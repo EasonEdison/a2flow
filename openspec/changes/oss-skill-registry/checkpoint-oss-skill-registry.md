@@ -14,19 +14,20 @@
 - 2026-09-06：工作区起点为 `3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`。
 - 已确认 worker worktree 干净，分支为 `codex/oss-skill-registry/design`。
 - 已执行 `git fetch origin` 与 `git merge --no-edit origin/main`，结果为 `Already up to date`。
-- 提交前再次同步，worker 从基线快进到最新 `origin/main=5be65edd8c1247119b8b5680847bdabaf4fb2e93`；本域文件无冲突。
+- 提交、集成与状态证据更新前均重新同步最新 origin/main；本域文件无冲突。
 - 已读取本任务允许的仓库入口 `AGENTS.md` 与 `docs/workstreams.md`；未读取其他任务 checkpoint。
+- 设计 worker c83a869ded9f588c3241f003c072e17bc800a58a 已 push，并首次集成到 main 2970ca7548ec9d8d6c803d10e29198d5d172ef5d。
 
 ## 当前状态
 
-- 阶段：7 份要求内设计文档已形成，正在执行提交前复审与 Git 同步。
+- 阶段：7 份要求内设计文档已完成源码交付，正在同步 checkpoint/readiness 证据。
 - Runtime 准出：`NO READY`。
 - 设计状态：`PROPOSED`，尚未经 main-brain/CTO 审批。
 - `tasks.md` 中 33 个实现任务全部未勾选；`regression.md` 中 8 个场景全部为 `PLANNED`。
 
 ## Next Executable Action
 
-复审精确 diff，重新合入最新 `origin/main`，提交并 push worker 分支，再通过任务独占 integration worktree 集成到 `main`。
+提交并 push 本次状态证据，通过任务独占 integration worktree 合入最新 origin/main 后结束本轮，等待 main-brain 审查。
 
 ## 最近验证
 
