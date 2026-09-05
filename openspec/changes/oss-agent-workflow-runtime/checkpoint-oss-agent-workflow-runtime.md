@@ -13,30 +13,30 @@
 
 - 初始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`
 - 2026-09-06 已核对 pwd、branch、status、worktree list 和 origin。
-- 开始前已 fetch/merge 当时最新 main；设计期间 main 并发前进。
-- 已在 worker 中合入 `a8cdbf9f3e47b99f5018db111a9304e5253e3d6e`，同步提交为 `12c1f9d969db5418a1134821b5f7c8011cf5b4fb`。
-- 交付前再次合入当时最新 main `c858766c90d9dba472c2600bf0694aa6423e0a5c`，worker 同步提交为 `48f2164c138c327f4c48c7e2fcde37ecc8c20222`，无冲突。
-- Worker 远端分支已核对为 `48f2164c138c327f4c48c7e2fcde37ecc8c20222`，工作区干净。
+- 开始前已 fetch/merge 当时最新 main；设计期间 main 并发前进，均以普通 merge 同步，无 rebase 或强推。
+- Worker 最终远端分支为 `2d998e60e662b4a3be8eb6e89bb2fa799767e45a`，工作区干净。
+- Integration worktree：`/home/admin/OpenSource/repos/.parallel/oss-agent-workflow-runtime/integration-platform`。
+- Integration 从 main `ab3e948e2116f3b485d95e0a691de1ea54824eab` 合入 worker，内容提交为 `c4e04e0793f0ba4706b427b371cfdfa9817f96c0`。
+- `origin/main` 已确认等于 `c4e04e0793f0ba4706b427b371cfdfa9817f96c0`。
 
 ## 当前里程碑
 
-- 状态：`WORKER_PUSHED`
+- 状态：`SOURCE_INTEGRATED`
 - 设计证据：仅使用用户净化后的需求、本仓库边界文档及公开官方资料。
 - Runtime 准出：`NO READY`
-- 已完成：七个限定文档、内容自审、校验、提交、并发 main 同步与 worker 首轮 push。
-- 未完成：checkpoint 最终 worker push、任务独占 integration worktree 合入并 push main。
+- 已完成：本次限定设计草案的文档、自审、校验、worker push、独占 integration 合并与 main push。
+- 本设计切片无剩余执行项；语言、协议和实现仍等待 CTO/main-brain 审查授权。
 
 ## Next Executable Action
 
-提交并推送本 checkpoint 更新；随后从新鲜 origin/main 创建任务独占 integration worktree，合入远端 worker 分支并推送 main。
+等待 main-brain 审查本提案并统一语言与跨域契约；未经新授权不进入实现。
 
 ## 交付证据
 
 - Worker 内容 commit：`9d9100f4401c373680623d1dd094f44dffd0dd69`
-- Worker checkpoint commit：`416a2c8acf96b15c4e21c3871cca39f4283e57a7`
-- Worker 最新同步 merge / 首轮远端 SHA：`48f2164c138c327f4c48c7e2fcde37ecc8c20222`
-- Worker push：PASS（远端 SHA 与本地一致）
-- Integration commit：待生成
+- Worker 最终 SHA / push：`2d998e60e662b4a3be8eb6e89bb2fa799767e45a`；PASS
+- Integration 内容 commit / 首轮 main push：`c4e04e0793f0ba4706b427b371cfdfa9817f96c0`；PASS
+- 本 checkpoint 更新将作为后续 main 提交；最终 main SHA 以 Git 真值和任务回报为准。
 - `git diff --check`：PASS
 - 场景结构：8 个 Scenario、8 个触发、8 个期望；PASS
 - 实现任务勾选检查：全部未勾选；PASS
