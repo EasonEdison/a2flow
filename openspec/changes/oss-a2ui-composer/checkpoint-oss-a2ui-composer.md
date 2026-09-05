@@ -11,10 +11,10 @@
 ## 当前磁盘真值
 
 - 初始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`
-- 同步结果：提交前已再次执行 fetch/merge，并快进到当时最新 `origin/main=c858766c90d9dba472c2600bf0694aa6423e0a5c`。
-- 工作区状态：仅本 change 目录 7 个设计文件有新增内容，未修改应用代码或其他 change。
+- 同步结果：设计提交基于 `origin/main=c858766c90d9dba472c2600bf0694aa6423e0a5c`，初次集成为 `5be65edd8c1247119b8b5680847bdabaf4fb2e93`；收口提交前已再快进到 `origin/main=ab3e948e2116f3b485d95e0a691de1ea54824eab`。
+- 工作区状态：设计内容已集成；当前仅本 checkpoint 与 readiness 做交付元数据收口。
 - 设计状态：`PROPOSED`
-- 源码交付：`READY TO COMMIT`
+- 源码交付：`COMPLETE (SERVER-LOCAL)`
 - 运行态就绪：`NO READY`
 
 ## 已完成里程碑
@@ -25,10 +25,11 @@
 4. 已调研 A2UI 官方协议、Catalog、Renderer、AG-UI、JSON Schema 2020-12 与 JSON 规范化资料。
 5. 已完成 proposal、design、tasks、regression、readiness 与 capability spec；八个验收场景均为 PLANNED。
 6. 已执行 staged diff、whitespace、任务勾选、占位符和敏感信息检查；服务器未安装 OpenSpec CLI，strict validate 尚未执行。
+7. Worker 内容提交 `4b02e21567df19cc73d5905df2dc9b58eb4a2281` 已 push，并通过独占 integration worktree 集成为 `main=5be65edd8c1247119b8b5680847bdabaf4fb2e93`。
 
 ## 下一可执行动作
 
-合入最新 `origin/main`，复查差异后提交并 push worker 分支，再通过任务独占 integration worktree 集成到 `main`。
+提交并集成本次 checkpoint/readiness 收口后，等待 main-brain 审查；未获实施授权前不推进 tasks.md。
 
 ## 边界与未决项
 

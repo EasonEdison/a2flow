@@ -3,7 +3,7 @@
 ## 总结
 
 - Design：PROPOSED
-- Source delivery：设计文档待提交/集成
+- Source delivery：READY（server-local main 已含设计内容）
 - Build：NO READY
 - Automated tests：NO READY
 - Cross-domain contract：NO READY
@@ -17,7 +17,8 @@
 
 | 门禁 | 状态 | 当前证据 | 达到 READY 的条件 |
 | --- | --- | --- | --- |
-| Clean-room | PARTIAL | 设计仅使用已授权需求与公开官方资料；尚未完成最终 diff 扫描 | 提交前文件清单与敏感/私有标识扫描通过 |
+| Clean-room | READY | 设计仅使用已授权需求与公开官方资料；文件清单、私有标识与敏感信息扫描通过 | 后续每次公开/外部 push 前重复门禁 |
+| Source integration | READY | Worker `4b02e21567df19cc73d5905df2dc9b58eb4a2281` 已集成为 server-local main `5be65edd8c1247119b8b5680847bdabaf4fb2e93` | 外部 Git 托管仍未配置，不把本状态解释为公开备份 |
 | Design completeness | PARTIAL | proposal/design/spec/tasks/regression/readiness 已形成草案 | main-brain 审查并关闭关键歧义 |
 | A2UI protocol decision | NO READY | 推荐 v0.9.1 实现 pin，v1.0 为 Candidate | ADR 批准 profile、wire version 与升级触发器 |
 | Common release contract | NO READY | 仅提出 ReleaseRef/digest/幂等消费需求 | oss-platform-contracts 给出并批准最终字段与语义 |
@@ -25,7 +26,7 @@
 | Runtime execution contract | NO READY | 仅提出 Resolver、cursor、replay、action 需求 | Runtime 契约测试通过且无业务耦合 |
 | Web Renderer contract | NO READY | 仅提出 supportedCatalogIds 与安全失败语义 | React Renderer 兼容矩阵和契约测试通过 |
 | PostgreSQL implementation | NO READY | 无代码、DDL 或迁移 | 草稿、校验、发布、幂等与多实例事务实现完成 |
-| Static/build validation | NO READY | 尚无实现；OpenSpec 校验待执行 | 代码静态检查、构建和 strict spec validation 通过 |
+| Static/build validation | NO READY | 设计 diff --check 通过；服务器无 OpenSpec CLI，strict validate 未执行；尚无实现可构建 | 代码静态检查、构建和 strict spec validation 通过 |
 | Automated regression | NO READY | regression.md 八项均为 PLANNED | 八项有提交 SHA、环境和字段级实际断言 |
 | Deployment | NO READY | 未授权且未执行 | 另行授权后由目标部署分支执行并保存证据 |
 | Runtime E2E | NO READY | 无 Surface、stream、action 或恢复证据 | 端到端证明渲染、重连、action 去重与可观察性 |
