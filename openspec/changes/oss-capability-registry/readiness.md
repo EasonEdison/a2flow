@@ -4,12 +4,13 @@
 
 **Runtime：NO READY**
 
-本 change 只有 PROPOSED 设计。源码集成若完成，只能证明设计文件进入 `origin/main`，不能证明设计已批准、实现存在、服务已部署或 Runtime 可用。
+本 change 只有 PROPOSED 设计。设计文件已进入 `origin/main`；这只能证明源码交付，不能证明设计已批准、实现存在、服务已部署或 Runtime 可用。
 
 ## 证据矩阵
 
 | 门禁 | 状态 | 当前证据 | 达到 READY 仍需 |
 | --- | --- | --- | --- |
+| 设计源码交付 | YES | 首版内容 commit `a8cdbf9f3e47b99f5018db111a9304e5253e3d6e` 已集成 | main-brain 设计审查 |
 | 需求边界 | PARTIAL | proposal/spec 已描述候选边界 | main-brain 审批跨域所有权 |
 | 共享契约 | NO READY | 仅提出消费者需求 | `ReleaseRef`、错误、上下文和凭证引用正式版本 |
 | 实现 | NO READY | 无代码 | 完成 tasks 中实现并审查 |
