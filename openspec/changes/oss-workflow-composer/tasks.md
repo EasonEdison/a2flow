@@ -2,11 +2,11 @@
 
 ## 状态
 
-本文件只跟踪待实现工作。统一基线对齐、OpenSpec 修订和非规范 fixture 证据记录在 checkpoint/regression，不将它们冒充服务实现。共享 graph revision 未经 main-brain 审查前，以下任务全部保持未勾选。
+本文件只跟踪待实现工作。统一基线对齐、OpenSpec 修订和非规范 fixture 证据记录在 checkpoint/regression，不将它们冒充服务实现。`SW-P1-SUBSET-01` 只批准 exact `skillKey/use_skill` 等列明闭包，未列入 Workflow owner 或 graph/context/control/events；在对应 named graph subset 下发前，以下任务全部保持未勾选。
 
 ## 0. 共享契约与打包门禁
 
-- [ ] 0.1 接入 main-brain 批准的 graph identity/version、exact `skillKey`/typed mapping、trusted context 和 environment-local resolver revision。
+- [ ] 0.1 以 `SW-P1-SUBSET-01` 的 exact `skillKey/use_skill` 闭包为依赖基线，待 main-brain 批准 graph identity/version、typed mapping、trusted context 和 environment-local resolver revision 后接入。
 - [ ] 0.2 接入 interaction/result references、control request dedupe 和配置版本比较契约。
 - [ ] 0.3 与 Runtime 固化发布图到 Python LangGraph 的版本化 consumer contract。
 - [ ] 0.4 main-brain 审查 `inputs/python-module-validation-candidates.md` 的可导入 Python 模块布局、Python 3.11+ 候选和依赖/许可证矩阵；根 `pyproject`/lock 仍由 main-brain 单一协调。
@@ -36,7 +36,7 @@
 
 ## 4. Consumer contract 验证
 
-- [ ] 4.1 与 Skill registry 验证 exact `skillKey` 和统一 `use_skill`，同一 Skill 无 Workflow 适配或前缀猜测。
+- [ ] 4.1 按 `SW-P1-SUBSET-01` 与 Skill registry 验证 exact `skillKey` 和统一 `use_skill`，同一 Skill 无 Workflow 适配或前缀猜测。
 - [ ] 4.2 与 A2UI registry 验证 selection Application、interaction mode 和 Action success/completion。
 - [ ] 4.3 与 Runtime 验证 A WAITING 时 B1→B2 继续且 JOIN 等 A。
 - [ ] 4.4 与 Runtime 验证 ALLOW_SKIP failure/真实 skip 可 join、REQUIRED failure 阻断。

@@ -3,13 +3,13 @@
 ## 当前状态
 
 - 任务：`oss-digital-employee`
-- 阶段：Phase 1 基线对齐与接口消费审查
+- 阶段：`SW-P1-SUBSET-01` 已同步；数字员工实现仍未放行
 - 设计状态：`PROPOSED`
 - Runtime 准备度：`NO READY`
 - 工作分支：`codex/oss-digital-employee/design`
 - 目标分支：`origin/main`
 - 起始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`
-- 当前对齐基线：`SW-P1-20260907.2 + ENG-01`；两处复核修订已集成至 `origin/main@7569c02e295cad0f65a6c74ede09f77aee039baa`
+- 当前对齐基线：`SW-P1-20260907.2 + ENG-01 + SW-P1-SUBSET-01`；已进入 `origin/main`，具体包含关系以 Git 查询为准，不递归记录 checkpoint 自身提交 SHA
 
 ## 已确认边界
 
@@ -19,6 +19,7 @@
 - Web 端负责消费并呈现可复用 A2UI Host；协议版本仍由主控统一裁决。
 - PostgreSQL 是开发、测试和部署唯一关系型数据库；应用按多实例正确性设计。
 - 不实现代码、不安装依赖、不修改服务、数据库、端口或部署状态。
+- `SW-P1-SUBSET-01` 只批准列明的共享 Skill/Policy 薄包与对应 owner 源码；完整 BFF、Host、control/event/Action 仍不在本任务实现范围。
 
 ## 已完成
 
@@ -39,13 +40,17 @@
 - [x] BFF 选项与路径清单提交 `c1050b83ddbb5e8b604e690a90b8349e1bdb0ce9` 已推送并集成到 `origin/main`。
 - [x] 按 main-brain 复核修正 R8 成本门禁与浏览器直连论证：最小偏好 schema/薄 adapter 不自动延期，否决依据是既定产品后端隔离职责。
 - [x] 两处小修订提交 `7569c02e295cad0f65a6c74ede09f77aee039baa` 已推送并集成到 `origin/main`。
+- [x] 完整读取 `implementation-release-01.md`，文件 SHA256 匹配 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
+- [x] 核对批准标识 `SW-P1-SUBSET-01`、schema snapshot `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 与 schema SHA256 `10fb8f2fb26529ba7850e981991bcb343037aa6defe7f22646e00f1cdf59fa3b`；不把 wire candidate 或整个 bundle 视为批准。
+- [x] 公共契约 checker 的既定无安装入口是以 `admin` 运行 `/usr/bin/python3 packages/contracts/tests/validate_contracts.py`（当前 Python 3.6.8 / jsonschema 2.6.0）；协调方已提供独立 57/57 证据，本任务引用该公共证据，不重复运行。
+- [x] 此前使用 `python3.11` 触发的 `jsonschema` 缺失只是验证入口不匹配，不是数字员工 B 端阻塞；未安装依赖，也未把公共校验与 Python 3.11/Runtime 验证混为一谈。
 
 ## 下一可执行动作
 
-等待 main-brain 指名 contracts revision 并批准接口消费边界；此前不进入 `apps/digital-employee/` 或 `packages/a2ui-host/` 实现。
+等待 main-brain 下发数字员工产品的正式实施入口；不要求用户重复背景或开工确认，入口下发前不进入 `apps/digital-employee/` 或 `packages/a2ui-host/` 实现。
 
 ## 禁止与未决
 
 - 禁止读取其他任务 checkpoint 或 proprietary 项目材料。
 - 禁止把设计集成误报为设计批准、实现完成、部署完成或 runtime 可用。
-- Runtime Python + Deep Agents SDK + LangGraph 已是基线；待主控指名共享接口 revision、A2UI 精确版本/发布身份、BFF/Tool 边界及长期记忆是否满足低成本门禁。
+- Runtime Python + Deep Agents SDK + LangGraph 已是基线；`SW-CONTRACTS-P1-CANDIDATE.1` 仍为 provisional wire，且本 release 不批准完整 BFF/Host/control/event/Action、数据库、服务或部署。

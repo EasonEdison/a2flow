@@ -5,13 +5,14 @@
 - 统一基线：`SW-P1-20260907.2` + `ENG-01`
 - 工程决策：Workflow registry 后端按 ENG-01 规划为可导入 Python 模块；不自动启动独立常驻服务，根依赖仍由 main-brain 单一协调。
 - 模块研究：已形成 `inputs/python-module-validation-candidates.md`，推荐 JSON Schema 权威边界 + 严格 Pydantic 域模型 + NetworkX DAG 算法；仅为 `DOC_RESEARCH_ONLY`，未安装或锁定依赖。
+- 命名依赖：`SW-P1-SUBSET-01` 仅批准 schema snapshot `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 中 exact `skillKey/use_skill` 相关闭包供列明 owner 实现；Workflow graph/context/control/events 与本模块源码仍未放行。
 - 基线集成 SHA：`c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`
 - 设计：`PROPOSED`
-- 实现：等待 main-brain 对共享契约实际差异审查后放行
+- 实现：等待 main-brain 下发对应的 named Workflow graph subset；`SW-P1-SUBSET-01` 不包含 Workflow owner 源码实现
 - Runtime：`NO READY`
 - PY-01：必要时替换/升级系统 Python 已获授权，但仅 Runtime 可在 main-brain 协调下执行；本任务不改系统 Python，也不以授权缺失为 blocker。
 
-本 change 合入 `main` 只表示 Phase 1 图契约需求和验证样例可供审查，不表示共享契约已冻结、服务已实现或 LangGraph 运行语义已经证明。
+本 change 合入 `main` 只表示 Phase 1 图契约需求和验证样例可供审查。`SW-P1-SUBSET-01` 只把 exact `skillKey/use_skill` 闭包变为命名依赖输入，不表示 Workflow graph 已批准、服务已实现或 LangGraph 运行语义已经证明。
 
 ## Why
 
@@ -38,7 +39,7 @@ M 侧需要发布可被 Python + LangGraph Runtime 编译执行的多 Skill Work
 - 节点成功、真实 `SKIPPED`、或配置为 allow-skip 的节点保持真实 `FAILED` 后可满足后继/join；required 节点失败阻断。
 - Skill、decision 和 Finalizer 默认获得全部相关、已实际执行祖先节点的最终结果和真实状态。A→B→C 时 C 必须同时获得 A、B；join 后只汇总真实执行分支，不为未选 condition candidate 虚构结果。
 - 发布图记录逻辑 Skill/Application 引用和图语义；共享 resolver 依据可信 environment/userId 解析实际版本。
-- Contracts 候选 `SW-CONTRACTS-P1-CANDIDATE.1` 将公共 Skill identity 定义为 exact `skillKey`；Composer/Runtime 不得拆 `skill:` 前缀猜测映射。该候选仍待 main-brain 纳入最终 shared revision。
+- `SW-P1-SUBSET-01` 已批准 snapshot `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 中 exact `skillKey/use_skill` 定义闭包作为命名实现依赖；wire field 仍为 `SW-CONTRACTS-P1-CANDIDATE.1`。Composer/Runtime 不得拆 `skill:` 前缀猜测映射；Workflow graph/context/control/events 不在该批准内。
 - 提供非规范图样例和 validation cases；共享 schema 字段名、版本和封装由 contracts 单一所有。
 
 ## 明确不做
