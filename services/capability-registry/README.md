@@ -46,6 +46,11 @@ This slice validates:
 - adapter-operation input paths and credential-slot compatibility;
 - shared named success-policy publication metadata.
 
+Required-source coverage is limited to the supported closed, top-level object
+profile. This slice does not validate arbitrary JSON Schema composition such as
+`allOf` or `$ref`, and it does not establish complete validation for nested
+source paths. Those gates require a separate implementation release.
+
 It does not evaluate result policies, execute an adapter or business API,
 resolve credentials, retry or deduplicate business calls, persist to a
 database, resolve an effective release, make authorization decisions, or run
