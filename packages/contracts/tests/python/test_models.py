@@ -11,6 +11,7 @@ from skillweave_contracts import (
     TrustedInvocationContext,
     UseSkillRequest,
     UseSkillResult,
+    ValidationIssue,
     load_approved_schema,
     load_definition_schema,
     parse_definition,
@@ -120,6 +121,22 @@ class RequestAndContextTests(unittest.TestCase):
         self.assertTrue(raised.exception.issues)
         self.assertTrue(all(issue.path.startswith("$") for issue in raised.exception.issues))
 
+    def test_workflow_scope_rejects_explicit_null_conversation_id(self):
+        payload = {
+            "contractRevision": CONTRACT_REVISION,
+            "trustedContext": {"userId": "user_1", "environment": "ONLINE"},
+            "invocationScope": {
+                "kind": "WORKFLOW",
+                "conversationId": None,
+                "runId": "run_1",
+                "nodeId": "node_1",
+            },
+            "controlRequestId": "control_1",
+        }
+
+        with self.assertRaises(ContractValidationError):
+            TrustedInvocationContext.from_mapping(payload)
+
 
 class SkillResultTests(unittest.TestCase):
     def test_skill_result_is_strict_and_round_trips(self):
@@ -194,6 +211,24 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaises(ContractValidationError):
                 ResultInterpretationPolicySet.from_mapping(payload)
 
+        for invalid_number in (float("nan"), float("inf"), float("-inf")):
+            payload = valid_policy_set()
+            payload["resultInterpretationPolicies"][1]["expectedLiteral"] = invalid_number
+            with self.subTest(value=invalid_number), self.assertRaises(ContractValidationError):
+                ResultInterpretationPolicySet.from_mapping(payload)
+
+
+class ErrorContractTests(unittest.TestCase):
+    def test_error_issues_are_defensively_copied_and_read_only(self):
+        caller_issues = [ValidationIssue(path="$.skillKey", code="invalid", message="bad")]
+
+        error = ContractValidationError(caller_issues)
+        caller_issues.clear()
+
+        self.assertEqual(len(error.issues), 1)
+        with self.assertRaises(AttributeError):
+            error.issues = ()
+
 
 class SchemaAndDispatchTests(unittest.TestCase):
     def test_approved_schema_loader_exposes_only_released_definitions(self):
@@ -202,9 +237,31 @@ class SchemaAndDispatchTests(unittest.TestCase):
         self.assertIn("useSkillResult", schema["definitions"])
         self.assertIn("resultInterpretationPolicySet", schema["definitions"])
         self.assertNotIn("controlRequest", schema["definitions"])
-        self.assertEqual(load_definition_schema("skillKey")["type"], "string")
+        skill_key_schema = load_definition_schema("skillKey")
+        self.assertEqual(skill_key_schema["$ref"], "#/definitions/skillKey")
+        self.assertEqual(skill_key_schema["definitions"]["skillKey"]["type"], "string")
         with self.assertRaises(KeyError):
             load_definition_schema("controlRequest")
+
+    def test_composite_definition_schema_has_no_dangling_local_refs(self):
+        schema = load_definition_schema("trustedContext")
+
+        self.assertEqual(schema["$ref"], "#/definitions/trustedContext")
+
+        def local_refs(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key == "$ref" and isinstance(item, str):
+                        yield item
+                    else:
+                        yield from local_refs(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from local_refs(item)
+
+        for ref in local_refs(schema):
+            self.assertTrue(ref.startswith("#/definitions/"), ref)
+            self.assertIn(ref.rsplit("/", 1)[-1], schema["definitions"])
 
     def test_explicit_definition_dispatch_has_no_generic_fallback(self):
         parsed = parse_definition("useSkillRequest", {"skillKey": "demo/evidence"})
@@ -212,6 +269,15 @@ class SchemaAndDispatchTests(unittest.TestCase):
         self.assertIsInstance(parsed, UseSkillRequest)
         with self.assertRaises(KeyError):
             parse_definition("controlRequest", {})
+
+        for definition_name in APPROVED_DEFINITION_NAMES:
+            with self.subTest(definition=definition_name):
+                try:
+                    parse_definition(definition_name, None)
+                except ContractValidationError:
+                    pass
+                except KeyError as error:
+                    self.fail(f"approved definition has no parser: {error}")
 
     def test_all_released_synthetic_cases_match_the_thin_adapter(self):
         contracts_root = Path(__file__).resolve().parents[2]

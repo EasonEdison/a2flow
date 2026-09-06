@@ -78,7 +78,9 @@ serialized = policy_set.to_mapping()
 same bounded validation as returned issues. Inputs reject extra fields and implicit type
 coercion; nested model collections are tuples and serialization returns defensive copies.
 `load_approved_schema()` reads and filters the neutral schema source rather than copying
-it into a second authority. Unknown or provisional definition names fail closed.
+it into a second authority. `load_definition_schema(name)` returns a self-contained root
+schema with the approved dependency closure, so its local references resolve without
+exposing provisional definitions. Unknown or provisional definition names fail closed.
 
 The adapter deliberately does not evaluate result policies, resolve Skills, authorize
 Tools, inspect host paths, execute scripts, access databases, or prove trusted-context

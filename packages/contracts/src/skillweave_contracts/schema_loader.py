@@ -50,11 +50,10 @@ def load_approved_schema() -> dict[str, Any]:
 
 
 def load_definition_schema(definition_name: str) -> dict[str, Any]:
-    """Load one approved definition by its exact external schema name."""
+    """Load a self-contained root schema for one approved external definition."""
 
     if definition_name not in APPROVED_DEFINITION_NAMES:
         raise KeyError(f"definition is not approved for this package: {definition_name}")
-    definition = load_approved_schema()["definitions"][definition_name]
-    if not isinstance(definition, dict):
-        raise ValueError(f"definition is not an object: {definition_name}")
-    return definition
+    schema = load_approved_schema()
+    schema["$ref"] = f"#/definitions/{definition_name}"
+    return schema

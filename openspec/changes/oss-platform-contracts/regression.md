@@ -20,7 +20,7 @@
 - Command: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src python3.11 -m unittest discover -s packages/contracts/tests/python -v`
 - Python: `3.11.13`
 - Third-party dependencies: none
-- Result: `13/13 PASS`; the suite replays all `25` existing fixtures whose definitions are in the approved Skill/Policy closure
+- Result: `16/16 PASS`; the suite replays all `25` existing fixtures whose definitions are in the approved Skill/Policy closure
 - Import smoke: `UseSkillRequest.from_mapping(...).to_mapping()` PASS
 
 ## TDD evidence
@@ -46,6 +46,8 @@
 | GREEN-8 | identifier/skillKey 显式排除 CR/LF | 57/57 PASS |
 | RED-9 | `skillweave_contracts` 尚不存在 | unittest import error，0 tests executed |
 | GREEN-9 | 严格冻结模型、显式 dispatcher、approved-only schema loader、不可变错误接口 | 13/13 PASS；批准闭包 25 个既有正反例对照 PASS |
+| RED-10 | reviewer probes：异常 issues 可回写、复合 schema `$ref` 悬空、Workflow 显式 null 被误当缺省 | 16 total / 12 PASS / 4 FAIL |
+| GREEN-10 | 防御性复制+只读 issues、自包含 definition schema、缺省/null 严格区分 | 16/16 PASS |
 
 ## Covered contract cases
 

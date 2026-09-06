@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import NoReturn
 
@@ -16,11 +17,18 @@ class ValidationIssue:
 class ContractValidationError(ValueError):
     """Raised when decoded input does not match an approved contract definition."""
 
-    def __init__(self, issues: tuple[ValidationIssue, ...]) -> None:
-        if not issues:
+    def __init__(self, issues: Iterable[ValidationIssue]) -> None:
+        normalized = tuple(issues)
+        if not normalized:
             raise ValueError("ContractValidationError requires at least one issue")
-        self.issues = issues
-        super().__init__("; ".join(f"{item.path}: {item.message}" for item in issues))
+        if not all(isinstance(item, ValidationIssue) for item in normalized):
+            raise TypeError("ContractValidationError issues must be ValidationIssue values")
+        self._issues = normalized
+        super().__init__("; ".join(f"{item.path}: {item.message}" for item in normalized))
+
+    @property
+    def issues(self) -> tuple[ValidationIssue, ...]:
+        return self._issues
 
 
 def fail(path: str, code: str, message: str) -> NoReturn:

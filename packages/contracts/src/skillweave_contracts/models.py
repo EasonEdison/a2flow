@@ -137,13 +137,12 @@ class WorkflowInvocationScope:
             optional=frozenset({"conversationId"}),
         )
         require_enum(data["kind"], path=f"{_path}.kind", allowed=frozenset({"WORKFLOW"}))
-        conversation_id = data.get("conversationId")
         return cls(
             run_id=parse_identifier(data["runId"], path=f"{_path}.runId"),
             node_id=parse_identifier(data["nodeId"], path=f"{_path}.nodeId"),
             conversation_id=(
-                parse_identifier(conversation_id, path=f"{_path}.conversationId")
-                if conversation_id is not None
+                parse_identifier(data["conversationId"], path=f"{_path}.conversationId")
+                if "conversationId" in data
                 else None
             ),
         )

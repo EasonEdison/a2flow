@@ -1,6 +1,6 @@
 # Execution Checkpoint
 
-- Updated at: 2026-09-07T02:25:09+08:00
+- Updated at: 2026-09-07T02:34:34+08:00
 - Thread: oss-platform-contracts
 - Change: oss-platform-contracts
 - Status: IMPLEMENTING / APPROVED SUBSET
@@ -40,19 +40,21 @@
 - worker 已 fetch 并 fast-forward merge 最新 `origin/main` 到 `3a48d4b106db8f382c3c96bbc8992f328b81e259`。
 - Python 3.11 薄 adapter 完成首轮 TDD：缺包时 RED，严格模型/schema loader/显式 dispatcher 落地后 13/13 GREEN；未安装依赖。
 - fresh verification：Python 3.11 import smoke PASS、adapter 13/13、批准闭包既有 fixture 25/25 对照、Draft 4 全量 schema 57/57；测试生成的两个 task-owned `__pycache__` 已删除。
+- 首轮内容 commit `cc20e510e13b26e42943997332e1319c509d1001` 后独立 review 为 `With fixes`：无 Critical，发现异常 issues 可改写和复合 schema `$ref` 悬空两项 Important；main-brain 另实证 Workflow 显式 `conversationId:null` 与缺省混同。
+- 三项均完成 TDD：16 total / 12 PASS / 4 FAIL 后最小修复为 16/16 GREEN；同时补充非有限 JSON number 与 dispatcher allowlist probe。
 
 ## In Progress
 
-- 独立 code review 首个可导入源码切片。
+- 对 review 修复 delta 做独立复审和 fresh 全量门禁。
 
 ## Pending
 
-- 完成独立 code review 和精确 diff 终检。
+- 完成修复 delta 的独立复审和精确 diff 终检。
 - commit/push worker 并通过独占 integration worktree合入最新 `origin/main`。
 
 ## Next Executable Action
 
-- 提交首个稳定 source SHA 后发起独立 code review。
+- 提交 review 修复 delta，并请求 reviewer 复核三项证据。
 
 ## Blockers
 
@@ -60,4 +62,4 @@
 
 ## Last External Progress
 
-- 2026-09-07T02:25:09+08:00：fresh import/adapter/schema 验证通过，13/13 + 57/57 GREEN。
+- 2026-09-07T02:34:34+08:00：三项 review delta 完成 RED/GREEN，adapter 16/16 GREEN。
