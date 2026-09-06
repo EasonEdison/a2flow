@@ -1,72 +1,73 @@
-# 回归计划
+# Phase 1 回归与验证记录
 
 ## 总体状态
 
-- 状态：`PLANNED`
-- 已执行：0
-- 运行证据：无
-- 说明：以下是实现后的验收契约，不是已通过的测试结果。
+- 图 fixture 自检：`PASS (DOC_FIXTURE_ONLY)`
+- 服务实现验证：`PLANNED`
+- Runtime 集成：`NO READY`
+- 说明：fixture 自检只证明项目自有 JSON 样例结构一致，不证明共享 contract、LangGraph 行为或产品可用。
 
-## R1 创建并保存合法串行草稿
+## R0 非规范图样例自检
 
-- 状态：`PLANNED`
-- Method：`CreateWorkflowDraft`，随后 `SaveWorkflowDraft`
-- Params：`name`；`draftId`、`expectedDraftRevision=1`、含 START/2 个 SKILL/END 和 3 条边的 `graph`
-- Success `data`：`draftId`、`draftRevision=2`、`status=DRAFT`、`updatedAt`
-- 字段级断言：`draftId` 非空；revision 只递增一次；读取后 nodeId、edge 方向和 layout 与保存输入一致。
+- 状态：`EXECUTED (DOC_FIXTURE_ONLY)`
+- Command：`python3 openspec/changes/oss-workflow-composer/examples/validate_phase1_examples.py`
+- Environment：服务器专属 worker worktree；Python 3.6.8 标准库；未安装依赖
+- Expected output：`phase1-workflow-fixtures: PASS nodes=11 edges=12 staticCases=5 runtimeCases=5`
+- Actual output：`phase1-workflow-fixtures: PASS nodes=11 edges=12 staticCases=5 runtimeCases=5`（2026-09-07）
+- 断言：JSON 可解析；node/edge key 唯一；全图无环；START/FINALIZER/END 唯一；decision candidates 与 CONDITIONAL edges 一致；parallel split/JOIN branch 集合闭合；样例不携带 environment/userId/credential。
 
-## R2 校验并发布合法两步链路
-
-- 状态：`PLANNED`
-- Method：`ValidateWorkflowDraft`，随后 `PublishWorkflowDraft`
-- Params：`draftId`、`draftRevision=2`、`expectedDraftRevision=2`、`requestKey`
-- Success `data`：校验返回 `valid=true`、空 ERROR issues、2 个 `resolvedDependencies`；发布返回 `workflowReleaseRef`、`artifactDigest`、`publishedAt`
-- 字段级断言：release ref 和 digest 非空；manifest 有 2 个 steps；ordinal 为 1/2；Skill refs 与草稿固定 release 完全一致；不含 layout。
-
-## R3 非串行图失败关闭
+## R1 发布合法 sequence/condition/parallel 图
 
 - 状态：`PLANNED`
-- Method：`ValidateWorkflowDraft`，随后 `PublishWorkflowDraft`
-- Params：含分支或环的 `draftId/draftRevision`；发布带相同 revision 和新 `requestKey`
-- Expected error：校验 `data.valid=false` 且 issues 含 `GRAPH_BRANCH_NOT_SUPPORTED` 或 `GRAPH_CYCLE`；发布 `data=null`
-- 字段级断言：issue 含 `nodeId` 或 `fieldPath`；没有 Workflow release、摘要或幂等成功记录产生。
+- Method：`ValidateWorkflowDraft`，随后 `PublishWorkflowDraft`（逻辑方法名，传输协议待 shared revision）
+- Params：包含 decision MERGE、parallel split/JOIN、FINALIZER 的 fixture；`expectedDraftRevision`；control `requestId`
+- Success `data`：`valid=true`、空 ERROR issues、`workflowRef`、`graphRevision`、`artifactDigest`
+- 字段级断言：发布图保留稳定 node/candidate/branch identity；移除 layout；相同 control request 返回同一发布结果。
 
-## R4 非发布或浮动 Skill 引用被拒绝
+## R2 非法拓扑失败关闭
 
 - 状态：`PLANNED`
 - Method：`ValidateWorkflowDraft`
-- Params：Skill 节点分别引用 draft、`latest` 或调用方无权访问的 release selector
-- Expected error：`data.valid=false`，issues 含 `SKILL_RELEASE_NOT_PUBLISHED`、`SKILL_RELEASE_UNAVAILABLE` 或授权错误；不得返回可发布 dependency snapshot
-- 字段级断言：每个 issue 定位到具体 `nodeId`；服务端不把 selector 解析后悄悄写回固定版本。
+- Params：分别应用 cycle、unknown candidate target、missing join branch、nested parallel、unreachable node fixtures
+- Expected error：`data.valid=false`；issues 分别含 `GRAPH_CYCLE`、`DECISION_TARGET_UNKNOWN`、`PARALLEL_BRANCH_MISMATCH`、`PARALLEL_NESTING_NOT_SUPPORTED`、`GRAPH_UNREACHABLE`
+- 字段级断言：每个 issue 含 node/edge/region 定位；不得生成发布 artifact。
 
-## R5 相邻 schema 不兼容被拒绝
-
-- 状态：`PLANNED`
-- Method：`ValidateWorkflowDraft`
-- Params：第一步 `outputSchemaRef=A`，第二步 `inputSchemaRef=B`，且 A/B 不相同
-- Expected error：`data.valid=false`，issues 含 `STEP_SCHEMA_MISMATCH`，发布未调用或返回 `data=null`
-- 字段级断言：issue 同时指出上游和下游 nodeId/schemaRef；无隐式转换、脚本或 fallback artifact。
-
-## R6 并发保存不丢更新
+## R3 AI 不确定进入同节点 A2UI 选择
 
 - 状态：`PLANNED`
-- Method：两个实例并发调用 `SaveWorkflowDraft`
-- Params：同一 `draftId`、相同 `expectedDraftRevision=7`、不同 graph 内容
-- Success `data`：仅一个请求返回 `draftRevision=8`；另一个返回 `data=null` 和 `DRAFT_REVISION_CONFLICT`，附当前 revision 8
-- 字段级断言：数据库只有一个 revision 8 snapshot；失败请求内容未覆盖成功请求；重读 head 为 revision 8。
+- Method：Runtime `AdvanceDecisionNode`，随后 node-bound `SubmitInteraction`
+- Params：前驱最终结果/状态、发布 candidate 集合、selectionApplicationRef；合法 interactionId/nodeKey/config versions/selectedCandidateKey
+- Success `data`：首次为 `WAITING_INTERACTION` 和候选卡引用；提交后为所选 `routeKey` 与 node completion
+- 字段级断言：Skills 无 routing 字段；选择仅命中配置候选；用户选择不回到 AI 重选；AI 技术异常返回 FAILED 而非选择卡。
 
-## R7 发布响应丢失后的幂等重试
+## R4 A 等待时 B1、B2 独立推进
+
+- 状态：`PLANNED`，Runtime 强制门禁
+- Method：Runtime `StartWorkflow`，读取 persisted node/branch/join states
+- Params：有效图 fixture；A decision 强制语义不确定；B1/B2 scripted success
+- Success `data`：A=`WAITING_INTERACTION`、B1=`SUCCESS`、B2=`SUCCESS`、JOIN=`WAITING`
+- 字段级断言：B2 完成时间早于 A resume；JOIN 不把 A waiting 当 skip；LangGraph/Pg evidence 含稳定 run/node/branch identity。
+
+## R5 allow-skip 与 required failure
 
 - 状态：`PLANNED`
-- Method：两次 `PublishWorkflowDraft`
-- Params：相同 `draftId`、`expectedDraftRevision` 和 `requestKey`；第一次在数据库提交后模拟响应丢失
-- Success `data`：第二次返回第一次已提交的同一 `workflowReleaseRef`、`artifactDigest`、`publishedAt`
-- 字段级断言：仅一个 release 和一组 dependency rows；两次结果字段完全相同；没有重复发布审计成功事件。
+- Method：Runtime `AdvanceWorkflow`
+- Params：先让 B2(ALLOW_SKIP) scripted failure，再让 A 路径 REQUIRED Skill scripted failure
+- Success `data`：第一种 B branch joinEligible=true 且 status=FAILED；第二种 JOIN=BLOCKED 且 requiredFailureRef 指向 A 节点
+- 字段级断言：容忍失败不改 SUCCESS；实际 skip 与 failure 分开；兄弟已完成结果不回滚；waiting 不自动 skip。
 
-## R8 Runtime 消费不可变 manifest
+## R6 environment/userId 与版本失配 reset
 
-- 状态：`PLANNED`，跨域集成
-- Method：`ResolvePublishedWorkflow`
-- Params：已发布 `workflowReleaseRef`、Runtime 支持的 `contractVersion`
-- Success `data`：`workflowReleaseRef`、`contractVersion`、`artifactDigest`、`inputSchemaRef`、`outputSchemaRef`、有序 `steps`
-- 字段级断言：重复读取字节级 canonical 内容和 digest 不变；steps 连续有序且无 layout/secret/script/URL；未知版本或摘要不符返回 `data=null` 并失败关闭。
+- 状态：`PLANNED`
+- Method：shared `ResolveEffectiveAssets`，随后 Runtime `SubmitInteraction`
+- Params：trusted PRT/ONLINE context、userId、run 记录 versions、变更后的 effective versions
+- Success `data`：PRT 只命中 PRT current；ONLINE 只命中 ONLINE stable/gray；失配返回 `resetRequired=true`
+- 字段级断言：无 ONLINE→PRT 读取；模型不能覆盖 environment/userId；失配在新业务调用前阻断；不自动 restart。
+
+## R7 A2UI-only retry、Finalizer 与 stop
+
+- 状态：`PLANNED`
+- Method：Runtime `RetryNode`、`StopWorkflow`、`FinalizeWorkflow`
+- Params：A2UI Action configured-success failure；普通 Skill failure；accepted stop；合法 control request ids
+- Success `data`：A2UI failure 可重入 owning node；普通 Skill failure retry denied；stop 后 Finalizer denied
+- 字段级断言：已完成前驱/独立分支不重跑；业务重复调用由 API backend 处理；stop 后无新 node/model/Tool/Action/retry/Finalizer。
