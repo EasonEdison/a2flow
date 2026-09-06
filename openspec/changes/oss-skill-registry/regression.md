@@ -2,7 +2,7 @@
 
 > Baseline: SW-P1-20260907.2
 > Approved source gate: **SW-P1-SUBSET-01**
-> Current evidence: **SOURCE IMPLEMENTED / TESTED / DELIVERY PENDING**
+> Current evidence: **SOURCE DELIVERED / TESTED**
 > Runtime readiness: **NO READY**
 > HTTP/RPC 与 Runtime Tool wiring 不在本 subset；本表不是运行通过声明。
 
@@ -39,6 +39,8 @@ Gate：`SW-P1-SUBSET-01` at
 - Focused schema/semantic checker：57/57 PASS；此 checker 使用仓库现有
   Python 3.6/jsonschema 环境，不代表 Registry runtime。
 - Public import check：PASS。
+- Integration worktree repeated the same 22/22、16/16、57/57 and static
+  checks；worker/source/first delivered main are all `d60998e42b43805ae88bb10d2d1b1f2b3127a148`.
 - instruction 与 resources 一起校验实际 bytes/stream、declared size/digest、
   strict UTF-8、logicalPath 唯一性与 entry/byte/path 硬上限；caller limits
   只能收紧。
