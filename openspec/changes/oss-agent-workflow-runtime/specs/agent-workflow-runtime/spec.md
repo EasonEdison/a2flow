@@ -1,81 +1,108 @@
-# Agent/Workflow Runtime Capability Specification
+# Agent/Workflow Runtime Phase 1 Capability Specification
 
 ## 状态
 
-- 规范状态：PROPOSED
-- Runtime 准出：NO READY
-- 适用域：业务无关 Agent/Workflow Runtime
+- Baseline：SW-P1-20260907.2
+- Specification：BASELINE_ALIGNED
+- Runtime：NO READY
 
 ## ADDED Requirements
 
-### Requirement: 区分 Agent 与 Workflow 运行语义
+### Requirement: Runtime 使用 Python Deep Agents 与 LangGraph
 
-Runtime SHALL 将单 Agent 执行与 Workflow 调度建模为不同 run 类型；Workflow 可通过显式节点创建 Agent 子运行，但不得读取 Agent 内部推理状态。
+Runtime SHALL 使用 Python Deep Agents SDK 的公开 Tools、Middleware、Backend、Store 和 Checkpointer 扩展点，并以 LangGraph 作为 Workflow/checkpoint/interrupt 基础。Runtime SHALL NOT fork 框架或静默实现第二 Workflow scheduler。
 
-#### Scenario: Workflow 调用 Agent 子运行
+#### Scenario: SDK 无法满足关键并行行为
 
-- 触发：已发布 Workflow 的一个节点引用已发布 Agent revision，并启动 WorkflowRun。
-- 期望：Scheduler 按依赖创建独立 AgentRun，持久化 parentRunId/childRunId；父运行只消费公开结果与状态，Agent Executor 不承担 Workflow 图调度。
+- 触发：隔离 reproducer 证明 LangGraph 原生执行无法在 A 等待时推进 B1→B2。
+- 期望：保存版本、代码、命令和输出并报告 main-brain；不得以未评审的自研 scheduler 伪装通过。
 
-### Requirement: 只执行已发布且可验证的资产
+### Requirement: 模型只看到 Runtime-owned Tool
 
-Runtime SHALL 在执行前解析不可变 asset revision，并校验 contractVersion、schema、checksum 与授权；未知或不受支持的输入 SHALL fail closed。
+Runtime SHALL 通过 Deep Agents 公开 Harness Profile 排除默认文件、shell 与 subagent Tool，并对 provider Tool schema 使用 strict binding。系统提示 SHALL NOT 被当作授权边界。
 
-#### Scenario: 请求未知 revision
+#### Scenario: SDK 默认绑定隐式 Tool
 
-- 触发：StartRun 指向未发布 revision 或不受支持的 contractVersion。
-- 期望：返回稳定拒绝错误，不创建可运行任务，不尝试旧 revision、其他协议或隐式 fallback。
+- 触发：使用显式模型构建最小 Deep Agent 并记录实际 bound Tool names。
+- 期望：bound set 只包含本次 Runtime 明确提供的 Tool；`ls/read/write/edit/delete/glob/grep/execute/task` 均不出现。
 
-### Requirement: PostgreSQL-only durable recovery
+### Requirement: 所有 Skill 使用统一进入 use_skill
 
-Runtime SHALL 将 run、attempt、checkpoint、action、幂等记录、租约与事件的正确性状态持久化到 PostgreSQL，不依赖进程内唯一状态。
+同一个 Skill SHALL 在 chat 与 Workflow 中作为 Agent 指令/资源执行，并 SHALL 先经过 use_skill Tool；Workflow SHALL NOT 直接读取 Skill body/resource 或要求专用路由字段。
 
-#### Scenario: Worker 在 checkpoint 后退出
+#### Scenario: 同一合成 Skill 从两个入口执行
 
-- 触发：Worker 完成一个 checkpoint 后进程退出，另一个实例随后领取该 run。
-- 期望：新实例只依赖 PostgreSQL 恢复到最后可提交边界；已成功且有持久记录的工作不重复，Runtime 不切换到内存、SQLite 或 MySQL。
+- 触发：scripted model 分别在 chat 和 Workflow Skill node 使用 `demo/evidence-first-brief` Skill。
+- 期望：两个 Tool trace 都先记录 use_skill；Skill package bytes/digest 完全相同，且没有 Workflow 专用 output 字段或固定子图。
 
-### Requirement: 多实例租约与 fencing
+### Requirement: trusted identity 和环境不可由模型选择
 
-Runtime SHALL 使用有期限租约和单调 fencingToken 保护每次 attempt；所有续租与提交 SHALL 校验 owner、token 和 expectedRevision。
+Runtime SHALL 使用 `SW-P1-SUBSET-01` 的 TrustedInvocationContext 从可信后端注入 contract revision、userId、PRT/ONLINE、conversation/run/node scope 与 controlRequestId；`use_skill` model schema SHALL 严格只接受 `{skillKey}`。PRT SHALL 只读 PRT 当前版本；ONLINE SHALL 只读 ONLINE stable 或 ONLINE gray candidate。
 
-#### Scenario: 过期 owner 晚到提交
+#### Scenario: 模型尝试覆盖环境
 
-- 触发：Worker A 租约过期，Worker B 取得更大 fencingToken 后，A 再提交结果。
-- 期望：A 的写入被拒绝且产生审计事件；B 保持唯一有效 owner，run 不被旧结果推进。
+- 触发：scripted Tool call 在公开 args 中加入其他 userId、PRT/ONLINE 或 credential。
+- 期望：schema/授权拒绝该调用且 resolver 未执行；ONLINE 不访问 PRT。
 
-### Requirement: 外部副作用协作幂等
+### Requirement: server artifact 不进入模型 provider wire
 
-Runtime SHALL 为同一逻辑副作用复用稳定 operationKey，并只对声明了幂等或结果查询能力的 Capability 自动重试。
+Runtime SHALL 先严格验证完整 use_skill result，再把 content 作为 Tool result 发送给模型；artifact/version/evidence SHALL 保留在服务端状态，不得序列化进 provider message。
 
-#### Scenario: 调用成功但结果落库前崩溃
+#### Scenario: Anthropic 第二轮请求序列化 Tool result
 
-- 触发：Capability 已产生副作用，Worker 在保存结果前退出，恢复后重试该 step。
-- 期望：重试携带相同 operationKey，Capability 返回同一 effectReceipt，副作用不重复；若 Capability 无幂等声明，run 停止自动重试并暴露明确失败。
+- 触发：离线 provider transport 返回 use_skill Tool call，Runtime resolver 返回 content + artifact。
+- 期望：第二轮 wire 只含 content；请求 JSON 不含 `artifact` 或 `evidenceRef`。
 
-### Requirement: HITL 决策可持久恢复且只生效一次
+### Requirement: 版本失配阻断并提示 reset
 
-Runtime SHALL 原子持久化 ActionRequest、WAITING_ACTION 状态、revision 和事件；提交 decision SHALL 校验 actionRequestId、expectedRunRevision 与授权。
+Runtime SHALL 在 start、continue、新模型/Tool round 和 Action ingress 比较记录版本与当前有效版本；不匹配 SHALL 阻断新工作并返回 RESET_REQUIRED。
 
-#### Scenario: 重复和冲突的人工决策
+#### Scenario: 等待卡片期间 Application 版本变化
 
-- 触发：同一 ActionRequest 先收到合法 approve，再收到相同 approve 和不同 reject。
-- 期望：首次 approve 生效；相同重复返回原结果；reject 返回冲突；重启恢复不会重复 interrupt 前的非幂等副作用。
+- 触发：run 记录 applicationVersion=v1，Action ingress 的 effective version 为 v2。
+- 期望：Action 不调用业务后端，run 不续跑、不静默迁移、不自动 restart，并返回显式 reset 提示。
 
-### Requirement: 取消具有确定的并发边界
+### Requirement: A2UI 模式决定等待
 
-Runtime SHALL 将取消作为持久化协作信号，在取消提交后禁止新副作用，并以 revision 比较决定取消与完成的竞争结果。
+render_application SHALL 根据发布配置区分 DISPLAY_ONLY 与 INTERACTIVE。render 成功本身 SHALL NOT 自动建立等待或完成 Skill。
 
-#### Scenario: 取消与 attempt 完成竞争
+#### Scenario: Display-only 与 interactive 相邻出现
 
-- 触发：CancelRun 与 Worker.CommitAttempt 并发提交。
-- 期望：数据库中先成功的合法终态规则生效；若取消先提交，晚结果不能推进主状态且仅留下审计；Runtime 不声称已撤回已经发生的外部副作用。
+- 触发：同一 Skill 先 render DISPLAY_ONLY，再 render INTERACTIVE。
+- 期望：第一个结果返回后继续；第二个产生 owning node 的 InteractionRef/interrupt，直到合法 resume 才继续。
 
-### Requirement: 事件可从游标续传且 presentation 保持通用
+### Requirement: Action success、interaction completion 与 Finalizer 分离
 
-Runtime SHALL 为每个 run 生成严格单调 sequence 的持久事件，并支持从 afterSequence 回放；presentation/action payload SHALL 只包含版本化通用契约。
+Runtime SHALL 按 Application 配置判断 Action 业务 success，并独立判断该 success 是否完成 interaction。Finalizer SHALL NOT 覆盖业务事实或绕过未完成交互。
 
-#### Scenario: 客户端在 presentation action 前断线
+#### Scenario: Action 成功但配置不完成交互
 
-- 触发：客户端记录 sequence=N 后断线，期间产生 progress、presentation 和 action-required 事件，再以 afterSequence=N 重连。
-- 期望：返回所有 sequence>N 的已提交事件并进入 live tail；重复投递可按 runId+sequence 去重；payload 不含业务实体、业务文案、renderer 实现或 raw chain-of-thought。
+- 触发：INTERACTIVE Action 返回满足 success 条件，但 completeInteractionOnSuccess=false。
+- 期望：记录 businessSuccess=true、interactionCompleted=false，node 继续等待，Finalizer 不运行。
+
+### Requirement: 并行分支保持独立推进
+
+当 A 处于等待，独立分支 B1 完成后 B2 SHALL 能继续；JOIN SHALL 等待 A。Runtime SHALL NOT 把 thread_id 当作分支 selector、OS thread 或分布式锁。
+
+#### Scenario: A 等待期间执行 B1 和 B2
+
+- 触发：LangGraph 从 START 并行进入 A(INTERACTIVE) 与 B1(DISPLAY_ONLY)，B1 后接 B2。
+- 期望：A 未 resume 时 B1、B2 完成，JOIN 未完成；只有 A 的 nodeId/interactionId/version 可恢复 A。
+
+### Requirement: retry 仅限 A2UI owning node
+
+Runtime SHALL 只对 render failure、Action technical failure 或 Action result 未满足配置 success 条件重试 owning A2UI node。Skill 模型、脚本、非 A2UI Tool 和 ability business failure SHALL NOT 获得通用 retry/recovery。
+
+#### Scenario: Ability 与 render 同时失败
+
+- 触发：一个 Skill execution 出现 ability business failure，另一个 A2UI node 出现 render technical failure。
+- 期望：ability failure 保持失败且不 retry；仅 A2UI owning node 按配置 retry，已完成 predecessor 和其他 branch 不重放。
+
+### Requirement: stop 与 restart 不承担业务幂等
+
+Stop SHALL 阻止所有新 node、模型/Tool round、Action、retry 和 Finalizer，且不可 resume。Restart SHALL 创建全新 run，不继承或检查旧业务结果。业务幂等/retry SHALL 由被调用 API 后端负责。
+
+#### Scenario: Stop 后收到 late result 并 restart
+
+- 触发：run 停止后收到已分发 ability 的 late result，随后用户显式 restart。
+- 期望：late result 仅保留事实且不推进；旧 card 操作被拒；新 runId 从入口开始，无旧 checkpoint/result/interaction，Runtime 不做跨 run dedup。

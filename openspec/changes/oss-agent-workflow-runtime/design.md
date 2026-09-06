@@ -1,217 +1,211 @@
-# Agent/Workflow Runtime 设计
+# Agent/Workflow Runtime Phase 1 设计
 
-## 状态与约束
+## 状态
 
-- 设计状态：PROPOSED
-- Runtime 准出：NO READY
-- 持久化：PostgreSQL-only；开发、测试和部署均不提供 SQLite/MySQL 或内存 fallback。
-- 部署假设：API 与 worker 可多实例；单机部署只是拓扑选择。
-- 协议状态：资产、Capability、事件、A2UI/AG-UI 的精确版本待主控统一。
-- 核心边界：Runtime 不导入数字员工领域模型、业务字段、场景分支或展示文案。
+- Authority：SW-P1-20260907.2
+- 状态：BASELINE_ALIGNED / EXPERIMENTAL
+- Runtime：NO READY
+- 实现语言：Python
+- Agent harness：Deep Agents SDK
+- Workflow/checkpoint/interrupt：LangGraph
+- 持久化：PostgreSQL-only
 
-## 设计原则
+本设计描述可行性映射和消费者边界。共享 schema、包布局、服务 API 与生产拓扑由 main-brain 审查后才能冻结。
 
-1. 将“单 Agent 决策循环”和“Workflow 节点调度”建模为不同 run 类型。
-2. PostgreSQL 是运行真值；进程内缓存不得参与正确性判断。
-3. 外部调用按至少一次尝试设计，端到端副作用通过稳定 operationKey 与 Capability 协作幂等。
-4. 每次状态变更、revision 增长和事件追加在同一数据库事务完成。
-5. 未知资产 revision、协议版本、schema 或授权一律 fail closed，不增加兼容 fallback。
-6. Runtime 只承载通用 presentation/action 契约；产品前端负责渲染，产品后端负责业务适配。
+## 最小架构映射
 
-## 逻辑架构
+    Chat command -----------+
+                            |
+    Workflow Skill node ----+--> Deep Agent
+                                  |
+                                  +--> use_skill
+                                  |      |
+                                  |      +--> authorized Skill instructions/resources
+                                  |
+                                  +--> execute_ability
+                                  |
+                                  +--> render_application
+                                           |
+                                           +--> DISPLAY_ONLY: return and continue
+                                           |
+                                           +--> INTERACTIVE: node-bound interrupt
+                                                                 |
+                                                                 +--> validated Action resume
+                                                                        |
+                                                                        +--> configured completion
+                                                                                |
+                                                                                +--> Finalizer
 
-    Product Adapter
-         |
-         v
-    Runtime Command Port ---- Run Query / Event Subscription Port
-         |
-         v
-    Run Coordinator
-      |              |
-      v              v
-    Agent Executor   Workflow Scheduler
-      |              |
-      +-------> CapabilityExecutionPort
-      +-------> PresentationActionPort
-         |
-         v
-    PostgreSQL: runs, attempts, checkpoints, actions,
-                idempotency records, leases, ordered events
+外层 Workflow 是 LangGraph StateGraph。Skill 节点调用同一个 Deep Agent executor，但必须由模型先调用 use_skill 取得授权后的指令/资源。Skill 本身不被编译为业务子图。
 
-LangGraph 是 Agent/Workflow 编排实现候选，不是公共协议，也不拥有 Runtime 的跨实例租约、授权或产品展示边界。
+## Deep Agents 使用范围
 
-## 组件职责
+### 采用的公开扩展点
 
-| 组件 | 负责 | 不负责 |
-| --- | --- | --- |
-| Runtime Command Port | start、resume action、cancel 的校验与命令幂等 | 业务参数拼装、UI 渲染 |
-| Run Coordinator | run 身份、revision、状态机、父子关系和事务边界 | Workflow 图编辑、模型供应商细节 |
-| Agent Executor | 单 Agent 的模型/工具循环、Agent checkpoint 与 terminal result | Workflow 节点依赖调度 |
-| Workflow Scheduler | 已发布图的依赖推进、节点 attempt、重试、等待与恢复 | Agent 内部推理策略、业务分支 |
-| CapabilityExecutionPort | 使用版本化 capabilityRef、typed input、operationKey 发起调用 | 注册 capability、实现具体业务系统 |
-| PresentationActionPort | 产生通用 presentation/action request，接收关联 action decision | 选择业务文案、渲染组件 |
-| Lease Manager | 领取、续租、过期恢复、fencing token | 通过单实例互斥假设保证正确性 |
-| Event Store / Subscription | 事务内追加有序事件，从 afterSequence 回放和续传 | 对外传输协议版本与浏览器渲染 |
-| Definition Resolver | 解析不可变已发布资产并校验 revision/schema/checksum | 发布、替换或修复资产 |
+- create_deep_agent：组装显式 model、Tools、middleware、backend、checkpointer、store 和 context_schema。
+- Tools：只暴露 Runtime-owned use_skill、execute_ability、render_application 和获批只读检索。
+- Harness Profile：显式排除默认 `ls/read_file/write_file/edit_file/delete/glob/grep/execute/task`；关闭 general-purpose subagent。
+- Provider adapter：Anthropic Tool bind 强制 `strict=True`，并通过 MockTransport 验证实际 wire schema/content。
+- Middleware：注入 trusted context、做版本准入、限制 Tool、记录事件；不创建另一套 scheduler。
+- Backend：Phase 1 使用无 host shell 权限的 StateBackend/受控自定义 backend 语义；生产持久化仍由 PostgreSQL Store/Checkpointer 方案评审。
+- Checkpointer：实验目标为 AsyncPostgresSaver；当前只 import，未运行 PG。
+- Store：仅在 Skill resource 或长文本需要 SDK StoreBackend 时评估；不得自动演化成知识库平台。
 
-## 两类运行
+### 明确不采用
 
-### AgentRun
+- model=None 的默认模型，因为它隐含 provider/key，且官方已标为 deprecated。
+- LocalShellBackend、默认文件系统 Tool、真实文件系统写权限、subagent/task swarm 和任意脚本执行。
+- native Skill-directory activation 作为 use_skill 的替代入口。
+- InMemorySaver/SQLite 作为 PostgreSQL 不可用时的 fallback。
+- 默认或全局 Tool retry。任何 retry middleware 必须显式限定为 A2UI render/Action。
 
-AgentRun 表示一个独立 Agent 的执行。它拥有输入、Agent 状态、模型/工具 attempt、checkpoint 和结果。即便内部使用 LangGraph 节点，也不得把它伪装成 Workflow 图节点调度器。
+## TrustedContext 与 Tool schema
 
-### WorkflowRun
+`SW-P1-SUBSET-01` 批准的 `TrustedInvocationContext` 由服务入口验证后注入 LangGraph runtime context：
 
-WorkflowRun 表示已发布图的持久化调度。它拥有图 revision、节点依赖、节点 attempt 和父子关系。需要 Agent 能力的节点创建或关联一个 AgentRun 子运行；父 Workflow 只消费子运行的公开结果与状态，不读取其内部消息或推理过程。
+- `contractRevision=SW-CONTRACTS-P1-CANDIDATE.1`；
+- `trustedContext={userId, environment}`，environment 仅 PRT/ONLINE；
+- conversation scope 为 `{kind:CONVERSATION, conversationId}`；
+- Workflow scope 为 `{kind:WORKFLOW, runId, nodeId, conversationId?}`；
+- `controlRequestId`。
 
-这一区分允许分别测试 Agent 循环与 Workflow 调度，同时保持一个统一的 RunQuery/Event 输出面。
+这些字段不进入模型可填写的 Tool arguments。模型只能提交严格 `{skillKey}`；userId、environment、versionId 或其他 extra 字段在 ToolNode 调 resolver 前被拒绝。
 
-## 状态机
+获批 use_skill result 为 `{contractRevision, content, artifact}`：content 只含 instructions、read-only opaque resource handles 与描述性 requiredToolNames；artifact 保存 skillKey、不可变版本、digest、environment/selection 与 evidenceRef。Runtime 直接使用主干共享 `skillweave_contracts.UseSkillResult.from_mapping()` 验证完整 resolver result，再以 `content_and_artifact` 分离返回。
 
-候选非终态包括 ACCEPTED、RUNNING、WAITING_ACTION、RETRY_SCHEDULED 和 CANCEL_REQUESTED。候选终态包括 SUCCEEDED、FAILED 和 CANCELLED。精确枚举名由公共契约统一，但必须满足：
+Tool arguments 只保留最薄 Pydantic 适配：本地校验委托共享 `UseSkillRequest`，provider JSON Schema 使用批准的 ECMA-262 pattern，避免把 Pydantic 私有正则语义带到 wire。共享适配拒绝 extra、隐式类型 coercion 与 CR/LF key；Runtime 不再维护重复 DTO。execute_ability 与 render_application 采用相同 trusted context 注入原则，但其 full wire 未由该子集批准。
 
-- 状态迁移基于 expectedRevision 做比较并交换。
-- 终态不可逆；重复同义命令返回已有结果，矛盾命令返回冲突。
-- WAITING_ACTION 与 RETRY_SCHEDULED 不持有长租约。
-- CANCEL_REQUESTED 禁止调度新的外部副作用，但不能假装撤回已经发生的调用。
-- Workflow 已先提交终态时，后到取消返回 ALREADY_TERMINAL。
-- 取消先提交时，晚到 attempt 不能推进主状态；其结果仅以审计事件记录，并明确提示外部副作用可能已经发生。
+## PRT / ONLINE 与版本准入
 
-## PostgreSQL 逻辑记录
+- PRT resolver 只从 PRT 库读取当前版本。
+- ONLINE resolver 只从 ONLINE 库读取 stable 或 userId 命中的 gray candidate。
+- ONLINE 绝不读取 PRT；userId 是唯一 gray targeting 术语。
+- start、每次新模型/Tool round、continue 和 Action ingress 都执行轻量 effective-version 比较。
+- 任一参与资产版本不匹配时，阻断新的工作并生成 RESET_REQUIRED；不得继续旧版本、静默迁移或自动 restart。
+- SDK checkpoint 兼容版本与业务配置版本是两类门禁，分别记录。
 
-本轮不冻结表名或 DDL，只定义必须存在的逻辑记录：
+## Workflow 与 Skill 边界
 
-| 记录 | 关键语义 |
-| --- | --- |
-| Run | runType、resolved asset revision、state、revision、parentRunId、cancelRequestedAt |
-| Attempt | logicalStepId、attemptNo、errorClass、started/finished、lease fencing token |
-| Checkpoint | run/thread identity、checkpoint namespace/id、序列化状态与兼容版本 |
-| Lease | ownerId、expiresAt、fencingToken；时间以数据库为准 |
-| ActionRequest | actionRequestId、runId、expectedRunRevision、schema、status、decision |
-| IdempotencyRecord | scope、key、request fingerprint、status、稳定结果或冲突 |
-| RunEvent | runId、单调 sequence、eventType、contractVersion、payload、occurredAt |
+Workflow graph 只包含 sequence、condition、parallel、AI decision、user choice、Skill node、A2UI presentation 和 Finalizer 等平台节点语义。Skill node 不展开 Skill 文档步骤。
 
-LangGraph PostgresSaver 可承载框架 checkpoint，但业务 run、lease、event、action 和外部副作用幂等仍由 Runtime 数据模型拥有。不得把 InMemorySaver 用作任何环境的持久化 fallback。
+同一合成 Skill 在两种入口下保持一致：
 
-## 多实例领取与恢复
+- Chat：Deep Agent 被要求使用某 Skill，模型调用 use_skill 后执行。
+- Workflow：Workflow Skill node 为 Deep Agent 提供 node-bound 任务上下文，模型仍调用同一个 use_skill Tool。
 
-1. Worker 在短事务中从“可运行且无有效租约”的队列记录领取任务。可使用 PostgreSQL 行锁与 SKIP LOCKED 降低多个消费者的争抢，但它只用于队列领取，不作为一般查询一致性保证。
-2. 领取时写入 ownerId、expiresAt，并递增 fencingToken；提交后才执行节点。
-3. Worker 周期性续租，续租和每次结果写入都必须匹配 ownerId、fencingToken 与 expectedRevision。
-4. 租约到期后其他实例可以领取并获得更大的 fencingToken。旧 worker 的任何晚写都会被拒绝。
-5. 崩溃恢复从最新持久化 checkpoint 与 Run/Attempt 真值重建，不依赖旧进程内存。
-6. 领取恢复次数与业务 retry attempt 分开计数，避免把基础设施接管误报为业务重试。
+不得为 Workflow 添加 Skill 专用 output 路由字段。路由只消费 Skill 的普通 final result/status，由 Workflow 节点配置解释。
 
-租约时长、续租周期和扫描批次是配置项，必须有下限、上限和指标；本提案不冻结具体数值。
+## A2UI 映射
 
-## 幂等与外部副作用
+render_application 通过可信 resolver 获取 Application 配置，返回结构化 presentation result。
 
-命令幂等与 capability 副作用幂等分开处理：
+### DISPLAY_ONLY
 
-- StartRun 使用调用方提供的 idempotencyKey 与规范化 request fingerprint。相同 key/相同请求返回同一 run；相同 key/不同请求返回冲突。
-- 每个外部副作用生成稳定 operationKey，至少包含 runId、logicalStepId 与 effect identity。基础设施恢复和业务重试均复用同一个 operationKey。
-- Runtime 先持久化调用意图，再在数据库事务外调用 CapabilityExecutionPort，最后用 fencing token 和 expectedRevision 提交结果。
-- 若进程在外部调用成功后、结果落库前崩溃，恢复会用相同 operationKey 重试。Capability 必须声明并实现去重或结果查询；否则该 capability 不得被标记为可自动重试。
-- “exactly once”不作为跨系统承诺；可验证承诺是 Runtime 状态 exactly-once transition、调用至少一次、协作式副作用幂等。
+- render 成功后立即将结果返回 Agent/Workflow。
+- 不创建 interrupt，不阻塞同分支下一步。
+- render 失败可以按 owning node 的 A2UI retry policy 重试。
 
-## 重试与失败分类
+### INTERACTIVE
 
-| 类别 | 行为 |
-| --- | --- |
-| TRANSIENT | 在版本化策略预算内退避重试，复用 operationKey |
-| PERMANENT_VALIDATION | 立即失败，不重试 |
-| AUTHORIZATION | fail closed，不通过其他身份或旧协议 fallback |
-| USER_REJECTED | 作为明确 action 结果推进到定义的分支，不当作技术失败重试 |
-| CANCELLED | 停止新工作，进入取消收敛 |
-| UNKNOWN | 默认不可自动重试，等待策略明确或人工处理 |
+- render 成功后创建 InteractionRef，并在 owning Workflow node 上触发 LangGraph interrupt。
+- interrupt payload 至少携带 runId、nodeId、interactionId、applicationRef/version 与允许的 action 描述。
+- resume 必须使用 Command(resume=...) 且通过 nodeId、interactionId、effectiveVersion 和授权校验。
+- 普通 chat、其他 card、仅相同 thread_id 或仅 runId 均不能选择等待节点。
+- Action 调用结果先按配置判断业务 success，再按配置判断是否完成 interaction。
+- render 成功、Action 请求已发出或 Action 业务成功都不自动等于 Skill success。
 
-重试策略属于发布定义或受治理的 Runtime policy。Runtime 不得自行把失败转成另一模型、另一 capability 或旧版本资产。
+官方 LangGraph 文档说明 interrupt 恢复会从节点开头重新执行，因此 render/Action 前后的控制记录必须可去重；这只处理平台控制重复，不接管业务 API 幂等。
 
-## HITL 与通用 action
+## Finalizer 边界
 
-- 节点请求人工动作时，在同一事务中创建 ActionRequest、将 run 置为 WAITING_ACTION、递增 revision 并追加事件，然后释放租约。
-- ActionRequest 只包含通用类型、schema、presentation artifact reference、data 和允许的 decision；业务文案来自已发布 presentation artifact 或产品适配层。
-- 提交动作必须携带 actionRequestId、expectedRunRevision、actor authorization context 和 decision。
-- 首次合法 decision 原子生效；完全相同的重复提交返回原结果；不同 decision 或过期 revision 返回冲突。
-- 恢复时重新进入节点意味着 interrupt 前代码可能重放，因此所有 interrupt 前副作用必须被隔离或幂等。LangGraph 两种语言的官方文档都明确提示该边界。
+Finalizer 可读取 predecessor final results/status 和已完成 InteractionRef，生成总结与完成判断。它不得：
 
-## 取消并发边界
+- 把真实失败改成成功；
+- 把“请求已提交”写成“异步业务已完成”；
+- 绕过未完成 INTERACTIVE；
+- 在 stop 后继续；
+- 重新调用业务 Tool 来补事实。
 
-取消是持久化协作信号，不是进程 kill：
+## 并行与节点绑定验证
 
-1. CancelRun 以 expectedRevision 提交 CANCEL_REQUESTED，并追加事件。
-2. Scheduler 在开始模型调用、capability 调用、action 创建和节点提交前检查取消状态。
-3. 可取消的下游调用接收 cancellation signal；不可取消调用允许完成，但其晚结果受 fencing/revision 拒绝，不能重新推进 run。
-4. 已完成的外部副作用不做隐式补偿。是否存在补偿是发布 Workflow 的显式节点设计。
-5. 终态竞争按数据库中先成功的 compare-and-swap 决定，并产生可审计结果。
+第一实验图：
 
-## 事件与续传
+    START
+      |\
+      | +--> A(INTERACTIVE wait) -----+
+      |                                |
+      +--> B1(DISPLAY_ONLY) --> B2 -----+--> JOIN --> FINALIZER
 
-- RunEvent 是执行可观察性的权威日志；每个 run 的 sequence 严格单调且不可复用。
-- 状态变更与对应事件在同一事务中提交，避免 snapshot 已变但事件缺失。
-- SubscribeRunEvents(afterSequence) 先回放 sequence 大于游标的已提交事件，再进入 live tail。
-- 传输允许至少一次投递；消费者以 runId + sequence 去重，并在发现 gap 时重新回放。
-- 事件 payload 不含 raw chain-of-thought、密钥或未经治理的完整模型上下文。可公开的是步骤状态、工具/模型调用元数据、经策略裁剪的输入输出摘要和错误分类。
-- SSE、WebSocket、AG-UI event 或其他 transport adapter 在主控裁决后映射此内部语义，不能反向污染核心状态机。
+必须观测：
 
-## Presentation/Action 端口
+1. A 进入 interrupt。
+2. B1 完成。
+3. A 未 resume 时 B2 仍能完成。
+4. JOIN 保持等待 A。
+5. 只用 A 的 interactionId 可 resume A；B 或普通 chat 不能代替。
+6. A 完成后 JOIN 与 Finalizer 才运行。
 
-PresentationActionPort 只接受版本化、可校验的通用输入：
+thread_id 只是 checkpoint cursor。单次 invoke、superstep、parallel task 与独立 branch progression 的实际关系必须由 SDK 运行记录证明。若 LangGraph 原生执行停在 A 所在 superstep，导致 B2 无法推进，则提交最小 reproducer 给 main-brain；不得通过私建 scheduler 掩盖。
 
-- presentationArtifactRef 与 revision
-- data 与 dataSchemaVersion
-- action schema/allowed decisions
-- runId、logicalStepId、actionRequestId
-- authorization/correlation context
+## Retry 边界
 
-输出是通用 presentation event 或 action decision。Runtime 不选择具体组件实现、不执行 DOM/React 渲染、不拼业务文案；数字员工前端负责 renderer，数字员工后端负责业务数据适配。未知组件、schema 或 action version 必须拒绝。
+- 可 retry：render_application 技术失败；Action 调用技术失败；Action 结果未满足该 Application 配置的 success 条件。
+- retry 作用域：仅 owning A2UI node，保留 predecessor 与其他 branch 已完成事实。
+- 不可通用 retry：Skill 模型调用、Skill instruction 执行、非 A2UI Tool、execute_ability 业务失败。
+- Deep Agents 默认 middleware 与 LangChain Agent/ToolNode 的异常行为需按实际安装版本审计。
+- 若引入 ToolRetryMiddleware，只允许匹配 render_application 或 Action adapter；禁止 fallback 模型、其他 Tool 或全局 retry。
 
-## 输入输出契约
+## Stop 与 fresh restart
 
-| 操作 | 关键输入 | 成功输出 data | 失败边界 |
-| --- | --- | --- | --- |
-| StartRun | runType、assetRef/revision、input、idempotencyKey、authContext | runId、state、revision、resolvedAsset | 未发布/未知版本/schema/授权失败即拒绝 |
-| SubmitAction | actionRequestId、expectedRunRevision、decision、authContext | runId、state、revision、acceptedDecision | 重复同义返回原结果；冲突或过期拒绝 |
-| CancelRun | runId、expectedRevision、reasonCode、authContext | runId、state、revision、cancelAccepted | 已终态返回稳定结果，不撤回外部副作用 |
-| GetRun | runId、authContext | snapshot、currentSequence | 不泄露内部 checkpoint 或推理链 |
-| SubscribeRunEvents | runId、afterSequence、authContext | ordered events、nextSequence | gap 可回放；未知版本 fail closed |
-| InvokeCapability | capabilityRef/revision、typedInput、operationKey、executionContext | typedOutput、effectReceipt | 无幂等保证时禁止自动重试 |
+Stop admission guard 在新 node、模型 round、Tool、Action、retry 和 Finalizer 前检查：
 
-以上是消费者需求，不是已批准的共享接口；字段名和 envelope 由 main-brain 与域所有者统一。
+- stop 后不再发起新工作；
+- 已分发调用的晚结果保留为事实，但不能推进；
+- stopped interaction/card 只读，后端拒绝操作；
+- stop 不可 resume。
 
-## 可观察性
+Restart 创建新 runId、thread/checkpoint namespace 和 InteractionRef 集合，从入口重新执行。它不继承旧消息、结果、状态、Action 或 completion，不查询旧业务结果来阻止新 run。调用 API 后端自行负责业务请求幂等/retry；Workflow 不补偿、不 reconciliation、不跨 run dedup。
 
-每个命令、领取、续租、attempt、checkpoint、action、retry、cancel、fencing rejection 与 terminal transition 都应带 runId、logicalStepId、attemptNo、revision、fencingToken 和 correlationId。日志和 trace 仅记录经策略允许的元数据；指标至少覆盖运行延迟、等待时间、租约接管、重试、幂等命中、事件 lag 与 stale write rejection。
+## PostgreSQL 与双进程门禁
 
-## 语言裁决建议
+Phase 1 不自建独立 lease scheduler。先验证 LangGraph + AsyncPostgresSaver 在两个 stateless Python 进程上的原生约束：
 
-建议 CTO 先批准 TypeScript + LangGraphJS 的限时 parity spike，验证：
+- 同一个 run/node 的并发 invoke 如何冲突或串行；
+- interrupt/checkpoint 如何被另一进程查询和 resume；
+- pending writes 与 node replay 的实际边界；
+- process kill 后可恢复边界；
+- parallel branch checkpoint/state 是否支持目标进度。
 
-- PostgresSaver 初始化与真实重启恢复；
-- interrupt/resume 的重复执行边界；
-- event streaming 与自定义运行事件适配；
-- 两 worker 竞争、租约过期和 stale writer fencing；
-- capability operationKey 在“调用成功、落库前崩溃”后的去重。
+任何额外 admission/ownership 机制必须以真实 SDK 缺口、最小 reproducer 和 contracts 评审为前提；不能从旧 design 直接继承 fencing/lease 方案。
 
-若全部通过，锁定 TypeScript MVP。若缺口来自可控的 Runtime 外层能力，则仍可选择 TypeScript；只有出现关键框架/生态能力不可接受且 Python 验证通过，才改选 Python。禁止为了“兼容两边”保留双 runtime。
+## Scripted model
 
-## 风险与缓解
+实验使用显式 scripted chat model：
 
-| 风险 | 缓解 |
-| --- | --- |
-| 把 LangGraph checkpoint 误当成完整分布式调度 | 独立建模 lease、fencing、event、idempotency 与 action |
-| 外部副作用无法 exactly once | 明确至少一次 + 稳定 operationKey；不支持幂等的 capability 禁止自动重试 |
-| 事件协议过早冻结 | 先稳定内部语义，transport/version 等主控裁决 |
-| 业务语义渗入核心 | 核心测试使用中性 fixture；依赖规则禁止 Runtime 引用数字员工模块 |
-| checkpoint 无界增长 | 实现前定义 retention、归档与删除安全门禁，并做容量测试 |
-| 取消造成错误“已撤回”承诺 | 暴露 late completion/audit，补偿必须由 Workflow 显式定义 |
+- 按脚本顺序产生 use_skill Tool call 和 final response；
+- 不联网，不使用模型 key；
+- 记录实际 model input 与绑定 Tool objects；
+- ToolNode 测试确认 userId/environment/versionId extra 不可由模型传入；
+- 读取项目自有 `evidence-first-brief` Skill bytes/digest，不使用真实业务字段。
+
+scripted model 被刻意编排为调用 use_skill，只证明 SDK/契约映射，不证明真实模型会稳定遵循 Skill。system prompt 不是授权；mandatory use_skill 仍需 Runtime admission guard。另有独立 Anthropic MockTransport 测试通过真实 provider serializer，证明 wire strict schema 与 artifact/evidenceRef 不出站，但仍不证明 live-model 行为。
+
+## 当前可执行性
+
+Python 3.11.13、task-owned venv、Deep Agents 0.7.13、LangGraph 1.2.11 与 checkpoint-postgres 3.1.2 已安装并通过 import/pip check。首批 15 个测试覆盖 named contracts subset、ToolRuntime 注入、provider wire、默认 Tool 收口和 A2UI mode/interrupt；这只是 source feasibility。
+
+当前只等待 main-brain 协调临时 PostgreSQL 与两个 stateless process 的验证窗口。PG 获批前不得以 InMemory/SQLite 替代 resume 证据，也不得启动公开端口或触碰现有 MySQL。独立并行 progression、scoped retry、stop/restart 必须继续按 TDD 在实验目录完成；若 SDK 原生不支持，提交最小 reproducer 而不自建第二 scheduler。
 
 ## 公开依据
 
-- LangGraphJS v1 将 durable execution、checkpointing、persistence、streaming 与 HITL 列为一等能力：[官方发布说明](https://docs.langchain.com/oss/javascript/releases/langgraph-v1)
-- JavaScript persistence 文档说明 checkpoint 用于中断恢复、故障恢复与 thread 状态，并列出 PostgresSaver：[官方文档](https://docs.langchain.com/oss/javascript/langgraph/persistence)
-- Python persistence 文档提供 PostgresSaver/AsyncPostgresSaver 与 pending writes 语义：[官方文档](https://docs.langchain.com/oss/python/langgraph/persistence)
-- 两种语言的 interrupt 都会在恢复时重新执行所在节点，因此副作用必须隔离或幂等：[JavaScript](https://docs.langchain.com/oss/javascript/langgraph/interrupts)、[Python](https://docs.langchain.com/oss/python/langgraph/interrupts)
-- JavaScript streaming 支持 state、message、custom、tool 等事件模式：[官方文档](https://docs.langchain.com/oss/javascript/langgraph/streaming)
-- PostgreSQL 官方说明 SKIP LOCKED 适合 queue-like 多消费者场景，但不提供一般一致视图：[SELECT locking clause](https://www.postgresql.org/docs/current/sql-select.html)
-- PostgreSQL unique constraints 可作为幂等键冲突的数据库最终门禁：[Constraints](https://www.postgresql.org/docs/current/ddl-constraints.html)
+- Deep Agents create_deep_agent 可注入 Tools、Middleware、Backend、Checkpointer、Store：
+  https://docs.langchain.com/oss/python/deepagents/customization
+- Backend 为可插拔 filesystem surface；LocalShellBackend 不适合 Web/API：
+  https://docs.langchain.com/oss/python/deepagents/backends
+- Deep Agents 0.7.13 要求 Python >=3.11、MIT：
+  https://github.com/langchain-ai/deepagents/blob/main/libs/deepagents/pyproject.toml
+  https://github.com/langchain-ai/deepagents/blob/main/LICENSE
+- LangGraph interrupt 使用 Command(resume=...)，并会从节点开头重放：
+  https://docs.langchain.com/oss/python/langgraph/interrupts
+- LangGraph 提供 PostgresSaver/AsyncPostgresSaver：
+  https://docs.langchain.com/oss/python/langgraph/persistence

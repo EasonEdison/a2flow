@@ -1,42 +1,53 @@
-# Agent/Workflow Runtime Readiness
+# Agent/Workflow Runtime Phase 1 Readiness
 
 ## 总结
 
 - 当前结论：NO READY
-- 设计：PROPOSED，等待 CTO/main-brain 审查
-- 实现：未开始
-- 自动化验证：未执行
-- Runtime 证据：无
-- 部署：未授权、未执行
-- 证据等级：C（design-only）
+- Phase 1 基线：ALIGNED
+- `SW-P1-SUBSET-01`：APPROVED_AND_CONSUMED（仅 use_skill/trusted-context 命名闭包）
+- SDK 版本/API：RESOLVED_AND_IMPORTED
+- 实验代码：PARTIAL，15 个首批用例 GREEN
+- Provider wire：OFFLINE_VERIFIED；live model 未验证
+- PostgreSQL：NOT PROVISIONED
+- 双进程：NOT VERIFIED
+- 独立并行/retry/stop/restart：NOT VERIFIED
+- 产品 Runtime：NOT IMPLEMENTED
+- 部署：NOT AUTHORIZED
 
-源文件合入 main 只表示设计草案已交付，不表示设计已批准、代码已实现、服务已部署或 Runtime 可用。Git 交付证据以本 change 的 task checkpoint 为准。
+本 change 合入只代表设计/实验源交付，不代表 SDK 可运行、Runtime 可用或产品完成。
 
 ## 门禁
 
-| 门禁 | 当前状态 | 通过条件 |
+| 门禁 | 状态 | 通过条件 |
 | --- | --- | --- |
-| 语言 ADR | NO READY | CTO 选择语言并记录替代方案、证据和复议触发条件 |
-| 共享契约 | NO READY | 资产、Capability、Workflow、presentation/action、authorization 与 event envelope 经各 owner 统一 |
-| PostgreSQL-only | NO READY | migration 和集成测试覆盖所有环境，无其他数据库或内存 fallback |
-| 多实例正确性 | NO READY | 两个以上 worker 完成领取、续租、接管和 stale writer fencing 故障注入 |
-| 幂等 | NO READY | start/action/cancel 与外部 capability operationKey 场景全部通过 |
-| HITL/取消 | NO READY | 并发、重复提交、重启恢复和晚结果边界有运行证据 |
-| 事件续传 | NO READY | 游标回放、gap 检测、至少一次去重和顺序断言通过 |
-| 安全与边界 | NO READY | 无业务语义、raw chain-of-thought、凭据；授权与敏感信息检查通过 |
-| 可复现运行 | NO READY | 干净环境构建、测试、启动和纵向 demo 成功 |
+| Python 运行时 | PASS | Python 3.11.13 并行安装完成；默认 3.6.8、DNF 与 tuned 复核正常 |
+| 依赖锁定 | PARTIAL | resolver/import/pip-check/59 项实验 lock 已完成；`psycopg-binary` LGPL notice/分发评审未完成 |
+| 共享契约 | PARTIAL | `SW-P1-SUBSET-01` 已批准并消费；bundle 其余定义仍 provisional |
+| Tool-only Skill | PARTIAL | model schema/trusted context/provider wire 已通过；Workflow 入口和 mandatory admission 未证明 |
+| Deep Agents Tool surface | PASS_FOR_PROBE | 模型只绑定 Runtime-owned Tool；默认文件/shell/subagent Tool 全部排除 |
+| A2UI | PARTIAL | DISPLAY_ONLY 与 INTERACTIVE interrupt payload 通过；Action resume/success/completion/Finalizer 未通过 |
+| 并行映射 | NO READY | LangGraph 1.2.11 最小复现实际只有 B1，A interrupt 后 B2 未推进；需架构裁决且不得补第二 scheduler |
+| retry/stop/restart | NO READY | 仅 A2UI retry；stop 不可 resume；restart fresh |
+| PostgreSQL | NO READY | AsyncPostgresSaver + migration + process restart |
+| 多进程 | NO READY | 两个 stateless process 共享 PG 的查询/resume/冲突证据 |
+| 安全与 clean-room | PARTIAL | 合成 fixture、无真实 key/业务数据/网络；最终 secret/license/source scan 待执行 |
 
-## 当前证据
+## 当前环境阻塞
 
-- 已有：净化需求、平台边界、公开官方 LangGraph/PostgreSQL 资料与本 change 的设计/计划。
-- 不存在：依赖安装、编译、单元测试、PostgreSQL integration、故障注入、浏览器验证、部署和生产运行证据。
-- OpenSpec strict validate：若交付环境没有 CLI，将明确记为未执行，不能替代人工审查。
+PY-01 已完成：DNF transaction 9 仅新增 7 个 Python 3.11 相关包；`/usr/bin/python3.11` 为 3.11.13，而默认 `/usr/bin/python3` 仍为 platform-python 3.6.8。安装后 DNF 4.7.0 与 tuned active 均正常。
 
-## 解除 NO READY 的最低证据
+Task-owned venv 已解析并导入 Deep Agents/LangGraph/PostgreSQL checkpointer，`pip check` 无 broken requirements。首次 `langgraph==1.2.10` 解析冲突被正确拒绝，最终使用 1.2.11；`psycopg-binary==3.3.5` 只在 venv 中补足 libpq implementation，未改系统库。当前环境阻塞已从 Python 转为尚未协调的临时 PostgreSQL 与双进程测试窗口；不得复用无关容器、触碰现有 MySQL、公开端口或真实 key。
 
-1. 主控批准语言与公共契约。
-2. 实现 tasks.md 的 MVP 项，并以 PostgreSQL-only 配置运行。
-3. regression.md 八个场景全部具有可复现实证。
-4. 完成依赖方向、敏感信息、secret、许可证与供应链检查。
-5. 在至少两个 API/worker 实例的测试拓扑证明恢复、fencing、幂等和续传。
-6. 主控审查 readiness 证据后显式更新状态；任务完成比例不得自动改变准出结论。
+## 已撤销门禁
+
+以下旧门禁不再要求，也不得回流：
+
+- TypeScript/LangGraphJS 选型 spike；
+- Runtime 外部业务 exactly-once、lease/fencing 通用 scheduler；
+- 通用 Skill recovery/retry；
+- frozen old revision continuation；
+- restart reconciliation 或跨 run dedup。
+
+## READY 更新规则
+
+只有 main-brain 审查全部实验 diff、真实命令输出和 PostgreSQL/双进程证据后，才可调整本文件。完成 tasks 比例或 Git merge 不自动改变 NO READY。
