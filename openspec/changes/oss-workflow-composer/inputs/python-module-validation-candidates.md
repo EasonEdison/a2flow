@@ -4,7 +4,7 @@
 
 - 状态：`PROPOSED / DOC_RESEARCH_ONLY`
 - 适用基线：`SW-P1-20260907.2 + ENG-01`
-- 共享输入：`SW-CONTRACTS-P1-CANDIDATE.1` 已有固定候选快照，但仍为 `PROVISIONAL`；本文件不把它升级为已批准 graph revision。
+- 共享输入：`SW-P1-SUBSET-01` 已批准 corrected snapshot `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 中 exact `skillKey/use_skill` 相关闭包作为命名实现依赖；wire field 仍为 `SW-CONTRACTS-P1-CANDIDATE.1`。Workflow graph/context/control/events 仍为 `PROVISIONAL`，本文件不把它们升级为已批准 graph revision。
 - 本文件只给出 `services/workflow-registry/` 的候选包布局、依赖取舍、校验流水线和测试门禁。
 - 未创建服务目录，未修改根 `pyproject`/lock，未安装包，未替换系统 Python，也未启动进程或数据库。
 
@@ -95,7 +95,7 @@ services/workflow-registry/
 | 可选 property test | Hypothesis `6.167.1` | MPL-2.0 | `>=3.10` | 非首个必需依赖；先做许可证审查 |
 | 后续 PostgreSQL adapter | psycopg `3.3.5` | LGPL-3.0-only | `>=3.10` | 不进入首个纯 validator 切片；单独审查部署/许可证 |
 
-Python `3.11+` 是当前模块兼容候选：它由 NetworkX 的最低要求决定，也与当前 Deep Agents PyPI classifiers 覆盖 3.11+ 的信号一致。这只是跨模块兼容推断；Runtime/main-brain 仍需选择并实测精确 Python、Deep Agents、LangGraph 和根锁文件组合。服务器现有 Python 3.6.8 只能运行当前标准库 fixture/checker，不能证明候选栈可安装或可执行；PY-01 的主机变更仍仅由 Runtime 执行。
+Python `3.11+` 是当前模块兼容候选：它由 NetworkX 的最低要求决定，也与当前 Deep Agents PyPI classifiers 覆盖 3.11+ 的信号一致。`SW-P1-SUBSET-01` 把 Python 3.11 定为第一验证目标并允许列明 owner 复用 Runtime 环境已有 Pydantic 2.13.5，但没有把 Workflow owner 或本候选依赖栈纳入实现放行。这仍是跨模块兼容输入；Runtime/main-brain 选择并实测精确 Python、Deep Agents、LangGraph 和根锁文件组合。服务器现有 Python 3.6.8 只能运行当前标准库 fixture/checker，不能证明候选栈可安装或可执行；PY-01 的主机变更仍仅由 Runtime 执行。
 
 ## 7. 测试与证据门禁
 

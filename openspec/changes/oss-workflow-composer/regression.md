@@ -4,6 +4,7 @@
 
 - 图 fixture 自检：`PASS (DOC_FIXTURE_ONLY)`
 - Python 模块/依赖研究：`PASS (DOC_RESEARCH_ONLY)`
+- `SW-P1-SUBSET-01` 权威同步：`PASS (DOC_AUTHORITY_ONLY)`
 - 服务实现验证：`PLANNED`
 - Runtime 集成：`NO READY`
 - 说明：fixture 自检只证明项目自有 JSON 样例结构和声明的 case 编码一致；它没有施加 5 种 mutation，也没有运行 5 类 Runtime 行为，不证明共享 contract、LangGraph 行为或产品可用。
@@ -24,6 +25,14 @@
 - Params：2026-09-07 可见的最新发布元数据、Python 要求、许可证和公开 DAG API；未安装或 import 候选包
 - Success `data`：推荐 `shared JSON Schema + strict Pydantic + NetworkX`；Python `3.11+` 仅为兼容候选；根 pins/lock、系统 Python 和 Runtime 组合仍待单一 owner 实测
 - 字段级断言：没有新增 `services/workflow-registry/`、根 manifest/lock、系统包或进程；研究结果不能把 G1-G7 改为 READY
+
+## R0c `SW-P1-SUBSET-01` 权威同步
+
+- 状态：`EXECUTED (DOC_AUTHORITY_ONLY)`
+- Method：在本任务 worker `fetch + merge origin/main`，完整读取 `implementation-release-01.md` 并执行 SHA256 校验
+- Params：release commit `3a48d4b106db8f382c3c96bbc8992f328b81e259`；expected SHA256 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`
+- Actual `data`：SHA256 完全一致；exact `skillKey/use_skill` 闭包来自 corrected schema snapshot `a1cb44e88ce5bb603c62b4618804c78ae0d5585c`
+- 字段级断言：wire revision 仍为 `SW-CONTRACTS-P1-CANDIDATE.1`；Workflow owner、graph/context/control/events、Runtime readiness 和部署均未批准；27 项实现任务保持未勾选
 
 ## R1 发布合法 sequence/condition/parallel 图
 
