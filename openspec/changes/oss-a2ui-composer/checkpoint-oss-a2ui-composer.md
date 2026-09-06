@@ -14,9 +14,9 @@
 ## 当前磁盘真值
 
 - Phase 1 基线：`SW-P1-20260907.2`
-- 服务器同步：已有自有未提交改动时两次执行 `git fetch origin` + `git merge --no-edit origin/main`，从 `25c00aab…` 依次快进到 `c168f2c…` 与 `255475d4a5a71ed767adf22362c6353a40fc4e12`，无冲突、未 stash/reset/覆盖。
+- 服务器同步：有自有改动时安全合入到 `255475d…`；内容首次集成后继续快进到 `35282b6…`、`6771b99…` 与 `origin/main=b01ba5a41bd60a84c0af3e54cad4ec0ae22759ed`。全程无冲突、未 stash/reset/覆盖。
 - PY-01：只撤销“系统 Python 不可替换”的禁令；Runtime 是唯一协调执行 owner，本任务不修改系统 Python。
-- 工作区状态：当前仅本任务专属 change 与 `packages/a2ui-contract-fixtures/` 有改动。
+- 工作区状态：内容提交 `c624c4f695cfe621464cc8b44d1823e85c1fab9f` 已 push 并首次集成；当前仅有本任务 canonical policy 修正与交付元数据。
 - 设计状态：`PROPOSED / PHASE 1 ALIGNED`
 - 运行态：`NO READY`
 
@@ -28,10 +28,13 @@
 4. 已向 contracts owner 提交共享需求，并收到未批准候选 `SW-CONTRACTS-P1-CANDIDATE.1`。
 5. 已新增两份 project-authored synthetic Application fixture、无依赖校验器和 focused tests。
 6. TDD RED：删除两个 INTERACTIVE retry reason 后旧校验器未拒绝，测试报 `Missing expected exception`。
-7. TDD GREEN：exact-set、success-condition ref 和 execution/continue/Action 三入口版本校验完成；最终 `node --test ...` 为 `12 pass / 0 fail`，目录校验输出 `validated 2 synthetic Application fixtures`。
+7. TDD GREEN：exact-set、successPolicyRef、禁止 inline policy 和 execution/continue/Action 三入口版本校验完成；最终 `node --test ...` 为 `14 pass / 0 fail`，目录校验输出 `validated 2 synthetic Application fixtures`。
 8. 已标记 protocol profile 为 `PENDING_CROSS_DOMAIN_REVIEW`，未冻结旧稿 v0.9.1 建议。
 9. 远端无 `rg`，使用限域 `grep`；未安装工具或依赖。
 10. 手工远程 multi-file patch 曾两次因 hunk 行数错误被 Git 拒绝，文件未变；后续改为本机临时副本 + `apply_patch` + 标准 unified diff，再应用服务器。
+11. 内容提交 `c624c4f695cfe621464cc8b44d1823e85c1fab9f` 已 push，在独占 integration worktree 通过 12/12 后首次快进到服务器 `origin/main`。
+12. contracts owner 随后将 canonical 从 ResultCondition/businessSuccessConditionRef 收敛为 ResultInterpretationPolicy/successPolicyRef；本任务已按最新候选修正，并以新增负例拒绝旧引用和 inline policy。
+13. 已读取 main-brain ENG-01：future A2UI registry 后端使用 Python 可导入模块；这不解除 shared contract/IMPLEMENT 门禁，也不授权独立服务、root dependency 或系统 Python 变更。
 
 ## 当前依赖
 
@@ -42,10 +45,9 @@
 
 ## 下一可执行动作
 
-1. 将临时副本生成的标准 patch 应用到服务器 worker。
-2. 执行范围、diff、focused test、敏感信息和 whitespace 验证。
-3. commit/push worker，并通过独占 integration worktree 合入服务器 `origin/main`。
-4. 回传 main-brain：`SW-P1-20260907.2`、actual diff、worker SHA、integrated SHA、测试证据与 NO READY 门禁。
+1. 应用 canonical policy 文档 patch，执行范围/diff/test/敏感/whitespace 验证。
+2. commit/push worker，并通过独占 integration worktree 再次合入服务器 `origin/main`。
+3. 回传 main-brain：`SW-P1-20260907.2`、actual diff、worker SHA、integrated SHA、测试证据与 NO READY 门禁。
 
 ## 禁止越界
 

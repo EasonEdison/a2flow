@@ -5,7 +5,7 @@ Status: PROVISIONAL / Phase 1 contract evidence for baseline SW-P1-20260907.2. T
 ## Scope
 
 - display-only-result-card.application.json demonstrates DISPLAY_ONLY rendering. It never creates an interaction wait and only permits retry after rendering failure.
-- interactive-selection-card.application.json demonstrates an INTERACTIVE node/card/form-scoped choice. A successful Action result is evaluated by a shared ResultCondition and completes the interaction only because the Application explicitly enables that transition.
+- interactive-selection-card.application.json demonstrates an INTERACTIVE node/card/form-scoped choice. The Action selects a named shared ResultInterpretationPolicy with successPolicyRef and completes the interaction only because the Application explicitly enables that transition.
 - validate-fixtures.mjs checks the local A2UI-domain invariants without dependencies or network access.
 
 Run:
@@ -17,7 +17,7 @@ Run:
 
 The fixture fields are consumer-shaped candidates pending cross-domain review. SW-CONTRACTS-P1-CANDIDATE.1 is named but not approved; it is an input to review, not a frozen dependency:
 
-- packages/contracts owns trusted userId/environment resolution, effective version comparison, public Release references, control-request dedupe and the reusable ResultCondition schema/interpreter.
+- packages/contracts owns trusted userId/environment resolution, effective version comparison, public Release references, control-request dedupe and the ResultInterpretationPolicy schema; Runtime owns the single pure interpreter.
 - Runtime owns render_application execution, Surface instantiation, persistence, interruption/resume, version admission and Action dispatch.
 - packages/a2ui-host, owned by the digital-employee task, maps accepted components to the browser and returns node-bound Actions.
 - This package owns only Application strategy examples and local validation of those examples. It does not define a shared schema or an alternative Runtime evaluator.
@@ -29,6 +29,7 @@ Runtime identity, environment and credentials are deliberately absent. PRT versu
 - DISPLAY_ONLY does not pause.
 - INTERACTIVE pauses and ordinary chat cannot resume it.
 - Render success, Action transport success, configured business success, interaction completion, Skill completion and Workflow completion are different facts.
+- Output schema validity, success-policy match, Action call success and interaction completion are also separate facts.
 - Finalizer cannot override business facts or bypass a required interaction.
 - Node-level retry reasons are limited to RENDER_FAILED, ACTION_CALL_FAILED and ACTION_RESULT_NOT_SUCCESS.
 - controlRequestId dedupe is not a business exactly-once guarantee; called API backends own business idempotency.

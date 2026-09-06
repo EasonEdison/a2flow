@@ -3,6 +3,7 @@
 ## 当前结论
 
 - 基线：`SW-P1-20260907.2`
+- 内容提交/首次服务器 main 集成：`c624c4f695cfe621464cc8b44d1823e85c1fab9f`
 - 合成夹具静态校验：`PASS`
 - Registry build/API/PostgreSQL：`NO READY`
 - Shared contract：`SW-CONTRACTS-P1-CANDIDATE.1` 已命名但未批准
@@ -17,17 +18,17 @@
 ### R1 两份合成 Application 正例
 
 - 状态：`PASS`
-- 时间：`2026-09-07T01:24:14+08:00`
+- 时间：`2026-09-07T01:42:51+08:00`
 - 环境：服务器 worker worktree；Node `v20.20.2`；无依赖安装、无网络 schema 访问
 - Command：`node --test packages/a2ui-contract-fixtures/test/validate-fixtures.test.mjs`
-- Result：`tests 12, pass 12, fail 0`
+- Result：`tests 14, pass 14, fail 0`
 - 字段级断言：
   - 两份 fixture 都是 synthetic、`PROVISIONAL`、`APPLICATION`，baseline 为 `SW-P1-20260907.2`。
   - protocolProfileRef 保持 `PENDING_CROSS_DOMAIN_REVIEW`。
   - render Tool 为 `render_application`。
   - DISPLAY_ONLY 不暂停、无 Action、retry 仅 `RENDER_FAILED`。
   - INTERACTIVE 暂停且绑定 node/card/form，普通聊天不能恢复，确定性选择不经 AI 重选。
-  - Action 通过精确 ability release + resultConditionName 引用 shared ResultCondition，并显式声明 `completeInteractionOnSuccess`；内联 success DSL 会被拒绝。
+  - Action 使用精确 abilityReleaseRef + successPolicyRef 选择 shared ResultInterpretationPolicy，并显式声明 `completeInteractionOnSuccess`；内联 DSL、inline policy 字段与旧 businessSuccessConditionRef 都会被拒绝。
   - 平台仅 `controlRequest` 去重，业务幂等 owner 为 `CALLED_API_BACKEND`。
   - execution、continue 与 Action ingress 都要求先做版本比较；失配返回 `RESET_REQUIRED`。
   - Finalizer 不改写业务事实、不绕过必需交互。
@@ -44,7 +45,7 @@
 
 - 状态：`PASS`
 - RED：删除 INTERACTIVE fixture 中 `ACTION_CALL_FAILED` 与 `ACTION_RESULT_NOT_SUCCESS` 后，旧校验器未抛异常，测试以 `Missing expected exception` 失败。
-- GREEN：新增 exact-set 校验后，同一变异 fixture 被拒绝；随后加入信任/三入口版本/交互/Finalizer 等负例，最终完整结果为 `pass 12, fail 0`。
+- GREEN：新增 exact-set 校验后，同一变异 fixture 被拒绝；随后加入 policy 引用/内联、信任/三入口版本/交互/Finalizer 等负例，最终完整结果为 `pass 14, fail 0`。
 - 价值：证明 allowlist 不仅拒绝额外 reason，也拒绝缺少任一必需 A2UI outcome。
 
 ## 待实现联合场景
@@ -71,7 +72,7 @@
 - Method：受信任 `SUBMIT_INTERACTION` 候选控制命令。
 - Params：runId/nodeId/interactionId/surfaceId/sourceComponentId、recordedAssetVersions、payload digest。
 - 成功 data/outcome：ACTION_CALL_SUCCEEDED、ACTION_RESULT_SUCCEEDED、INTERACTION_COMPLETED。
-- 断言：ResultCondition 为真且 `completeInteractionOnSuccess=true`；三种事实分别存在。
+- 断言：输出 schema 合法、success policy matched 且 `completeInteractionOnSuccess=true`；schema validity、policy matched、Action call success 与 interaction completion 分别存在。
 
 ### P4 Action 业务成功但保持交互
 

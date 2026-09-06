@@ -4,7 +4,8 @@
 
 - 状态：`PROPOSED / PHASE 1 ALIGNED`
 - 运行态：`NO READY`
-- 权威基线：`SW-P1-20260907.2`，已读服务器 `origin/main=255475d4a5a71ed767adf22362c6353a40fc4e12`
+- 权威基线：`SW-P1-20260907.2`，已同步服务器 `origin/main=b01ba5a41bd60a84c0af3e54cad4ec0ae22759ed`
+- 工程裁决：ENG-01 已接受 future registry 为 Python 可导入后端模块；不要求独立进程，不授权根依赖编辑
 - 协议版本：`PENDING_CROSS_DOMAIN_REVIEW`；任何 A2UI 版本均未由本任务冻结
 - 当前实现证据：两份项目独立合成的 Application 夹具及无依赖静态校验器
 - 当前门禁：registry 依赖共享契约的命名修订，尚未获 IMPLEMENT 放行
@@ -17,7 +18,7 @@
 3. 所有渲染从授权 Tool `render_application` 进入；模型不能绕过 Tool 直接构造可信 Runtime 命令。
 4. `interactionMode` 必须显式为 `DISPLAY_ONLY` 或 `INTERACTIVE`。
 5. 渲染成功、Action 调用成功、Action 业务成功、交互完成、Skill 完成和 Workflow 完成分别记录，不相互推断。
-6. Action 业务成功由共享 `ResultCondition` 判断；`completeInteractionOnSuccess` 独立决定业务成功后是否完成当前交互。
+6. Action 通过 `successPolicyRef` 选择精确 Ability Release 中的命名 `ResultInterpretationPolicy`；`completeInteractionOnSuccess` 独立决定 policy matched 后是否完成当前交互。
 7. execution/continue/Action ingress 在做新工作前比较当前有效版本；失配即 `RESET_REQUIRED`，不继续冻结旧资产、不静默迁移、不自动重启。
 8. 平台 `controlRequestId` 只去重控制请求；被调 API 后端负责业务幂等、重试、对账和不确定结果。
 9. 节点重试只允许 `RENDER_FAILED`、`ACTION_CALL_FAILED`、`ACTION_RESULT_NOT_SUCCESS`。
@@ -34,7 +35,7 @@
                          v
     Shared Contracts
       trusted context / effective version / ReleaseRef
-      ResultCondition / control envelope / publication
+      ResultInterpretationPolicy / control envelope / publication
                          |
                          v
     Generic Runtime
@@ -53,13 +54,14 @@
 - 使用批准 protocol profile 的确定性编译。
 - Component Catalog/Application 领域 payload 与 Validation Report。
 - 调用公共发布端口；不复制公共 Asset/Release、身份、环境或版本决议。
+- 在 IMPLEMENT 放行后，于 `services/a2ui-registry/` 提供小型 Python 可导入模块；transport/process composition 保持可分离。
 
 ### 2.2 Shared Contracts 拥有
 
 - 可信 `userId` 与环境上下文。
 - PRT 当前版本和 ONLINE stable/gray 有效版本决议；ONLINE 永不读取 PRT。
 - 公共 AssetRef/ReleaseRef、digest、授权、审计与发布幂等。
-- `ResultCondition`、控制请求 envelope、版本失配和通用失败 envelope。
+- `ResultInterpretationPolicy`、控制请求 envelope、版本失配和通用失败 envelope。
 - 最终字段名、协议版本与 transport envelope。
 
 ### 2.3 Runtime 拥有
@@ -106,7 +108,7 @@ Catalog 不包含 React 代码、脚本体、远程模块或运行期下载地�
 | inputSchema | JSON Schema 2020-12 候选；只描述可投影数据 |
 | bindings | RFC 6901 JSON Pointer；无脚本表达式 |
 | interactionMode | 仅 `DISPLAY_ONLY` 或 `INTERACTIVE` |
-| actionPolicies | event 到 Action contract、ResultCondition 与完成策略 |
+| actionPolicies | event 到精确 Ability Release、successPolicyRef 与完成策略 |
 | limits | 平台批准的固定上限，作者不可放大 |
 
 首期不支持多 Surface 编排、任意表达式、运行期能力发现或自动业务调用。
@@ -118,12 +120,15 @@ Catalog 不包含 React 代码、脚本体、远程模块或运行期下载地�
 | actionName | 在一个 Application 内唯一 |
 | sourceComponentId | 必须指向声明该 event 的组件 |
 | actionContractRef | 精确且已授权的 Action schema 引用 |
-| businessSuccessConditionRef | 精确 ability release + 已发布的命名 `ResultCondition`；本域不内联 DSL |
+| abilityReleaseRef | Action 调用的精确 Ability Release；不接受 floating/latest |
+| successPolicyRef | 选择该 Release 已发布的命名 `ResultInterpretationPolicy`；本域不内联 DSL |
 | completeInteractionOnSuccess | 必填 boolean，不从 success condition 推断 |
 | controlRequestDedupeOnly | 固定为 true，表示只去重平台控制请求 |
 | businessIdempotencyOwner | 固定为 `CALLED_API_BACKEND` |
 
 Application 不声明“业务 exactly-once”。若 Action 调用已发出但结果未知，Runtime 记录不确定事实并停止自动推进；是否重试、查询或补偿由被调 API 契约决定。
+
+Ability Release 拥有 named policies 与 defaultSuccessPolicyRef；A2UI Action 必须显式选择 successPolicyRef。A2UI 不复制 policy 内容，也不实现解释器。当前候选只允许 SCHEMA_VALID，或 JSON_POINTER_EQUALS + JSON primitive expectedLiteral。Runtime 的唯一纯解释器必须区分 PATH_MISSING 与 FOUND(null)，missing 永不 match，并按 JSON 类型和值严格比较，不做字符串/数字/布尔/null 隐式转换。
 
 ### 3.4 ApplicationRelease 领域 payload
 
@@ -145,8 +150,8 @@ Application 不声明“业务 exactly-once”。若 Action 调用已发出但�
 | --- | --- | --- |
 | `RENDER_SUCCEEDED` | Surface 已成功产出 | DISPLAY_ONLY 可继续；INTERACTIVE 不可 |
 | `ACTION_CALL_SUCCEEDED` | 被调 API 返回可解析结果 | 仍需判断业务成功条件 |
-| `ACTION_RESULT_SUCCEEDED` | ResultCondition 为真 | 由完成布尔值决定 |
-| `ACTION_RESULT_NOT_SUCCESS` | ResultCondition 为假 | 保持交互并可走 A2UI-only retry |
+| `ACTION_RESULT_SUCCEEDED` | 输出 schema 合法且 success policy matched | 由完成布尔值决定 |
+| `ACTION_RESULT_NOT_SUCCESS` | 输出 schema 或 success policy 未满足 | 保持交互并可走 A2UI-only retry |
 | `INTERACTION_COMPLETED` | 当前 node/card/form 交互已完成 | Runtime 才可继续节点后继 |
 | `SKILL_COMPLETED` | 当前 Skill 已完成 | 不等于 Workflow 完成 |
 | `WORKFLOW_COMPLETED` | Workflow 所需节点均完成 | 由 Runtime 决定 |
@@ -164,8 +169,8 @@ Application 不声明“业务 exactly-once”。若 Action 调用已发出但�
 - 绑定范围固定为 Runtime 的 node/card/form 实例。
 - 普通聊天输入不能恢复该交互；必须经受信任的 Action ingress。
 - 作者配置的确定性选择直接路由，不再交给 AI 重选。
-- Action 业务成功且 `completeInteractionOnSuccess=true` 时完成交互。
-- Action 业务成功但该值为 false 时保留交互，等待后续显式 Action。
+- Action 调用成功、输出 schema 合法、success policy matched 且 `completeInteractionOnSuccess=true` 时完成交互。
+- policy matched 但该值为 false 时保留交互，等待后续显式 Action。
 - Action 业务失败不完成交互，可按 `ACTION_RESULT_NOT_SUCCESS` 的有界策略重试。
 - Action 调用失败可按 `ACTION_CALL_FAILED` 的有界策略重试。
 - Renderer/Suface 渲染失败可按 `RENDER_FAILED` 的有界策略重试。
@@ -203,7 +208,7 @@ Composer 只把版本标识和精确依赖写入产物；实际有效版本选�
 - binding 只允许 JSON Pointer，路径和目标类型兼容。
 - capability/ability output schema 只作为定义期证据，不授权执行。
 - eventName 与 ActionPolicy 一一对应。
-- `businessSuccessConditionRef` 必须指向精确 ability release 和非空 resultConditionName；本域不实现第二套解释器。
+- `abilityReleaseRef` 必须精确，`successPolicyRef` 必须非空且在该 Release 中存在；本域不复制 policy 或实现第二套解释器。
 - `completeInteractionOnSuccess` 必须显式存在。
 - DISPLAY_ONLY 不得携带 Action；INTERACTIVE 至少一个 ActionPolicy。
 

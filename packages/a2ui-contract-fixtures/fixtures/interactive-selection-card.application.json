@@ -31,13 +31,9 @@
     {
       "actionName": "confirm_route_choice",
       "sourceComponentId": "confirm",
-      "outcomePolicy": {
-        "businessSuccessConditionRef": {
-          "abilityReleaseRef": "fixture:ability-release:route-selection@1",
-          "resultConditionName": "routeAccepted"
-        },
-        "completeInteractionOnSuccess": true
-      },
+      "abilityReleaseRef": "fixture:ability-release:route-selection@1",
+      "successPolicyRef": "routeAccepted",
+      "completeInteractionOnSuccess": true,
       "controlRequestDedupeOnly": true,
       "businessIdempotencyOwner": "CALLED_API_BACKEND"
     }

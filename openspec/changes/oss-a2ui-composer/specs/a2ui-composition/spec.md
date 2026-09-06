@@ -44,14 +44,15 @@
 - AND 普通聊天输入不能恢复该 interaction
 - AND 作者配置的确定性选择不经过 AI 重新判断
 
-### Requirement: Action business success and interaction completion SHALL be separate
+### Requirement: Action success policy and interaction completion SHALL be separate
 
-INTERACTIVE Application 的每个 ActionPolicy SHALL 引用 shared contracts 拥有的 `ResultCondition`，并 SHALL 显式声明 boolean `completeInteractionOnSuccess`。Action call success、业务 success 与 interaction completion MUST 分别记录。
+INTERACTIVE Application 的每个 ActionPolicy SHALL 指向精确 Ability Release，并 SHALL 以 `successPolicyRef` 选择该 Release 发布的命名 `ResultInterpretationPolicy`，同时 SHALL 显式声明 boolean `completeInteractionOnSuccess`。A2UI MUST NOT 内联 policy 或实现解释器。Output schema validity、policy matched、Action call success 与 interaction completion MUST 分别记录。
 
 #### Scenario: Successful business result completes interaction when configured
 
 - GIVEN Action 调用成功
-- AND ResultCondition 计算为 true
+- AND 输出 schema 校验通过
+- AND successPolicyRef 对应 policy matched
 - AND completeInteractionOnSuccess 等于 true
 - WHEN Runtime 记录 Action 结果
 - THEN 记录 ACTION_CALL_SUCCEEDED
@@ -62,21 +63,32 @@ INTERACTIVE Application 的每个 ActionPolicy SHALL 引用 shared contracts 拥
 #### Scenario: Successful business result keeps interaction open when configured
 
 - GIVEN Action 调用成功
-- AND ResultCondition 计算为 true
+- AND 输出 schema 校验通过
+- AND successPolicyRef 对应 policy matched
 - AND completeInteractionOnSuccess 等于 false
 - WHEN Runtime 记录 Action 结果
 - THEN 记录 ACTION_RESULT_SUCCEEDED
 - AND 不记录 INTERACTION_COMPLETED
 - AND Runtime 等待后续显式 Action
 
-#### Scenario: Business result does not satisfy success condition
+#### Scenario: Action result does not satisfy the success policy
 
 - GIVEN Action 调用成功
-- AND ResultCondition 计算为 false
+- AND 输出 schema 校验失败或 success policy 未 match
 - WHEN Runtime 记录结果
 - THEN 记录 ACTION_RESULT_NOT_SUCCESS
 - AND 不完成 interaction
 - AND 只允许按 A2UI retry policy 处理该节点
+
+#### Scenario: Missing JSON Pointer does not equal null
+
+- GIVEN successPolicyRef 指向 JSON_POINTER_EQUALS policy
+- AND expectedLiteral 为 null
+- AND Action 结果中目标 JSON Pointer 路径缺失
+- WHEN Runtime 唯一纯解释器计算 policy
+- THEN policy 不 match 并返回 PATH_MISSING
+- AND 不把缺失路径当作 FOUND(null)
+- AND 不做字符串、数字、布尔或 null 的隐式转换
 
 ### Requirement: Version admission SHALL precede new work
 
@@ -189,7 +201,7 @@ ComponentCatalogDraft 与 ApplicationDraft 更新 SHALL 提交 expectedRevision�
 
 ### platform-contracts input
 
-本域需要 approved revision 提供 server-only trustedContext、effective version resolution、Asset/Release、ResultCondition、control request、outcome 与 publication envelope。候选 `SW-CONTRACTS-P1-CANDIDATE.1` 仅是审查输入。
+本域需要 approved revision 提供 server-only trustedContext、effective version resolution、Asset/Release、ResultInterpretationPolicy、control request、outcome 与 publication envelope。候选 `SW-CONTRACTS-P1-CANDIDATE.1` 仅是审查输入。
 
 ### Runtime output expectation
 
