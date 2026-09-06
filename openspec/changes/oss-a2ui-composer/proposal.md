@@ -7,7 +7,8 @@
 - 运行态就绪：`NO READY`
 - 审查责任人：main-brain
 - 权威基线：`SW-P1-20260907.2`
-- 已读服务器 `origin/main`：`255475d4a5a71ed767adf22362c6353a40fc4e12`
+- 已同步服务器 `origin/main`：`b01ba5a41bd60a84c0af3e54cad4ec0ae22759ed`
+- 工程裁决：ENG-01 已接受未来 A2UI registry 后端采用 Python 小型可导入模块；不等于独立常驻服务或 IMPLEMENT 放行
 
 ## Phase 1 基线对齐
 
@@ -54,7 +55,7 @@
 - 不实现 React Renderer、数字员工页面或业务场景。
 - 不实现业务能力，也不因 Application 依赖自动调用能力。
 - 不接受任意 HTML、JavaScript、远程插件、脚本上传或网络 schema 解析。
-- 不自行冻结共享 schema、A2UI 版本、传输或服务语言。
+- 不自行冻结共享 schema、A2UI 版本或传输；后端语言遵循 ENG-01 的 Python 裁决，但 package layout/依赖仍需审查。
 - 不在本轮部署、开放端口、启动后台服务、修改系统 Python 或其他系统包。
 
 ## Phase 1 交付
@@ -88,7 +89,7 @@ Application Draft 包含逻辑 Surface 模板、精确 Catalog 依赖、输入 s
 
 | 来源/去向 | 本域依赖或输出 | 边界 |
 | --- | --- | --- |
-| platform-contracts | 可信用户/环境、有效版本、ReleaseRef、ResultCondition、控制请求 envelope | 本域只消费，不创建第二套公共 schema |
+| platform-contracts | 可信用户/环境、有效版本、ReleaseRef、ResultInterpretationPolicy、控制请求 envelope | 本域只消费，不创建第二套公共 schema |
 | capability registry | ability output 与 Action contract 的精确 schema | 只用于定义期校验，不触发业务调用 |
 | Runtime | `render_application`、Surface/等待/恢复/Action dispatch/失败结果 | Runtime 保持业务无关；先做版本准入 |
 | digital employee | `packages/a2ui-host/` 的 Catalog 支持与 action ingress | Host 负责本地 React 映射、安全展示和可访问性 |
@@ -101,7 +102,7 @@ Application Draft 包含逻辑 Surface 模板、精确 Catalog 依赖、输入 s
 | 协议继续演进 | profile 保持候选并由适配器隔离；未经审查不 pin |
 | Catalog 与 Host 不一致 | 发布前校验 Host 能力；运行前精确协商；失败关闭 |
 | 作者生成非法树 | 校验 root、引用、环、可达性和上限 |
-| 交互与完成混淆 | 强制显式 mode、ResultCondition 和完成布尔值 |
+| 交互与完成混淆 | 强制显式 mode、successPolicyRef 和完成布尔值 |
 | 版本变化导致旧卡误调用 | Action 前版本比较；失配只允许 reset |
 | 将控制去重误当业务 exactly-once | schema 与夹具明确拆分两种责任 |
 | 跨域契约各自冻结 | shared contract 由单一 owner 提交，main-brain 命名修订后再实现 registry |

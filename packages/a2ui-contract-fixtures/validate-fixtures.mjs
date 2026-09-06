@@ -9,6 +9,17 @@ const ALLOWED_RETRY_REASONS = new Set([
   "ACTION_CALL_FAILED",
   "ACTION_RESULT_NOT_SUCCESS",
 ]);
+const INLINE_SUCCESS_POLICY_KEYS = new Set([
+  "businessSuccessCondition",
+  "businessSuccessConditionRef",
+  "contractRevision",
+  "defaultSuccessPolicyRef",
+  "expectedLiteral",
+  "jsonPointer",
+  "operator",
+  "outcomePolicy",
+  "policyRef",
+]);
 const FORBIDDEN_KEYS = new Set([
   "credentials",
   "environment",
@@ -156,21 +167,21 @@ export function validateFixture(fixture, label = "fixture") {
     );
 
     for (const policy of policies) {
-      const outcomePolicy = policy.outcomePolicy;
+      const inlinePolicyKeys = Object.keys(policy)
+        .filter((key) => INLINE_SUCCESS_POLICY_KEYS.has(key));
       assertCondition(
-        !Object.hasOwn(outcomePolicy ?? {}, "businessSuccessCondition"),
-        label + ": business success condition must be an exact published reference",
+        inlinePolicyKeys.length === 0,
+        label + ": Action must not inline or reuse a superseded success-condition DSL",
       );
-      const successConditionRef = outcomePolicy?.businessSuccessConditionRef;
       assertCondition(events.get(policy.actionName) === policy.sourceComponentId, label + ": action policy must match its source component");
       assertCondition(
-        typeof successConditionRef?.abilityReleaseRef === "string"
-          && successConditionRef.abilityReleaseRef.includes("@")
-          && typeof successConditionRef.resultConditionName === "string"
-          && successConditionRef.resultConditionName.length > 0,
-        label + ": business success condition must reference an exact ability release and named ResultCondition",
+        typeof policy.abilityReleaseRef === "string"
+          && /^[^@\s]+@[^@\s]+$/.test(policy.abilityReleaseRef)
+          && typeof policy.successPolicyRef === "string"
+          && policy.successPolicyRef.length > 0,
+        label + ": Action must select a named successPolicyRef from its exact ability release",
       );
-      assertCondition(typeof outcomePolicy?.completeInteractionOnSuccess === "boolean", label + ": completion behavior must be explicit");
+      assertCondition(typeof policy.completeInteractionOnSuccess === "boolean", label + ": completion behavior must be explicit");
       assertCondition(policy.controlRequestDedupeOnly === true, label + ": platform dedupe must be control-request only");
       assertCondition(policy.businessIdempotencyOwner === "CALLED_API_BACKEND", label + ": called API backend must own business idempotency");
     }

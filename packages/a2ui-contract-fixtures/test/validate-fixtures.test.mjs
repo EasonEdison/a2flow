@@ -45,23 +45,45 @@ test("rejects an inline success-condition DSL", () => {
   const fixture = loadFixture(
     "interactive-selection-card.application.json",
   );
-  fixture.actionPolicies[0].outcomePolicy = {
-    businessSuccessCondition: {
-      schemaOwner: "packages/contracts",
-      operator: "EQUALS",
-      path: "/accepted",
-      expected: true,
-    },
-    completeInteractionOnSuccess: true,
+  fixture.actionPolicies[0].businessSuccessCondition = {
+    operator: "EQUALS",
+    path: "/accepted",
+    expected: true,
   };
 
   assert.throws(
     () => validateFixture(fixture, "inline success condition"),
-    /business success condition must be an exact published reference/,
+    /Action must not inline or reuse a superseded success-condition DSL/,
+  );
+});
+
+test("rejects the superseded business-success-condition reference", () => {
+  const fixture = loadFixture(
+    "interactive-selection-card.application.json",
+  );
+  delete fixture.actionPolicies[0].successPolicyRef;
+  fixture.actionPolicies[0].businessSuccessConditionRef = {
+    abilityReleaseRef: "fixture:ability-release:route-selection@1",
+    resultConditionName: "routeAccepted",
+  };
+
+  assert.throws(
+    () => validateFixture(fixture, "superseded success-condition reference"),
+    /Action must not inline or reuse a superseded success-condition DSL/,
   );
 });
 
 const invalidCases = [
+  {
+    name: "inline ResultInterpretationPolicy fields",
+    fixture: "interactive-selection-card.application.json",
+    mutate: (fixture) => {
+      fixture.actionPolicies[0].operator = "JSON_POINTER_EQUALS";
+      fixture.actionPolicies[0].jsonPointer = "/accepted";
+      fixture.actionPolicies[0].expectedLiteral = true;
+    },
+    expected: /Action must not inline or reuse a superseded success-condition DSL/,
+  },
   {
     name: "embedded trusted environment",
     fixture: "display-only-result-card.application.json",
@@ -102,7 +124,7 @@ const invalidCases = [
     name: "implicit interaction completion",
     fixture: "interactive-selection-card.application.json",
     mutate: (fixture) => {
-      delete fixture.actionPolicies[0].outcomePolicy.completeInteractionOnSuccess;
+      delete fixture.actionPolicies[0].completeInteractionOnSuccess;
     },
     expected: /completion behavior must be explicit/,
   },
