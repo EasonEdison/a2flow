@@ -12,11 +12,12 @@
 ## Baseline Truth
 
 - Active baseline: `SW-P1-20260907.2`
+- Engineering supplement: `ENG-01`；worker `bc2a496188eea16b5c53172b9b627414635a78c3`，first integrated main `6771b996a00007e01a21ad2c8c27e8ff5b82ab81`.
 - Baseline commit: `b1a0c9f32497c04dd623edb0bb8858a01b5ae7ad`
 - PY-01 worker 1bcc61a4137436f5c3811d555d2af8244c0fc971 and integrated main c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e were read; system Python authorization belongs to Runtime execution only and is not a blocker for this task.
 - Baseline integration SHA read and merged: `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`
 - 2026-09-07 start: worker was clean at `cfede4966140f567c500f51bc697cb35376225e2`; `git fetch origin && git merge --no-edit origin/main` fast-forwarded it to the baseline integration SHA.
-- Repository `AGENTS.md`, Phase 1 `baseline.md`, `plan.md` and this checkpoint were read. No other task checkpoint was read.
+- Repository `AGENTS.md`, Phase 1 `baseline.md`、`plan.md`、`engineering-decisions.md` and this checkpoint were read. No other task checkpoint was read.
 - Runtime readiness: `NO READY`.
 
 ## Superseded Conflicts Removed in This Batch
@@ -32,20 +33,21 @@
 - Revise proposal/design/spec/tasks/regression/readiness/checkpoint.
 - Add `inputs/use-skill-consumer-requirements.md`.
 - Add `inputs/skill-package-candidate.md`.
+- Add `inputs/python-module-candidates.md` after ENG-01，without installing or implementing candidates.
 - Add one independently authored `examples/evidence-first-brief/` Skill.
 - Add chat/Workflow same-package reuse and positive/negative validation cases.
 - No service code, dependency install, database/service/port/secret/deployment mutation.
 
 ## Current State
 
-- Stage: main-brain diff review corrections applied and focused static evidence refreshed；ready for source delivery.
-- Design: PROPOSED against SW-P1-20260907.2.
+- Stage: reviewed ALIGN source delivered；ENG-01 Python dependency/module plan prepared；shared contract gate pending.
+- Design: PROPOSED against SW-P1-20260907.2 + ENG-01.
 - Runtime: NO READY.
 - Shared contracts and `services/skill-registry/` implementation are not released.
 
 ## Next Executable Action
 
-Commit the review correction on top of the 13-file ALIGN batch，push the worker branch，then merge it through the exclusive integration worktree into `origin/main`. Send exact SHAs/evidence to main-brain and wait for a named shared contract revision before service implementation.
+Await a main-brain-reviewed named shared contract revision before service implementation. On continuation，fetch/merge the then-current `origin/main` before reading or modifying service code.
 
 ## Evidence
 
@@ -61,3 +63,11 @@ Commit the review correction on top of the 13-file ALIGN batch，push the worker
 - Initial ALIGN receipt was sent to main-brain task `01a070ef-5da9-7591-ac2a-25bf89a44763` with baseline .2、removed conflicts、owned diff、first slice、dependencies and explicit NO READY.
 - Main-brain reviewed the actual worker diff and requested three corrections: complete name/compatibility constraints；UTF-8 text versus opaque binary assets；and deterministic package validation separated from execution authorization. All three are reflected in the current diff.
 - Pre-delivery `git fetch origin && git merge --no-edit origin/main` returned `Already up to date` at `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`; the repeated full static check passed.
+- Worker delivery head: `322062bf65aa6c3c0f73188278a6cc12b2f37041`；owned commits `b955e106ef9e11e2fc9ab01708ee6fdc260b27f8` and `97ffc5e46f857eac6708b095ebe2280b8bb461fd`.
+- Integration merge containing the worker: `c81ebf29d558f8481596aba8a4ee3fe4e868e75d`；after merging concurrent main `c624c4f695cfe621464cc8b44d1823e85c1fab9f`，the first delivered `origin/main` was `35282b6259eb6527a17bf359e92f2ec432d69681`.
+- `git diff c624c4f..35282b6` contained exactly the 13 owned Skill Registry files；`git diff --check`、fixture assertions、sensitive/private scan and ancestry check passed.
+- Exact SHAs、checks and remaining NO READY gates were sent to main-brain before this bookkeeping update.
+- ENG-01 was read from `openspec/changes/skillweave-phase1/engineering-decisions.md` after main-brain delivered worker `bc2a496` / first integrated main `6771b99`. It authorizes Python module planning，not shared contract implementation or host Python changes.
+- Bounded public-source research covered Agent Skills/`skills-ref`、StrictYAML、ruamel.yaml、PyYAML and Python archive/path safety documentation.
+- Candidate outcome: `skills-ref` test-only conformance oracle；one pinned safe YAML parser after a compatibility spike；logicalPath/descriptor entry reader first；TAR/ZIP deferred pending separate approval.
+- Reviewed consumer input and neutral sample paths were sent to main-brain for contracts/Runtime routing；the normalized `logicalPath` descriptor clarification is included in this pending documentation batch.

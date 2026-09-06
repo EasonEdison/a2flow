@@ -1,7 +1,7 @@
 # Regression: oss-skill-registry Phase 1
 
 > Baseline: SW-P1-20260907.2
-> Current evidence: **ALIGNMENT / FIXTURE STATIC PASS**
+> Current evidence: **SOURCE DELIVERED / FIXTURE STATIC PASS**
 > Runtime readiness: **NO READY**
 > HTTP 与 Tool 字段仍待共享 contract revision；本表是消费者验收计划，不是运行通过声明。
 
@@ -25,6 +25,7 @@
 - `SKILL.md sha256=1cc034c1d066b24771e9b0d91bc74abd89012268cf225802c25dd33316e06434`。
 - 样例 `SKILL.md` 中 Workflow/route/userId/environment 禁止字段命中 0；私有/敏感模式命中 0。
 - `openspec` 与 `skills-ref` CLI 均不存在；未安装依赖，因此未执行 strict/OpenSpec 官方 validator。
+- Source delivery ancestry：worker `322062bf65aa6c3c0f73188278a6cc12b2f37041` is an ancestor of first delivered main `35282b6259eb6527a17bf359e92f2ec432d69681`；相对并发主干净增量为 13 个本域文件。
 
 以上只证明当前文档/fixtures 的静态一致性，不是 package validator 实现、Runtime `use_skill`、PostgreSQL 或跨域合同运行证据。
 
