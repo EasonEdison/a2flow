@@ -1,0 +1,83 @@
+{
+  "fixtureMetadata": {
+    "synthetic": true,
+    "contractStatus": "PROVISIONAL",
+    "baseline": "SW-P1-20260907.2",
+    "purpose": "Display a synthetic final summary without pausing execution"
+  },
+  "asset": {
+    "kind": "APPLICATION",
+    "applicationKey": "sample.display.result-card",
+    "protocolProfileRef": "PENDING_CROSS_DOMAIN_REVIEW",
+    "componentCatalogRef": "fixture:component-catalog:basic"
+  },
+  "renderPolicy": {
+    "tool": "render_application",
+    "interactionMode": "DISPLAY_ONLY",
+    "requiresPause": false
+  },
+  "interactionPolicy": {
+    "bindingScope": "NONE",
+    "ordinaryChatMayResume": false
+  },
+  "versionAdmissionPolicy": {
+    "compareBeforeExecution": true,
+    "compareBeforeContinue": true,
+    "compareBeforeAction": true,
+    "onMismatch": "RESET_REQUIRED"
+  },
+  "actionPolicies": [],
+  "retryPolicy": {
+    "allowedReasons": [
+      "RENDER_FAILED"
+    ]
+  },
+  "finalizerPolicy": {
+    "mayOverrideBusinessFacts": false,
+    "mayBypassRequiredInteraction": false
+  },
+  "surfaceTemplate": {
+    "surfaceKey": "synthetic_result_summary",
+    "rootId": "root",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "title",
+        "summary"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "components": [
+      {
+        "id": "root",
+        "component": "Column",
+        "children": [
+          "title",
+          "summary"
+        ]
+      },
+      {
+        "id": "title",
+        "component": "Text",
+        "text": {
+          "path": "/title"
+        }
+      },
+      {
+        "id": "summary",
+        "component": "Text",
+        "text": {
+          "path": "/summary"
+        }
+      }
+    ]
+  }
+}
