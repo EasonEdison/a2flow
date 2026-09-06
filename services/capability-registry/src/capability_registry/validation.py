@@ -50,6 +50,10 @@ def _is_identifier(value: object) -> bool:
     return isinstance(value, str) and _IDENTIFIER_PATTERN.fullmatch(value) is not None
 
 
+def _pointer_for_property(property_name: str) -> str:
+    return "/" + property_name.replace("~", "~0").replace("/", "~1")
+
+
 def _is_pointer(value: object) -> bool:
     return isinstance(value, str) and _JSON_POINTER_PATTERN.fullmatch(value) is not None
 
@@ -194,15 +198,49 @@ class AbilityDefinitionValidator:
                         ),
                     )
 
-        for schema_name in ("resolvedInputSchema", "outputSchema"):
-            if not isinstance(payload[schema_name], Mapping):
+        resolved_schema = payload["resolvedInputSchema"]
+        resolved_required_paths = ()
+        if not isinstance(resolved_schema, Mapping):
+            issues.append(
+                _issue(
+                    "RESOLVED_INPUT_SCHEMA_UNSUPPORTED",
+                    "/resolvedInputSchema",
+                    "resolvedInputSchema must use the supported closed object profile",
+                ),
+            )
+        else:
+            resolved_properties = resolved_schema.get("properties")
+            resolved_required = resolved_schema.get("required", [])
+            supported_profile = (
+                resolved_schema.get("type") == "object"
+                and resolved_schema.get("additionalProperties") is False
+                and isinstance(resolved_properties, Mapping)
+                and isinstance(resolved_required, list)
+                and all(isinstance(name, str) for name in resolved_required)
+                and len(resolved_required) == len(set(resolved_required))
+                and all(name in resolved_properties for name in resolved_required)
+            )
+            if not supported_profile:
                 issues.append(
                     _issue(
-                        "ABILITY_SCHEMA_INVALID",
-                        "/%s" % schema_name,
-                        "schema field must be an object",
+                        "RESOLVED_INPUT_SCHEMA_UNSUPPORTED",
+                        "/resolvedInputSchema",
+                        "resolvedInputSchema must use the supported closed object profile",
                     ),
                 )
+            else:
+                resolved_required_paths = tuple(
+                    _pointer_for_property(name) for name in resolved_required
+                )
+
+        if not isinstance(payload["outputSchema"], Mapping):
+            issues.append(
+                _issue(
+                    "ABILITY_SCHEMA_INVALID",
+                    "/outputSchema",
+                    "schema field must be an object",
+                ),
+            )
 
         bindings = payload["inputBindings"]
         model_paths = []
@@ -271,6 +309,17 @@ class AbilityDefinitionValidator:
                             "model sourcePath must reference a declared model property",
                         ),
                     )
+                if (
+                    _is_pointer(target_path)
+                    and _pointer_root(target_path) in _RESERVED_MODEL_FIELDS
+                ):
+                    issues.append(
+                        _issue(
+                            "MODEL_ARGUMENT_TARGET_SERVER_OWNED",
+                            binding_path + "/targetPath",
+                            "model arguments must not construct a server-owned input",
+                        ),
+                    )
                 if isinstance(target_path, str):
                     model_paths.append(target_path)
             elif source == "TRUSTED_CONTEXT":
@@ -285,6 +334,17 @@ class AbilityDefinitionValidator:
                 if isinstance(target_path, str):
                     trusted_paths.append(target_path)
         issues.extend(_find_target_conflicts(target_paths))
+
+        bound_target_paths = frozenset(path for _, path in target_paths)
+        for required_path in resolved_required_paths:
+            if required_path not in bound_target_paths:
+                issues.append(
+                    _issue(
+                        "REQUIRED_INPUT_SOURCE_MISSING",
+                        "/resolvedInputSchema/required",
+                        "every required resolved input must have exactly one source",
+                    ),
+                )
 
         requirements = payload["credentialRequirements"]
         credential_slot_entries = []

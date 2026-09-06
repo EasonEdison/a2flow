@@ -259,6 +259,22 @@ class AbilityDefinitionValidatorBoundaryTests(unittest.TestCase):
 
         self.assert_invalid(payload, "CREDENTIAL_SLOT_UNSUPPORTED")
 
+    def test_rejects_model_binding_to_server_owned_target(self):
+        payload = deepcopy(valid_ability_payload())
+        payload["inputBindings"][1] = {
+            "targetPath": "/userId",
+            "source": "MODEL_ARGUMENT",
+            "sourcePath": "/query",
+        }
+
+        self.assert_invalid(payload, "MODEL_ARGUMENT_TARGET_SERVER_OWNED")
+
+    def test_rejects_required_resolved_input_without_source(self):
+        payload = deepcopy(valid_ability_payload())
+        payload["inputBindings"] = [payload["inputBindings"][0]]
+
+        self.assert_invalid(payload, "REQUIRED_INPUT_SOURCE_MISSING")
+
 
 if __name__ == "__main__":
     unittest.main()

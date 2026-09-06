@@ -23,7 +23,11 @@ class SharedResultPolicySetValidator:
             ResultInterpretationPolicySet.from_mapping(policy_set)
         except ContractValidationError as error:
             return tuple(
-                ValidationIssue(issue.code, issue.path, issue.message)
+                ValidationIssue(
+                    code=issue.code,
+                    path=issue.path,
+                    message=issue.message,
+                )
                 for issue in error.issues
             )
         return ()
