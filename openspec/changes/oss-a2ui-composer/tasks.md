@@ -71,5 +71,5 @@ Phase 1 已授权 ALIGN/PROVE。勾选只表示本任务真实完成的设计或
 
 - [x] 8.1 当前改动范围限于本任务专属 change 与 `packages/a2ui-contract-fixtures/`。
 - [ ] 8.2 main-brain 对实际 diff、候选依赖和证据完成审查。
-- [x] 8.3 内容提交 `c624c4f695cfe621464cc8b44d1823e85c1fab9f` 已 push，并通过独占 integration worktree 首次合入服务器 `origin/main`。
+- [x] 8.3 内容提交 `c624c4f…`、canonical 修正 `7b1257a…` 与 review hardening `3eac2f9de3a7b306b62a5175dae374d550223959` 均已 push，并通过独占 integration worktree 合入服务器 `origin/main`。
 - [ ] 8.4 所有必要门禁达到 READY 后才能宣称实现或运行可用。

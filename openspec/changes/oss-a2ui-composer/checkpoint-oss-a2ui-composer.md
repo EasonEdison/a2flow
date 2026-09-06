@@ -14,9 +14,9 @@
 ## 当前磁盘真值
 
 - Phase 1 基线：`SW-P1-20260907.2`
-- 服务器同步：有自有改动时安全合入到 `255475d…`；后续依次快进到 `35282b6…`、`6771b99…`、`b01ba5a…` 与 `origin/main=0980f0ae304a340f24d7421ab4a51818af612b32`。全程无冲突、未 stash/reset/覆盖。
+- 服务器同步：有自有改动时安全合入到 `255475d…`；后续依次快进多个 main 增量，review hardening 最终集成为 `origin/main=3eac2f9de3a7b306b62a5175dae374d550223959`。全程无冲突、未 stash/reset/覆盖。
 - PY-01：只撤销“系统 Python 不可替换”的禁令；Runtime 是唯一协调执行 owner，本任务不修改系统 Python。
-- 工作区状态：前序最终提交 `7b1257aff3a157364387a7e55690984aa219d670` 已集成；当前仅有 main-brain review 指定的 validator/test 与本任务证据文档。
+- 工作区状态：review hardening `3eac2f9de3a7b306b62a5175dae374d550223959` 已集成；当前仅准备本任务交付元数据。
 - 设计状态：`PROPOSED / PHASE 1 ALIGNED`
 - 运行态：`NO READY`
 
@@ -36,6 +36,7 @@
 12. contracts owner 随后将 canonical 从 ResultCondition/businessSuccessConditionRef 收敛为 ResultInterpretationPolicy/successPolicyRef；本任务已按最新候选修正，并以新增负例拒绝旧引用和 inline policy。
 13. 已读取 main-brain ENG-01：future A2UI registry 后端使用 Python 可导入模块；这不解除 shared contract/IMPLEMENT 门禁，也不授权独立服务、root dependency 或系统 Python 变更。
 14. main-brain review 六个反例先得到 `20 tests / 14 pass / 6 fail`；逐项修复 credential、retry duplicate、@latest 与 Action/event 映射后为 `20 pass / 0 fail`，目录校验仍为 `validated 2 synthetic Application fixtures`。
+15. review hardening `3eac2f9de3a7b306b62a5175dae374d550223959` 已 push，并在独占 integration worktree fresh 验证 20/20 后集成服务器 `origin/main`。
 
 ## 当前依赖
 
@@ -46,9 +47,8 @@
 
 ## 下一可执行动作
 
-1. 执行范围/diff/test/敏感/whitespace 验证。
-2. commit/push worker，并通过独占 integration worktree 合入服务器 `origin/main`。
-3. 回传 main-brain：`SW-P1-20260907.2`、actual diff、worker SHA、integrated SHA、测试证据与 NO READY 门禁。
+1. 提交并集成交付元数据。
+2. 回传 main-brain：`SW-P1-20260907.2`、actual diff、worker SHA、integrated SHA、测试证据与 NO READY 门禁。
 
 ## 禁止越界
 

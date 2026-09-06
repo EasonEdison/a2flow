@@ -7,7 +7,7 @@
 - 运行态就绪：`NO READY`
 - 审查责任人：main-brain
 - 权威基线：`SW-P1-20260907.2`
-- 已同步服务器 `origin/main`：`0980f0ae304a340f24d7421ab4a51818af612b32`
+- 审查修复已集成服务器 `origin/main`：`3eac2f9de3a7b306b62a5175dae374d550223959`
 - 工程裁决：ENG-01 已接受未来 A2UI registry 后端采用 Python 小型可导入模块；不等于独立常驻服务或 IMPLEMENT 放行
 
 ## Phase 1 基线对齐

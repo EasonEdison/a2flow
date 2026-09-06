@@ -4,9 +4,10 @@
 
 - 基线：`SW-P1-20260907.2`
 - 内容提交/首次服务器 main 集成：`c624c4f695cfe621464cc8b44d1823e85c1fab9f`
+- main-brain review hardening/服务器 main 集成：`3eac2f9de3a7b306b62a5175dae374d550223959`
 - 合成夹具静态校验：`PASS`
 - Registry build/API/PostgreSQL：`NO READY`
-- Shared contract：`SW-CONTRACTS-P1-CANDIDATE.1` 已命名但未批准
+- Shared contract：`SW-CONTRACTS-P1-CANDIDATE.1` 固定快照 54/54 GREEN，但仍未批准
 - Runtime/Host 联合验证：`NO READY`
 - Deployment/E2E：`NO READY`
 - 总体 Runtime readiness：`NO READY`
