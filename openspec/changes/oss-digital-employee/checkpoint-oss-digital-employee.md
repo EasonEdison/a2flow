@@ -9,7 +9,7 @@
 - 工作分支：`codex/oss-digital-employee/design`
 - 目标分支：`origin/main`
 - 起始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`
-- 当前对齐基线：`SW-P1-20260907.2 + ENG-01 + SW-P1-SUBSET-01`；已合入 `origin/main@3a48d4b106db8f382c3c96bbc8992f328b81e259`
+- 当前对齐基线：`SW-P1-20260907.2 + ENG-01 + SW-P1-SUBSET-01`；已同步到 `origin/main@7bc1aa0ad087ff33044ac5f0db47dee44d920b4e`
 
 ## 已确认边界
 
@@ -43,6 +43,7 @@
 - [x] 完整读取 `implementation-release-01.md`，文件 SHA256 匹配 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
 - [x] 核对批准标识 `SW-P1-SUBSET-01`、schema snapshot `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 与 schema SHA256 `10fb8f2fb26529ba7850e981991bcb343037aa6defe7f22646e00f1cdf59fa3b`；不把 wire candidate 或整个 bundle 视为批准。
 - [x] 独立 checker 尝试被本 worktree 的 `python3.11` 缺少 `jsonschema` 阻断；未安装依赖，未声称本任务复跑 57/57。schema 文件哈希已匹配。
+- [x] release 边界检查点提交 `7bc1aa0ad087ff33044ac5f0db47dee44d920b4e` 已推送并集成到 `origin/main`；该事实只证明同步与边界记录，不代表数字员工实现放行或 Runtime READY。
 
 ## 下一可执行动作
 
