@@ -191,7 +191,7 @@ Runtime -> 产品 BFF: 权威结果、失配/停止事实与下一 sequence
 | --- | --- | --- | --- | --- |
 | A. Python BFF | `apps/digital-employee/bff/` 独立应用模块 | contracts 的中立 schema + 未来薄 Python adapter；与 Python Runtime 减少一种客户端语言 | 必须保持进程/领域边界，不得 import Runtime 内部状态模型 | 条件推荐；待 named revision、依赖和部署边界确认 |
 | B. TypeScript BFF | 与 React 工程同仓但独立 server entry | 中立 schema/examples；前端类型与 server routes 可共用生成物 | 需要额外 Runtime transport client、Python 边界测试和部署进程 | 若选定前端宿主天然提供 server runtime，再评估 |
-| C. 浏览器直连 Runtime | 无 BFF | 无 | 身份、环境、版本 admission、stop 与 Action 重新授权泄漏到浏览器 | 拒绝 |
+| C. 浏览器直连 Runtime | 无产品 BFF | 可依赖另一个可信服务做认证/admission | 不符合已确认的产品后端隔离、产品投影与 Action 重新授权职责；并非断言安全职责必然交给浏览器 | 拒绝 |
 
 选择 A 不是由 `ENG-01` 自动推出；依据仅是未来薄 Python contracts adapter 与 Python Runtime 的潜在复用。若这些前提没有形成可验证 revision，则保持语言中立，不创建框架或根依赖。
 

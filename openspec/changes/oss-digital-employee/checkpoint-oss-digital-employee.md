@@ -9,7 +9,7 @@
 - 工作分支：`codex/oss-digital-employee/design`
 - 目标分支：`origin/main`
 - 起始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`
-- 当前对齐基线：`SW-P1-20260907.2 + ENG-01`；已完成对齐交付至 `origin/main@c1050b83ddbb5e8b604e690a90b8349e1bdb0ce9`
+- 当前对齐基线：`SW-P1-20260907.2 + ENG-01`；已合入 `origin/main@0980f0ae304a340f24d7421ab4a51818af612b32`
 
 ## 已确认边界
 
@@ -37,6 +37,7 @@
 - [x] 合入 `origin/main@7b1257aff3a157364387a7e55690984aa219d670` 的 A2UI 修订；fixture 测试 14/14 与 2 个合成 Application validator 通过，仅作为辅助证据。
 - [x] 补充 Python/TypeScript BFF 最小选项、拒绝浏览器直连，以及 web/BFF/A2UI Host 职责路径清单；未锁定框架或创建代码。
 - [x] BFF 选项与路径清单提交 `c1050b83ddbb5e8b604e690a90b8349e1bdb0ce9` 已推送并集成到 `origin/main`。
+- [x] 按 main-brain 复核修正 R8 成本门禁与浏览器直连论证：最小偏好 schema/薄 adapter 不自动延期，否决依据是既定产品后端隔离职责。
 
 ## 下一可执行动作
 
