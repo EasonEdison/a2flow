@@ -73,6 +73,6 @@
 
 ## 7. SUBSET-01 Delivery
 
-- [ ] 7.1 Fetch and merge fresh origin/main before commit/push, then rerun complete source checks.
+- [x] 7.1 Fetch and merge fresh origin/main before commit/push, then rerun complete source checks.
 - [ ] 7.2 Push the worker branch; merge through the exclusive integration worktree from fresh origin/main and push HEAD:main without rebase/force/stash/reset/clean.
 - [ ] 7.3 Report exact source/worker/integration SHAs, touched paths, fresh tests and NO READY boundaries.

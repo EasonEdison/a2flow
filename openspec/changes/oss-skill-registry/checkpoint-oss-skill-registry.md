@@ -92,14 +92,15 @@ Await a main-brain-reviewed named shared contract revision before service implem
 
 ### Current State
 
-- Stage: worker merge head `b52235a220c93c5fcee7a2b0c28d368b3bc71255`；shared DTO adaptation、review fixes、tests and evidence are complete in the worker，pending final commit/push/integration.
+- Stage: source/review commit `c09536a0fa843969649f393177e8932149bee938`；fresh-main merge head `c082b9375a8b7eb50f283c2e9c24953692cced24`，pending worker push/integration.
+- Fresh `origin/main` merged: `fe9b656a12bc5f95dd6b0c2525ea2868a61f01ff`.
 - Stable shared package main: `e7797830b09ac367db21f7dde51236e3189e77f3`；reviewed content commit `54a807bc061e79f77a7ba52bcf6d6827d6966481` is included.
 - Runtime readiness: NO READY.
 - Full contracts, trusted provenance/admission, resolver, DB/service and runtime gates remain unreleased.
 
 ### Next Executable Action
 
-Run final two-pass review and verification，commit the exact owned paths，merge fresh `origin/main`，then push worker and deliver through the exclusive integration worktree.
+Commit this merge checkpoint，fetch once more，then push worker and deliver through the exclusive integration worktree.
 
 ### Verification Milestone
 
@@ -119,5 +120,7 @@ Run final two-pass review and verification，commit the exact owned paths，merg
 - Fresh evidence before delivery: Registry 22/22 PASS on Python 3.11；shared
   contracts 16/16 PASS；focused schema checker 57/57 PASS；public import PASS；
   `git diff --check`、line-length、forbidden-operation and sensitive scans PASS.
+- After merging fresh main `fe9b656a12bc5f95dd6b0c2525ea2868a61f01ff`,
+  all four verification groups were rerun with the same passing counts.
 - No dependency install、system Python change、database、service/process、
   deployment or runtime mutation occurred.
