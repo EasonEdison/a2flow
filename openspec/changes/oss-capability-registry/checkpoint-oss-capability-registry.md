@@ -34,6 +34,8 @@
 - TDD Task 1：先观察 `ModuleNotFoundError: capability_registry`，再实现 immutable models、ports 与 happy path，1/1 GREEN。
 - TDD Task 2：15 个 boundary 断言先失败，再实现字段、模型/服务端分离、Pointer/target 冲突门禁，10/10 GREEN。
 - TDD Task 3：operation 缺失、input path 与 credential slot 不支持三例先失败，再实现 catalog 兼容校验，13/13 GREEN。
+- 边界 review 新增 2 个畸形 JSON RED 用例；混合类型顶层 key 与非标量 binding source 现均失败关闭，15/15 GREEN。
+- Contracts owner 已确认最终薄包 import API，但稳定主干 SHA 尚待其独立 review、push 与集成；本线程未读取其脏 worktree。
 - 所有测试均使用 `/bin/python3.11` 和标准库；未安装依赖、未调用外部服务。
 
 ## 已移除的活动冲突
