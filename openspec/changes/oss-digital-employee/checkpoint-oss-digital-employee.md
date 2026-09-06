@@ -9,7 +9,7 @@
 - 工作分支：`codex/oss-digital-employee/design`
 - 目标分支：`origin/main`
 - 起始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`
-- 当前对齐基线：`SW-P1-20260907.2 + ENG-01 + SW-P1-SUBSET-01`；已同步到 `origin/main@7bc1aa0ad087ff33044ac5f0db47dee44d920b4e`
+- 当前对齐基线：`SW-P1-20260907.2 + ENG-01 + SW-P1-SUBSET-01`；已进入 `origin/main`，具体包含关系以 Git 查询为准，不递归记录 checkpoint 自身提交 SHA
 
 ## 已确认边界
 
@@ -42,8 +42,8 @@
 - [x] 两处小修订提交 `7569c02e295cad0f65a6c74ede09f77aee039baa` 已推送并集成到 `origin/main`。
 - [x] 完整读取 `implementation-release-01.md`，文件 SHA256 匹配 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
 - [x] 核对批准标识 `SW-P1-SUBSET-01`、schema snapshot `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 与 schema SHA256 `10fb8f2fb26529ba7850e981991bcb343037aa6defe7f22646e00f1cdf59fa3b`；不把 wire candidate 或整个 bundle 视为批准。
-- [x] 独立 checker 尝试被本 worktree 的 `python3.11` 缺少 `jsonschema` 阻断；未安装依赖，未声称本任务复跑 57/57。schema 文件哈希已匹配。
-- [x] release 边界检查点提交 `7bc1aa0ad087ff33044ac5f0db47dee44d920b4e` 已推送并集成到 `origin/main`；该事实只证明同步与边界记录，不代表数字员工实现放行或 Runtime READY。
+- [x] 公共契约 checker 的既定无安装入口是以 `admin` 运行 `/usr/bin/python3 packages/contracts/tests/validate_contracts.py`（当前 Python 3.6.8 / jsonschema 2.6.0）；协调方已提供独立 57/57 证据，本任务引用该公共证据，不重复运行。
+- [x] 此前使用 `python3.11` 触发的 `jsonschema` 缺失只是验证入口不匹配，不是数字员工 B 端阻塞；未安装依赖，也未把公共校验与 Python 3.11/Runtime 验证混为一谈。
 
 ## 下一可执行动作
 
