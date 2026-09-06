@@ -10,6 +10,7 @@
 
 | 门禁 | 状态 | 当前证据 | 仍需 |
 | --- | --- | --- | --- |
+| 对齐源码交付 | YES | 内容 commit `a661f2c78055b20dda91fc74ebd61cc46e6e6177` 已进入 main | main-brain 实际 diff 审阅 |
 | 基线读取 | YES | worker 已合入 `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e` | main-brain 检查实际修订 |
 | 旧冲突移除 | PARTIAL | proposal/design 已修订语言、环境、重试/幂等边界 | 跨域评审 |
 | 成功解释器所有权 | PARTIAL | 提出 contracts schema + Runtime 单实现 + A2UI 选择 | main-brain/A2UI/Runtime/Contracts 同意 |
