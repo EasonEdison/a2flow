@@ -21,9 +21,9 @@ tasks.md 只记录工作完成情况，不能替代本文件的证据门禁。�
 | 门禁 | 状态 | 当前证据 | 达到 READY 的条件 |
 | --- | --- | --- | --- |
 | Clean-room | READY | 仅使用已授权需求、公开概念和项目自创 synthetic fixtures；无真实业务数据 | 每次外部发布前重复敏感/来源扫描 |
-| Baseline alignment | READY | 已同步 `origin/main=b01ba5a…` 并读取 `SW-P1-20260907.2`、PY-01 与 ENG-01 | 后续基线变更继续安全 merge 和重读 |
+| Baseline alignment | READY | 已同步 `origin/main=0980f0a…` 并读取 `SW-P1-20260907.2`、PY-01 与 ENG-01 | 后续基线变更继续安全 merge 和重读 |
 | Design convergence | PARTIAL | Component/Application、interaction/completion、version/reset、retry/Finalizer 边界已写入 | main-brain 审查实际 diff 并关闭歧义 |
-| Synthetic fixture validation | READY | Node v20.20.2；`14/14 tests PASS`；`validated 2 synthetic Application fixtures` | 若 shared contract 改动，更新夹具并重新验证 |
+| Synthetic fixture validation | READY | Node v20.20.2；`20/20 tests PASS`；`validated 2 synthetic Application fixtures` | 若 shared contract 改动，更新夹具并重新验证 |
 | A2UI protocol decision | NO READY | fixture profile 为 `PENDING_CROSS_DOMAIN_REVIEW` | main-brain 批准 profile/wire version/升级策略 |
 | Shared contract | NO READY | `SW-CONTRACTS-P1-CANDIDATE.1` 已命名且 39/39 owner fixtures GREEN，但尚未获 main-brain 批准 | main-brain 命名 approved revision |
 | Registry implementation | NO READY | ENG-01 已选 Python 可导入模块，但 `services/a2ui-registry/` 未实现；当前有意受门禁阻断 | approved revision + package review + 明确 IMPLEMENT 放行后实现 |

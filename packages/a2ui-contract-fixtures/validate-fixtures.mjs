@@ -9,6 +9,7 @@ const ALLOWED_RETRY_REASONS = new Set([
   "ACTION_CALL_FAILED",
   "ACTION_RESULT_NOT_SUCCESS",
 ]);
+const FLOATING_RELEASE_VERSIONS = new Set(["default", "draft", "latest"]);
 const INLINE_SUCCESS_POLICY_KEYS = new Set([
   "businessSuccessCondition",
   "businessSuccessConditionRef",
@@ -21,6 +22,7 @@ const INLINE_SUCCESS_POLICY_KEYS = new Set([
   "policyRef",
 ]);
 const FORBIDDEN_KEYS = new Set([
+  "credential",
   "credentials",
   "environment",
   "grayTarget",
@@ -39,6 +41,15 @@ function assertCondition(condition, message) {
   if (!condition) {
     fail(message);
   }
+}
+
+function isExactNonFloatingReleaseRef(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+  const match = /^([^@\s]+)@([^@\s]+)$/.exec(value);
+  return match !== null
+    && !FLOATING_RELEASE_VERSIONS.has(match[2].toLowerCase());
 }
 
 function collectKeys(value, result = []) {
@@ -140,6 +151,11 @@ export function validateFixture(fixture, label = "fixture") {
 
   const retryReasons = fixture.retryPolicy?.allowedReasons;
   assertCondition(Array.isArray(retryReasons), label + ": retryPolicy.allowedReasons is required");
+  const uniqueRetryReasons = new Set(retryReasons);
+  assertCondition(
+    uniqueRetryReasons.size === retryReasons.length,
+    label + ": retry reasons must not contain duplicates",
+  );
   for (const reason of retryReasons) {
     assertCondition(ALLOWED_RETRY_REASONS.has(reason), label + ": retry reason is outside the A2UI-only boundary: " + reason);
   }
@@ -159,14 +175,26 @@ export function validateFixture(fixture, label = "fixture") {
     assertCondition(fixture.interactionPolicy.bindingScope === "RUNTIME_NODE_CARD_FORM", label + ": INTERACTIVE must be node/card/form scoped");
     assertCondition(fixture.interactionPolicy.routeDirectlyWithoutAiReselection === true, label + ": configured choice must route without AI reselection");
     assertCondition(policies.length > 0, label + ": INTERACTIVE requires an action policy");
-    const uniqueRetryReasons = new Set(retryReasons);
     assertCondition(
       uniqueRetryReasons.size === ALLOWED_RETRY_REASONS.size
         && [...ALLOWED_RETRY_REASONS].every((reason) => uniqueRetryReasons.has(reason)),
       label + ": INTERACTIVE retry reasons must exactly match the A2UI-only boundary",
     );
 
+    const policiesByActionName = new Map();
     for (const policy of policies) {
+      assertCondition(
+        typeof policy.actionName === "string"
+          && policy.actionName.trim().length > 0
+          && typeof policy.sourceComponentId === "string"
+          && policy.sourceComponentId.trim().length > 0,
+        label + ": actionName and sourceComponentId must be non-empty",
+      );
+      assertCondition(
+        !policiesByActionName.has(policy.actionName),
+        label + ": duplicate action policy " + policy.actionName,
+      );
+      policiesByActionName.set(policy.actionName, policy);
       const inlinePolicyKeys = Object.keys(policy)
         .filter((key) => INLINE_SUCCESS_POLICY_KEYS.has(key));
       assertCondition(
@@ -175,16 +203,24 @@ export function validateFixture(fixture, label = "fixture") {
       );
       assertCondition(events.get(policy.actionName) === policy.sourceComponentId, label + ": action policy must match its source component");
       assertCondition(
-        typeof policy.abilityReleaseRef === "string"
-          && /^[^@\s]+@[^@\s]+$/.test(policy.abilityReleaseRef)
-          && typeof policy.successPolicyRef === "string"
+        isExactNonFloatingReleaseRef(policy.abilityReleaseRef),
+        label + ": abilityReleaseRef must identify an exact non-floating release",
+      );
+      assertCondition(
+        typeof policy.successPolicyRef === "string"
           && policy.successPolicyRef.length > 0,
-        label + ": Action must select a named successPolicyRef from its exact ability release",
+        label + ": Action must select a named successPolicyRef",
       );
       assertCondition(typeof policy.completeInteractionOnSuccess === "boolean", label + ": completion behavior must be explicit");
       assertCondition(policy.controlRequestDedupeOnly === true, label + ": platform dedupe must be control-request only");
       assertCondition(policy.businessIdempotencyOwner === "CALLED_API_BACKEND", label + ": called API backend must own business idempotency");
     }
+    assertCondition(
+      policiesByActionName.size === events.size
+        && [...events].every(([actionName, sourceComponentId]) =>
+          policiesByActionName.get(actionName)?.sourceComponentId === sourceComponentId),
+      label + ": every action event must have exactly one policy",
+    );
   }
 }
 

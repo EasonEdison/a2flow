@@ -21,6 +21,7 @@ Phase 1 已授权 ALIGN/PROVE。勾选只表示本任务真实完成的设计或
 - [x] 2.3 实现无依赖校验器，覆盖组件图、交互/完成、版本、Finalizer、信任边界和 retry allowlist。
 - [x] 2.4 用 Node 内置 test runner 记录 RED/GREEN，并执行目录级校验。
 - [x] 2.5 标记夹具为 `PROVISIONAL`/synthetic，不包含真实业务数据，不冻结 A2UI 版本。
+- [x] 2.6 按 main-brain review 增加 Action/event 双向唯一覆盖、单数 credential、非 floating release 与重复 retry reason 负例。
 
 ## 3. 共享契约审查门禁
 

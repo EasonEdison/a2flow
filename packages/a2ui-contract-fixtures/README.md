@@ -32,5 +32,9 @@ Runtime identity, environment and credentials are deliberately absent. PRT versu
 - Output schema validity, success-policy match, Action call success and interaction completion are also separate facts.
 - Finalizer cannot override business facts or bypass a required interaction.
 - Node-level retry reasons are limited to RENDER_FAILED, ACTION_CALL_FAILED and ACTION_RESULT_NOT_SUCCESS.
+- Retry reasons are unique; duplicated allowlist entries are rejected.
 - controlRequestId dedupe is not a business exactly-once guarantee; called API backends own business idempotency.
 - Version mismatch is checked before execution, continue and Action dispatch and requires an explicit reset, with no automatic restart or business replay.
+- Action policies require non-empty unique identities and bidirectional one-to-one coverage with component events.
+- abilityReleaseRef rejects explicit floating values such as latest/default/draft; shared contracts still own actual release lookup.
+- Both credential and credentials fields are rejected explicitly; this is not a heuristic keyword filter.

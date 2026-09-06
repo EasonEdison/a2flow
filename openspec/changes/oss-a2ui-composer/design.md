@@ -4,7 +4,7 @@
 
 - 状态：`PROPOSED / PHASE 1 ALIGNED`
 - 运行态：`NO READY`
-- 权威基线：`SW-P1-20260907.2`，已同步服务器 `origin/main=b01ba5a41bd60a84c0af3e54cad4ec0ae22759ed`
+- 权威基线：`SW-P1-20260907.2`，已同步服务器 `origin/main=0980f0ae304a340f24d7421ab4a51818af612b32`
 - 工程裁决：ENG-01 已接受 future registry 为 Python 可导入后端模块；不要求独立进程，不授权根依赖编辑
 - 协议版本：`PENDING_CROSS_DOMAIN_REVIEW`；任何 A2UI 版本均未由本任务冻结
 - 当前实现证据：两份项目独立合成的 Application 夹具及无依赖静态校验器

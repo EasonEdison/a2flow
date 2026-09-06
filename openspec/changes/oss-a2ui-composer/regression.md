@@ -18,10 +18,10 @@
 ### R1 两份合成 Application 正例
 
 - 状态：`PASS`
-- 时间：`2026-09-07T01:42:51+08:00`
+- 时间：`2026-09-07T02:01:16+08:00`
 - 环境：服务器 worker worktree；Node `v20.20.2`；无依赖安装、无网络 schema 访问
 - Command：`node --test packages/a2ui-contract-fixtures/test/validate-fixtures.test.mjs`
-- Result：`tests 14, pass 14, fail 0`
+- Result：`tests 20, pass 20, fail 0`
 - 字段级断言：
   - 两份 fixture 都是 synthetic、`PROVISIONAL`、`APPLICATION`，baseline 为 `SW-P1-20260907.2`。
   - protocolProfileRef 保持 `PENDING_CROSS_DOMAIN_REVIEW`。
@@ -33,6 +33,8 @@
   - execution、continue 与 Action ingress 都要求先做版本比较；失配返回 `RESET_REQUIRED`。
   - Finalizer 不改写业务事实、不绕过必需交互。
   - 禁止嵌入 userId/environment/grayTarget/secret/credential/script/html。
+  - Action policy 的 actionName/sourceComponentId 非空且唯一，并与组件 event 双向一一覆盖。
+  - abilityReleaseRef 拒绝 latest/default/draft，retry reasons 拒绝重复项。
 
 ### R2 目录级校验
 
@@ -45,8 +47,16 @@
 
 - 状态：`PASS`
 - RED：删除 INTERACTIVE fixture 中 `ACTION_CALL_FAILED` 与 `ACTION_RESULT_NOT_SUCCESS` 后，旧校验器未抛异常，测试以 `Missing expected exception` 失败。
-- GREEN：新增 exact-set 校验后，同一变异 fixture 被拒绝；随后加入 policy 引用/内联、信任/三入口版本/交互/Finalizer 等负例，最终完整结果为 `pass 14, fail 0`。
+- GREEN：新增 exact-set 校验后，同一变异 fixture 被拒绝；随后加入 policy 引用/内联、信任/三入口版本/交互/Finalizer 等负例。
 - 价值：证明 allowlist 不仅拒绝额外 reason，也拒绝缺少任一必需 A2UI outcome。
+
+### R4 main-brain review 六类反例
+
+- 状态：`PASS`
+- RED：新增 policy 身份缺失、重复 policy、无 policy event、单数 credential、`@latest` release、重复 retry reason 六个内存变异后，原 validator 结果为 `tests 20, pass 14, fail 6`。
+- GREEN：分别补充 trusted-key、retry Set 长度、非 floating release 与 Action/event 双向唯一覆盖后，最终结果为 `tests 20, pass 20, fail 0`。
+- targeted 证据：credential、retry、latest 各 1/1 PASS；Action identity/duplicate/event coverage 为 3/3 PASS。
+- 边界：只证明 fixture checker 失败关闭；不证明 shared ReleaseRef 存在性、Runtime 或业务凭据泄露。
 
 ## 待实现联合场景
 

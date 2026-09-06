@@ -75,6 +75,59 @@ test("rejects the superseded business-success-condition reference", () => {
 
 const invalidCases = [
   {
+    name: "missing action policy identity",
+    fixture: "interactive-selection-card.application.json",
+    mutate: (fixture) => {
+      delete fixture.actionPolicies[0].actionName;
+      delete fixture.actionPolicies[0].sourceComponentId;
+    },
+    expected: /actionName and sourceComponentId must be non-empty/,
+  },
+  {
+    name: "duplicate action policy with different completion",
+    fixture: "interactive-selection-card.application.json",
+    mutate: (fixture) => {
+      fixture.actionPolicies.push({
+        ...fixture.actionPolicies[0],
+        completeInteractionOnSuccess: false,
+      });
+    },
+    expected: /duplicate action policy/,
+  },
+  {
+    name: "action event without a matching policy",
+    fixture: "interactive-selection-card.application.json",
+    mutate: (fixture) => {
+      const prompt = fixture.surfaceTemplate.components
+        .find((component) => component.id === "prompt");
+      prompt.action = { event: { name: "unbound_action" } };
+    },
+    expected: /every action event must have exactly one policy/,
+  },
+  {
+    name: "singular embedded credential",
+    fixture: "display-only-result-card.application.json",
+    mutate: (fixture) => { fixture.credential = "synthetic-placeholder"; },
+    expected: /trusted runtime field embedded in fixture: credential/,
+  },
+  {
+    name: "floating latest ability release",
+    fixture: "interactive-selection-card.application.json",
+    mutate: (fixture) => {
+      fixture.actionPolicies[0].abilityReleaseRef =
+        "fixture:ability-release:route-selection@latest";
+    },
+    expected: /abilityReleaseRef must identify an exact non-floating release/,
+  },
+  {
+    name: "duplicate A2UI retry reason",
+    fixture: "interactive-selection-card.application.json",
+    mutate: (fixture) => {
+      fixture.retryPolicy.allowedReasons.push("RENDER_FAILED");
+    },
+    expected: /retry reasons must not contain duplicates/,
+  },
+  {
     name: "inline ResultInterpretationPolicy fields",
     fixture: "interactive-selection-card.application.json",
     mutate: (fixture) => {
