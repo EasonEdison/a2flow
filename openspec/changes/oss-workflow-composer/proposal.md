@@ -2,7 +2,8 @@
 
 ## 状态
 
-- 统一基线：`SW-P1-20260907.2`
+- 统一基线：`SW-P1-20260907.2` + `ENG-01`
+- 工程决策：Workflow registry 后端按 ENG-01 规划为可导入 Python 模块；不自动启动独立常驻服务，根依赖仍由 main-brain 单一协调。
 - 基线集成 SHA：`c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`
 - 设计：`PROPOSED`
 - 实现：等待 main-brain 对共享契约实际差异审查后放行
@@ -20,7 +21,7 @@ M 侧需要发布可被 Python + LangGraph Runtime 编译执行的多 Skill Work
 | 旧提案 | Phase 1 修订 |
 | --- | --- |
 | 只允许 `START -> SKILL... -> END` 串行链 | 支持顺序、AI 条件选择、非嵌套并行和显式 join |
-| 相邻 Skill 必须完全相同 `schemaRef`，否则新增 Adapter Skill | 下游默认读取所有直接前驱的最终结果/状态；Skill 无需 Workflow 适配，精确上下文契约由 contracts/Runtime 审查 |
+| 相邻 Skill 必须完全相同 `schemaRef`，否则新增 Adapter Skill | 下游默认读取全部相关、已实际执行的前序/祖先节点最终结果和真实状态；Skill 无需 Workflow 适配，精确上下文契约由 contracts/Runtime 审查 |
 | 固定 Skill release 并按旧版本继续执行 | 由可信 `environment + userId` 解析有效配置；入口发现版本失配即阻断并提示重置，不冻结旧配置继续 |
 | Runtime 语言和图协议仍待选择 | Runtime 固定为 Python + Deep Agents SDK + LangGraph；具体版本/API 仍需 Runtime 实证 |
 | 只定义线性 manifest 和 ordinal | 发布物必须保留节点、候选边、并行区域、join 和失败容忍语义 |
@@ -34,7 +35,9 @@ M 侧需要发布可被 Python + LangGraph Runtime 编译执行的多 Skill Work
 - AI 无法做出语义选择时，该 decision 节点展示配置好的 INTERACTIVE A2UI 选择卡，等待一次 node-bound 用户选择并直接路由，不再交给 AI 重选。
 - 并行区域首版不嵌套。A 分支等待交互时，独立 B 分支必须继续 B1、B2，直到对应 join；join 仍等待 A。
 - 节点成功、真实 `SKIPPED`、或配置为 allow-skip 的节点保持真实 `FAILED` 后可满足后继/join；required 节点失败阻断。
+- Skill、decision 和 Finalizer 默认获得全部相关、已实际执行祖先节点的最终结果和真实状态。A→B→C 时 C 必须同时获得 A、B；join 后只汇总真实执行分支，不为未选 condition candidate 虚构结果。
 - 发布图记录逻辑 Skill/Application 引用和图语义；共享 resolver 依据可信 environment/userId 解析实际版本。
+- Contracts 候选 `SW-CONTRACTS-P1-CANDIDATE.1` 将公共 Skill identity 定义为 exact `skillKey`；Composer/Runtime 不得拆 `skill:` 前缀猜测映射。该候选仍待 main-brain 纳入最终 shared revision。
 - 提供非规范图样例和 validation cases；共享 schema 字段名、版本和封装由 contracts 单一所有。
 
 ## 明确不做
@@ -63,25 +66,25 @@ M 侧需要发布可被 Python + LangGraph Runtime 编译执行的多 Skill Work
 ## 已确认的图执行语义
 
 1. Sequence：节点完成为可传播终态后才激活后继。
-2. Decision：AI 读取前驱最终结果/状态，从配置候选中选一个；语义不确定才进入 A2UI 用户选择。技术失败必须保持失败，不伪装成不确定。
+2. Decision：AI 读取全部相关、已执行祖先节点的最终结果/状态，从配置候选中选一个；语义不确定才进入 A2UI 用户选择。技术失败必须保持失败，不伪装成不确定。
 3. Parallel：split 激活多个独立分支；一个分支 `WAITING_INTERACTION` 不冻结其他分支。
 4. Join：等待所有成员分支达到可 join 终态；waiting 继续等待，allow-skip failure/实际 skip 可 join，required failure 阻断。
-5. Finalizer：只读取本次 run 已保存的真实结果/状态并生成最终表达；不能改变状态、补业务调用、绕过交互或在 stop 后运行。
+5. Finalizer：读取本次 run 全部相关、已执行祖先节点的真实结果/状态并生成最终表达；不虚构未选分支结果，不能改变状态、补业务调用、绕过交互或在 stop 后运行。
 6. Retry：仅 A2UI 渲染/Action 失败满足配置条件时重试 owning node，并保留已完成前驱和独立分支；整图 restart 是无继承的新 run。
 
 ## 所有权与真实依赖
 
 | 所有者 | 本任务需要 | 本任务提供 |
 | --- | --- | --- |
-| platform-contracts | graph identity/version、可信 context、resolver、事件/interaction/result refs、control request dedupe | sequence/decision/parallel/join 的消费者约束和样例 |
-| skill-registry | `use_skill` 可解析逻辑 Skill 引用和可发现元数据 | 无 Workflow 专用 Skill 输出/适配要求 |
+| platform-contracts | graph identity/version、exact `skillKey`/显式 typed mapping、可信 context、resolver、事件/interaction/result refs、control request dedupe | sequence/decision/parallel/join/context 的消费者约束和样例 |
+| skill-registry | `use_skill` 接受共享契约的 exact `skillKey` 和可发现元数据 | 无 Workflow 专用 Skill 输出/适配要求，不做前缀猜测 |
 | a2ui-registry | decision selection Application、DISPLAY_ONLY/INTERACTIVE、Action success/completion 语义 | node-bound 选择和 A2UI-only retry 的引用需求 |
-| Runtime | LangGraph 编译映射、状态传播、interrupt/checkpoint、独立分支进度实证 | 发布图候选、join truth table、失败/等待边界 |
+| Runtime | LangGraph 编译映射、祖先 context 累积、状态传播、interrupt/checkpoint、独立分支进度实证 | 发布图候选、context cases、join truth table、失败/等待边界 |
 | digital employee | node-bound 输入/Action 和 reset UX | 可浏览/启动的 Workflow identity，不暴露草稿和调度内部 |
 
 ## 首个可执行切片
 
-当前可独立完成：修订本 change，增加一份有效 parallel/decision 图候选和一组无依赖验证样例，用 Python 标准库做 JSON 结构/断言检查。`services/workflow-registry/` 仅预留所有权，不在共享 graph revision 获批前写实现。
+当前可独立完成：修订本 change，增加一份有效 parallel/decision 图候选，以及 A→B→C 和 join 后真实执行分支 context cases，用 Python 标准库做 JSON 结构/断言检查。`services/workflow-registry/` 仅预留所有权，不在共享 graph revision 获批前写实现。
 
 ## 公开参考
 

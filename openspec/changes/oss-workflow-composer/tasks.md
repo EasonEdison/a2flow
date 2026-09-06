@@ -6,14 +6,14 @@
 
 ## 0. 共享契约与打包门禁
 
-- [ ] 0.1 接入 main-brain 批准的 graph identity/version、trusted context 和 environment-local resolver revision。
+- [ ] 0.1 接入 main-brain 批准的 graph identity/version、exact `skillKey`/typed mapping、trusted context 和 environment-local resolver revision。
 - [ ] 0.2 接入 interaction/result references、control request dedupe 和配置版本比较契约。
 - [ ] 0.3 与 Runtime 固化发布图到 Python LangGraph 的版本化 consumer contract。
-- [ ] 0.4 由 main-brain 确认 workflow-registry 的服务语言、包布局和根依赖写入所有权。
+- [ ] 0.4 按 ENG-01 提交可导入的 Python workflow-registry 模块布局；根 `pyproject`/lock 仍由 main-brain 单一协调。
 
 ## 1. Workflow registry 最小骨架
 
-- [ ] 1.1 在 `services/workflow-registry/` 创建获批语言的最小模块，不修改共享根 manifest。
+- [ ] 1.1 在 `services/workflow-registry/` 创建最小 Python 模块，不修改共享根 manifest，也不默认启动独立常驻服务。
 - [ ] 1.2 实现 PostgreSQL-only draft/revision repository 和 expected-revision 乐观并发。
 - [ ] 1.3 通过共享 publication/resolver 保存 PRT/ONLINE 分离资产，不自建 gray/fallback。
 - [ ] 1.4 验证两个无状态实例共享 PostgreSQL 时草稿写入和发布控制请求不丢更新。
@@ -35,11 +35,12 @@
 
 ## 4. Consumer contract 验证
 
-- [ ] 4.1 与 Skill registry 验证 logical Skill ref 和统一 `use_skill`，同一 Skill 无 Workflow 适配。
+- [ ] 4.1 与 Skill registry 验证 exact `skillKey` 和统一 `use_skill`，同一 Skill 无 Workflow 适配或前缀猜测。
 - [ ] 4.2 与 A2UI registry 验证 selection Application、interaction mode 和 Action success/completion。
 - [ ] 4.3 与 Runtime 验证 A WAITING 时 B1→B2 继续且 JOIN 等 A。
 - [ ] 4.4 与 Runtime 验证 ALLOW_SKIP failure/真实 skip 可 join、REQUIRED failure 阻断。
 - [ ] 4.5 与 Runtime 验证 A2UI-only retry、Finalizer/stop、版本失配 reset 门禁。
+- [ ] 4.6 与 Runtime 验证 A→B→C 的 C 获得 A、B，以及 join 后只汇总真实执行分支祖先。
 
 ## 5. 准出
 

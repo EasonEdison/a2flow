@@ -49,12 +49,22 @@ AI decision MUST 从该节点发布时配置的 candidate 集合中选择一个 
 
 ### Requirement: Skill 在对话与 Workflow 中复用
 
-Workflow 中的 Skill 执行 MUST 统一经过 `use_skill`，并默认获得所有直接前驱的最终结果和真实状态。发布图 MUST NOT 内嵌 Skill body、业务凭证或要求 Skill 增加 routing/branch 专用字段。中间 Tool 结果只能通过只读 retrieval Tool 读取，不能重新执行业务调用。
+Workflow 中的 Skill 执行 MUST 统一经过 `use_skill`，并默认获得全部相关、已实际执行前序/祖先节点的最终结果和真实状态。发布图对 Skill 的引用 MUST 使用共享契约的 exact `skillKey`，或在发布边界通过显式 typed mapping 转为该 key；Composer/Runtime MUST NOT 拆 `skill:` 等字符串前缀猜测映射。发布图 MUST NOT 内嵌 Skill body、业务凭证或要求 Skill 增加 routing/branch 专用字段。中间 Tool 结果只能通过只读 retrieval Tool 读取，不能重新执行业务调用。
 
 #### Scenario: 同一 Skill 无适配复用
 
 - **WHEN** 同一已发布 Skill 分别从普通会话和 Workflow 节点通过 `use_skill` 调用
-- **THEN** 两种入口使用同一 Skill 内容和 Tool 边界，Workflow 仅由 Runtime 提供通用 predecessor context，不要求修改 Skill 输出
+- **THEN** 两种入口使用同一 Skill 内容、exact `skillKey` 和 Tool 边界，Workflow 仅由 Runtime 提供通用 ancestor context，不要求修改 Skill 输出
+
+#### Scenario: A 到 B 到 C 累积全部已执行祖先
+
+- **WHEN** A、B 已依次完成并保存最终结果和真实状态，随后 C 被激活
+- **THEN** C 的默认 context 同时包含 A、B 的最终结果和真实状态，而不是只包含直接前驱 B
+
+#### Scenario: Join 后只汇总真实执行分支
+
+- **WHEN** parallel 分支 A 的 decision 选择 `a_fast` 而 `a_review` 从未激活，分支 B 也完成并到达 JOIN，随后 Finalizer 被激活
+- **THEN** Finalizer context 包含 A、B 真实执行祖先及 JOIN 的最终结果和状态，且不存在为未选 `a_review` 虚构的结果
 
 ### Requirement: 可信环境解析与轻量版本失配重置
 

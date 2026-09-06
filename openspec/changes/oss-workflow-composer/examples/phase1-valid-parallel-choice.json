@@ -7,10 +7,10 @@
   "workflowRef": "workflow:request-triage",
   "graphRevision": 1,
   "configurationRefs": [
-    {"assetType": "SKILL", "logicalRef": "skill:route-fast"},
-    {"assetType": "SKILL", "logicalRef": "skill:route-review"},
-    {"assetType": "SKILL", "logicalRef": "skill:branch-b1"},
-    {"assetType": "SKILL", "logicalRef": "skill:branch-b2"},
+    {"assetType": "SKILL", "skillKey": "route-fast"},
+    {"assetType": "SKILL", "skillKey": "route-review"},
+    {"assetType": "SKILL", "skillKey": "branch-b1"},
+    {"assetType": "SKILL", "skillKey": "branch-b2"},
     {"assetType": "APPLICATION", "logicalRef": "application:decision-choice"}
   ],
   "nodes": [
@@ -26,11 +26,11 @@
         {"candidateKey": "review", "label": "人工复核", "targetNodeKey": "a_review"}
       ]
     },
-    {"nodeKey": "a_fast", "kind": "SKILL", "skillRef": "skill:route-fast", "failureRequirement": "REQUIRED"},
-    {"nodeKey": "a_review", "kind": "SKILL", "skillRef": "skill:route-review", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "a_fast", "kind": "SKILL", "skillKey": "route-fast", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "a_review", "kind": "SKILL", "skillKey": "route-review", "failureRequirement": "REQUIRED"},
     {"nodeKey": "merge_a", "kind": "CONDITION_MERGE", "failureRequirement": "REQUIRED"},
-    {"nodeKey": "b1", "kind": "SKILL", "skillRef": "skill:branch-b1", "failureRequirement": "REQUIRED"},
-    {"nodeKey": "b2", "kind": "SKILL", "skillRef": "skill:branch-b2", "failureRequirement": "ALLOW_SKIP"},
+    {"nodeKey": "b1", "kind": "SKILL", "skillKey": "branch-b1", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "b2", "kind": "SKILL", "skillKey": "branch-b2", "failureRequirement": "ALLOW_SKIP"},
     {"nodeKey": "join", "kind": "PARALLEL_JOIN", "failureRequirement": "REQUIRED"},
     {"nodeKey": "finalizer", "kind": "FINALIZER", "failureRequirement": "REQUIRED"},
     {"nodeKey": "end", "kind": "END", "failureRequirement": "REQUIRED"}

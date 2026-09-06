@@ -2,7 +2,8 @@
 
 ## 1. 状态与权威
 
-- 统一基线：`SW-P1-20260907.2`
+- 统一基线：`SW-P1-20260907.2` + `ENG-01`
+- 工程决策：Workflow registry 后端按 ENG-01 规划为可导入 Python 模块；模块边界不等于独立常驻进程，根 `pyproject`/lock 仍由 main-brain 单一协调。
 - 设计状态：`PROPOSED`
 - Runtime 状态：`NO READY`
 - 权威边界：本 change 只提供 workflow-registry 消费者需求、图候选和 validation examples；共享 contract 字段、版本和包由 `oss-platform-contracts` 单一所有。
@@ -34,7 +35,7 @@ PublishedWorkflowGraph
   nodes[]
     nodeKey
     kind = START | SKILL | AI_DECISION | CONDITION_MERGE | PARALLEL_SPLIT | PARALLEL_JOIN | FINALIZER | END
-    skillRef?
+    skillKey?
     candidates[]?
     selectionApplicationRef?
     failureRequirement = REQUIRED | ALLOW_SKIP
@@ -57,7 +58,8 @@ PublishedWorkflowGraph
 
 关键要求：
 
-- Skill 节点引用逻辑 Skill identity，所有执行统一通过 `use_skill`；不得内嵌 Skill body、凭证或运行环境。
+- Skill 节点保存共享契约定义的 exact `skillKey`，所有执行统一通过 `use_skill`；不得内嵌 Skill body、凭证或运行环境，也不得由 Runtime 拆 `skill:` 前缀猜测映射。
+- 当前 `SW-CONTRACTS-P1-CANDIDATE.1` 的 `skillKey` grammar 是 `^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)*$`。若通用 `configurationRefs.logicalRef` 继续存在，发布边界必须通过显式 typed mapping 转为 `skillKey`；该字段形态仍待 main-brain 审查，不由本 change 冻结。
 - Decision 候选是发布时有限集合，候选必须唯一映射到可达目标。AI 和用户都不能跳到集合外。
 - A2UI 选择卡引用已发布 Application 配置；卡片属于 decision 节点 interaction，不要求上游 Skill 改输出。
 - `failureRequirement` 是 authoring intent；运行状态必须保持真实 SUCCESS/FAILED/SKIPPED/WAITING，不得改写为成功。
@@ -107,12 +109,13 @@ PublishedWorkflowGraph
 
 已确认样例：split 后 A 进入 INTERACTIVE decision 并等待；B1 成功后 B2 必须继续；B2 到 join 后等待 A。A 获得合法用户选择并完成后，join 才可满足。该行为必须由 Runtime spike 实证，不能仅从 LangGraph `thread_id` 或一次 graph invocation 推断。
 
-## 7. 前驱上下文
+## 7. 前序/祖先上下文
 
-- Skill 和 decision 默认读取所有直接前驱的最终结果及真实状态，而不是只读前一个 Skill 的 payload。
-- final summarization 读取本次 run 的前驱/节点最终结果和状态；中间 Tool 结果按需通过只读 retrieval Tool 获取，不能重放业务调用。
-- 不要求 Skill 输出 route、branch 或 Workflow 专用字段；Runtime 通过统一 context envelope 调用 `use_skill`。
-- context envelope、结果引用和预算属于 shared contracts/Runtime；本任务只要求 branch/node identity 稳定可关联。
+- Skill、decision 和 Finalizer 默认读取全部相关、已实际执行祖先节点的最终结果及真实状态，而不是只读直接前驱或前一个 Skill payload。A→B→C 时 C 的默认 context 必须同时包含 A、B。
+- condition 未选 candidate 从未执行，不能生成占位结果；parallel JOIN 后的下游/Finalizer 汇总真实执行分支的祖先结果和状态，不虚构未选分支事实。
+- 中间 Tool 结果按需通过只读 retrieval Tool 获取，不能重放业务调用；这不改变所有已执行祖先 final result/status 默认可用的要求。
+- 不要求 Skill 输出 route、branch 或 Workflow 专用字段；Runtime 通过统一 context envelope 和 exact `skillKey` 调用 `use_skill`，不得硬编码字符串前缀转换。
+- context envelope 和结果引用属于 shared contracts；实际执行祖先的累积、确定性顺序/引用和预算策略属于 Runtime 映射。本任务只要求 branch/node identity 稳定可关联并保留全部相关已执行祖先事实。
 
 ## 8. A2UI、Finalizer 与 retry
 
@@ -152,6 +155,8 @@ Runtime feasibility 必须至少证明：
 4. allow-skip failure 和 required failure 按真值表传播。
 5. A2UI owning-node retry 不重跑已完成前驱或独立分支。
 6. accepted stop 后没有新 node/model/Tool/Action/retry/Finalizer。
+7. A→B→C 时 C 默认获得 A、B 的最终结果/真实状态；join 后 Finalizer 获得真实执行分支祖先且不出现未选 candidate 结果。
+8. Workflow graph 的 exact `skillKey` 按 shared contract 交给 `use_skill`，不存在 Runtime 前缀猜测。
 
 若标准 LangGraph 调用模型不能满足 A 等待/B 继续，Runtime owner 必须提供最小 reproducer 并向 main-brain 报告；不得由 Composer 增加自研调度器规避。
 
@@ -161,6 +166,7 @@ Runtime feasibility 必须至少证明：
 - AI 返回候选外 route：decision FAILED，不选择默认分支。
 - AI 技术异常：FAILED，不打开选择卡。
 - 用户选择 interaction/node/version 不匹配：拒绝，不触发新业务调用。
+- Skill identity 不符合获批 `skillKey` 或缺失显式 typed mapping：发布失败关闭，不拆字符串前缀补救。
 - join 配置不完整、嵌套 parallel、循环或不可达：拒绝发布。
 - 共享 contract 尚未批准：只交付 requirement fixture，不实现依赖接口。
 

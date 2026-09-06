@@ -37,5 +37,40 @@
       "given": ["RUN=STOPPED"],
       "expected": ["NEW_WORK=DENIED", "FINALIZER=NOT_ADMITTED"]
     }
+  ],
+  "contextCases": [
+    {
+      "caseId": "transitive-sequence-context",
+      "topology": ["skill_a", "skill_b", "skill_c"],
+      "executedAncestorNodes": [
+        {"nodeKey": "skill_a", "status": "SUCCESS", "finalResultRef": "result:skill-a"},
+        {"nodeKey": "skill_b", "status": "SUCCESS", "finalResultRef": "result:skill-b"}
+      ],
+      "consumerNodeKey": "skill_c",
+      "expectedContextNodeKeys": ["skill_a", "skill_b"]
+    },
+    {
+      "caseId": "join-executed-branches-context",
+      "selectedCandidateKey": "fast",
+      "executedAncestorNodes": [
+        {"nodeKey": "decision_a", "status": "SUCCESS", "finalResultRef": "result:decision-a"},
+        {"nodeKey": "a_fast", "status": "SUCCESS", "finalResultRef": "result:a-fast"},
+        {"nodeKey": "merge_a", "status": "SUCCESS", "finalResultRef": "result:merge-a"},
+        {"nodeKey": "b1", "status": "SUCCESS", "finalResultRef": "result:b1"},
+        {"nodeKey": "b2", "status": "FAILED", "finalResultRef": "result:b2"},
+        {"nodeKey": "join", "status": "SUCCESS", "finalResultRef": "result:join"}
+      ],
+      "unselectedCandidateNodeKeys": ["a_review"],
+      "consumerNodeKey": "finalizer",
+      "expectedContextNodeKeys": [
+        "decision_a",
+        "a_fast",
+        "merge_a",
+        "b1",
+        "b2",
+        "join"
+      ],
+      "expectedAbsentNodeKeys": ["a_review"]
+    }
   ]
 }

@@ -6,6 +6,7 @@ This is a documentation-fixture check, not the product graph validator or Runtim
 
 import json
 import os
+import re
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -44,6 +45,26 @@ for kind in ("START", "FINALIZER", "END"):
 
 allowed_failure = {"REQUIRED", "ALLOW_SKIP"}
 require(all(node["failureRequirement"] in allowed_failure for node in nodes), "unknown failure requirement")
+
+skill_key_pattern = re.compile(r"^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)*$")
+skill_nodes = [node for node in nodes if node["kind"] == "SKILL"]
+require(
+    all("skillKey" in node and "skillRef" not in node for node in skill_nodes),
+    "skill node must use exact skillKey",
+)
+node_skill_keys = {node["skillKey"] for node in skill_nodes}
+require(all(skill_key_pattern.fullmatch(key) for key in node_skill_keys), "invalid skillKey grammar")
+skill_configuration_refs = [
+    ref for ref in graph["configurationRefs"] if ref["assetType"] == "SKILL"
+]
+require(
+    all("skillKey" in ref and "logicalRef" not in ref for ref in skill_configuration_refs),
+    "SKILL configuration reference must use explicit skillKey",
+)
+require(
+    node_skill_keys == {ref["skillKey"] for ref in skill_configuration_refs},
+    "node and configuration skillKey sets must match",
+)
 
 adjacency = {key: [] for key in node_by_key}
 indegree = {key: 0 for key in node_by_key}
@@ -119,8 +140,44 @@ expected_runtime_ids = {
 }
 require({case["caseId"] for case in cases["runtimeCases"]} == expected_runtime_ids, "runtime case coverage")
 
+require("contextCases" in cases, "context propagation cases missing")
+expected_context_ids = {
+    "transitive-sequence-context",
+    "join-executed-branches-context",
+}
+context_by_id = {case["caseId"]: case for case in cases["contextCases"]}
+require(set(context_by_id) == expected_context_ids, "context case coverage")
+
+sequence_context = context_by_id["transitive-sequence-context"]
+require(sequence_context["topology"] == ["skill_a", "skill_b", "skill_c"], "transitive topology")
+sequence_expected = {"skill_a", "skill_b"}
+sequence_executed = {entry["nodeKey"]: entry for entry in sequence_context["executedAncestorNodes"]}
+require(set(sequence_context["expectedContextNodeKeys"]) == sequence_expected, "skill C must receive A and B final context")
+require(set(sequence_executed) == sequence_expected, "sequence executed ancestors")
+require(
+    all(entry.get("status") and entry.get("finalResultRef") for entry in sequence_executed.values()),
+    "sequence ancestor facts must carry status and final result reference",
+)
+
+join_context = context_by_id["join-executed-branches-context"]
+join_expected = {"decision_a", "a_fast", "merge_a", "b1", "b2", "join"}
+join_executed = {entry["nodeKey"]: entry for entry in join_context["executedAncestorNodes"]}
+require(set(join_context["expectedContextNodeKeys"]) == join_expected, "finalizer must receive the executed branch ancestors")
+require(set(join_executed) == join_expected, "join executed ancestors")
+require(
+    all(entry.get("status") and entry.get("finalResultRef") for entry in join_executed.values()),
+    "join ancestor facts must carry status and final result reference",
+)
+join_absent = set(join_context["expectedAbsentNodeKeys"])
+require(join_absent == {"a_review"}, "unselected branch result must stay absent")
+require(join_absent.isdisjoint(join_executed), "unselected branch must not have an executed result")
+
 print(
-    "phase1-workflow-fixtures: PASS nodes={0} edges={1} staticCases={2} runtimeCases={3}".format(
-        len(nodes), len(edges), len(cases["staticCases"]), len(cases["runtimeCases"])
+    "phase1-workflow-fixtures: PASS nodes={0} edges={1} staticCases={2} runtimeCases={3} contextCases={4}".format(
+        len(nodes),
+        len(edges),
+        len(cases["staticCases"]),
+        len(cases["runtimeCases"]),
+        len(cases["contextCases"]),
     )
 )
