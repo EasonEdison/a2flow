@@ -9,7 +9,7 @@
 - 工作分支：`codex/oss-digital-employee/design`
 - 目标分支：`origin/main`
 - 起始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`
-- 当前对齐基线：`SW-P1-20260907.2`；已合入 `origin/main@35282b6259eb6527a17bf359e92f2ec432d69681`
+- 当前对齐基线：`SW-P1-20260907.2 + ENG-01`；已合入 `origin/main@7b1257aff3a157364387a7e55690984aa219d670`
 
 ## 已确认边界
 
@@ -34,6 +34,8 @@
 - [x] 范围、UTF-8、敏感信息、8 Requirement/8 Scenario、0 实现勾选与 `git diff --check` 通过；服务器无 OpenSpec CLI，未执行 strict validate。
 - [x] 内容提交 `809ebaafbfeabdf331e04a639e295bc4025b846c` 已推送；合并最新 main 后的 worker `d7c3594602e75fae1a30938b26e73a9c24d7437f` 已集成到 `origin/main`。
 - [x] 已读 `ENG-01`：M 后端四域采用 Python 模块，不自动改变数字员工 BFF 技术选择；未修改根依赖或启动服务。
+- [x] 合入 `origin/main@7b1257aff3a157364387a7e55690984aa219d670` 的 A2UI 修订；fixture 测试 14/14 与 2 个合成 Application validator 通过，仅作为辅助证据。
+- [x] 补充 Python/TypeScript BFF 最小选项、拒绝浏览器直连，以及 web/BFF/A2UI Host 职责路径清单；未锁定框架或创建代码。
 
 ## 下一可执行动作
 

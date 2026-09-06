@@ -8,6 +8,12 @@
 - 已执行部署验证：无
 - Runtime：`NO READY`
 
+## 已执行的跨域辅助验证
+
+- 命令：`node --test packages/a2ui-contract-fixtures/test/validate-fixtures.test.mjs`。
+- 结果：14/14 测试通过；独立 validator 同时验证 2 个合成 Application fixture。
+- 边界：只证明 provisional fixture 的 DISPLAY_ONLY/INTERACTIVE、版本 admission、retry allowlist 和 Finalizer 规则；不证明本 change 的 Host、BFF、Runtime 或 named contract 已实现。
+
 下列 operation、params 和 `data` 是待 contracts owner 命名修订的消费语义，不冻结公开 method 或字段名。
 
 ## R1 侧栏显式启动与可信上下文

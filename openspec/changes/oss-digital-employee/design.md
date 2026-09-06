@@ -176,3 +176,54 @@ Runtime -> 产品 BFF: 权威结果、失配/停止事实与下一 sequence
 ## 10. 待裁决
 
 仅保留 proposal 中的三项主控裁决：Runtime wire 协议、A2UI/传输精确版本、产品后端及业务 Tool 交付边界。裁决前所有接口名和字段都是消费需求，不是已发布契约；应用实现等待 contracts owner 给出命名修订。
+
+## 11. BFF 技术选项与模块路径清单
+
+### 11.1 当前仓库证据
+
+- 当前仓库还没有 `apps/`、Runtime 可执行模块或根级 JS/Python 工程清单，不能声称已有可直接调用的 Runtime SDK。
+- `packages/a2ui-contract-fixtures/` 已提供两个 provisional Application fixture 和无依赖 validator，可作为未来 Host consumer test 输入；其字段仍是 `SW-CONTRACTS-P1-CANDIDATE.1` 候选。
+- 当前 Runtime 设计稿中的具体 operation/field 与旧语言建议均不是获批接口；产品不得据此提前生成客户端或固化 DTO。
+
+### 11.2 最小 BFF 选项
+
+| 选项 | 最小形态 | 复用依据 | 新增成本/风险 | 当前建议 |
+| --- | --- | --- | --- | --- |
+| A. Python BFF | `apps/digital-employee/bff/` 独立应用模块 | contracts 的中立 schema + 未来薄 Python adapter；与 Python Runtime 减少一种客户端语言 | 必须保持进程/领域边界，不得 import Runtime 内部状态模型 | 条件推荐；待 named revision、依赖和部署边界确认 |
+| B. TypeScript BFF | 与 React 工程同仓但独立 server entry | 中立 schema/examples；前端类型与 server routes 可共用生成物 | 需要额外 Runtime transport client、Python 边界测试和部署进程 | 若选定前端宿主天然提供 server runtime，再评估 |
+| C. 浏览器直连 Runtime | 无 BFF | 无 | 身份、环境、版本 admission、stop 与 Action 重新授权泄漏到浏览器 | 拒绝 |
+
+选择 A 不是由 `ENG-01` 自动推出；依据仅是未来薄 Python contracts adapter 与 Python Runtime 的潜在复用。若这些前提没有形成可验证 revision，则保持语言中立，不创建框架或根依赖。
+
+### 11.3 预留路径与职责
+
+```text
+apps/digital-employee/
+  web/
+    src/product-shell/          # 侧栏、会话、连接与固定布局
+    src/run-projection/         # 权威 snapshot/events 的只读 UI 映射
+    src/node-interactions/      # 节点输入、Action、stop/reset/retry 入口
+    src/memory-settings/        # 条件批准的长期记忆控制
+  bff/
+    application/                # 产品用例编排，不保存 Runtime 状态机
+    ingress/                    # 可信 userId/环境、授权和版本 admission
+    ports/runtime/              # 唯一 Runtime consumer port
+    adapters/postgresql/        # 产品会话、投影和偏好元数据
+    tests/contracts/            # named contract consumer tests
+
+packages/a2ui-host/
+  src/catalog-support/          # profile/catalog/digest/renderer 支持声明
+  src/surface-projection/       # snapshot/update、sequence 与 gap
+  src/actions/                  # node-bound Action envelope，不判业务成功
+  src/components/               # 本地受信 React 组件
+  tests/contracts/              # provisional fixtures 与 named revision 用例
+```
+
+目录名描述职责，不预先锁定 Python/TypeScript 包布局。根 `pyproject`、lockfile、workspace 和版本依赖只由 main-brain 协调修改。
+
+### 11.4 Runtime/A2UI 复用边界
+
+- contracts named revision 后，BFF 的 `ports/runtime/` 只映射 start/read/subscribe、节点 input/Action、stop、fresh reset 和 A2UI retry；不创建第二套运行命令或事件。
+- 产品 PostgreSQL 只保存会话、关联、可重建投影和可选偏好；run/checkpoint/sequence/Action/stop 仍以 Runtime 为权威。
+- Host contract tests 可直接复用 provisional DISPLAY_ONLY/INTERACTIVE fixture 的行为断言，但字段绑定必须等待获批 revision。
+- 本轮已运行 fixture validator 的 14 个测试和 2 个合成 Application 校验；该结果只证明独立 fixture 规则，不证明 Host、BFF 或 Runtime 已实现。

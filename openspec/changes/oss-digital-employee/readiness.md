@@ -5,7 +5,7 @@
 - Overall：`NO READY`
 - Design：`ALIGN / CONTRACT REVIEW`
 - Runtime：`NO READY`
-- Evidence：`SW-P1-20260907.2` 对齐文档与公开 SDK 能力调研
+- Evidence：`SW-P1-20260907.2` 对齐文档、公开 SDK 调研与 provisional A2UI fixture 14/14 辅助测试
 - Source state：设计源码；Git 集成只证明文档已交付，不表示接口批准、实现完成或 Runtime 可用
 
 ## 门禁矩阵
@@ -16,7 +16,7 @@
 | 首片业务范围 | `PARTIAL` | 合成 Workflow fixture 和 UI 状态已收敛，仍待 main-brain 批准 |
 | 平台共享合约 | `NO READY` | 已发送 consumer requirements；等待 contracts owner 命名修订 |
 | Runtime 消费合约 | `NO READY` | start/read/subscribe、节点输入/Action、stop/reset、A2UI retry 与错误语义未形成获批命名版本 |
-| A2UI 消费合约 | `NO READY` | profile/catalog 支持声明、DISPLAY_ONLY/INTERACTIVE、Action 结果与完成交互未形成获批命名版本 |
+| A2UI 消费合约 | `NO READY` | provisional fixtures 14/14 辅助测试通过，但 profile/catalog、Action 与完成语义仍未形成获批命名版本 |
 | 业务 Tool 合约 | `NO READY` | 首片不做真实业务写入；未来 Tool 输入输出、授权和业务后端责任仍待裁决 |
 | 个人长期记忆控制 | `PARTIAL` | 已给 A/B/B+ 条件成本；待代码核验 Store/namespace/delete 权限与最小 diff 后由 main-brain 判断是否低成本 |
 | PostgreSQL 模型/迁移 | `NO READY` | 未实现 |
