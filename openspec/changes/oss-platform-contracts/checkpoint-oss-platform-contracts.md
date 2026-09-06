@@ -1,10 +1,10 @@
 # Execution Checkpoint
 
-- Updated at: 2026-09-07T02:05:50+08:00
+- Updated at: 2026-09-07T02:07:23+08:00
 - Thread: oss-platform-contracts
 - Change: oss-platform-contracts
-- Status: ACTIVE / PROVISIONAL
-- Current phase: VERIFYING FINAL REGEX DELTA
+- Status: SOURCE_DELIVERED / PROVISIONAL
+- Current phase: HANDOFF
 - Baseline: `SW-P1-20260907.2 + ENG-01`
 - Candidate revision: `SW-CONTRACTS-P1-CANDIDATE.1`
 - Scope: 公共契约候选、最小 JSON Schema/正反例和聚焦检查。
@@ -14,7 +14,8 @@
 
 | Repo | Worker path | Worker branch | Target branch | Base/HEAD | Dirty files |
 | --- | --- | --- | --- | --- | --- |
-| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `e3895fad6a46536489e43aa83b366f31f629668f` | schema/cases + 3 negative fixtures + own evidence docs |
+| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` | clean |
+| platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` | clean |
 | platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | `05cab8bd33ca89c392b21aa8be2fe8250fd696e2` | clean |
 
 ## Completed With Evidence
@@ -34,19 +35,20 @@
 - checkpoint 里程碑提交后最终 worker 为 `f8cf77baf8fd2663ea06bcb1cfc25135f08ca4fb`。
 - 独占 integration worktree 从最新 main `a4915ad6ad5e6a847c8ac6309590601f7875ccd8` 合入 worker，复跑 54/54、55 JSON、64 文件 scope/diff 检查后 push main `05cab8bd33ca89c392b21aa8be2fe8250fd696e2`。
 - main-brain subset probe 发现 Draft 4 `$` 的终末换行边界；新增 3 个负例得到 RED 57/54/3，并仅给 identifier/skillKey 加 CR/LF 排除后 GREEN 57/57。
+- final regex delta 内容 commit `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 已 push worker 并 fast-forward 集成到 main；integration fresh check 为 57/57、58 JSON、专属 scope PASS。
 - 环境为 Python 3.6.8/jsonschema 2.6.0；未安装依赖、未修改系统 Python。PY-01 已读，主机 Python 变更仅 Runtime 可执行。
 
 ## In Progress
 
-- 正在执行 final regex delta 的 fresh verification 与提交。
+- main-brain 正在对 identifier/skillKey 两条正则与新增负例做最终 subset review。
 
 ## Pending
 
-- 提交并集成 final regex delta；随后 main-brain 命名 approved revision。
+- main-brain 命名 approved revision；各 owner 继续运行态证据。
 
 ## Next Executable Action
 
-- fresh verify 57 cases/58 JSON、scope/diff/clean-room 后 commit/push/integrate。
+- main-brain review 内容 commit `a1cb44e88ce5bb603c62b4618804c78ae0d5585c`。
 
 ## Blockers
 
@@ -54,4 +56,4 @@
 
 ## Last External Progress
 
-- 2026-09-07T02:05:50+08:00：main-brain 最后 regex probe 已复现并最小修复，57/57 GREEN。
+- 2026-09-07T02:07:23+08:00：final regex delta `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 已集成 main，57/57 GREEN。
