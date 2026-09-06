@@ -2,6 +2,8 @@
 
 Baseline: SW-P1-20260907.2 (`baseline.md` in this change). Coordinator: main-brain. Status: AUTHORIZED / runtime NO READY. Delta PY-01 permits necessary system Python replacement, with Runtime as the single executor coordinated by main-brain.
 
+Engineering supplement: `engineering-decisions.md` ENG-01 selects Python for M-backend domain modules, without requiring independent resident services or changing frontend/BFF scope. Exact packaging and dependent implementation remain review-gated.
+
 ## First milestone
 
 Converge current contracts and demonstrate the smallest framework-backed execution spine: Deep Agents -> use_skill -> ability Tool -> display/interactive Application -> valid node-bound continuation -> final result, with PostgreSQL persistence and independent parallel progression. This is not the entire product release.
