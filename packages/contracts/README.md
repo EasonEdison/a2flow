@@ -4,12 +4,18 @@
 - Authority baseline: `SW-P1-20260907.2`
 - Status: `PROVISIONAL`; main-brain review is required before dependent implementation.
 
+The bounded Skill/Policy closure named by `SW-P1-SUBSET-01` is approved for source
+implementation. This does not approve the rest of the candidate bundle or establish
+runtime readiness.
+
 ## Contents
 
 - `schemas/contracts-bundle.schema.json`: transport-neutral common shapes.
 - `tests/fixtures/valid/` and `tests/fixtures/invalid/`: synthetic project-owned examples.
 - `tests/cases.json`: expected validity for each fixture.
 - `tests/validate_contracts.py`: focused no-install check using the server's existing validator.
+- `src/skillweave_contracts/`: Python 3.11 strict model/serialization adapter for the
+  approved Skill/Policy closure only.
 
 ## Covered boundaries
 
@@ -51,7 +57,39 @@ packages/contracts/
     py.typed
 ~~~
 
-The module-local project must not carry a second lock or modify the root manifest. It must not depend on or import Deep Agents, LangGraph, PostgreSQL drivers or Runtime adapters; Runtime's currently tested versions are compatibility evidence, not contracts dependencies. This candidate does not create the Python package or dependency files.
+The module-local project must not carry a second lock or modify the root manifest. It must not depend on or import Deep Agents, LangGraph, PostgreSQL drivers or Runtime adapters; Runtime's currently tested versions are compatibility evidence, not contracts dependencies. The approved first source slice intentionally adds no dependency or packaging metadata.
+
+## Approved Python adapter
+
+The source slice has no third-party runtime dependency and is importable by adding
+`packages/contracts/src` to `PYTHONPATH`. Consumers parse decoded JSON mappings through
+the exact schema definition name or the named model:
+
+~~~python
+from skillweave_contracts import ResultInterpretationPolicySet, parse_definition
+
+request = parse_definition("useSkillRequest", {"skillKey": "demo/evidence"})
+policy_set = ResultInterpretationPolicySet.from_mapping(payload)
+serialized = policy_set.to_mapping()
+~~~
+
+`ContractValidationError.issues` is an immutable tuple of
+`ValidationIssue(path, code, message)`. `validate_definition(name, payload)` exposes the
+same bounded validation as returned issues. Inputs reject extra fields and implicit type
+coercion; nested model collections are tuples and serialization returns defensive copies.
+`load_approved_schema()` reads and filters the neutral schema source rather than copying
+it into a second authority. Unknown or provisional definition names fail closed.
+
+The adapter deliberately does not evaluate result policies, resolve Skills, authorize
+Tools, inspect host paths, execute scripts, access databases, or prove trusted-context
+provenance.
+
+Focused Python 3.11 check:
+
+~~~sh
+PYTHONPATH=packages/contracts/src python3.11 -m unittest discover \
+  -s packages/contracts/tests/python -v
+~~~
 
 ## Public references
 

@@ -2,7 +2,7 @@
 
 - Baseline: `SW-P1-20260907.2`
 - Candidate revision: `SW-CONTRACTS-P1-CANDIDATE.1`
-- Status: `SCHEMA PASS / RUNTIME NO READY`
+- Status: `SCHEMA PASS / ADAPTER SOURCE PASS / RUNTIME NO READY`
 - Executed focused cases: `57`
 
 ## Environment
@@ -13,6 +13,15 @@
 - Supported validator dialect on host: Draft 3/4
 - Dependency installation: none
 - System Python mutation: none; PY-01 execution belongs only to Runtime/main-brain coordination
+
+### Approved Python adapter environment
+
+- Approval: `SW-P1-SUBSET-01`
+- Command: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src python3.11 -m unittest discover -s packages/contracts/tests/python -v`
+- Python: `3.11.13`
+- Third-party dependencies: none
+- Result: `13/13 PASS`; the suite replays all `25` existing fixtures whose definitions are in the approved Skill/Policy closure
+- Import smoke: `UseSkillRequest.from_mapping(...).to_mapping()` PASS
 
 ## TDD evidence
 
@@ -35,6 +44,8 @@
 | CHECK-8 | fresh START 不携带 recorded versions | 54/54 PASS |
 | RED-8 | Draft 4 `$` 接受 identifier/skillKey 终末换行 | 57 total / 54 PASS / 3 FAIL |
 | GREEN-8 | identifier/skillKey 显式排除 CR/LF | 57/57 PASS |
+| RED-9 | `skillweave_contracts` 尚不存在 | unittest import error，0 tests executed |
+| GREEN-9 | 严格冻结模型、显式 dispatcher、approved-only schema loader、不可变错误接口 | 13/13 PASS；批准闭包 25 个既有正反例对照 PASS |
 
 ## Covered contract cases
 
@@ -59,5 +70,6 @@ Exact fixtures and expected validity live in `packages/contracts/tests/cases.jso
 - Deep Agents content_and_artifact visibility, checkpoint serialization and PostgreSQL reopen.
 - ResultInterpretationPolicy interpreter runtime behavior, A2UI success/completion and Finalizer boundaries.
 - Event transaction/delivery protocol and end-to-end Runtime behavior.
+- Installed-wheel/package metadata behavior; root manifest/lock remains main-brain-owned.
 
 Schema PASS cannot satisfy these runtime gates.
