@@ -1,77 +1,80 @@
-# 业务能力注册平台提案
+# 业务能力注册平台 Phase 1 对齐提案
 
 ## 状态
 
-- 设计状态：PROPOSED
-- 源码范围：仅设计文档
-- Runtime 状态：NO READY
-- 审批状态：等待 main-brain 统一裁决
-
-## 为什么要做
-
-M 侧需要一种可发布、可验证、可被通用 Runtime 消费的业务能力契约。它必须描述“能力能接收什么、返回什么、哪些输入可由模型生成、哪些是固定常量、哪些只能来自可信运行上下文”，同时不能把业务实现、密钥或企业 API 平台耦合进 Runtime。
-
-如果直接把任意 HTTP 接口或模型生成的参数交给 Runtime，会混淆定义期与执行期职责，也会让调用方有机会伪造租户、身份等可信字段。本 change 用一个小而完整的契约切片解决这一边界。
+- 基线：SW-P1-20260907.2
+- 基线提交：`b1a0c9f32497c04dd623edb0bb8858a01b5ae7ad`
+- 已读集成 SHA：`c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`
+- 设计状态：PROPOSED / BASELINE ALIGNED
+- 实现放行：等待 main-brain 审阅共享契约
+- Runtime：NO READY
 
 ## 目标
 
-- 定义业务能力草稿及不可变已发布契约。
-- 用 JSON Schema 描述模型参数、最终调用输入和调用输出。
-- 用显式绑定规则分离 `MODEL_ARGUMENT`、`STATIC_CONSTANT`、`TRUSTED_CONTEXT` 三种来源。
-- 定义 Runtime 读取发布契约和调用适配器的逻辑端口。
-- 只存储凭证需求与不透明 `CredentialRef`，不存储或返回凭证明文。
-- 规定发布前静态验证、并发冲突、失败分类和重试安全边界。
-- 保持 PostgreSQL-only、多实例应用下的一致性。
+M 侧业务能力注册平台负责能力元数据、参数/结果契约、发布前验证和成功判定配置。B 侧 Runtime 通过统一 `execute_ability` Tool 调用已授权能力，真实业务适配器位于 Runtime 核心之外。
+
+本阶段先收敛消费共享契约的需求，并提供独立合成的调用、失败、结果样例；不实现真实外部写、不抢写共享 schema、不部署。
+
+## 已接受边界
+
+- Runtime 固定使用 Python + Deep Agents SDK + LangGraph；能力注册服务语言仍由 main-brain 评审。
+- 已读 PY-01：必要时可替换/升级系统 Python，但唯一执行负责人是 Runtime；本任务不操作系统 Python，也不再把授权缺失当作 blocker。
+- PostgreSQL-only，PRT 与 ONLINE 使用分离数据库，不提供 SQLite/MySQL 或跨环境 fallback。
+- `userId` 是唯一用户/灰度身份；模型不得提供 userId、环境、凭证或生效版本。
+- PRT 只解析 PRT 当前版本；ONLINE 只解析 ONLINE stable/gray，灰度也不得读取 PRT。
+- `execute_ability` 必须复用共享可信上下文、配置解析和轻量版本失配门禁。
+- 配置版本不匹配时，在业务调用前阻断并提示全新 reset；不得继续旧版本、静默迁移或自动重放。
+- Runtime/Workflow 不拥有业务幂等、业务重试、对账、补偿或跨 run 去重；这些属于被调用 API 后端。
+
+## 从旧方案移除的冲突
+
+| 旧活动设计 | 修订结论 |
+| --- | --- |
+| Runtime 语言仍“待统一裁决” | 改为已接受 Python + Deep Agents SDK + LangGraph |
+| Registry/Runtime 按 READ_ONLY/IDEMPOTENT_WRITE 自动重试 | 首版移除通用业务调用自动重试；业务幂等/重试归 API 后端 |
+| 以 `effectState` 推导平台重试安全 | 只保留可观测调用结果，不把推导结果变成自动重试授权 |
+| 缺少 PRT/ONLINE、userId 灰度规则 | 增加共享 resolver 输入/输出和禁止跨环境读取 |
+| 精确 releaseRef 可由调用方直接选择 | 模型只能选已暴露的 abilityKey；生效版本由可信 resolver 决定 |
+| 输出 schema 合法即等于业务成功 | 分离 schema 合法、配置成功判定和 A2UI 交互完成 |
+
+## 首个可执行切片
+
+1. 修订本 change 的 `execute_ability`、授权、版本、成功判定和失败边界。
+2. 在 `services/capability-registry/` 放置不依赖共享实现的合成契约样例和轻量校验。
+3. 向 contracts/Runtime/A2UI 提供消费者需求，不实现竞争性的共享契约。
+4. main-brain 命名审核通过的共享契约 revision 后，再实现最小 registry 代码切片。
+
+## 成功解释器归属建议
+
+建议只保留一个解释器实现：
+
+- `oss-platform-contracts` 单一拥有 `ResultInterpretationPolicy` 的共享 schema 和稳定语义。
+- Capability Registry 发布经 output schema 校验的命名成功策略。
+- A2UI 配置选择能力的 `successPolicyRef`，并独立拥有 `completeInteractionOnSuccess`；不嵌入第二套表达式 DSL。
+- Runtime 在 adapter 输出通过 schema 后执行唯一解释器，返回结构化判定证据；Runtime 不把业务失败自动改成 Skill/Workflow 成功。
+
+首版策略只建议支持 `SCHEMA_VALID` 和 `JSON_POINTER_EQUALS`，不支持脚本、任意表达式或模型判定。
+
+## 模块所有权
+
+| 所有者 | 输入 | 输出 | 不负责 |
+| --- | --- | --- | --- |
+| Capability Registry | 共享发布/环境契约、管理员草稿 | ability payload、schema、命名成功策略、credential requirements | Runtime 调度、真实 API 调用、业务幂等 |
+| Shared Contracts | 通用消费者需求 | trusted context、环境 resolver、release/version、授权/错误/成功策略 schema | 领域适配器 |
+| Runtime | 模型参数、可信 ToolRuntime context、发布能力 | 一次受控调用及结构化结果 | M 侧发布、业务后端重试 |
+| A2UI Registry | Action 配置、能力/策略引用 | Action 成功选择与交互完成配置 | 能力结果解释器实现 |
+| API Backend / Adapter | resolved input、credential ref | 外部调用与业务结果 | 资产发布和 Workflow 状态 |
 
 ## 非目标
 
-- 不实现真实业务适配器、HTTP 客户端、模型调用、Runtime 或前端。
-- 不依赖企业 API 平台、企业协议、内部 schema 或私有数据。
-- 不在本 change 决定 Runtime 语言、HTTP/gRPC/消息协议或其版本。
-- 不实现通用低代码 API 编排、凭证中心、组织/租户管理或任意脚本执行。
-- 不发布服务、不修改数据库、不开放端口。
+- 不实现企业 API 平台、真实业务写、凭证中心或任意脚本执行。
+- 不新增通用业务调用 retry engine、exactly-once 承诺或 Workflow 补偿。
+- 不决定共享包目录、协议版本、根依赖或能力服务语言。
+- 不部署、不修改服务/数据库/端口、不配置 secret。
 
-## 候选方案
+## 公开依据
 
-| 方案 | 描述 | 优点 | 主要代价 |
-| --- | --- | --- | --- |
-| A. OpenAPI 导入优先 | 以 OpenAPI Operation 作为能力主模型 | HTTP 工具链成熟，已有 API 容易导入 | 将首版模型绑定到 HTTP；常量、可信上下文和凭证边界需要额外扩展；非 HTTP 适配器不自然 |
-| B. SDK/协议优先 | 先冻结某种语言接口或 RPC IDL | 强类型生成和调用性能好 | Runtime 语言与传输协议尚未裁决，过早冻结会制造跨任务冲突 |
-| **C. 契约优先（推荐）** | 以 JSON Schema 2020-12 + 来源绑定 + 逻辑端口表达能力，传输绑定后置 | 可静态验证、语言中立、适配器可替换，最符合当前待裁决状态 | 后续需要为选定传输补充映射与兼容性测试 |
-
-## 推荐方案
-
-采用方案 C。能力注册平台拥有“定义、验证、发布、查询”的控制面；Runtime 只读取不可变发布契约，并通过逻辑 `CapabilityInvocationPort` 调用外部适配器。OpenAPI 可在后续成为导入格式或某类适配器描述，但不是领域真值。
-
-首版只支持 JSON 值，schema 候选方言为 JSON Schema Draft 2020-12；`inputBindings` 使用 RFC 6901 JSON Pointer 指向最终输入位置。发布产物必须自包含，MVP 禁止运行时解析任意远程 `$ref`。
-
-## 预期产物
-
-- 可并发编辑、显式校验的 `CapabilityDraft`。
-- 包含内容摘要的不可变 `PublishedCapabilityContract`。
-- Runtime 使用的 `PublishedCapabilityCatalogPort` 和 `CapabilityInvocationPort` 逻辑契约。
-- 7 类发布门禁和 8 个 planned 验收场景。
-- 对共享资产标识、发布语义、可信上下文目录和 Runtime 传输映射的明确依赖。
-
-## 跨域影响
-
-| 依赖方 | 本域输出 | 本域所需输入 |
-| --- | --- | --- |
-| oss-platform-contracts | 能力领域 payload、发布校验结果、内容摘要候选 | `AssetIdentity`、`ReleaseRef`、不可变发布与错误包络 |
-| oss-agent-workflow-runtime | 发布契约读取端口、调用端口、失败/重试语义 | 传输映射、执行上下文真实性、deadline 与幂等策略 |
-| oss-skill-registry / oss-workflow-composer | 稳定能力发布引用 | 共同引用格式和兼容性规则 |
-| oss-digital-employee | 凭证槽位和适配器实现边界 | 业务适配器、环境凭证绑定；不得把业务模型反向放入 Runtime |
-
-## 风险
-
-- JSON Schema 实现之间的 `format`、浮点数和远程引用行为可能不一致，必须固定方言、验证器能力集和兼容性用例。
-- 超时后副作用状态可能未知，不能把“网络失败”等同于“未执行”。
-- `CredentialRef` 若被错误地当作普通模型参数传递，会破坏可信边界。
-- 公共发布语义未统一前，本域只能提交 PROPOSED 草案，不能宣称跨域契约已批准。
-
-## 公开规范依据
-
-- JSON Schema Draft 2020-12：<https://json-schema.org/draft/2020-12>
+- Deep Agents customization：<https://docs.langchain.com/oss/python/deepagents/customization>
+- LangChain Tools/ToolRuntime：<https://docs.langchain.com/oss/python/langchain/tools>
+- JSON Schema 2020-12：<https://json-schema.org/draft/2020-12>
 - RFC 6901 JSON Pointer：<https://www.rfc-editor.org/rfc/rfc6901>
-- OpenAPI 3.1.1（候选方案对比）：<https://spec.openapis.org/oas/v3.1.1.html>
-- RFC 9457 Problem Details（仅作为未来 HTTP 映射参考）：<https://www.rfc-editor.org/rfc/rfc9457.html>
