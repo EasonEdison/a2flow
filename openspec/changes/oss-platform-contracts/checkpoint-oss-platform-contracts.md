@@ -1,10 +1,10 @@
 # Execution Checkpoint
 
-- Updated at: 2026-09-07T02:01:03+08:00
+- Updated at: 2026-09-07T02:05:50+08:00
 - Thread: oss-platform-contracts
 - Change: oss-platform-contracts
-- Status: SOURCE_DELIVERED / PROVISIONAL
-- Current phase: HANDOFF
+- Status: ACTIVE / PROVISIONAL
+- Current phase: VERIFYING FINAL REGEX DELTA
 - Baseline: `SW-P1-20260907.2 + ENG-01`
 - Candidate revision: `SW-CONTRACTS-P1-CANDIDATE.1`
 - Scope: 公共契约候选、最小 JSON Schema/正反例和聚焦检查。
@@ -14,7 +14,7 @@
 
 | Repo | Worker path | Worker branch | Target branch | Base/HEAD | Dirty files |
 | --- | --- | --- | --- | --- | --- |
-| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `f8cf77baf8fd2663ea06bcb1cfc25135f08ca4fb` | clean |
+| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `e3895fad6a46536489e43aa83b366f31f629668f` | schema/cases + 3 negative fixtures + own evidence docs |
 | platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | `05cab8bd33ca89c392b21aa8be2fe8250fd696e2` | clean |
 
 ## Completed With Evidence
@@ -33,19 +33,20 @@
 - candidate 内容已提交并 push worker：`404bbcacc1ef176c273c9a90fc4ae91bfadc42fd`。
 - checkpoint 里程碑提交后最终 worker 为 `f8cf77baf8fd2663ea06bcb1cfc25135f08ca4fb`。
 - 独占 integration worktree 从最新 main `a4915ad6ad5e6a847c8ac6309590601f7875ccd8` 合入 worker，复跑 54/54、55 JSON、64 文件 scope/diff 检查后 push main `05cab8bd33ca89c392b21aa8be2fe8250fd696e2`。
+- main-brain subset probe 发现 Draft 4 `$` 的终末换行边界；新增 3 个负例得到 RED 57/54/3，并仅给 identifier/skillKey 加 CR/LF 排除后 GREEN 57/57。
 - 环境为 Python 3.6.8/jsonschema 2.6.0；未安装依赖、未修改系统 Python。PY-01 已读，主机 Python 变更仅 Runtime 可执行。
 
 ## In Progress
 
-- main-brain 可基于固定 main 快照执行命名/子集审查；当前仍是 PROVISIONAL。
+- 正在执行 final regex delta 的 fresh verification 与提交。
 
 ## Pending
 
-- main-brain 命名 approved revision；Runtime/A2UI/Skill/Ability/Workflow 继续各自集成与运行证据。
+- 提交并集成 final regex delta；随后 main-brain 命名 approved revision。
 
 ## Next Executable Action
 
-- main-brain review `05cab8bd33ca89c392b21aa8be2fe8250fd696e2` 中本 change 与 `packages/contracts/`。
+- fresh verify 57 cases/58 JSON、scope/diff/clean-room 后 commit/push/integrate。
 
 ## Blockers
 
@@ -53,4 +54,4 @@
 
 ## Last External Progress
 
-- 2026-09-07T02:01:03+08:00：worker `f8cf77baf8fd2663ea06bcb1cfc25135f08ca4fb` 已集成并 push main `05cab8bd33ca89c392b21aa8be2fe8250fd696e2`，等待 main-brain 命名审查。
+- 2026-09-07T02:05:50+08:00：main-brain 最后 regex probe 已复现并最小修复，57/57 GREEN。

@@ -322,5 +322,23 @@
     "definition": "controlRequest",
     "fixture": "fixtures/valid/control-request-start-fresh.json",
     "expectedValid": true
+  },
+  {
+    "name": "identifier rejects trailing newline",
+    "definition": "identifier",
+    "fixture": "fixtures/invalid/identifier-trailing-newline.json",
+    "expectedValid": false
+  },
+  {
+    "name": "skillKey rejects trailing newline",
+    "definition": "skillKey",
+    "fixture": "fixtures/invalid/skill-key-trailing-newline.json",
+    "expectedValid": false
+  },
+  {
+    "name": "use_skill request rejects newline skillKey",
+    "definition": "useSkillRequest",
+    "fixture": "fixtures/invalid/use-skill-request-newline-key.json",
+    "expectedValid": false
   }
 ]

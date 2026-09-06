@@ -3,7 +3,7 @@
 - Baseline: `SW-P1-20260907.2`
 - Candidate revision: `SW-CONTRACTS-P1-CANDIDATE.1`
 - Status: `SCHEMA PASS / RUNTIME NO READY`
-- Executed focused cases: `54`
+- Executed focused cases: `57`
 
 ## Environment
 
@@ -33,6 +33,8 @@
 | RED-7 | pre-merge review 的 control/event/policy/material/Action 缺口 | 53 total / 40 PASS / 13 FAIL |
 | GREEN-7 | 非空/唯一引用、closed event、runSequence、四事实片段与 CR/LF 边界 | 53/53 PASS |
 | CHECK-8 | fresh START 不携带 recorded versions | 54/54 PASS |
+| RED-8 | Draft 4 `$` 接受 identifier/skillKey 终末换行 | 57 total / 54 PASS / 3 FAIL |
+| GREEN-8 | identifier/skillKey 显式排除 CR/LF | 57/57 PASS |
 
 ## Covered contract cases
 
@@ -44,7 +46,7 @@
 | Control requests | node-bound interaction；A2UI-only retry；non-empty versions | business idempotency；missing/empty/conflicting versions；generic retry | PASS |
 | ResultInterpretationPolicy/Action | SCHEMA_VALID；JSON_POINTER_EQUALS；named set；success/completion binding；四事实 | unsupported operator；missing expected/fact；duplicate/dangling policy | PASS |
 | Events | runSequence；closed Interaction/Node/Run Result scope | missing/mismatched/redundant ref；foreign fact；blocked+ALLOW | PASS |
-| use_skill | logical request；server scope；READ_ONLY handles；真实 package-relative logicalPath/digest/size；content+artifact | identity override；missing node；raw locator；parent traversal；newline；duplicate logicalPath；Workflow route | PASS |
+| use_skill | logical request；server scope；READ_ONLY handles；真实 package-relative logicalPath/digest/size；content+artifact | identity override；newline skillKey；missing node；raw locator；parent traversal；newline；duplicate logicalPath；Workflow route | PASS |
 
 Exact fixtures and expected validity live in `packages/contracts/tests/cases.json`; all data is synthetic and project-authored.
 

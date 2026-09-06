@@ -16,6 +16,7 @@
 - [x] 2.4 记录 Python/Runtime 打包建议和六域回交字段，不改根 manifest/lockfile。
 - [x] 2.5 按 main-brain 审阅收敛 `ResultInterpretationPolicySet`、package-relative `logicalPath` 与单一 `skillKey`，不增加通用表达式引擎或字符串前缀解析。
 - [x] 2.6 按独立 pre-merge review 修复非空/asset-unique 版本集、closed event + runSequence、policy/resource 语义唯一性和 Action 四事实片段。
+- [x] 2.7 修复 Draft 4 终末换行边界：identifier/skillKey 显式拒绝 CR/LF，并覆盖 use_skill request。
 
 ## 3. VERIFY
 
