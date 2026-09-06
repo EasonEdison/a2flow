@@ -1,5 +1,13 @@
 # Platform contributor instructions
 
+## Current phase authorization (2026-09-07)
+
+- The user authorized phase 1 execution and main-brain-led coordination. Read `openspec/changes/skillweave-phase1/baseline.md` (SW-P1-20260907.1) and `plan.md` before working. These supersede conflicting old design-only instructions and proposed languages/semantics below.
+- Start baseline alignment, shared contract candidates and the isolated Runtime feasibility spike now. Dependent application implementation follows main-brain's recorded interface/design review, not another user-mediated kickoff.
+- Own only your existing change directory and the explicitly reserved paths in the phase 1 plan. Shared files need an exclusive owner grant. main-brain owns this AGENTS.md and the phase 1 baseline/plan.
+- Runtime is Python + Deep Agents SDK + LangGraph; PostgreSQL only. Respect the baseline's Tool, PRT/ONLINE userId gray, A2UI, retry/stop/restart and clean-room boundaries. Old drafts are not authority.
+- User communication, task synchronization, review and acceptance belong to main-brain. Report baseline acknowledgement, stale-design corrections, owned diff and evidence to main-brain. Runtime readiness and unapproved deployment/product scope remain separate gates.
+
 ## Source and architecture
 
 - Write new code and specifications independently from sanitized requirements and public documentation. Do not read or copy proprietary projects, schemas, tests, fixtures or credentials into this repository.
