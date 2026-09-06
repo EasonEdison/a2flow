@@ -177,6 +177,19 @@ class AbilityDefinitionValidatorBoundaryTests(unittest.TestCase):
                     "CREDENTIAL_REQUIREMENT_FIELD_UNSUPPORTED",
                 )
 
+    def test_rejects_non_string_top_level_field_without_crashing(self):
+        payload = deepcopy(valid_ability_payload())
+        payload[1] = "not-allowed"
+        payload["credentialValue"] = "not-allowed"
+
+        self.assert_invalid(payload, "ABILITY_FIELD_UNSUPPORTED")
+
+    def test_rejects_non_scalar_binding_source_without_crashing(self):
+        payload = deepcopy(valid_ability_payload())
+        payload["inputBindings"][0]["source"] = ["MODEL_ARGUMENT"]
+
+        self.assert_invalid(payload, "INPUT_BINDING_SOURCE_UNSUPPORTED")
+
     def test_rejects_unreleased_binding_source(self):
         payload = deepcopy(valid_ability_payload())
         payload["inputBindings"][0]["source"] = "CREDENTIAL_REFERENCE"

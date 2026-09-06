@@ -125,7 +125,10 @@ class AbilityDefinitionValidator:
             )
             return AbilityDefinitionValidation(issues=(issue,), metadata=None)
 
-        for field_name in sorted(set(payload) - _ABILITY_FIELDS):
+        unsupported_fields = set(payload) - _ABILITY_FIELDS
+        for field_name in sorted(
+            unsupported_fields, key=lambda value: (type(value).__name__, repr(value)),
+        ):
             issues.append(
                 _issue(
                     "ABILITY_FIELD_UNSUPPORTED",
@@ -232,7 +235,7 @@ class AbilityDefinitionValidator:
             source = binding["source"]
             source_path = binding["sourcePath"]
             target_path = binding["targetPath"]
-            if source not in _ALLOWED_BINDING_SOURCES:
+            if not isinstance(source, str) or source not in _ALLOWED_BINDING_SOURCES:
                 issues.append(
                     _issue(
                         "INPUT_BINDING_SOURCE_UNSUPPORTED",
