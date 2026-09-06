@@ -18,12 +18,50 @@ cases:
     expectedStatus: FAILED
     expectedCode: SKILL_PACKAGE_MISSING_MANIFEST
 
+  - id: invalid-name-shape
+    virtualPackage:
+      invalidFrontmatterNames:
+        - -leading
+        - trailing-
+        - double--hyphen
+        - Uppercase
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_INVALID_FRONTMATTER
+
   - id: name-directory-mismatch
     virtualPackage:
       directory: evidence-first-brief
       frontmatterName: another-skill
     expectedStatus: FAILED
     expectedCode: SKILL_PACKAGE_NAME_MISMATCH
+
+  - id: description-out-of-range
+    virtualPackages:
+      - descriptionLength: 0
+      - descriptionLength: 1025
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_INVALID_FRONTMATTER
+
+  - id: compatibility-out-of-range
+    virtualPackages:
+      - compatibilityLength: 0
+      - compatibilityLength: 501
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_INVALID_FRONTMATTER
+
+  - id: opaque-binary-asset
+    virtualPackage:
+      entries:
+        - SKILL.md
+        - assets/cover.png
+      asset:
+        mediaType: image/png
+        utf8Decodable: false
+        digestMatches: true
+    expectedStatus: PASSED
+    assertions:
+      - binary asset is not decoded as UTF-8
+      - media type, digest and size remain available
 
   - id: path-traversal
     virtualPackage:
@@ -46,16 +84,27 @@ cases:
     expectedStatus: FAILED
     expectedCode: SKILL_PACKAGE_DIGEST_MISMATCH
 
-  - id: script-is-not-authority
+  - id: tool-words-and-script-are-not-authority
     virtualPackage:
       entries:
         - SKILL.md
         - scripts/run.py
+      instructionText: Use execute_ability only when the host authorizes it.
       allowedTools: execute
-    expectedStatus: PASSED_WITH_WARNING_OR_POLICY_FAILURE
+    expectedStatus: PASSED_WITH_WARNING
     assertions:
+      - instruction text does not trigger rejection
       - no script executes
       - no Tool permission is added
+
+  - id: unsupported-execution-profile
+    revisionEnvelope:
+      executionProfile: script-executable
+    expectedStatus: FAILED
+    expectedCode: SKILL_EXECUTION_PROFILE_UNSUPPORTED
+    assertions:
+      - failure comes from the structured profile
+      - ordinary instruction text is not scanned to infer the profile
 
   - id: forbidden-workflow-binding
     revisionEnvelope:

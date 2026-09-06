@@ -58,7 +58,7 @@ Phase 1 要证明同一份 Skill 指令可以在对话和 Workflow 中原样复�
 
 ### Package
 
-采用 [Agent Skills Specification](https://agentskills.io/specification) 的目录与 `SKILL.md` 结构作为候选作者格式。公共发布层只需给本域一个不可变、可校验、无凭证的 package reference；digest、media type、size、locator/handle 的最终字段由 contracts 单一所有。本域不要求首版自建 OCI Registry。
+采用 [Agent Skills Specification](https://agentskills.io/specification) 的目录与 `SKILL.md` 结构作为候选作者格式。`SKILL.md` 与文本 references 按 UTF-8 校验；assets 可以是图片或其他字节，以 media type/digest/size 的不透明资源描述符处理，不能强制 UTF-8 解码。公共发布层只需给本域一个不可变、可校验、无凭证的 package reference；最终字段由 contracts 单一所有。本域不要求首版自建 OCI Registry。
 
 ### Runtime entry
 

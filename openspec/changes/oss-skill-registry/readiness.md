@@ -1,6 +1,6 @@
 # Readiness: oss-skill-registry Phase 1
 
-> Baseline alignment: **LOCAL PASS / MAIN-BRAIN REVIEW PENDING**
+> Baseline alignment: **LOCAL PASS / REVIEW CORRECTIONS APPLIED / CONTRACT PENDING**
 > Overall runtime readiness: **NO READY**
 > Design status: **PROPOSED**
 > Phase 1 已开工不等于接口获批、服务实现或产品可用。
@@ -10,9 +10,9 @@
 | Gate | Status | Evidence / blocker |
 | --- | --- | --- |
 | Baseline read and Git alignment | PASS | 已读取 SW-P1-20260907.2/PY-01 并合入 `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`；本任务不执行系统 Python 变更 |
-| Stale-design removal | PARTIAL | 文档已移除 Workflow-bound publication；待 main-brain diff review |
-| use_skill consumer requirements | PARTIAL | 本 change 已提交候选需求；共享 Tool schema/Runtime 实现未批准 |
-| Independent reusable Skill sample | PARTIAL | 合成样例静态检查 PASS、digest 已记录；Runtime chat/Workflow 双入口仍无证据 |
+| Stale-design removal | PASS | main-brain 已审查实际 diff；Workflow-bound publication 已移除，评审修订已落盘 |
+| use_skill consumer requirements | PARTIAL | 本 change 已提交并经过边界评审；共享 Tool schema/Runtime 实现未批准 |
+| Independent reusable Skill sample | PARTIAL | 14 个 fixture 定义与样例静态检查 PASS、digest 已记录；validator 与 Runtime chat/Workflow 双入口仍无运行证据 |
 | Shared contracts | NO READY | trusted context、resolver、package/release ref、version evidence/error revision 未命名 |
 | Service implementation | NO READY | `services/skill-registry/` 尚未获 interface revision 放行 |
 | PostgreSQL implementation | NO READY | 无 migration、repository、多进程证据 |

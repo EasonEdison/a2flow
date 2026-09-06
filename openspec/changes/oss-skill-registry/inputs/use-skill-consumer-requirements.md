@@ -51,7 +51,7 @@ A successful Tool result needs：
 - resolved logical identity and immutable release/version；
 - configuration/version evidence for execution and continue checks；
 - `SKILL.md` instructions；
-- authorized read-only resource descriptors or opaque handles；
+- authorized read-only resource descriptors or opaque handles with media type/digest/size；text references and binary assets remain distinguishable；
 - content digest；
 - compatibility hints such as required Tool names, never authorization。
 
@@ -75,5 +75,5 @@ Every load returns evidence sufficient for Runtime to compare the run's recorded
 2. ONLINE has no Skill but PRT does。
 3. Ordinary user calls authoring/publish rather than use_skill。
 4. Caller loads a native SDK directory or raw package locator directly。
-5. Package includes scripts/allowed-tools and expects permission elevation。
+5. Package instructions mention an authorized Tool or include scripts/allowed-tools；validation must not misclassify text as execution authority。
 6. Workflow caller requests mode-specific rewritten instructions or routing output。

@@ -66,16 +66,18 @@ Phase 1 候选包与 [Agent Skills Specification](https://agentskills.io/specifi
 <skill-name>/
 ├── SKILL.md              # required
 ├── references/           # optional, read-only material
-├── assets/               # optional, read-only material
+├── assets/               # optional, opaque image/data/static bytes
 └── scripts/              # optional by public spec; non-executable in Phase 1
 ```
 
 `SKILL.md` frontmatter：
 
 - required：`name`、`description`；
-- optional：`license`、`compatibility`、string-to-string `metadata`；
-- `allowed-tools` 是实验字段，只能作为提示，不能提升 Runtime 权限；
-- `name` 必须匹配包目录名；
+- `name` 长度 1–64，只含小写 ASCII 字母、数字和连字符，不得首尾为连字符、不得连续连字符，并匹配父目录名；
+- `description` 长度 1–1024；
+- optional `compatibility` 存在时长度 1–500；
+- optional `license` and string-to-string `metadata`；
+- `allowed-tools` 是实验字段，只能作为兼容性提示，不能提升 Runtime 权限，也不能因其存在而拒绝一个结构合法的包；
 - body 是通用指令，不得要求调用者输出 Workflow 路由字段。
 
 Registry revision envelope 可以附带 `requiredToolNames`，但不会把 Tool/Ability 版本解析为固定业务图。具体 Tool 授权和环境版本由执行时 trusted context 决定。
@@ -90,9 +92,9 @@ Registry revision envelope 可以附带 `requiredToolNames`，但不会把 Tool/
 2. 读取前后核对 size/digest；不匹配即 fail closed。
 3. 设置 bytes、文件数、单文件、路径深度和超时上限。
 4. 拒绝绝对路径、`..`、设备文件和逃逸 symlink。
-5. 校验 `SKILL.md` frontmatter、name/目录一致性和 UTF-8 文本边界。
-6. references/assets 只作为资源；scripts 只登记为非执行内容。
-7. 不执行 Markdown、scripts 或 `allowed-tools`。
+5. 校验 `SKILL.md` frontmatter、完整 name/description/compatibility 边界、name/目录一致性和 UTF-8 文本边界。
+6. 文本 references 按 UTF-8 校验；assets/scripts 可是任意受限字节，只做路径、size/digest/media type 和资源描述符校验，不强制 UTF-8 解码。
+7. 不执行 Markdown/scripts，也不把正文提到 Tool、存在 scripts 或 `allowed-tools` 当成发布拒绝或授权依据。只有结构化 authoring/revision envelope 明确请求未支持的 executable profile 时，才返回 unsupported profile。
 8. 不把 `workflow`、`route`、`nextNode` 等字段加入 SkillWeave revision envelope。
 9. 同一个 package digest 不得因 chat/workflow 消费模式产生不同内容。
 
@@ -134,7 +136,7 @@ Runtime 从可信后端上下文提供：
 - resolved Skill identity/release/version；
 - configuration/version evidence，供执行及 continue ingress 比较；
 - instructions；
-- resource descriptors/opaque handles；
+- resource descriptors/opaque handles，包含 media type/digest/size，文本与二进制资源不混淆；
 - required Tool compatibility hints；
 - immutable content digest。
 
@@ -145,7 +147,8 @@ Runtime 从可信后端上下文提供：
 - `SKILL_NOT_FOUND`：当前环境无发布版本。
 - `SKILL_FORBIDDEN`：主体无正文/资源使用权。
 - `SKILL_VERSION_MISMATCH`：有效配置与 run 证据不一致；Runtime 在新业务调用前提示显式 reset。
-- `SKILL_PACKAGE_INVALID`：发布内容/校验证据无效。
+- `SKILL_PACKAGE_INVALID`：发布内容/确定性校验证据无效。
+- `SKILL_EXECUTION_PROFILE_UNSUPPORTED`：结构化 revision 明确要求 Phase 1 不支持的可执行 profile；不通过扫描自然语言触发。
 - `SKILL_MATERIAL_UNAVAILABLE`：受控后端暂时不可用；这是 Tool failure，不得扩展为通用 Skill node retry。
 - `SKILL_ENTRY_BYPASS_DENIED`：试图通过 native directory、locator 或模型提供环境直接加载。
 

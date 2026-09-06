@@ -71,7 +71,7 @@ The system MUST publish instructions/resources independently from Workflow graph
 
 ### Requirement: Validate Agent Skills package structure without executing it
 
-The system MUST validate a package against the approved Agent Skills-compatible profile, including required `SKILL.md`, valid frontmatter, name/directory match, digest/size and safe paths. Validation MUST NOT execute Markdown, scripts or tools.
+The system MUST validate a package against the approved Agent Skills-compatible profile, including required `SKILL.md`, complete name/description/compatibility constraints, name/directory match, digest/size and safe paths. `SKILL.md` and text references MUST be UTF-8. Binary assets MUST be handled as opaque media-typed bytes rather than rejected for not being UTF-8. Validation MUST NOT execute Markdown, scripts or tools.
 
 #### Scenario: Accept the independent instruction sample
 
@@ -87,16 +87,25 @@ The system MUST validate a package against the approved Agent Skills-compatible 
 - **THEN** validation fails closed with a stable candidate error code
 - **AND** no content is executed and publication remains blocked
 
-### Requirement: Treat scripts and allowed-tools as non-authorizing content
+### Requirement: Separate deterministic package validation from execution authorization
 
-The system MUST NOT grant tool or script execution permission from package contents. Phase 1 MAY preserve script bytes as non-executable package resources for format compatibility, but executing them requires a future separately authorized sandbox Tool.
+The system MUST NOT infer execution permission or publication failure by scanning natural-language instructions. The presence of scripts, an experimental allowed-tools field, or ordinary instructions mentioning an authorized Tool MUST NOT itself grant permission or make an otherwise valid package fail. Phase 1 MAY preserve script bytes as non-executable resources. A structured request for an unsupported executable profile MUST be rejected explicitly and separately.
 
-#### Scenario: Package asks to execute a script
+#### Scenario: Instruction mentions an authorized Tool
 
-- **GIVEN** a package includes scripts or an experimental allowed-tools field
-- **WHEN** it is validated or loaded by use_skill
-- **THEN** no script runs and no Runtime permission is added
-- **AND** the result records only compatibility metadata or a policy warning
+- **GIVEN** a structurally valid Skill body says to use execute_ability when the host authorizes it and may include allowed-tools metadata
+- **WHEN** package validation runs
+- **THEN** deterministic format/path/digest validation can pass
+- **AND** no Tool permission is granted
+- **AND** the validator does not reject the package merely because those words or metadata exist
+
+#### Scenario: Revision requests an unsupported executable profile
+
+- **GIVEN** a structured authoring/revision field explicitly requests a script-executable profile that Phase 1 does not support
+- **WHEN** validation or use_skill admission runs
+- **THEN** it returns the approved unsupported-execution-profile error
+- **AND** no script runs
+- **AND** ordinary instruction text is not used to infer this profile
 
 ### Requirement: Publish Skill independently from Workflow
 

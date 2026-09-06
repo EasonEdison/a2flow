@@ -12,7 +12,7 @@
 实际命令：
 
 - `git diff --check`
-- `python3 -`，对 `SKILL.md` frontmatter/name/description/reference、两个 reuse cases、九个 validation cases 和禁止字段执行只读断言
+- `python3 -`，对 `SKILL.md` frontmatter/name/description/reference、两个 reuse cases、十四个 validation cases 和禁止字段执行只读断言
 - `sha256sum examples/evidence-first-brief/SKILL.md examples/evidence-first-brief/references/output-format.md`
 - 精确文件/任务/scenario/敏感信息 grep 计数
 
@@ -20,12 +20,13 @@
 
 - `git diff --check`：PASS。
 - `fixture_static_check=PASS`；`sample_name=evidence-first-brief`；`description_chars=170`。
-- `validation_cases=9`；`reuse_cases=2`；`same_model_input=true`。
+- `validation_cases=14`；`reuse_cases=2`；`same_model_input=true`。
+- 以上只证明样例与 fixture 定义可解析、静态断言成立；没有执行 validator 的 14 个结果，也不是 chat/Workflow 双入口运行证据。
 - `SKILL.md sha256=1cc034c1d066b24771e9b0d91bc74abd89012268cf225802c25dd33316e06434`。
 - 样例 `SKILL.md` 中 Workflow/route/userId/environment 禁止字段命中 0；私有/敏感模式命中 0。
 - `openspec` 与 `skills-ref` CLI 均不存在；未安装依赖，因此未执行 strict/OpenSpec 官方 validator。
 
-以上只证明当前文档/fixtures 的静态一致性，不是 package validator 实现、Runtime use_skill、PostgreSQL 或跨域合同运行证据。
+以上只证明当前文档/fixtures 的静态一致性，不是 package validator 实现、Runtime `use_skill`、PostgreSQL 或跨域合同运行证据。
 
 ## Planned Contract Scenarios
 
@@ -40,7 +41,7 @@
 | SK-P1-07 native-bypass | PLANNED | Runtime material load | native directory/raw locator without authorized use_skill | `SKILL_ENTRY_BYPASS_DENIED`/approved equivalent | agent context 无 instructions/resources |
 | SK-P1-08 package-valid | PLANNED | candidate `validatePackage` | `examples/evidence-first-brief/` + immutable candidate package reference | `data={status:"PASSED",checks,digest}` | name/dir/reference 通过；不执行内容 |
 | SK-P1-09 package-invalid | PLANNED | candidate `validatePackage` | `examples/validation-cases.yaml` negative cases | `data.status="FAILED"` or approved failure envelope | 每例稳定 code；无执行/边界外写入 |
-| SK-P1-10 scripts-no-authority | PLANNED | validate/load material | package includes scripts/allowed-tools | passed-with-warning or policy failure | 无 script call，无新增 Tool permission |
+| SK-P1-10 execution-policy-separated | PLANNED | validate/load material | valid instruction mentions execute_ability，package may include scripts/allowed-tools；另有 structured executable profile case | deterministic validation passes or warns for content；structured unsupported profile fails explicitly | 无 script call、无新增 Tool permission、无自然语言误杀 |
 | SK-P1-11 standalone-publish | PLANNED | candidate `publishSkill` | admin + valid revision + shared idempotency/publication input | `data={publishedSkillRef}` | 无 WorkflowReleaseRef/graph/route；相同 key 幂等 |
 | SK-P1-12 stale-version | PLANNED | resolve at continue ingress | run evidence V1，effective config V2 | mismatch data/failure | Runtime 可在新业务调用前 reset；无 frozen V1 fallback |
 
