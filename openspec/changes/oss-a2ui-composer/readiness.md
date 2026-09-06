@@ -2,53 +2,60 @@
 
 ## 总结
 
-- Design：PROPOSED
-- Source delivery：READY（server-local main 已含设计内容）
-- Build：NO READY
-- Automated tests：NO READY
-- Cross-domain contract：NO READY
-- Deployment：NO READY
-- Runtime：NO READY
-- Archive decision：NO READY
+- Baseline alignment：`READY`（`SW-P1-20260907.2` 已读）
+- Design：`PARTIAL`
+- Synthetic contract fixtures：`READY`
+- Source integration：`READY`
+- Shared contract：`NO READY`
+- Registry implementation：`NO READY`
+- Build/PostgreSQL：`NO READY`
+- Runtime/Host integration：`NO READY`
+- Deployment/E2E：`NO READY`
+- Overall Runtime readiness：`NO READY`
+- Archive decision：`NO READY`
 
-本文件是准出唯一结论。tasks.md 即使未来全部勾选，也不能替代本文件的运行证据门禁。
+tasks.md 只记录工作完成情况，不能替代本文件的证据门禁。静态 fixture READY 不等于 shared contract、registry、Runtime 或产品 READY。
 
 ## 门禁矩阵
 
 | 门禁 | 状态 | 当前证据 | 达到 READY 的条件 |
 | --- | --- | --- | --- |
-| Clean-room | READY | 设计仅使用已授权需求与公开官方资料；文件清单、私有标识与敏感信息扫描通过 | 后续每次公开/外部 push 前重复门禁 |
-| Source integration | READY | Worker `4b02e21567df19cc73d5905df2dc9b58eb4a2281` 已集成为 server-local main `5be65edd8c1247119b8b5680847bdabaf4fb2e93` | 外部 Git 托管仍未配置，不把本状态解释为公开备份 |
-| Design completeness | PARTIAL | proposal/design/spec/tasks/regression/readiness 已形成草案 | main-brain 审查并关闭关键歧义 |
-| A2UI protocol decision | NO READY | 推荐 v0.9.1 实现 pin，v1.0 为 Candidate | ADR 批准 profile、wire version 与升级触发器 |
-| Common release contract | NO READY | 仅提出 ReleaseRef/digest/幂等消费需求 | oss-platform-contracts 给出并批准最终字段与语义 |
-| Capability/action schema contract | NO READY | 仅提出精确 schema Release 依赖 | oss-capability-registry 对齐读取、授权和兼容规则 |
-| Runtime execution contract | NO READY | 仅提出 Resolver、cursor、replay、action 需求 | Runtime 契约测试通过且无业务耦合 |
-| Web Renderer contract | NO READY | 仅提出 supportedCatalogIds 与安全失败语义 | React Renderer 兼容矩阵和契约测试通过 |
-| PostgreSQL implementation | NO READY | 无代码、DDL 或迁移 | 草稿、校验、发布、幂等与多实例事务实现完成 |
-| Static/build validation | NO READY | 设计 diff --check 通过；服务器无 OpenSpec CLI，strict validate 未执行；尚无实现可构建 | 代码静态检查、构建和 strict spec validation 通过 |
-| Automated regression | NO READY | regression.md 八项均为 PLANNED | 八项有提交 SHA、环境和字段级实际断言 |
-| Deployment | NO READY | 未授权且未执行 | 另行授权后由目标部署分支执行并保存证据 |
-| Runtime E2E | NO READY | 无 Surface、stream、action 或恢复证据 | 端到端证明渲染、重连、action 去重与可观察性 |
+| Clean-room | READY | 仅使用已授权需求、公开概念和项目自创 synthetic fixtures；无真实业务数据 | 每次外部发布前重复敏感/来源扫描 |
+| Baseline alignment | READY | 已同步 `origin/main=b01ba5a…` 并读取 `SW-P1-20260907.2`、PY-01 与 ENG-01 | 后续基线变更继续安全 merge 和重读 |
+| Design convergence | PARTIAL | Component/Application、interaction/completion、version/reset、retry/Finalizer 边界已写入 | main-brain 审查实际 diff 并关闭歧义 |
+| Synthetic fixture validation | READY | Node v20.20.2；`14/14 tests PASS`；`validated 2 synthetic Application fixtures` | 若 shared contract 改动，更新夹具并重新验证 |
+| A2UI protocol decision | NO READY | fixture profile 为 `PENDING_CROSS_DOMAIN_REVIEW` | main-brain 批准 profile/wire version/升级策略 |
+| Shared contract | NO READY | `SW-CONTRACTS-P1-CANDIDATE.1` 已命名且 39/39 owner fixtures GREEN，但尚未获 main-brain 批准 | main-brain 命名 approved revision |
+| Registry implementation | NO READY | ENG-01 已选 Python 可导入模块，但 `services/a2ui-registry/` 未实现；当前有意受门禁阻断 | approved revision + package review + 明确 IMPLEMENT 放行后实现 |
+| PostgreSQL correctness | NO READY | 无 schema、migration、事务或多实例证据 | PostgreSQL-only 实现与集成测试通过 |
+| Runtime `render_application` | NO READY | 只有消费需求和 synthetic fixture | Runtime 实现并证明 display/interactive/version/action/retry |
+| Digital employee Host | NO READY | 只有 `packages/a2ui-host/` 消费需求 | Host 组件映射、能力协商和安全失败契约通过 |
+| Source integration | READY | 内容提交 `c624c4f695cfe621464cc8b44d1823e85c1fab9f` 已 push 并首次集成到服务器 `origin/main` | 后续修正/元数据提交继续走相同集成流程 |
+| OpenSpec strict validation | NO READY | 服务器未发现 OpenSpec CLI；未安装工具 | 可用批准工具后执行 strict validation |
+| Deployment | NO READY | 未授权且未执行 | 另行授权，并从批准的目标分支执行 |
+| Runtime E2E | NO READY | 无 Surface、interaction、Action 或恢复运行证据 | P1-P9 必需场景有字段级实际证据 |
 
 ## 明确不成立的声明
 
 当前不能宣称：
 
-- A2UI Composer 已实现或可用。
-- v0.9.1 已获架构批准。
-- Catalog 与 React Renderer 已兼容。
-- Runtime 已能执行或恢复 Presentation。
-- 并发发布、幂等、不可变性或 PostgreSQL-only 已通过测试。
-- server-local main 集成等于公开发布、离机备份、部署或运行态 READY。
+- A2UI registry、Composer 服务或 Application 发布 API 已实现。
+- `SW-CONTRACTS-P1-CANDIDATE.1` 已获批准。
+- 任一 A2UI 版本已经冻结。
+- Runtime 已实现 `render_application`、等待/恢复、Action、retry 或 Finalizer。
+- Host 已兼容 Catalog/Application。
+- PostgreSQL 多实例、不可变发布或业务幂等已经验证。
+- 静态夹具或 server-local Git 集成等于部署、公开发布或运行态 READY。
+- PY-01 表示本任务应修改系统 Python；该权限只由 Runtime 在 main-brain 协调下使用。
 
 ## 当前阻塞项
 
-1. main-brain 尚未裁决 A2UI profile 与传输策略。
-2. 公共 ReleaseRef、digest、授权和幂等契约尚未冻结。
-3. Runtime 与数字员工 Web Renderer 的消费/失败接口尚未联合确认。
-4. 无实现、构建、数据库、自动化测试、部署或运行证据。
+1. main-brain 尚未批准 shared contract candidate 与 A2UI protocol profile。
+2. registry 未获命名 approved revision 与 IMPLEMENT 放行。
+3. Runtime/Host 尚无真实消费、失败关闭和 Action ingress 证据。
+4. 无 PostgreSQL、构建、部署或 E2E 证据。
 
 ## 下一准出动作
 
-main-brain 审查本提案，先裁决协议 profile、公共发布契约和 Runtime/Renderer 分界。只有设计获批并下发实施授权后，才可将 tasks.md 中的任务纳入执行计划。
+1. main-brain 审查实际提交与 `SW-CONTRACTS-P1-CANDIDATE.1` 依赖。
+2. 只有 main-brain 命名 approved revision 并下发 IMPLEMENT 后，才实现 `services/a2ui-registry/`。

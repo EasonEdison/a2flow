@@ -8,75 +8,82 @@
 
 ## ADDED Requirements
 
-### Requirement: 产品必须与通用 Runtime 解耦
+### Requirement: 运行必须由侧栏显式启动
 
-数字员工前后端 MUST 通过版本化通用合约消费 Runtime。产品拥有业务语义和读模型，Runtime 拥有 run、checkpoint、interrupt、resume、retry 与幂等执行语义。产品 MUST NOT 实现第二套运行状态机，Runtime MUST NOT 导入会议纪要、行动项、业务文案或 React 组件模型。
+数字员工产品 MUST 只通过侧栏 Workflow 启动入口创建 run，MUST NOT 把普通聊天消息解释为启动命令。产品 BFF MUST 从可信服务端上下文取得 `userId` 与环境，并以不可变 Workflow 发布引用和请求去重语义调用共享 Runtime；客户端 MUST NOT 覆盖主体或环境。PRT 与 ONLINE MUST 使用独立数据库与发布解析，PRT 只解析当前版本，ONLINE 才解析稳定/候选灰度。
 
-#### Scenario: 创建会议纪要工作单
+#### Scenario: 用户显式启动合成 Workflow
 
-- **WHEN** 已授权用户用合法合成会议文本和唯一 `requestId` 创建工作单
-- **THEN** 产品后端创建产品工作单并以不可变 Workflow 发布引用启动一个 Runtime run
-- **AND** 相同 `requestId` 的重复请求返回同一 `workItemId`/`runId`，不启动第二个 run
+- **WHEN** 已授权用户在侧栏选择 Workflow 与 PRT 后提交启动，而聊天区同时存在普通消息
+- **THEN** BFF 只为侧栏请求创建一个 run，并返回权威 run 身份与起始 revision
+- **AND** 普通聊天不启动 run，重复启动请求不创建第二个 run，客户端伪造的主体或环境被拒绝
 
-### Requirement: 产品必须从权威快照恢复会话和任务
+### Requirement: 产品必须消费唯一的权威投影
 
-产品 MUST 持久化会话、工作单与 run 的关联，但 MUST 将 Runtime snapshot 视为执行状态权威。投影丢失、刷新或实例切换时，产品 MUST 能从 PostgreSQL 关联与 Runtime snapshot 重建视图。开发、测试和部署 MUST 使用 PostgreSQL，MUST NOT 回退到 MySQL、SQLite 或进程内持久化。
+产品 BFF MUST 通过共享合约读取 snapshot 和连续 run events，MUST NOT 自建第二套 event/action schema 或复制 Runtime 状态机。投影 MUST 按单 run sequence 排序去重；公共事件外壳的稳定身份只用于外壳去重。缺口或非法 delta MUST 阻断增量并补权威 snapshot。产品状态 MUST 使用 PostgreSQL，不得依赖 sticky session、MySQL、SQLite 或进程内持久化。
 
-#### Scenario: 刷新并切换服务实例
+#### Scenario: 切换实例后出现事件缺口
 
-- **WHEN** 用户在 run 进行中刷新页面，且后续请求落到另一无状态实例
-- **THEN** 新实例通过 `workItemId` 找到同一 `runId`，获取 snapshot 并恢复当前进度、开放 interrupt 和 surface
-- **AND** 恢复不依赖旧实例内存、sticky session、MySQL、SQLite 或内存 fallback
+- **WHEN** 同一 run 的消费从一个 BFF 实例切换到另一个实例，并收到重复、倒序和不连续事件
+- **THEN** 新实例从 PostgreSQL 关联和 Runtime snapshot 重建投影，仅应用连续 sequence
+- **AND** 缺口后的 delta 不被猜测或跳过，补齐 snapshot 后才继续
 
-### Requirement: 事件消费必须有序、幂等且可补快照
+### Requirement: 用户输入必须绑定等待节点
 
-产品与 Host MUST 按唯一事件 ID 去重并只连续应用单 run 序号。检测到缺口、非法 delta 或无法续传时 MUST 停止增量应用并请求完整 snapshot，MUST NOT 猜测或跳过缺失状态。
+等待用户输入的 Workflow 节点 MUST 在对应节点卡上开放结构化输入入口。BFF MUST 校验 run/node 关联、可信主体和所见 revision；普通聊天 MUST NOT 被解释为 continue 或 resume。
 
-#### Scenario: 重复事件后出现序号缺口
+#### Scenario: 从错误入口提交相同文本
 
-- **WHEN** 客户端收到重复事件并随后收到不连续 sequence
-- **THEN** 重复事件不改变视图，缺口后的 update 不被应用
-- **AND** 客户端获取并替换为权威 snapshot 后才继续消费
+- **WHEN** 用户分别从目标节点卡和普通聊天提交相同文本
+- **THEN** 只有节点卡请求被关联到等待节点并可能推进 run
+- **AND** 普通聊天、错误节点、过期 revision 或错误主体不会改变 run
 
-### Requirement: 有副作用的发布必须先人工确认
+### Requirement: A2UI 显示与交互必须由配置区分
 
-“发布到演示待办板” MUST 在 Runtime 开放的通用 interrupt 上暂停。产品后端 MUST 校验用户、interrupt、结构化决定和 `expectedVersion`；只有有效批准才能恢复 run 并触发 Capability。拒绝、过期、未授权或冲突决定 MUST NOT 产生副作用。
+A2UI 配置 MUST 明确声明 DISPLAY_ONLY 或 INTERACTIVE。DISPLAY_ONLY surface MUST NOT 暂停 Workflow；INTERACTIVE surface 只在等待结构化 Action 时暂停。Action 的业务成功事实与“完成本次交互” MUST 是独立结果，Finalizer MUST NOT 覆盖 Tool 或 Action 的权威事实。Host MUST 只渲染获批 profile/catalog 的本地组件，未知版本或资产 MUST fail closed，且不得执行下发的 JavaScript 或任意 HTML。
 
-#### Scenario: 用户拒绝发布
+#### Scenario: 先展示再交互
 
-- **WHEN** 用户在待确认 surface 上提交拒绝决定
-- **THEN** 产品后端把结构化决定关联到当前 interrupt 并请求 Runtime resume
-- **AND** 演示待办表没有新增记录，视图展示已拒绝的权威结果
+- **WHEN** 同一 run 先收到 DISPLAY_ONLY surface，后收到 INTERACTIVE surface 并提交 Action
+- **THEN** 首个 surface 展示后 Workflow 继续，第二个 surface 等待 BFF 重新授权的结构化 Action
+- **AND** UI 分别呈现业务成功与交互完成事实，未知资产只产生安全错误卡
 
-#### Scenario: 两个客户端并发决定
+### Requirement: 配置版本失配必须阻断并提示 fresh reset
 
-- **WHEN** 两个客户端以相同 `expectedVersion` 对同一 interrupt 提交不同决定
-- **THEN** 至多一个决定成功，另一个收到冲突和当前版本
-- **AND** 失败客户端刷新 snapshot，不覆盖已生效决定
+start、continue 和 Action 在开始新工作前 MUST 校验轻量配置有效版本。版本失配 MUST 返回类型化错误并提示用户显式 reset，MUST NOT 继续冻结旧版本、静默迁移或自动重启。reset MUST 创建全新 run，不继承旧 context、checkpoint、results 或 interactions，也不得检查旧业务结果。
 
-### Requirement: Capability 副作用必须跨重试幂等
+#### Scenario: continue 前配置版本已变化
 
-演示待办 Adapter MUST 使用 Runtime 提供的副作用幂等键和 PostgreSQL 唯一约束。Runtime 因超时或响应丢失重试时 MUST 复用同一键；产品端 MUST NOT 额外启动不可追踪的隐式重试循环。
+- **WHEN** run 等待输入期间有效配置版本变化，用户提交 continue 后再显式 reset
+- **THEN** continue 被阻断并返回 reset 提示
+- **AND** reset 返回新的 run 身份，旧 run 的上下文和结果不进入新 run
 
-#### Scenario: 写入成功但响应丢失
+### Requirement: stop 后所有分支与历史交互必须关闭
 
-- **WHEN** Adapter 已提交待办和回执，但 Runtime 未收到首次响应并重试
-- **THEN** 第二次调用返回原 `receiptId` 和待办集合
-- **AND** PostgreSQL 中没有重复待办，run 可使用原业务结果继续完成
+stop MUST 阻止 run 的所有分支开始新工作。迟到结果只可追加为事实，MUST NOT 触发后续节点。stopped run MUST NOT resume；其历史卡 MUST 只读，所有 Action、输入、retry 和 continue 操作都必须由后端类型化拒绝。
 
-### Requirement: A2UI Host 必须可复用且 fail closed
+#### Scenario: stop 后收到迟到结果并操作历史卡
 
-Web Host MUST 与会议业务无关，只消费受信的版本、catalog、surface snapshot/update 和 action schema。Host MUST 使用本地注册的 React 组件，MUST NOT 执行服务端下发的 JavaScript 或任意 HTML。未知版本、catalog、组件、函数或 action MUST 被拒绝并隔离。完成视图 MUST 呈现可关联的摘要、行动项和发布回执，MUST NOT 暴露原始思维链、隐藏模型消息或凭据。
+- **WHEN** 多分支 run 被 stop，随后一个已在途 Tool 返回结果且用户点击旧卡 Action
+- **THEN** 结果只作为历史事实展示，不启动任何新工作
+- **AND** 旧卡操作被拒绝，UI 保持 stopped 与只读
 
-#### Scenario: 渲染受信行动项 surface
+### Requirement: retry 与业务幂等必须遵守责任边界
 
-- **WHEN** Host 收到已批准 catalog 的完整 surface snapshot 及连续更新
-- **THEN** Host 使用本地 React 组件呈现摘要、行动项和确认动作
-- **AND** 用户 action 以结构化 envelope 交给产品后端重新授权
-- **AND** 完成后结果关联同一 `sessionId`、`workItemId`、`runId` 与 `receiptId`，且不包含原始思维链
+只有 A2UI 渲染失败，或 Action 失败/结果不满足配置成功条件时，产品才可请求 retry 该 A2UI 所属节点。Skill、模型、非 A2UI Tool 与普通 Workflow 失败 MUST NOT 获得通用 retry。所有能力调用 MUST 通过 Runtime 的 `use_skill` 或获批 Tool；真实业务调用的重试与幂等只属于被调 API 后端，产品和 Runtime MUST NOT 查询旧业务结果、补偿或跨 run 去重。
 
-#### Scenario: 收到未知 catalog
+#### Scenario: 四类失败同时出现
 
-- **WHEN** presentation 引用未批准 catalog 或不支持的协议版本
-- **THEN** Host 冻结或拒绝目标 surface，展示安全错误与刷新入口
-- **AND** 固定产品壳保持可用，不执行 payload，不静默降级到任意 HTML
+- **WHEN** 分别发生 A2UI 渲染失败、Action 失败、Skill 失败和业务 API 暂时失败
+- **THEN** 只有前两类在满足配置条件时可 retry 对应 A2UI 节点
+- **AND** Skill 失败不重试，业务 API 的策略与权威结果完全由被调后端决定
+
+### Requirement: 可选长期记忆控制不得扩张成知识库
+
+经仓库依赖、namespace、删除权限和最小 diff 核验，并由 main-brain 判定为 A/B/B+ 低成本后，产品 MAY 提供分页查看、逐条删除和禁用长期记忆；为此 MAY 增加最小偏好元数据与薄 facade，但 MUST NOT 改造记忆正文 schema 或索引。禁用 MUST 停止长期记忆读取与新写入，但 MUST NOT 终止当前聊天、当前 run 或短期上下文；删除记忆 MUST NOT 删除聊天。能力 MUST 限定当前可信 `userId`，不得扩张到上传、切块、共享、搜索调优或知识库管理。
+
+#### Scenario: 禁用长期记忆后继续当前聊天
+
+- **WHEN** 用户删除一条自己的长期记忆并关闭长期记忆开关
+- **THEN** 后续长期读取与新写入停止，其他用户 namespace 不可见
+- **AND** 当前聊天与当前 run 继续，聊天记录不因记忆删除而消失

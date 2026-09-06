@@ -1,0 +1,33 @@
+# Synthetic, project-authored fixture. It is not a frozen shared schema.
+fixture: evidence-first-brief-reuse
+skillKey: demo/evidence-first-brief
+packagePath: ./evidence-first-brief
+packageVersion: 0.1.0
+entryTool: use_skill
+cases:
+  - id: conversation
+    callerKind: conversation
+    modelInput:
+      skillKey: demo/evidence-first-brief
+    trustedContext:
+      injectedByBackend: true
+    expected:
+      samePackage: true
+      workflowSpecificFields: false
+      routeFields: false
+  - id: workflow
+    callerKind: workflow-skill-node
+    modelInput:
+      skillKey: demo/evidence-first-brief
+    trustedContext:
+      injectedByBackend: true
+      nodeScopeRequired: true
+    expected:
+      samePackage: true
+      workflowSpecificFields: false
+      routeFields: false
+assertions:
+  - conversation.packagePath == workflow.packagePath
+  - conversation.packageVersion == workflow.packageVersion
+  - both.entryTool == use_skill
+  - neither.modelInput contains userId or environment

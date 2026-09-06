@@ -1,0 +1,136 @@
+{
+  "fixtureMetadata": {
+    "synthetic": true,
+    "contractStatus": "PROVISIONAL",
+    "baseline": "SW-P1-20260907.2",
+    "purpose": "Request one configured route choice and continue without AI reselection"
+  },
+  "asset": {
+    "kind": "APPLICATION",
+    "applicationKey": "sample.interactive.route-selection",
+    "protocolProfileRef": "PENDING_CROSS_DOMAIN_REVIEW",
+    "componentCatalogRef": "fixture:component-catalog:basic"
+  },
+  "renderPolicy": {
+    "tool": "render_application",
+    "interactionMode": "INTERACTIVE",
+    "requiresPause": true
+  },
+  "interactionPolicy": {
+    "bindingScope": "RUNTIME_NODE_CARD_FORM",
+    "ordinaryChatMayResume": false,
+    "routeDirectlyWithoutAiReselection": true
+  },
+  "versionAdmissionPolicy": {
+    "compareBeforeExecution": true,
+    "compareBeforeContinue": true,
+    "compareBeforeAction": true,
+    "onMismatch": "RESET_REQUIRED"
+  },
+  "actionPolicies": [
+    {
+      "actionName": "confirm_route_choice",
+      "sourceComponentId": "confirm",
+      "abilityReleaseRef": "fixture:ability-release:route-selection@1",
+      "successPolicyRef": "routeAccepted",
+      "completeInteractionOnSuccess": true,
+      "controlRequestDedupeOnly": true,
+      "businessIdempotencyOwner": "CALLED_API_BACKEND"
+    }
+  ],
+  "retryPolicy": {
+    "allowedReasons": [
+      "RENDER_FAILED",
+      "ACTION_CALL_FAILED",
+      "ACTION_RESULT_NOT_SUCCESS"
+    ]
+  },
+  "finalizerPolicy": {
+    "mayOverrideBusinessFacts": false,
+    "mayBypassRequiredInteraction": false
+  },
+  "surfaceTemplate": {
+    "surfaceKey": "synthetic_route_selection",
+    "rootId": "root",
+    "inputSchema": {
+      "type": "object",
+      "required": [
+        "prompt",
+        "options"
+      ],
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "value"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "selection": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "components": [
+      {
+        "id": "root",
+        "component": "Column",
+        "children": [
+          "prompt",
+          "selection",
+          "confirm"
+        ]
+      },
+      {
+        "id": "prompt",
+        "component": "Text",
+        "text": {
+          "path": "/prompt"
+        }
+      },
+      {
+        "id": "selection",
+        "component": "ChoicePicker",
+        "options": {
+          "path": "/options"
+        },
+        "value": {
+          "path": "/selection"
+        },
+        "variant": "mutuallyExclusive"
+      },
+      {
+        "id": "confirm",
+        "component": "Button",
+        "label": "Confirm selection",
+        "action": {
+          "event": {
+            "name": "confirm_route_choice",
+            "context": {
+              "selection": {
+                "path": "/selection"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

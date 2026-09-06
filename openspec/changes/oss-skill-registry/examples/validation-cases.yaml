@@ -1,0 +1,125 @@
+# Synthetic, project-authored validator cases. Not runtime evidence or a frozen error schema.
+profile: agent-skills-phase1-candidate
+cases:
+  - id: valid-independent-instruction
+    packagePath: ./evidence-first-brief
+    expectedStatus: PASSED
+    assertions:
+      - root SKILL.md exists
+      - frontmatter name equals evidence-first-brief
+      - directory name equals frontmatter name
+      - referenced references/output-format.md exists
+      - no workflow routing or mode-specific output fields
+
+  - id: missing-skill-md
+    virtualPackage:
+      files:
+        - README.md
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_MISSING_MANIFEST
+
+  - id: invalid-name-shape
+    virtualPackage:
+      invalidFrontmatterNames:
+        - -leading
+        - trailing-
+        - double--hyphen
+        - Uppercase
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_INVALID_FRONTMATTER
+
+  - id: name-directory-mismatch
+    virtualPackage:
+      directory: evidence-first-brief
+      frontmatterName: another-skill
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_NAME_MISMATCH
+
+  - id: description-out-of-range
+    virtualPackages:
+      - descriptionLength: 0
+      - descriptionLength: 1025
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_INVALID_FRONTMATTER
+
+  - id: compatibility-out-of-range
+    virtualPackages:
+      - compatibilityLength: 0
+      - compatibilityLength: 501
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_INVALID_FRONTMATTER
+
+  - id: opaque-binary-asset
+    virtualPackage:
+      entries:
+        - SKILL.md
+        - assets/cover.png
+      asset:
+        mediaType: image/png
+        utf8Decodable: false
+        digestMatches: true
+    expectedStatus: PASSED
+    assertions:
+      - binary asset is not decoded as UTF-8
+      - media type, digest and size remain available
+
+  - id: path-traversal
+    virtualPackage:
+      entries:
+        - ../outside.txt
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_UNSAFE_PATH
+
+  - id: escaping-symlink
+    virtualPackage:
+      symlink: references/escape
+      target: ../../outside.txt
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_UNSAFE_PATH
+
+  - id: digest-mismatch
+    virtualPackage:
+      declaredDigest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+      observedDigest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_DIGEST_MISMATCH
+
+  - id: tool-words-and-script-are-not-authority
+    virtualPackage:
+      entries:
+        - SKILL.md
+        - scripts/run.py
+      instructionText: Use execute_ability only when the host authorizes it.
+      allowedTools: execute
+    expectedStatus: PASSED_WITH_WARNING
+    assertions:
+      - instruction text does not trigger rejection
+      - no script executes
+      - no Tool permission is added
+
+  - id: unsupported-execution-profile
+    revisionEnvelope:
+      executionProfile: script-executable
+    expectedStatus: FAILED
+    expectedCode: SKILL_EXECUTION_PROFILE_UNSUPPORTED
+    assertions:
+      - failure comes from the structured profile
+      - ordinary instruction text is not scanned to infer the profile
+
+  - id: forbidden-workflow-binding
+    revisionEnvelope:
+      workflowReleaseRef: workflow:demo/fixed
+      nextNode: publish
+    expectedStatus: FAILED
+    expectedCode: SKILL_PACKAGE_INVALID_DOMAIN_FIELDS
+
+  - id: forbidden-context-override
+    modelUseSkillInput:
+      skillKey: demo/evidence-first-brief
+      userId: another-user
+      environment: PRT
+    trustedEnvironment: ONLINE
+    expectedStatus: DENIED_OR_UNTRUSTED_FIELDS_IGNORED
+    assertions:
+      - ONLINE never reads PRT
+      - model userId does not select gray

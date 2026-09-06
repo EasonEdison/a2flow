@@ -2,126 +2,114 @@
 
 ## 状态
 
-- 设计状态：PROPOSED
-- 源码实现：未开始
-- 运行态就绪：NO READY
+- 设计状态：`PROPOSED / PHASE 1 ALIGNED`
+- Phase 1：独立契约样例与校验已实现；依赖共享接口的 registry 实现仍待 main-brain 命名契约修订并放行
+- 运行态就绪：`NO READY`
 - 审查责任人：main-brain
-- 变更性质：M 侧 A2UI 组件目录、呈现草稿、校验与不可变发布产物的首轮边界提案
+- 权威基线：`SW-P1-20260907.2`
+- 已同步服务器 `origin/main`：`b01ba5a41bd60a84c0af3e54cad4ec0ae22759ed`
+- 工程裁决：ENG-01 已接受未来 A2UI registry 后端采用 Python 小型可导入模块；不等于独立常驻服务或 IMPLEMENT 放行
+
+## Phase 1 基线对齐
+
+本任务只拥有：
+
+- `openspec/changes/oss-a2ui-composer/`
+- `services/a2ui-registry/`
+- `packages/a2ui-contract-fixtures/`
+
+本轮已经可以独立完成设计收敛、合成 Application 夹具和无依赖校验器。`services/a2ui-registry/` 依赖 `packages/contracts/` 的身份、环境、版本、发布、Action 结果条件与控制请求契约；在 main-brain 指定已审查的契约修订前不实现。
+
+旧稿以下主动假设已被基线覆盖：
+
+1. M 侧资产是 Component Catalog 与 Application；Presentation 只表示 Runtime 渲染产生的运行期输出。
+2. Application 必须显式声明 `DISPLAY_ONLY` 或 `INTERACTIVE`，不得根据控件、文案或渲染结果推断是否等待。
+3. Action 调用成功、业务结果成功和 `completeInteractionOnSuccess` 是三件事；交互完成也不等于 Skill 或 Workflow 完成。
+4. Finalizer 不得改写业务事实，也不得绕过必需交互。
+5. 节点重试仅限 `RENDER_FAILED`、`ACTION_CALL_FAILED`、`ACTION_RESULT_NOT_SUCCESS`，不得扩展为通用 Skill、模型或其他 Tool 重试。
+6. execution/continue/Action ingress 都必须先比较当前有效版本；失配时阻断并要求显式 reset，不继续冻结旧资产、不自动迁移或重启。
+7. 平台 `controlRequestId` 只去重控制请求；被调 API 后端负责业务幂等、重试及外部结果不确定性。
+8. `userId`、PRT/ONLINE 与 ONLINE stable/gray 解析由共享可信后端契约负责；本域不接受模型或资产提供这些字段。
+9. Application 渲染统一从授权 Tool `render_application` 进入。
+10. 协议版本仍待跨域审查；合成夹具显式标记 `PROVISIONAL`，不冻结旧稿建议的 A2UI v0.9.1。
 
 ## 背景与问题
 
-数字员工需要把 Agent 或 Workflow 的执行结果安全、可移植地呈现为可交互界面。若每个业务前端自行约定组件 JSON、运行时直接接受任意模型 UI、或把 React 实现细节写入 Runtime，会同时产生协议漂移、安全风险和业务耦合。
+数字员工需要把 Agent 或 Workflow 的结果安全地呈现为声明式界面。若业务前端各自约定组件 JSON、Runtime 接受任意模型 UI，或 M 资产携带 React/脚本实现，会造成协议漂移、安全风险和业务耦合。
 
-本变更提出一个定义期平台：维护受信任组件 Catalog，编排呈现草稿，进行确定性校验和编译，并通过公共发布契约产出不可变 A2UI 资产。平台不负责生产运行、流式传输、React 渲染或业务动作执行。
-
-## 公开协议结论
-
-截至 2026-09-06，A2UI 官方仓库将 v0.9.1 标为当前生产稳定版本，v1.0 仍为 Candidate。A2UI 定义声明式 JSON、增量 Surface 更新、Catalog 和数据绑定，并与具体传输解耦；交互场景需要有序消息、明确 framing、能力元数据和返回 action 的通道。
-
-官方资料：
-
-- A2UI 项目与版本状态：https://github.com/a2ui-project/a2ui
-- A2UI v0.9.1 协议：https://a2ui.org/specification/v0.9.1-a2ui/
-- Catalog 识别、协商与版本：https://a2ui.org/concepts/catalogs/
-- Renderer 开发边界：https://a2ui.org/guides/renderer-development/
-- AG-UI 交互层定位：https://github.com/ag-ui-protocol/ag-ui/blob/main/docs/introduction.mdx
-- JSON Schema 2020-12：https://json-schema.org/draft/2020-12
-- JSON 规范化候选 RFC 8785：https://www.rfc-editor.org/rfc/rfc8785.html
+本变更定义 M 侧的 Component Catalog/Application 作者能力、确定性校验和不可变领域产物。它不负责 Runtime 的 Surface 状态、等待/恢复、Action 调度，也不负责数字员工的 React Host。
 
 ## 目标
 
-1. 定义 Catalog 草稿和呈现草稿的最小生命周期。
-2. 用公开 A2UI Catalog/消息模型和 JSON Schema 进行确定性校验。
-3. 发布时锁定所有 Catalog、数据契约和 action 契约依赖，不允许 latest 或运行期隐式解析。
-4. 生成内容可寻址、不可变、可审计的 Catalog Release 与 Presentation Release。
-5. 把编排器、Runtime 通用 presentation 执行和 B 端 Web Renderer 的输入输出与失败边界说清楚。
-6. 支持多实例 API：草稿并发更新、重复发布和瞬时失败均有明确语义。
+1. 定义 Component Catalog 与 Application Draft/Release 的最小生命周期。
+2. 定义 `DISPLAY_ONLY` 与 `INTERACTIVE` 的显式交互策略。
+3. 定义 Action 业务成功条件与交互完成策略的独立配置。
+4. 对组件图、绑定、Action 映射、安全与资源边界做确定性校验。
+5. 通过公共发布契约输出不可变 Application 产物，不复制共享身份、环境、版本或发布语义。
+6. 给 Runtime `render_application` 与数字员工 A2UI Host 提供可审查的消费需求。
+7. 用项目独立创作的合成夹具证明上述静态边界。
 
 ## 非目标
 
-- 不实现 React 组件、Web Renderer、页面宿主或数字员工业务体验。
-- 不实现 Runtime 的流式执行、Surface 状态机、重放、action 调度或传输适配器。
-- 不实现业务能力本身，也不因呈现依赖而自动调用能力。
-- 不建立低代码通用编辑器、任意表达式语言、插件市场或任意 HTML/JavaScript 执行。
-- 不决定最终编程语言、服务拆分、AG-UI 版本或 A2UI 最终协议版本。
-- 本轮不新增代码、依赖、数据库、服务、端口或部署。
+- 不实现 Runtime 执行、Surface 流、等待/恢复、Action 调用、停止/重启或 Finalizer。
+- 不实现 React Renderer、数字员工页面或业务场景。
+- 不实现业务能力，也不因 Application 依赖自动调用能力。
+- 不接受任意 HTML、JavaScript、远程插件、脚本上传或网络 schema 解析。
+- 不自行冻结共享 schema、A2UI 版本或传输；后端语言遵循 ENG-01 的 Python 裁决，但 package layout/依赖仍需审查。
+- 不在本轮部署、开放端口、启动后台服务、修改系统 Python 或其他系统包。
 
-## 候选方案
+## Phase 1 交付
 
-### 方案 A：稳定 A2UI 直接草稿，加薄平台清单，推荐
+`packages/a2ui-contract-fixtures/` 提供两份合成 Application：
 
-- 草稿主体直接采用 A2UI v0.9.1 对应的 Catalog 与 Surface 结构。
-- 平台清单只增加资产身份、精确依赖、输入数据契约、action 契约映射和编译元数据。
-- Wire version 使用 v0.9.1，协议 family 归为 v0.9；协议适配器与领域模型隔离。
-- 发布产物保留协议 profile，升级 v1.0 时发布新版本，不改写旧产物。
+- 展示型结果卡：`DISPLAY_ONLY`，渲染后不暂停，无 Action。
+- 交互型选择卡：`INTERACTIVE`，绑定 Runtime node/card/form，普通聊天不能恢复，配置选择直接路由而不经 AI 重新判断。
 
-优点：基于官方当前稳定线，MVP 语义少、验证工具可复用、与 Renderer 的责任最清晰。缺点：未来升级 v1.0 需要显式编译迁移。
+无依赖 Node 校验器验证资产类型、基线、临时协议状态、`render_application`、组件图、交互策略、Action 成功/完成分离、版本失配 reset、Finalizer 边界、控制请求去重、业务幂等归属和 A2UI-only retry 集合。夹具是静态契约证据，不是共享接口冻结、Runtime 或 Renderer 证据。
 
-### 方案 B：直接采用 A2UI v1.0 Candidate
+## 设计候选
 
-优点：Catalog 混用、函数调用和新能力更完整，减少未来一次升级。缺点：Candidate 仍可能变化，Renderer 支持和工具链稳定性不足，不适合作为十一月 MVP 的默认生产契约。
+### Component Catalog
 
-### 方案 C：先定义私有中立 DSL，再编译到 A2UI
+Catalog 只声明组件、属性、结构引用和声明式函数 schema，不包含 React 代码、脚本体、远程模块或可执行插件。
 
-优点：理论上可同时支持多个协议版本。缺点：首期需要自行定义解析、表达式、错误模型和语义映射，容易形成另一套非标准协议，增加编排器与 Runtime 的重复职责。
+### Application Draft
 
-## 推荐
-
-采用方案 A，并把 A2UI 版本与传输绑定留在可替换适配器边界：
-
-- 首个实现候选固定 a2uiFamily=v0.9、wireVersion=v0.9.1、implementationVersion=v0.9.1。
-- Presentation Release 不封装 AG-UI/SSE/WebSocket 外层事件；Runtime 选择并实现传输。
-- main-brain 只有在 v1.0 转为稳定且 React Renderer/校验工具通过兼容矩阵后，才重新评估默认 profile。
-- 不提供 v0.9 与 v1.0 的静默双读、latest fallback 或运行时自动降级。
-
-## 拟议变更
-
-### Catalog 草稿
-
-Catalog 草稿包含名称、协议 profile、Catalog JSON Schema、允许的组件与声明式函数、说明和草稿修订号。Catalog 只描述组件与函数契约，不包含 React 代码、脚本或远程可执行内容。
-
-### Presentation 草稿
-
-Presentation 草稿包含单 Surface 模板、精确 Catalog 草稿或 Release 引用、输入数据 schema、只读数据契约引用、JSON Pointer 绑定和 action 契约映射。首期不支持任意表达式、多 Surface 协同或运行时自动调用 capability。
+Application Draft 包含逻辑 Surface 模板、精确 Catalog 依赖、输入 schema、JSON Pointer 绑定、`interactionMode`、Action 映射和完成策略。首期不支持任意表达式、多 Surface 编排或运行期自动调用能力。
 
 ### 校验与编译
 
-校验分为结构、图、绑定、依赖、安全与资源上限六层。编译将已校验草稿转换为确定性 Presentation Artifact；相同草稿修订和依赖锁必须产生相同规范化内容与 digest。
+校验覆盖结构、组件图、绑定、Action、依赖、安全与资源上限。相同草稿修订、validatorRevision 与依赖锁必须产生相同规范化领域内容和 digest。
 
 ### 不可变发布
 
-发布通过公共 platform-contracts 的资产/修订/授权/Release Port 完成。本域只提供领域 payload、依赖锁和校验报告，不重新定义公共 Release 身份。发布成功后禁止原地修改；任何变更产生新 Release。
+本域只产生 Component Catalog/Application 的领域 payload、依赖锁和 Validation Report；公共 Asset/Release 身份、授权、`userId`/环境解析、版本决议、digest 与发布幂等由 `packages/contracts/` 的唯一实现负责。
 
-## 依赖输入与本域输出
+## 跨域边界
 
-| 来源/去向 | 输入或输出 | 本域要求 |
+| 来源/去向 | 本域依赖或输出 | 边界 |
 | --- | --- | --- |
-| oss-platform-contracts | AssetRef、ReleaseRef、授权上下文、幂等发布与 digest 契约 | 必须是精确且可校验的不可变引用；字段名待统一 |
-| oss-capability-registry | capability output schema 与 action contract release | 仅用于类型校验和动作映射，不触发业务调用 |
-| oss-agent-workflow-runtime | PublishedPresentationResolver 所需的不可变产物 | Runtime 负责实例化 Surface、数据投影、有序发送、重放与 action 关联 |
-| oss-digital-employee | supportedCatalogIds、Renderer 能力与用户 action | Web Renderer 负责 React 映射、可访问性、本地校验、安全展示和用户交互 |
-| 本域输出 | Catalog Release、Presentation Release、Validation Report | 都带协议 profile、精确依赖锁和内容 digest |
-
-## 影响
-
-- 新增一个独立 OpenSpec 设计 change。
-- 后续实现需要 PostgreSQL 持久化草稿和不可变产物，并通过乐观并发与数据库唯一约束支持多实例。
-- 不改变现有运行服务；当前仓库尚无本域实现。
-- server-local main 集成仅表示设计源码已汇总，不表示设计批准、外部备份或运行态 READY。
+| platform-contracts | 可信用户/环境、有效版本、ReleaseRef、ResultInterpretationPolicy、控制请求 envelope | 本域只消费，不创建第二套公共 schema |
+| capability registry | ability output 与 Action contract 的精确 schema | 只用于定义期校验，不触发业务调用 |
+| Runtime | `render_application`、Surface/等待/恢复/Action dispatch/失败结果 | Runtime 保持业务无关；先做版本准入 |
+| digital employee | `packages/a2ui-host/` 的 Catalog 支持与 action ingress | Host 负责本地 React 映射、安全展示和可访问性 |
+| 本域 | Catalog/Application 领域产物与 Validation Report | 协议版本仍为候选，依赖必须精确锁定 |
 
 ## 风险与缓解
 
 | 风险 | 缓解 |
 | --- | --- |
-| A2UI 协议仍演进 | 锁定 profile；适配器隔离；旧 Release 不改写 |
-| Catalog 与 Renderer 实现不一致 | 发布前校验 Renderer 能力清单；运行前精确协商；不按 latest 猜测 |
-| 模型或作者产生非法树 | 结构、引用、环、root、资源上限和安全规则确定性校验 |
-| 发布重试产生重复资产 | Idempotency-Key、草稿修订和唯一约束共同去重 |
-| 多实例覆盖草稿 | expectedRevision 乐观并发；陈旧写入返回冲突 |
-| 跨域契约各自冻结 | 所有跨域字段保持 PROPOSED，交由 main-brain 统一裁决 |
+| 协议继续演进 | profile 保持候选并由适配器隔离；未经审查不 pin |
+| Catalog 与 Host 不一致 | 发布前校验 Host 能力；运行前精确协商；失败关闭 |
+| 作者生成非法树 | 校验 root、引用、环、可达性和上限 |
+| 交互与完成混淆 | 强制显式 mode、successPolicyRef 和完成布尔值 |
+| 版本变化导致旧卡误调用 | Action 前版本比较；失配只允许 reset |
+| 将控制去重误当业务 exactly-once | schema 与夹具明确拆分两种责任 |
+| 跨域契约各自冻结 | shared contract 由单一 owner 提交，main-brain 命名修订后再实现 registry |
 
 ## 需要 main-brain 裁决
 
-1. 是否接受首期以 A2UI v0.9.1 为稳定实现 pin、Wire version 为 v0.9.1，并把 v1.0 作为升级触发项。
-2. 公共 ReleaseRef、digest 计算、Idempotency-Key 和依赖锁字段由 oss-platform-contracts 采用何种最终形态。
-3. Runtime 与数字员工之间是否以 AG-UI 作为首选传输绑定；无论选择什么，本域发布产物均保持 transport-neutral。
+1. 命名并批准 A2UI profile、wire version 与升级策略。
+2. 命名 `packages/contracts/` 可供 registry 实现依赖的修订。
+3. 批准 Runtime/Host 的传输 envelope 与 Action ingress 形态。
+4. 批准 Application Draft/Release API 字段与 PostgreSQL 模型后再进入 IMPLEMENT。
