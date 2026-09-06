@@ -32,10 +32,12 @@
 - [x] 本轮远端 patch 发现多 hunk 对工作树偏移敏感；失败均原子退出，改用带上下文的单 hunk `git apply --recount` 并逐次核对。
 - [x] proposal、design、tasks、spec、regression、readiness 已完成对齐；所有实现任务保持未勾选。
 - [x] 范围、UTF-8、敏感信息、8 Requirement/8 Scenario、0 实现勾选与 `git diff --check` 通过；服务器无 OpenSpec CLI，未执行 strict validate。
+- [x] 内容提交 `809ebaafbfeabdf331e04a639e295bc4025b846c` 已推送；合并最新 main 后的 worker `d7c3594602e75fae1a30938b26e73a9c24d7437f` 已集成到 `origin/main`。
+- [x] 已读 `ENG-01`：M 后端四域采用 Python 模块，不自动改变数字员工 BFF 技术选择；未修改根依赖或启动服务。
 
 ## 下一可执行动作
 
-完成文档门禁，fetch/merge 最新 `origin/main`，commit/push worker 并集成回目标分支；随后等待 main-brain 指名 contracts revision，未经批准不进入应用实现。
+等待 main-brain 指名 contracts revision 并批准接口消费边界；此前不进入 `apps/digital-employee/` 或 `packages/a2ui-host/` 实现。
 
 ## 禁止与未决
 
