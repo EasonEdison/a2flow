@@ -1,10 +1,10 @@
 # Execution Checkpoint
 
-- Updated at: 2026-09-07T02:34:34+08:00
+- Updated at: 2026-09-07T02:37:52+08:00
 - Thread: oss-platform-contracts
 - Change: oss-platform-contracts
-- Status: IMPLEMENTING / APPROVED SUBSET
-- Current phase: BUILD_VERIFY
+- Status: SOURCE_DELIVERED / APPROVED SUBSET
+- Current phase: HANDOFF
 - Baseline: `SW-P1-20260907.2 + ENG-01`
 - Candidate revision: `SW-CONTRACTS-P1-CANDIDATE.1`
 - Scope: 公共契约候选，以及 `SW-P1-SUBSET-01` 批准的 Skill/Policy 薄 Python adapter。
@@ -14,8 +14,8 @@
 
 | Repo | Worker path | Worker branch | Target branch | Base/HEAD | Dirty files |
 | --- | --- | --- | --- | --- | --- |
-| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `3a48d4b106db8f382c3c96bbc8992f328b81e259` | `packages/contracts/`、本 change 文档 |
-| platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | 待交付前刷新 | 待核验 |
+| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `54a807bc061e79f77a7ba52bcf6d6827d6966481` | clean before final checkpoint update |
+| platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | `54a807bc061e79f77a7ba52bcf6d6827d6966481` | clean |
 
 ## Completed With Evidence
 
@@ -42,24 +42,27 @@
 - fresh verification：Python 3.11 import smoke PASS、adapter 13/13、批准闭包既有 fixture 25/25 对照、Draft 4 全量 schema 57/57；测试生成的两个 task-owned `__pycache__` 已删除。
 - 首轮内容 commit `cc20e510e13b26e42943997332e1319c509d1001` 后独立 review 为 `With fixes`：无 Critical，发现异常 issues 可改写和复合 schema `$ref` 悬空两项 Important；main-brain 另实证 Workflow 显式 `conversationId:null` 与缺省混同。
 - 三项均完成 TDD：16 total / 12 PASS / 4 FAIL 后最小修复为 16/16 GREEN；同时补充非有限 JSON number 与 dispatcher allowlist probe。
+- 修复 delta 经原 reviewer 复审：无剩余 Critical/Important，`Ready to merge: Yes`。
+- worker 已 push 到 `origin/codex/oss-platform-contracts/design`；独占 integration worktree 从最新 `origin/main=bbd00344684dcf250d1512d747e7b72239a911d4` fast-forward 合入 worker 并 push `origin/main=54a807bc061e79f77a7ba52bcf6d6827d6966481`。
+- integration fresh verification：Python 3.11 adapter 16/16、批准 fixture 25/25、Draft 4 schema 57/57、`git diff --check` 全部 PASS。
 
 ## In Progress
 
-- 对 review 修复 delta 做独立复审和 fresh 全量门禁。
+- 向 Skill/Capability/Runtime 回传稳定 main SHA 和最终 import API。
 
 ## Pending
 
-- 完成修复 delta 的独立复审和精确 diff 终检。
+- 各 consumer 从稳定 `origin/main` 采用薄 adapter；根 packaging metadata 仍由 main-brain 决定。
 - commit/push worker 并通过独占 integration worktree合入最新 `origin/main`。
 
 ## Next Executable Action
 
-- 提交 review 修复 delta，并请求 reviewer 复核三项证据。
+- 回传 `origin/main=54a807bc061e79f77a7ba52bcf6d6827d6966481` 与最终验证边界。
 
 ## Blockers
 
-- 源码实现无阻塞。运行态 PostgreSQL/多实例/ingress/event/SDK 证据仍是 `NO READY` 门禁。
+- 薄 adapter 源码交付无阻塞。运行态 PostgreSQL/多实例/ingress/event/SDK 证据仍是 `NO READY` 门禁。
 
 ## Last External Progress
 
-- 2026-09-07T02:34:34+08:00：三项 review delta 完成 RED/GREEN，adapter 16/16 GREEN。
+- 2026-09-07T02:37:52+08:00：内容 SHA `54a807bc061e79f77a7ba52bcf6d6827d6966481` 已 push worker、集成并 push `origin/main`，integration 16/16 + 57/57 GREEN。

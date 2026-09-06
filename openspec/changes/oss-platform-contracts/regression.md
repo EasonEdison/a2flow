@@ -75,3 +75,10 @@ Exact fixtures and expected validity live in `packages/contracts/tests/cases.jso
 - Installed-wheel/package metadata behavior; root manifest/lock remains main-brain-owned.
 
 Schema PASS cannot satisfy these runtime gates.
+
+## Source delivery
+
+- Independent review: no remaining Critical/Important findings; `Ready to merge: Yes`
+- Worker source SHA: `54a807bc061e79f77a7ba52bcf6d6827d6966481`
+- Integrated `origin/main` source SHA: `54a807bc061e79f77a7ba52bcf6d6827d6966481`
+- Integration rerun: adapter `16/16`, approved fixture parity `25/25`, schema `57/57`, diff whitespace PASS

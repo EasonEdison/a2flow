@@ -7,6 +7,7 @@
 - Schema/examples: `PASS (57/57)`
 - Main-brain interface review: `APPROVED SUBSET ONLY (SW-P1-SUBSET-01)`
 - Python adapter source: `PASS (16/16; approved fixture parity 25/25)`
+- Integrated source: `origin/main@54a807bc061e79f77a7ba52bcf6d6827d6966481`
 - Runtime implementation: `NOT OWNED / NOT PROVEN`
 - Deployment: `NOT RUN`
 - Runtime readiness: `NO READY`
