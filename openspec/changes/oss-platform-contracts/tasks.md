@@ -26,5 +26,5 @@
 ## 4. DELIVER
 
 - [x] 4.1 fetch/merge 最新 `origin/main`，只提交本 change 与 `packages/contracts/`。
-- [ ] 4.2 push worker，再通过独占 integration worktree 合入 `origin/main`。
-- [ ] 4.3 向 main-brain 回传实际文件、SHA、检查、剩余冲突与 `NO READY` 门禁。
+- [x] 4.2 push worker，再通过独占 integration worktree 合入 `origin/main`。
+- [x] 4.3 准备 main-brain handoff：实际文件、SHA、检查、剩余冲突与 `NO READY` 门禁。

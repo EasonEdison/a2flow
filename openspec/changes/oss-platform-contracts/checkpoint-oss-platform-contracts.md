@@ -1,10 +1,10 @@
 # Execution Checkpoint
 
-- Updated at: 2026-09-07T01:59:44+08:00
+- Updated at: 2026-09-07T02:01:03+08:00
 - Thread: oss-platform-contracts
 - Change: oss-platform-contracts
-- Status: ACTIVE
-- Current phase: INTEGRATING
+- Status: SOURCE_DELIVERED / PROVISIONAL
+- Current phase: HANDOFF
 - Baseline: `SW-P1-20260907.2 + ENG-01`
 - Candidate revision: `SW-CONTRACTS-P1-CANDIDATE.1`
 - Scope: 公共契约候选、最小 JSON Schema/正反例和聚焦检查。
@@ -14,7 +14,8 @@
 
 | Repo | Worker path | Worker branch | Target branch | Base/HEAD | Dirty files |
 | --- | --- | --- | --- | --- | --- |
-| platform | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `404bbcacc1ef176c273c9a90fc4ae91bfadc42fd` | clean |
+| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `f8cf77baf8fd2663ea06bcb1cfc25135f08ca4fb` | clean |
+| platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | `05cab8bd33ca89c392b21aa8be2fe8250fd696e2` | clean |
 
 ## Completed With Evidence
 
@@ -30,24 +31,26 @@
 - 独立 pre-merge review 发现并已修复：空/冲突 recorded versions、event 交叉归因/外来事实、policy 默认/唯一性、Action 四事实、材料重复路径/换行边界和状态措辞。
 - TDD 七轮 RED/GREEN 加 fresh START 非回归检查完成；最终命令 `python3 packages/contracts/tests/validate_contracts.py` 为 `SUMMARY total=54 passed=54 failed=0`。
 - candidate 内容已提交并 push worker：`404bbcacc1ef176c273c9a90fc4ae91bfadc42fd`。
+- checkpoint 里程碑提交后最终 worker 为 `f8cf77baf8fd2663ea06bcb1cfc25135f08ca4fb`。
+- 独占 integration worktree 从最新 main `a4915ad6ad5e6a847c8ac6309590601f7875ccd8` 合入 worker，复跑 54/54、55 JSON、64 文件 scope/diff 检查后 push main `05cab8bd33ca89c392b21aa8be2fe8250fd696e2`。
 - 环境为 Python 3.6.8/jsonschema 2.6.0；未安装依赖、未修改系统 Python。PY-01 已读，主机 Python 变更仅 Runtime 可执行。
 
 ## In Progress
 
-- 正在通过独占 integration worktree 合入最新 `origin/main`。
+- main-brain 可基于固定 main 快照执行命名/子集审查；当前仍是 PROVISIONAL。
 
 ## Pending
 
-- 通过独占 integration worktree 合入最新 `origin/main`，再回传 main-brain。
+- main-brain 命名 approved revision；Runtime/A2UI/Skill/Ability/Workflow 继续各自集成与运行证据。
 
 ## Next Executable Action
 
-- 在独占 integration worktree fetch/merge `origin/main` 与 worker commit，复核后 push `main`。
+- main-brain review `05cab8bd33ca89c392b21aa8be2fe8250fd696e2` 中本 change 与 `packages/contracts/`。
 
 ## Blockers
 
-- 无。Draft 4 只是当前免安装校验 dialect，不是最终依赖冻结；运行态门禁仍 NO READY。
+- 源码交付无阻塞。接口命名批准、运行态 PostgreSQL/多实例/ingress/event/SDK 证据仍是 `NO READY` 门禁。
 
 ## Last External Progress
 
-- 2026-09-07T01:59:44+08:00：candidate commit `404bbcacc1ef176c273c9a90fc4ae91bfadc42fd` 已 push worker，进入 integration。
+- 2026-09-07T02:01:03+08:00：worker `f8cf77baf8fd2663ea06bcb1cfc25135f08ca4fb` 已集成并 push main `05cab8bd33ca89c392b21aa8be2fe8250fd696e2`，等待 main-brain 命名审查。
