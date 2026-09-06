@@ -9,7 +9,7 @@
 - 当前基线：SW-P1-20260907.2
 - 基线提交：`b1a0c9f32497c04dd623edb0bb8858a01b5ae7ad`
 - 消费者内容已合入 main SHA：`57d11fcfee3481512d444a51fee0db3280357789`
-- 阶段：ResultInterpretationPolicy consumer 收敛与负向 fixture 已集成，等待 named approved contracts revision
+- 阶段：`SW-P1-SUBSET-01` 已批准；正在执行 Capability Registry 第一实现切片
 - Runtime：`NO READY`
 
 ## 本轮已核对
@@ -27,6 +27,10 @@
 - 已创建 3 个 PROVISIONAL fixture 文件，覆盖 9 个合成调用/结果场景和 2 个非法策略样例。
 - 现有 Python 3.6.8 已完成 JSON 语法和 stdlib 不变量检查；missing/null/严格类型检查通过，未安装/升级 Python 或依赖。
 - 已核对 main 中 A2UI 最新交付使用 `successPolicyRef`、拒绝旧 `businessSuccessConditionRef` 并分离四类事实。
+- 已合入实现放行 commit `3a48d4b106db8f382c3c96bbc8992f328b81e259`。
+- 已完整读取 `implementation-release-01.md`，SHA256=`c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
+- 批准子集：authored Ability definition、named policy publication metadata、adapter-operation binding validation 与端口。
+- 明确不实现结果解释器、业务调用/重试/幂等、credential resolution、PostgreSQL 或部署。
 
 ## 已移除的活动冲突
 
@@ -61,7 +65,7 @@
 
 ## Next Executable Action
 
-等待 Contracts 稳定 commit 与 main-brain 命名 approved revision；此前不实现 Registry Python 模块或第二解释器。
+按 `implementation-plan-subset-01.md` 先写 happy-path 失败测试，观察 RED 后实现最小 Python domain API。
 
 ## 交付记录
 
