@@ -53,20 +53,20 @@
 
 ## 5. SW-P1-SUBSET-01 Source Implementation
 
-- [ ] 5.1 Scaffold a stdlib-only importable module under services/skill-registry/ without root manifest or dependency changes.
-- [ ] 5.2 TDD immutable entry/resource descriptors and finite entry, per-entry byte, total-byte, path-length and path-depth limits.
-- [ ] 5.3 TDD exact logicalPath uniqueness, safe relative paths, actual-byte size/digest agreement, strict UTF-8 text and opaque binary retention.
-- [ ] 5.4 TDD separate model request and trusted invocation context plus catalog/material ports.
-- [ ] 5.5 TDD mapping of verified instructions/resources and trusted resolution evidence to the approved useSkillResult shape.
-- [ ] 5.6 Verify compatibility metadata remains a hint and cannot trigger Tool/script execution or authorization.
-- [ ] 5.7 Add owner README and keep YAML/frontmatter parsing, archive extraction, model filesystem locators, resolver admission, DB, process, deploy and production fallback out of scope.
+- [x] 5.1 Scaffold a stdlib-only importable module under services/skill-registry/ without root manifest or dependency changes.
+- [x] 5.2 TDD immutable entry/resource descriptors and finite entry, per-entry byte, total-byte, path-length and path-depth limits.
+- [x] 5.3 TDD exact logicalPath uniqueness, safe relative paths, actual-byte size/digest agreement, strict UTF-8 text and opaque binary retention.
+- [x] 5.4 TDD separate model request and trusted invocation context plus catalog/material ports.
+- [x] 5.5 TDD mapping of verified instructions/resources and trusted resolution evidence to the approved useSkillResult shape.
+- [x] 5.6 Verify compatibility metadata remains a hint and cannot trigger Tool/script execution or authorization.
+- [x] 5.7 Add owner README and keep YAML/frontmatter parsing, archive extraction, model filesystem locators, resolver admission, DB, process, deploy and production fallback out of scope.
 
 ## 6. SUBSET-01 Focused Verification
 
-- [ ] 6.1 Record each resource-validator and useSkill projection red/green cycle.
-- [ ] 6.2 Verify same verified material maps identically from chat and Workflow contexts except caller-supplied trusted evidence.
-- [ ] 6.3 Verify invalid paths, duplicates, size/digest mismatch, finite limits and invalid UTF-8 text fail closed; binary bytes remain opaque.
-- [ ] 6.4 Validate a success result against the approved schema definition and focused semantic checker; describe this as source-shape evidence only.
+- [x] 6.1 Record each resource-validator and useSkill projection red/green cycle.
+- [x] 6.2 Verify same verified material maps identically from chat and Workflow contexts except caller-supplied trusted evidence.
+- [x] 6.3 Verify invalid paths, duplicates, size/digest mismatch, finite limits and invalid UTF-8 text fail closed; binary bytes remain opaque.
+- [x] 6.4 Validate a success result against the approved schema definition and focused semantic checker; describe this as source-shape evidence only.
 - [ ] 6.5 Run import check, stdlib unit tests, git diff --check, sensitive-data scan and two-pass changed-Python review.
 - [ ] 6.6 Update regression.md/readiness.md while trusted provenance, resolver, DB/service and runtime proof remain NO READY.
 

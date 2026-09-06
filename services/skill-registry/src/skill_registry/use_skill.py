@@ -6,7 +6,7 @@ from collections import namedtuple
 import re
 
 from .ports import MaterialPort, SkillMaterial
-from .resources import ResourceLimits, validate_package_entries
+from .resources import validate_package_entries
 
 
 CONTRACT_REVISION = "SW-CONTRACTS-P1-CANDIDATE.1"
@@ -296,7 +296,7 @@ def use_skill(request, context, material_port, resource_limits=None):
     )
     verified_resources = validate_package_entries(
         material.entries,
-        resource_limits or ResourceLimits(),
+        resource_limits,
     )
     return _project_result(
         material,

@@ -92,10 +92,10 @@ Await a main-brain-reviewed named shared contract revision before service implem
 
 ### Current State
 
-- Stage: approved bounded source implementation, tests not yet written.
+- Stage: source implementation committed at 47d4ccf9fac0f0f424cdcdd0ae6a94a8b61a1526; focused review fixes and evidence update are in progress.
 - Runtime readiness: NO READY.
 - Full contracts, trusted provenance/admission, resolver, DB/service and runtime gates remain unreleased.
 
 ### Next Executable Action
 
-Write the first resource-validation tests, run them red against the absent module, then implement only enough validator code to make that focused batch green.
+Complete dual review, consume only a stable contracts package if it reaches main, then record fresh verification and deliver through the exclusive integration worktree.

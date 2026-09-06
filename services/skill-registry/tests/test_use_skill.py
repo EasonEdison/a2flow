@@ -2,10 +2,14 @@ from __future__ import unicode_literals
 
 import hashlib
 import unittest
-import skill_registry
 
+import skill_registry
 from skill_registry.ports import CatalogPort, MaterialPort, SkillMaterial
-from skill_registry.resources import PackageEntry, PackageEntryDescriptor
+from skill_registry.resources import (
+    PackageEntry,
+    PackageEntryDescriptor,
+    ResourceValidationError,
+)
 from skill_registry.use_skill import (
     InvocationScope,
     SkillRegistryValidationError,
@@ -234,6 +238,7 @@ class UseSkillTest(unittest.TestCase):
         self.assertIs(UseSkillRequest, skill_registry.UseSkillRequest)
         self.assertIs(MaterialPort, skill_registry.MaterialPort)
         self.assertIs(use_skill, skill_registry.use_skill)
+
     def test_rejects_crlf_in_approved_contract_pattern_fields(self):
         context = self.context(
             InvocationScope(kind="CONVERSATION", conversation_id="conversation-1"),
@@ -275,6 +280,23 @@ class UseSkillTest(unittest.TestCase):
                 FakeMaterialPort(material),
             )
         self.assertEqual("INVALID_RESOLUTION_EVIDENCE", raised.exception.code)
+
+    def test_rejects_falsy_invalid_resource_limits(self):
+        context = self.context(
+            InvocationScope(kind="CONVERSATION", conversation_id="conversation-1"),
+            "control-1",
+        )
+
+        with self.assertRaises(ResourceValidationError) as raised:
+            use_skill(
+                UseSkillRequest(skill_key="demo/evidence-first-brief"),
+                context,
+                FakeMaterialPort(self.material()),
+                resource_limits=0,
+            )
+
+        self.assertEqual("INVALID_LIMITS", raised.exception.code)
+
 
 
 if __name__ == "__main__":
