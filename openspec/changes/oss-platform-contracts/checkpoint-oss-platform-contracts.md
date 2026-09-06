@@ -1,10 +1,10 @@
 # Execution Checkpoint
 
-- Updated at: 2026-09-07T01:57:56+08:00
+- Updated at: 2026-09-07T01:59:44+08:00
 - Thread: oss-platform-contracts
 - Change: oss-platform-contracts
 - Status: ACTIVE
-- Current phase: VERIFYING
+- Current phase: INTEGRATING
 - Baseline: `SW-P1-20260907.2 + ENG-01`
 - Candidate revision: `SW-CONTRACTS-P1-CANDIDATE.1`
 - Scope: 公共契约候选、最小 JSON Schema/正反例和聚焦检查。
@@ -14,7 +14,7 @@
 
 | Repo | Worker path | Worker branch | Target branch | Base/HEAD | Dirty files |
 | --- | --- | --- | --- | --- | --- |
-| platform | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `0980f0ae304a340f24d7421ab4a51818af612b32` | 本 change 7 文件；`packages/contracts/` 57 文件 |
+| platform | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `404bbcacc1ef176c273c9a90fc4ae91bfadc42fd` | clean |
 
 ## Completed With Evidence
 
@@ -29,20 +29,20 @@
 - main-brain 审阅要求已纳入：材料 handle 使用规范化 package-relative `logicalPath`；结果解释只保留 `SCHEMA_VALID` / `JSON_POINTER_EQUALS` 和唯一 Runtime 解释器语义；Capability 容器为 `resultInterpretationPolicies + defaultSuccessPolicyRef`。
 - 独立 pre-merge review 发现并已修复：空/冲突 recorded versions、event 交叉归因/外来事实、policy 默认/唯一性、Action 四事实、材料重复路径/换行边界和状态措辞。
 - TDD 七轮 RED/GREEN 加 fresh START 非回归检查完成；最终命令 `python3 packages/contracts/tests/validate_contracts.py` 为 `SUMMARY total=54 passed=54 failed=0`。
+- candidate 内容已提交并 push worker：`404bbcacc1ef176c273c9a90fc4ae91bfadc42fd`。
 - 环境为 Python 3.6.8/jsonschema 2.6.0；未安装依赖、未修改系统 Python。PY-01 已读，主机 Python 变更仅 Runtime 可执行。
 
 ## In Progress
 
-- 正在执行 review 修复后的 fresh verification。
+- 正在通过独占 integration worktree 合入最新 `origin/main`。
 
 ## Pending
 
-- 更新最后验证证据并提交/push worker。
 - 通过独占 integration worktree 合入最新 `origin/main`，再回传 main-brain。
 
 ## Next Executable Action
 
-- 执行 Schema fresh check、JSON parse、`git diff --check`、独占路径和 clean-room 扫描。
+- 在独占 integration worktree fetch/merge `origin/main` 与 worker commit，复核后 push `main`。
 
 ## Blockers
 
@@ -50,4 +50,4 @@
 
 ## Last External Progress
 
-- 2026-09-07T01:57:56+08:00：合入最新 main `0980f0ae304a340f24d7421ab4a51818af612b32`，fresh START 无 recorded versions 非回归后 54/54。
+- 2026-09-07T01:59:44+08:00：candidate commit `404bbcacc1ef176c273c9a90fc4ae91bfadc42fd` 已 push worker，进入 integration。
