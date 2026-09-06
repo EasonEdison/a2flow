@@ -31,6 +31,10 @@
 - 已完整读取 `implementation-release-01.md`，SHA256=`c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
 - 批准子集：authored Ability definition、named policy publication metadata、adapter-operation binding validation 与端口。
 - 明确不实现结果解释器、业务调用/重试/幂等、credential resolution、PostgreSQL 或部署。
+- TDD Task 1：先观察 `ModuleNotFoundError: capability_registry`，再实现 immutable models、ports 与 happy path，1/1 GREEN。
+- TDD Task 2：15 个 boundary 断言先失败，再实现字段、模型/服务端分离、Pointer/target 冲突门禁，10/10 GREEN。
+- TDD Task 3：operation 缺失、input path 与 credential slot 不支持三例先失败，再实现 catalog 兼容校验，13/13 GREEN。
+- 所有测试均使用 `/bin/python3.11` 和标准库；未安装依赖、未调用外部服务。
 
 ## 已移除的活动冲突
 
@@ -65,7 +69,7 @@
 
 ## Next Executable Action
 
-按 `implementation-plan-subset-01.md` 先写 happy-path 失败测试，观察 RED 后实现最小 Python domain API。
+等待 Contracts 薄包稳定 SHA；随后先写 `SharedResultPolicySetValidator` 失败测试，再实现仅做异常 issue 映射的 adapter。
 
 ## 交付记录
 

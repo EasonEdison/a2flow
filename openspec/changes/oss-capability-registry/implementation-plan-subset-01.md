@@ -35,11 +35,11 @@
 - Produces: `AdapterOperationCatalogPort.lookup(operation_ref)` and `ResultPolicySetValidatorPort.validate(policy_set)`.
 - Produces: `AbilityDefinitionValidator.validate(payload)`; successful validation has immutable metadata and no issues.
 
-- [ ] **Step 1: Write the happy-path test**
+- [x] **Step 1: Write the happy-path test**
 
 Create a complete literal Ability payload using model `/query`, trusted `/userId`, one `demoRead` credential slot and the approved policy set. Inject recording port fakes and assert exact immutable publication metadata plus the exact policy-set mapping passed to the contract port.
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run:
 
@@ -49,7 +49,7 @@ PYTHONPATH=services/capability-registry/src /bin/python3.11 -m unittest services
 
 Expected: import failure because `capability_registry` does not exist.
 
-- [ ] **Step 3: Implement the minimum public types and happy path**
+- [x] **Step 3: Implement the minimum public types and happy path**
 
 Use frozen, slotted dataclasses. The validator must assemble this exact policy-set projection before calling the shared port:
 
@@ -62,7 +62,7 @@ policy_set = {
 
 It may produce metadata only when both ports and all domain checks return no issues.
 
-- [ ] **Step 4: Run the test and verify GREEN**
+- [x] **Step 4: Run the test and verify GREEN**
 
 Run the same command and require zero failures.
 
@@ -76,7 +76,7 @@ Run the same command and require zero failures.
 - Consumes: `AbilityDefinitionValidator.validate(payload)`.
 - Produces stable issues with JSON-style paths; invalid results have `metadata is None`.
 
-- [ ] **Step 1: Add failing table-driven tests**
+- [x] **Step 1: Add failing table-driven tests**
 
 Use independent literal mutations and assert these behaviors:
 
@@ -87,15 +87,15 @@ Use independent literal mutations and assert these behaviors:
 - trusted source paths are limited to `/userId` and `/environment`;
 - binding target paths must be valid, unique and non-overlapping.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Expected: each new case fails because the validator still accepts the invalid payload.
 
-- [ ] **Step 3: Implement minimum deterministic validation**
+- [x] **Step 3: Implement minimum deterministic validation**
 
 Use exact field allowlists, the approved identifier pattern and RFC 6901 syntax pattern from the contract snapshot. Do not add schema evaluation, coercion, URL fetching or a generic expression engine.
 
-- [ ] **Step 4: Run all tests and verify GREEN**
+- [x] **Step 4: Run all tests and verify GREEN**
 
 Require every table case and the original happy path to pass.
 
@@ -109,19 +109,19 @@ Require every table case and the original happy path to pass.
 - Consumes: `AdapterOperationCatalogPort.lookup(operation_ref)`.
 - Produces: `ADAPTER_OPERATION_NOT_FOUND`, `ADAPTER_INPUT_UNSUPPORTED` and `CREDENTIAL_SLOT_UNSUPPORTED` issues.
 
-- [ ] **Step 1: Add failing port-boundary tests**
+- [x] **Step 1: Add failing port-boundary tests**
 
 Test a missing operation, an undeclared target path and an unsupported credential slot. Assert returned domain issues, not fake call counts.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Expected: invalid cases currently return valid metadata or omit the required issue.
 
-- [ ] **Step 3: Implement minimum compatibility checks**
+- [x] **Step 3: Implement minimum compatibility checks**
 
 Lookup exactly once per validation. Compare authored target paths and credential slot identifiers to immutable sets in `AdapterOperationDescriptor`. Never request or retain a credential value.
 
-- [ ] **Step 4: Run all tests and verify GREEN**
+- [x] **Step 4: Run all tests and verify GREEN**
 
 Require zero failures and no warnings.
 
