@@ -16,6 +16,7 @@ from .use_skill import (
     TrustedInvocationContext,
     TrustedResolutionEvidence,
     UseSkillRequest,
+    UseSkillResult,
     use_skill,
 )
 
@@ -33,6 +34,7 @@ __all__ = (
     "TrustedInvocationContext",
     "TrustedResolutionEvidence",
     "UseSkillRequest",
+    "UseSkillResult",
     "VerifiedResource",
     "use_skill",
     "validate_package_entries",

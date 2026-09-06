@@ -3,7 +3,8 @@
 > Baseline: SW-P1-20260907.2
 > Implementation release: SW-P1-SUBSET-01 at 3a48d4b106db8f382c3c96bbc8992f328b81e259
 > Runtime readiness: **NO READY**
-> Checked items below are documentation/example alignment only, not service implementation or runtime proof.
+> Checked items identify completed source or documentation work only. Runtime
+> admission remains governed by `readiness.md`.
 
 ## 0. ALIGN
 
@@ -22,18 +23,18 @@
 - [x] 1.2 SW-P1-SUBSET-01 已确认 model-visible request 仅含 skillKey，trusted context 由服务端注入，success material 使用批准的 useSkillResult。
 - [x] 1.3 main-brain 已确认 Python、`services/skill-registry/` 独立 import package、根 pyproject/lock 由主控统一，且不新建常驻进程。
 - [x] 1.4 requiredToolNames 是 compatibility hint，可映射但绝不授予 Tool/script 权限。
-- [ ] 1.5 在以上 gate 完成前，不写共享 contracts、根 manifest 或跨域 Runtime 代码。
+- [x] 1.5 仅按 SW-P1-SUBSET-01 实现 Registry owner 路径；未修改共享 contracts、根 manifest 或跨域 Runtime 代码。
 - [x] 1.6 提交格式校验、安全 YAML、资源读取候选调研和模块路径清单；未安装依赖或实现通用解包。
 
 ## 2. Minimal Domain Slice after Review
 
-- [ ] 2.1 在 `services/skill-registry/` scaffold 经批准的最小模块，不安装未批准的共享依赖。
+- [x] 2.1 在 `services/skill-registry/` scaffold 经批准的最小模块，不安装未批准的共享依赖。
 - [ ] 2.2 实现 Agent Skills-compatible package validator core：完整 name/description/compatibility 约束、name/directory、digest/size、安全路径、资源上限和文本/二进制 asset 区分。
-- [ ] 2.3 实现 catalog/material application ports，接口显式接受后端 trusted context，模型参数不含 userId/environment。
+- [x] 2.3 实现 catalog/material application ports，接口显式接受后端 trusted context，模型参数不含 userId/environment。
 - [ ] 2.4 实现普通用户 authoring denial 与 discovery/material 权限分离。
 - [ ] 2.5 实现 PRT current、ONLINE stable/gray 的 resolver adapter；只消费共享 contract，不自造 gray 算法。
 - [ ] 2.6 实现 PostgreSQL repository 与唯一/乐观并发约束；不提供 SQLite/MySQL fallback。
-- [ ] 2.7 保证 published Skill 无 WorkflowReleaseRef、graph、route 或 mode-specific output。
+- [x] 2.7 保证当前 source projection 无 WorkflowReleaseRef、graph、route 或 mode-specific output。
 
 ## 3. Focused Verification
 
@@ -67,8 +68,8 @@
 - [x] 6.2 Verify same verified material maps identically from chat and Workflow contexts except caller-supplied trusted evidence.
 - [x] 6.3 Verify invalid paths, duplicates, size/digest mismatch, finite limits and invalid UTF-8 text fail closed; binary bytes remain opaque.
 - [x] 6.4 Validate a success result against the approved schema definition and focused semantic checker; describe this as source-shape evidence only.
-- [ ] 6.5 Run import check, stdlib unit tests, git diff --check, sensitive-data scan and two-pass changed-Python review.
-- [ ] 6.6 Update regression.md/readiness.md while trusted provenance, resolver, DB/service and runtime proof remain NO READY.
+- [x] 6.5 Run import check, stdlib unit tests, git diff --check, sensitive-data scan and two-pass changed-Python review.
+- [x] 6.6 Update regression.md/readiness.md while trusted provenance, resolver, DB/service and runtime proof remain NO READY.
 
 ## 7. SUBSET-01 Delivery
 

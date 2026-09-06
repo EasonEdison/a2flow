@@ -9,8 +9,8 @@ from collections import namedtuple
 class SkillMaterial(namedtuple(
         "_SkillMaterial",
         (
-            "instructions",
-            "entries",
+            "instruction_entry",
+            "resource_entries",
             "required_tool_names",
             "resolution_evidence",
         ))):

@@ -2,6 +2,7 @@ from __future__ import unicode_literals
 
 import hashlib
 import io
+import sys
 import unittest
 
 from skill_registry.resources import (
@@ -154,7 +155,7 @@ class ValidatePackageEntriesTest(unittest.TestCase):
                     entry("one.txt", b"12", handle_id="material-1"),
                     entry("two.txt", b"34", handle_id="material-2"),
                 ),
-                ResourceLimits(max_total_bytes=3),
+                ResourceLimits(max_entry_bytes=2, max_total_bytes=3),
             ),
             (
                 "PATH_LENGTH_LIMIT_EXCEEDED",
@@ -208,35 +209,60 @@ class ValidatePackageEntriesTest(unittest.TestCase):
                 ResourceLimits(),
             )
         self.assertEqual("INVALID_CONTENT_SOURCE", raised.exception.code)
-    def test_rejects_crlf_in_contract_pattern_fields(self):
+
+    def test_rejects_line_breaks_in_contract_pattern_fields(self):
         digest = sha256_digest(b"x")
-        cases = (
-            (
-                "INVALID_LOGICAL_PATH",
-                entry("unsafe.txt\n", b"x"),
-            ),
-            (
-                "INVALID_HANDLE_ID",
-                entry("safe.txt", b"x", handle_id="material-1\n"),
-            ),
-            (
-                "INVALID_DECLARED_DIGEST",
-                entry(
-                    "safe.txt",
-                    b"x",
-                    declared_content_digest=digest + "\n",
+
+        for line_break in ("\n", "\r", "\r\n"):
+            cases = (
+                (
+                    "INVALID_LOGICAL_PATH",
+                    entry("unsafe.txt" + line_break, b"x"),
                 ),
-            ),
+                (
+                    "INVALID_HANDLE_ID",
+                    entry(
+                        "safe.txt",
+                        b"x",
+                        handle_id="material-1" + line_break,
+                    ),
+                ),
+                (
+                    "INVALID_DECLARED_DIGEST",
+                    entry(
+                        "safe.txt",
+                        b"x",
+                        declared_content_digest=digest + line_break,
+                    ),
+                ),
+            )
+
+            for expected_code, package_entry in cases:
+                with self.subTest(
+                        expected_code=expected_code,
+                        line_break=repr(line_break)):
+                    with self.assertRaises(ResourceValidationError) as raised:
+                        validate_package_entries(
+                            (package_entry,),
+                            ResourceLimits(),
+                        )
+                    self.assertEqual(expected_code, raised.exception.code)
+
+    def test_limits_can_only_tighten_non_negotiable_hard_ceilings(self):
+        invalid_limits = (
+            ResourceLimits(max_entries=129),
+            ResourceLimits(max_entry_bytes=4 * 1024 * 1024 + 1),
+            ResourceLimits(max_total_bytes=16 * 1024 * 1024 + 1),
+            ResourceLimits(max_path_depth=33),
+            ResourceLimits(max_entry_bytes=4, max_total_bytes=3),
+            ResourceLimits(max_entries=sys.maxsize + 1),
         )
 
-        for expected_code, package_entry in cases:
-            with self.subTest(expected_code=expected_code):
+        for limits in invalid_limits:
+            with self.subTest(limits=limits):
                 with self.assertRaises(ResourceValidationError) as raised:
-                    validate_package_entries(
-                        (package_entry,),
-                        ResourceLimits(),
-                    )
-                self.assertEqual(expected_code, raised.exception.code)
+                    validate_package_entries((), limits)
+                self.assertEqual("INVALID_LIMITS", raised.exception.code)
 
 
 if __name__ == "__main__":

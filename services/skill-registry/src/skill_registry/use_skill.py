@@ -5,11 +5,15 @@ from __future__ import unicode_literals
 from collections import namedtuple
 import re
 
+from skillweave_contracts import (
+    CONTRACT_REVISION,
+    UseSkillRequest,
+    UseSkillResult,
+)
+
 from .ports import MaterialPort, SkillMaterial
-from .resources import validate_package_entries
+from .resources import PackageEntry, validate_package_entries
 
-
-CONTRACT_REVISION = "SW-CONTRACTS-P1-CANDIDATE.1"
 ASSET_TYPE_SKILL = "SKILL"
 ENVIRONMENT_PRT = "PRT"
 ENVIRONMENT_ONLINE = "ONLINE"
@@ -17,19 +21,11 @@ SELECTION_PRT_CURRENT = "PRT_CURRENT"
 SELECTION_ONLINE_STABLE = "ONLINE_STABLE"
 SELECTION_ONLINE_GRAY = "ONLINE_GRAY"
 SCOPE_CONVERSATION = "CONVERSATION"
+INSTRUCTION_LOGICAL_PATH = "SKILL.md"
 SCOPE_WORKFLOW = "WORKFLOW"
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-_SKILL_KEY_PATTERN = re.compile(
-    r"^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)*$"
-)
 _DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
-
-
-class UseSkillRequest(namedtuple("_UseSkillRequest", ("skill_key",))):
-    """The complete model-visible request; no identity or environment fields."""
-
-    __slots__ = ()
 
 
 class TrustedContext(namedtuple("_TrustedContext", ("user_id", "environment"))):
@@ -105,14 +101,6 @@ def _valid_identifier(value):
     return isinstance(value, str) and bool(_IDENTIFIER_PATTERN.fullmatch(value))
 
 
-def _validate_skill_key(skill_key):
-    if (
-            not isinstance(skill_key, str)
-            or not 1 <= len(skill_key) <= 128
-            or not _SKILL_KEY_PATTERN.fullmatch(skill_key)):
-        _fail("INVALID_SKILL_KEY", "skillKey does not match the approved contract")
-
-
 def _validate_context(context):
     if not isinstance(context, TrustedInvocationContext):
         _fail(
@@ -167,7 +155,6 @@ def _validate_resolution_evidence(request, trusted_context, evidence):
             "INVALID_RESOLUTION_EVIDENCE",
             "trusted resolution evidence has an unsupported type",
         )
-    _validate_skill_key(evidence.skill_key)
     if evidence.skill_key != request.skill_key:
         _fail(
             "RESOLUTION_SKILL_MISMATCH",
@@ -214,10 +201,20 @@ def _validate_resolution_evidence(request, trusted_context, evidence):
 def _validate_material(material):
     if not isinstance(material, SkillMaterial):
         _fail("INVALID_SKILL_MATERIAL", "material port returned an invalid value")
-    if not isinstance(material.instructions, str) or not material.instructions:
+    if not isinstance(material.instruction_entry, PackageEntry):
         _fail(
             "INVALID_SKILL_MATERIAL",
-            "Skill instructions must be a non-empty string",
+            "Skill instructions must be supplied as a package entry",
+        )
+    if (
+            not isinstance(material.resource_entries, tuple)
+            or any(
+                not isinstance(entry, PackageEntry)
+                for entry in material.resource_entries
+            )):
+        _fail(
+            "INVALID_SKILL_MATERIAL",
+            "Skill resources must be an immutable tuple of package entries",
         )
     if not isinstance(material.required_tool_names, tuple):
         _fail(
@@ -245,9 +242,9 @@ def _resource_handle(resource):
     }
 
 
-def _project_result(material, evidence, verified_resources):
+def _project_result(instructions, material, evidence, verified_resources):
     content = {
-        "instructions": material.instructions,
+        "instructions": instructions,
         "resources": [
             _resource_handle(resource) for resource in verified_resources
         ],
@@ -279,7 +276,6 @@ def use_skill(request, context, material_port, resource_limits=None):
 
     if not isinstance(request, UseSkillRequest):
         _fail("INVALID_USE_SKILL_REQUEST", "request has an unsupported type")
-    _validate_skill_key(request.skill_key)
     _validate_context(context)
     if not isinstance(material_port, MaterialPort):
         _fail("INVALID_MATERIAL_PORT", "material port has an unsupported type")
@@ -294,12 +290,25 @@ def use_skill(request, context, material_port, resource_limits=None):
         context.trusted_context,
         material.resolution_evidence,
     )
-    verified_resources = validate_package_entries(
-        material.entries,
+    verified_entries = validate_package_entries(
+        (material.instruction_entry,) + material.resource_entries,
         resource_limits,
     )
-    return _project_result(
-        material,
-        material.resolution_evidence,
-        verified_resources,
+    verified_instruction = verified_entries[0]
+    if (
+            verified_instruction.logical_path != INSTRUCTION_LOGICAL_PATH
+            or verified_instruction.text is None
+            or not verified_instruction.text):
+        _fail(
+            "INVALID_SKILL_INSTRUCTIONS",
+            "Skill instructions must be non-empty UTF-8 text from SKILL.md",
+        )
+    verified_resources = verified_entries[1:]
+    return UseSkillResult.from_mapping(
+        _project_result(
+            verified_instruction.text,
+            material,
+            material.resolution_evidence,
+            verified_resources,
+        )
     )

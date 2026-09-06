@@ -1,11 +1,66 @@
 # Regression: oss-skill-registry Phase 1
 
 > Baseline: SW-P1-20260907.2
-> Current evidence: **SOURCE DELIVERED / FIXTURE STATIC PASS**
+> Approved source gate: **SW-P1-SUBSET-01**
+> Current evidence: **SOURCE IMPLEMENTED / TESTED / DELIVERY PENDING**
 > Runtime readiness: **NO READY**
-> HTTP 与 Tool 字段仍待共享 contract revision；本表是消费者验收计划，不是运行通过声明。
+> HTTP/RPC 与 Runtime Tool wiring 不在本 subset；本表不是运行通过声明。
 
-## Current Static Evidence
+## SW-P1-SUBSET-01 Source Evidence
+
+Gate：`SW-P1-SUBSET-01` at
+`3a48d4b106db8f382c3c96bbc8992f328b81e259`。共享 Python adapter 从已合入
+`origin/main` 的 `skillweave_contracts` 消费；本任务未修改
+`packages/contracts/`。
+
+实际 source method：
+
+- `use_skill(request, context, material_port, resource_limits=None)`
+- model input：共享 `UseSkillRequest(skill_key=...)`，wire 仅 `skillKey`
+- server input：本地 immutable `TrustedInvocationContext`，仅作 adapter
+  boundary shape，不证明 provenance
+- material input：一个 `SKILL.md` instruction entry、resource entry tuple、
+  compatibility hints 和 trusted resolution evidence
+- success output：共享 immutable `UseSkillResult`；`content.instructions`、
+  READ_ONLY resource handles、可选 `requiredToolNames`，以及带
+  version/digest/environment/selection/evidenceRef 的 `artifact`
+
+服务器 worker 上的实际命令：
+
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=services/skill-registry/src:packages/contracts/src /usr/bin/python3.11 -m unittest discover -s services/skill-registry/tests -v`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src /usr/bin/python3.11 -m unittest discover -s packages/contracts/tests/python -v`
+- `PYTHONDONTWRITEBYTECODE=1 python3 packages/contracts/tests/validate_contracts.py`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=services/skill-registry/src:packages/contracts/src /usr/bin/python3.11 -c 'from skill_registry import MaterialPort, UseSkillRequest, UseSkillResult, use_skill'`
+
+当前结果：
+
+- Registry source suite：22/22 PASS（Python 3.11）。
+- Shared contract adapter suite：16/16 PASS（Python 3.11）。
+- Focused schema/semantic checker：57/57 PASS；此 checker 使用仓库现有
+  Python 3.6/jsonschema 环境，不代表 Registry runtime。
+- Public import check：PASS。
+- instruction 与 resources 一起校验实际 bytes/stream、declared size/digest、
+  strict UTF-8、logicalPath 唯一性与 entry/byte/path 硬上限；caller limits
+  只能收紧。
+- chat 与 Workflow context 投影相同 material 得到相同 `UseSkillResult`；
+  PRT current、ONLINE stable/gray 的证据 shape 均有单测。
+- instruction 中的 Tool 名称、`requiredToolNames` 和
+  `scripts/setup.sh` resource path 只进入 instructions/metadata/read-only
+  handle；不返回 bytes/text/execute/authorization 字段，也没有 executor。
+- `\n`、`\r`、`\r\n` 后缀、错误 digest/size、无效 UTF-8、过量
+  entry/bytes/path 和不一致 environment/selection 均 fail closed。
+
+TDD red/green 证据包括：missing module、iterator 越过 limit、多余 model
+字段、public export 缺失、正则接受行尾换行、falsy invalid limits、raw dict
+result、instruction 未走 bytes 校验、hard ceiling 可被放大，以及最终
+`UseSkillResult` 公共导出缺失。每项先由 focused failure 复现，再由完整
+suite 通过收口。
+
+以上仅证明 bounded source behavior、共享 DTO 互操作和 approved wire
+shape；不证明 trusted provenance、resolver/authorization、database、
+service/process、Runtime Tool integration、deployment 或产品可用性。
+
+## Historical Static Evidence before Implementation
 
 执行日期：2026-09-07。环境：服务器专属 worker；Python 3.6.8；PyYAML 3.12；没有安装或升级依赖。
 

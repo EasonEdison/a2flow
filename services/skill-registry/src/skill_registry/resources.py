@@ -126,10 +126,22 @@ def _validate_limits(limits):
     )
     if not all(_is_positive_integer(value) for value in values):
         _fail("INVALID_LIMITS", "resource limits must be finite positive integers")
-    if limits.max_path_length > MAX_CONTRACT_PATH_LENGTH:
+    hard_ceilings = (
+        (limits.max_entries, DEFAULT_MAX_ENTRIES),
+        (limits.max_entry_bytes, DEFAULT_MAX_ENTRY_BYTES),
+        (limits.max_total_bytes, DEFAULT_MAX_TOTAL_BYTES),
+        (limits.max_path_length, MAX_CONTRACT_PATH_LENGTH),
+        (limits.max_path_depth, DEFAULT_MAX_PATH_DEPTH),
+    )
+    if any(value > ceiling for value, ceiling in hard_ceilings):
         _fail(
             "INVALID_LIMITS",
-            "max_path_length cannot exceed the approved contract limit",
+            "resource limits may only tighten non-negotiable hard ceilings",
+        )
+    if limits.max_entry_bytes > limits.max_total_bytes:
+        _fail(
+            "INVALID_LIMITS",
+            "max_entry_bytes cannot exceed max_total_bytes",
         )
 
 

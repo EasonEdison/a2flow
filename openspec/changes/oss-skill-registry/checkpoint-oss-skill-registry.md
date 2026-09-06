@@ -92,10 +92,32 @@ Await a main-brain-reviewed named shared contract revision before service implem
 
 ### Current State
 
-- Stage: source implementation committed at 47d4ccf9fac0f0f424cdcdd0ae6a94a8b61a1526; focused review fixes and evidence update are in progress.
+- Stage: worker merge head `b52235a220c93c5fcee7a2b0c28d368b3bc71255`；shared DTO adaptation、review fixes、tests and evidence are complete in the worker，pending final commit/push/integration.
+- Stable shared package main: `e7797830b09ac367db21f7dde51236e3189e77f3`；reviewed content commit `54a807bc061e79f77a7ba52bcf6d6827d6966481` is included.
 - Runtime readiness: NO READY.
 - Full contracts, trusted provenance/admission, resolver, DB/service and runtime gates remain unreleased.
 
 ### Next Executable Action
 
-Complete dual review, consume only a stable contracts package if it reaches main, then record fresh verification and deliver through the exclusive integration worktree.
+Run final two-pass review and verification，commit the exact owned paths，merge fresh `origin/main`，then push worker and deliver through the exclusive integration worktree.
+
+### Verification Milestone
+
+- Worker merged reviewed shared-contract main at
+  `b52235a220c93c5fcee7a2b0c28d368b3bc71255`; shared content commit
+  `54a807bc061e79f77a7ba52bcf6d6827d6966481` is an ancestor of
+  `e7797830b09ac367db21f7dde51236e3189e77f3`.
+- Registry now consumes shared `UseSkillRequest`/`UseSkillResult`; no
+  duplicate model request DTO or placeholder digest remains.
+- Independent review found no critical issue and three important gaps:
+  instruction bytes bypass, expandable caller limits and stale evidence docs.
+  All were reproduced/covered and fixed.
+- Instruction `SKILL.md` and resources now share actual-byte/digest/UTF-8/
+  entry-byte-path validation；limits may only tighten fixed hard ceilings.
+- Compatibility Tool names and `scripts/*` paths remain inert metadata and
+  READ_ONLY handles；there is no executor or permission grant.
+- Fresh evidence before delivery: Registry 22/22 PASS on Python 3.11；shared
+  contracts 16/16 PASS；focused schema checker 57/57 PASS；public import PASS；
+  `git diff --check`、line-length、forbidden-operation and sensitive scans PASS.
+- No dependency install、system Python change、database、service/process、
+  deployment or runtime mutation occurred.
