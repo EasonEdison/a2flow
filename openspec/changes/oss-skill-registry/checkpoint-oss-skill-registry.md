@@ -71,3 +71,31 @@ Await a main-brain-reviewed named shared contract revision before service implem
 - Bounded public-source research covered Agent Skills/`skills-ref`、StrictYAML、ruamel.yaml、PyYAML and Python archive/path safety documentation.
 - Candidate outcome: `skills-ref` test-only conformance oracle；one pinned safe YAML parser after a compatibility spike；logicalPath/descriptor entry reader first；TAR/ZIP deferred pending separate approval.
 - Reviewed consumer input and neutral sample paths were sent to main-brain for contracts/Runtime routing；the normalized `logicalPath` descriptor clarification is included in this pending documentation batch.
+
+## SW-P1-SUBSET-01 Continuation
+
+- Approval record: SW-P1-SUBSET-01 at 3a48d4b106db8f382c3c96bbc8992f328b81e259.
+- Release record: openspec/changes/skillweave-phase1/implementation-release-01.md, SHA-256 c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4.
+- Corrected schema snapshot: a1cb44e88ce5bb603c62b4618804c78ae0d5585c, SHA-256 10fb8f2fb26529ba7850e981991bcb343037aa6defe7f22646e00f1cdf59fa3b.
+- Wire revision remains SW-CONTRACTS-P1-CANDIDATE.1.
+- Worker was clean and fast-forwarded from 8f406d4637830019dbcf8d42c7f84952fb0f9bc7 to 3a48d4b106db8f382c3c96bbc8992f328b81e259; release ancestry passed.
+- The exact approved definitions and focused semantic checker were inspected from packages/contracts/schemas/contracts-bundle.schema.json and packages/contracts/tests/validate_contracts.py.
+- The release record, not a guessed snapshot path, is authoritative for contract file locations.
+
+### Current Source Batch
+
+- Add only owner source/tests/README plus this task's OpenSpec evidence files.
+- TDD batch A: immutable descriptors and bounded actual-byte resource validation.
+- TDD batch B: separate model/trusted inputs and catalog/material ports.
+- TDD batch C: exact approved useSkillResult projection and focused compatibility tests.
+- No YAML parser, archive extraction, Tool/script execution, model filesystem locator, resolver/admission implementation, DB, service/process, dependency install, system Python change, deployment or production fallback.
+
+### Current State
+
+- Stage: approved bounded source implementation, tests not yet written.
+- Runtime readiness: NO READY.
+- Full contracts, trusted provenance/admission, resolver, DB/service and runtime gates remain unreleased.
+
+### Next Executable Action
+
+Write the first resource-validation tests, run them red against the absent module, then implement only enough validator code to make that focused batch green.
