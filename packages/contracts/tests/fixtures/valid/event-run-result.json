@@ -1,0 +1,16 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "eventId": "event_run_001",
+  "runSequence": 3,
+  "eventType": "RUN_RESULT_RECORDED",
+  "occurredAt": "2026-09-07T00:00:02Z",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "resultRef": {
+    "runId": "run_demo",
+    "resultId": "result_run",
+    "scope": "RUN"
+  }
+}

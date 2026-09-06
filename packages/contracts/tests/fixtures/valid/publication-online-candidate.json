@@ -1,0 +1,18 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "controlRequestId": "publish_demo_001",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "assetVersion": {
+    "asset": {
+      "assetType": "APPLICATION",
+      "assetId": "application_demo"
+    },
+    "versionId": "app_v2"
+  },
+  "targetSlot": "ONLINE_CANDIDATE",
+  "expectedServingRevision": 4,
+  "payloadDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+}

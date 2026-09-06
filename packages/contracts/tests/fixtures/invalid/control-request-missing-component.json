@@ -1,0 +1,25 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "controlRequestId": "control_demo_003",
+  "commandType": "SUBMIT_INTERACTION",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "target": {
+    "runId": "run_demo",
+    "nodeId": "node_demo",
+    "interactionId": "interaction_demo",
+    "surfaceId": "surface_demo"
+  },
+  "payloadDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "recordedAssetVersions": [
+    {
+      "asset": {
+        "assetType": "APPLICATION",
+        "assetId": "application_demo"
+      },
+      "versionId": "app_v1"
+    }
+  ]
+}

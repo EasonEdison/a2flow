@@ -1,0 +1,30 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "eventId": "event_cross_ref_001",
+  "runSequence": 7,
+  "eventType": "INTERACTION_RESULT_RECORDED",
+  "occurredAt": "2026-09-07T00:00:06Z",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "runRef": {
+    "runId": "other_run"
+  },
+  "nodeRef": {
+    "runId": "run_demo",
+    "nodeId": "node_demo"
+  },
+  "interactionRef": {
+    "runId": "run_demo",
+    "nodeId": "node_demo",
+    "interactionId": "interaction_demo"
+  },
+  "resultRef": {
+    "runId": "run_demo",
+    "nodeId": "node_demo",
+    "interactionId": "interaction_demo",
+    "resultId": "result_interaction",
+    "scope": "INTERACTION"
+  }
+}

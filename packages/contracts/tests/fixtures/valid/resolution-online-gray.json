@@ -1,0 +1,16 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "asset": {
+    "assetType": "APPLICATION",
+    "assetId": "application_demo"
+  },
+  "selection": "ONLINE_GRAY",
+  "effectiveVersion": {
+    "versionId": "app_v2",
+    "sourceEnvironment": "ONLINE"
+  }
+}

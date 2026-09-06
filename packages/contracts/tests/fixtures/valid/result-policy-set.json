@@ -1,0 +1,17 @@
+{
+  "resultInterpretationPolicies": [
+    {
+      "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+      "policyRef": "schema_policy_demo",
+      "operator": "SCHEMA_VALID"
+    },
+    {
+      "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+      "policyRef": "success_policy_demo",
+      "operator": "JSON_POINTER_EQUALS",
+      "jsonPointer": "/status",
+      "expectedLiteral": "SUCCEEDED"
+    }
+  ],
+  "defaultSuccessPolicyRef": "success_policy_demo"
+}

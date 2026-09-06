@@ -1,0 +1,19 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "eventId": "event_mismatch_001",
+  "runSequence": 6,
+  "eventType": "VERSION_MISMATCH_BLOCKED",
+  "occurredAt": "2026-09-07T00:00:05Z",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "runRef": {
+    "runId": "run_demo"
+  },
+  "versionGuardDecision": {
+    "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+    "decision": "ALLOW",
+    "mismatches": []
+  }
+}

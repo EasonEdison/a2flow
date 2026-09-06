@@ -1,0 +1,34 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "content": {
+    "instructions": "Produce a brief using the authorized evidence resources.",
+    "resources": [
+      {
+        "handleId": "material_demo_001",
+        "accessMode": "READ_ONLY",
+        "mediaType": "text/markdown",
+        "byteSize": 128,
+        "contentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "logicalPath": "references/output-format.md"
+      }
+    ],
+    "requiredToolNames": [
+      "execute_ability"
+    ]
+  },
+  "artifact": {
+    "skillKey": "demo/evidence-first-brief",
+    "resolvedVersion": {
+      "asset": {
+        "assetType": "SKILL",
+        "assetId": "skill_demo"
+      },
+      "versionId": "skill_v2"
+    },
+    "contentDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "environment": "ONLINE",
+    "selection": "ONLINE_GRAY",
+    "evidenceRef": "evidence_demo_001"
+  },
+  "workflowRoute": "next_node"
+}

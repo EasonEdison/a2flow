@@ -1,0 +1,1793 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "id": "https://schemas.skillweave.example/contracts/SW-CONTRACTS-P1-CANDIDATE.1/contracts-bundle.schema.json",
+  "title": "SkillWeave Phase 1 shared contract candidate",
+  "description": "Provisional transport-neutral contract shapes. Main-brain review is required before dependent implementation.",
+  "definitions": {
+    "contractRevision": {
+      "enum": [
+        "SW-CONTRACTS-P1-CANDIDATE.1"
+      ]
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "trustedContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userId",
+        "environment"
+      ],
+      "properties": {
+        "userId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "environment": {
+          "enum": [
+            "PRT",
+            "ONLINE"
+          ]
+        }
+      }
+    },
+    "trustedPrtContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userId",
+        "environment"
+      ],
+      "properties": {
+        "userId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "environment": {
+          "enum": [
+            "PRT"
+          ]
+        }
+      }
+    },
+    "trustedOnlineContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userId",
+        "environment"
+      ],
+      "properties": {
+        "userId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "environment": {
+          "enum": [
+            "ONLINE"
+          ]
+        }
+      }
+    },
+    "assetRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetType",
+        "assetId"
+      ],
+      "properties": {
+        "assetType": {
+          "enum": [
+            "SKILL",
+            "ABILITY",
+            "COMPONENT",
+            "APPLICATION",
+            "WORKFLOW"
+          ]
+        },
+        "assetId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "assetVersionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset",
+        "versionId"
+      ],
+      "properties": {
+        "asset": {
+          "$ref": "#/definitions/assetRef"
+        },
+        "versionId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "assetServingState": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "asset",
+            "environment",
+            "currentVersionId",
+            "servingRevision"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "asset": {
+              "$ref": "#/definitions/assetRef"
+            },
+            "environment": {
+              "enum": [
+                "PRT"
+              ]
+            },
+            "currentVersionId": {
+              "$ref": "#/definitions/identifier"
+            },
+            "servingRevision": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "asset",
+            "environment",
+            "stableVersionId",
+            "servingRevision"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "asset": {
+              "$ref": "#/definitions/assetRef"
+            },
+            "environment": {
+              "enum": [
+                "ONLINE"
+              ]
+            },
+            "stableVersionId": {
+              "$ref": "#/definitions/identifier"
+            },
+            "candidateVersionId": {
+              "$ref": "#/definitions/identifier"
+            },
+            "servingRevision": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "assetResolution": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "trustedContext",
+            "asset",
+            "selection",
+            "effectiveVersion"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "trustedContext": {
+              "$ref": "#/definitions/trustedPrtContext"
+            },
+            "asset": {
+              "$ref": "#/definitions/assetRef"
+            },
+            "selection": {
+              "enum": [
+                "PRT_CURRENT"
+              ]
+            },
+            "effectiveVersion": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "versionId",
+                "sourceEnvironment"
+              ],
+              "properties": {
+                "versionId": {
+                  "$ref": "#/definitions/identifier"
+                },
+                "sourceEnvironment": {
+                  "enum": [
+                    "PRT"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "trustedContext",
+            "asset",
+            "selection",
+            "effectiveVersion"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "trustedContext": {
+              "$ref": "#/definitions/trustedOnlineContext"
+            },
+            "asset": {
+              "$ref": "#/definitions/assetRef"
+            },
+            "selection": {
+              "enum": [
+                "ONLINE_STABLE"
+              ]
+            },
+            "effectiveVersion": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "versionId",
+                "sourceEnvironment"
+              ],
+              "properties": {
+                "versionId": {
+                  "$ref": "#/definitions/identifier"
+                },
+                "sourceEnvironment": {
+                  "enum": [
+                    "ONLINE"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "trustedContext",
+            "asset",
+            "selection",
+            "effectiveVersion"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "trustedContext": {
+              "$ref": "#/definitions/trustedOnlineContext"
+            },
+            "asset": {
+              "$ref": "#/definitions/assetRef"
+            },
+            "selection": {
+              "enum": [
+                "ONLINE_GRAY"
+              ]
+            },
+            "effectiveVersion": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "versionId",
+                "sourceEnvironment"
+              ],
+              "properties": {
+                "versionId": {
+                  "$ref": "#/definitions/identifier"
+                },
+                "sourceEnvironment": {
+                  "enum": [
+                    "ONLINE"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "versionMismatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset",
+        "recordedVersionId"
+      ],
+      "properties": {
+        "asset": {
+          "$ref": "#/definitions/assetRef"
+        },
+        "recordedVersionId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "effectiveVersionId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "resolutionFailureCode": {
+          "$ref": "#/definitions/identifier"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "effectiveVersionId"
+          ]
+        },
+        {
+          "required": [
+            "resolutionFailureCode"
+          ]
+        }
+      ]
+    },
+    "versionGuardDecision": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/allowVersionGuardDecision"
+        },
+        {
+          "$ref": "#/definitions/resetVersionGuardDecision"
+        }
+      ]
+    },
+    "controlRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractRevision",
+        "controlRequestId",
+        "commandType",
+        "trustedContext",
+        "target",
+        "payloadDigest"
+      ],
+      "properties": {
+        "contractRevision": {
+          "$ref": "#/definitions/contractRevision"
+        },
+        "controlRequestId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "commandType": {
+          "enum": [
+            "START_RUN",
+            "CONTINUE_RUN",
+            "SUBMIT_NODE_INPUT",
+            "SUBMIT_INTERACTION",
+            "RETRY_A2UI_NODE",
+            "STOP_RUN"
+          ]
+        },
+        "trustedContext": {
+          "$ref": "#/definitions/trustedContext"
+        },
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/startTarget"
+            },
+            {
+              "$ref": "#/definitions/runTarget"
+            },
+            {
+              "$ref": "#/definitions/nodeTarget"
+            },
+            {
+              "$ref": "#/definitions/interactionTarget"
+            }
+          ]
+        },
+        "payloadDigest": {
+          "type": "string",
+          "pattern": "^(?!.*[\\r\\n])sha256:[0-9a-f]{64}$"
+        },
+        "recordedAssetVersions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/assetVersionRef"
+          }
+        },
+        "retryReason": {
+          "enum": [
+            "RENDER_FAILED",
+            "ACTION_CALL_FAILED",
+            "ACTION_RESULT_NOT_SUCCESS"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "commandType": {
+                  "enum": [
+                    "START_RUN"
+                  ]
+                },
+                "target": {
+                  "$ref": "#/definitions/startTarget"
+                }
+              },
+              "required": [
+                "commandType",
+                "target"
+              ],
+              "not": {
+                "required": [
+                  "retryReason"
+                ]
+              }
+            },
+            {
+              "properties": {
+                "commandType": {
+                  "enum": [
+                    "CONTINUE_RUN"
+                  ]
+                },
+                "target": {
+                  "$ref": "#/definitions/runTarget"
+                }
+              },
+              "required": [
+                "commandType",
+                "target",
+                "recordedAssetVersions"
+              ],
+              "not": {
+                "required": [
+                  "retryReason"
+                ]
+              }
+            },
+            {
+              "properties": {
+                "commandType": {
+                  "enum": [
+                    "STOP_RUN"
+                  ]
+                },
+                "target": {
+                  "$ref": "#/definitions/runTarget"
+                }
+              },
+              "required": [
+                "commandType",
+                "target"
+              ],
+              "not": {
+                "required": [
+                  "retryReason"
+                ]
+              }
+            },
+            {
+              "properties": {
+                "commandType": {
+                  "enum": [
+                    "SUBMIT_NODE_INPUT"
+                  ]
+                },
+                "target": {
+                  "$ref": "#/definitions/nodeTarget"
+                }
+              },
+              "required": [
+                "commandType",
+                "target",
+                "recordedAssetVersions"
+              ],
+              "not": {
+                "required": [
+                  "retryReason"
+                ]
+              }
+            },
+            {
+              "properties": {
+                "commandType": {
+                  "enum": [
+                    "RETRY_A2UI_NODE"
+                  ]
+                },
+                "target": {
+                  "$ref": "#/definitions/nodeTarget"
+                },
+                "retryReason": {
+                  "enum": [
+                    "RENDER_FAILED",
+                    "ACTION_CALL_FAILED",
+                    "ACTION_RESULT_NOT_SUCCESS"
+                  ]
+                }
+              },
+              "required": [
+                "commandType",
+                "target",
+                "recordedAssetVersions",
+                "retryReason"
+              ]
+            },
+            {
+              "properties": {
+                "commandType": {
+                  "enum": [
+                    "SUBMIT_INTERACTION"
+                  ]
+                },
+                "target": {
+                  "$ref": "#/definitions/interactionTarget"
+                }
+              },
+              "required": [
+                "commandType",
+                "target",
+                "recordedAssetVersions"
+              ],
+              "not": {
+                "required": [
+                  "retryReason"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "startTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflowVersion"
+      ],
+      "properties": {
+        "workflowVersion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "asset",
+            "versionId"
+          ],
+          "properties": {
+            "asset": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "assetType",
+                "assetId"
+              ],
+              "properties": {
+                "assetType": {
+                  "enum": [
+                    "WORKFLOW"
+                  ]
+                },
+                "assetId": {
+                  "$ref": "#/definitions/identifier"
+                }
+              }
+            },
+            "versionId": {
+              "$ref": "#/definitions/identifier"
+            }
+          }
+        }
+      }
+    },
+    "runTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "nodeTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "nodeId"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "nodeId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "interactionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "nodeId",
+        "interactionId",
+        "surfaceId",
+        "sourceComponentId"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "nodeId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "interactionId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "surfaceId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "sourceComponentId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "resultInterpretationPolicy": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "policyRef",
+            "operator"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "policyRef": {
+              "$ref": "#/definitions/identifier"
+            },
+            "operator": {
+              "enum": [
+                "SCHEMA_VALID"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "policyRef",
+            "operator",
+            "jsonPointer",
+            "expectedLiteral"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "policyRef": {
+              "$ref": "#/definitions/identifier"
+            },
+            "operator": {
+              "enum": [
+                "JSON_POINTER_EQUALS"
+              ]
+            },
+            "jsonPointer": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?:/(?:[^~/]|~0|~1)*)+$"
+            },
+            "expectedLiteral": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "resultInterpretationPolicySet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resultInterpretationPolicies",
+        "defaultSuccessPolicyRef"
+      ],
+      "properties": {
+        "resultInterpretationPolicies": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/resultInterpretationPolicy"
+          }
+        },
+        "defaultSuccessPolicyRef": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "actionSuccessPolicyBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "successPolicyRef",
+        "completeInteractionOnSuccess"
+      ],
+      "properties": {
+        "successPolicyRef": {
+          "$ref": "#/definitions/identifier"
+        },
+        "completeInteractionOnSuccess": {
+          "type": "boolean"
+        }
+      }
+    },
+    "actionOutcomeFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionCallSucceeded",
+        "outputSchemaValid",
+        "successPolicyMatched",
+        "interactionCompleted"
+      ],
+      "properties": {
+        "actionCallSucceeded": {
+          "type": "boolean"
+        },
+        "outputSchemaValid": {
+          "type": "boolean"
+        },
+        "successPolicyMatched": {
+          "type": "boolean"
+        },
+        "interactionCompleted": {
+          "type": "boolean"
+        }
+      }
+    },
+    "runRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "nodeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "nodeId"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "nodeId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "interactionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "nodeId",
+        "interactionId"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "nodeId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "interactionId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "interactionResultRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "nodeId",
+        "interactionId",
+        "resultId",
+        "scope"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "nodeId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "interactionId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "resultId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "scope": {
+          "enum": [
+            "INTERACTION"
+          ]
+        }
+      }
+    },
+    "nodeResultRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "nodeId",
+        "resultId",
+        "scope"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "nodeId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "resultId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "scope": {
+          "enum": [
+            "NODE"
+          ]
+        }
+      }
+    },
+    "runResultRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "resultId",
+        "scope"
+      ],
+      "properties": {
+        "runId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "resultId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "scope": {
+          "enum": [
+            "RUN"
+          ]
+        }
+      }
+    },
+    "resultRef": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/interactionResultRef"
+        },
+        {
+          "$ref": "#/definitions/nodeResultRef"
+        },
+        {
+          "$ref": "#/definitions/runResultRef"
+        }
+      ]
+    },
+    "executionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractRevision",
+        "eventId",
+        "runSequence",
+        "eventType",
+        "occurredAt",
+        "trustedContext"
+      ],
+      "properties": {
+        "contractRevision": {
+          "$ref": "#/definitions/contractRevision"
+        },
+        "eventId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "runSequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "eventType": {
+          "enum": [
+            "RUN_ACCEPTED",
+            "RUN_STOPPED",
+            "NODE_STATUS_CHANGED",
+            "INTERACTION_WAITING",
+            "INTERACTION_RESULT_RECORDED",
+            "NODE_RESULT_RECORDED",
+            "RUN_RESULT_RECORDED",
+            "VERSION_MISMATCH_BLOCKED"
+          ]
+        },
+        "occurredAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trustedContext": {
+          "$ref": "#/definitions/trustedContext"
+        },
+        "runRef": {
+          "$ref": "#/definitions/runRef"
+        },
+        "nodeRef": {
+          "$ref": "#/definitions/nodeRef"
+        },
+        "interactionRef": {
+          "$ref": "#/definitions/interactionRef"
+        },
+        "resultRef": {
+          "$ref": "#/definitions/resultRef"
+        },
+        "nodeStatus": {
+          "enum": [
+            "PENDING",
+            "RUNNING",
+            "WAITING_INTERACTION",
+            "SUCCEEDED",
+            "FAILED",
+            "SKIPPED",
+            "STOPPED"
+          ]
+        },
+        "versionGuardDecision": {
+          "$ref": "#/definitions/versionGuardDecision"
+        },
+        "causationControlRequestId": {
+          "$ref": "#/definitions/identifier"
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "eventType": {
+                  "enum": [
+                    "RUN_ACCEPTED",
+                    "RUN_STOPPED"
+                  ]
+                }
+              },
+              "required": [
+                "eventType",
+                "runRef"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "nodeRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "interactionRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "resultRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeStatus"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "versionGuardDecision"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "properties": {
+                "eventType": {
+                  "enum": [
+                    "NODE_STATUS_CHANGED"
+                  ]
+                },
+                "nodeRef": {
+                  "$ref": "#/definitions/nodeRef"
+                }
+              },
+              "required": [
+                "eventType",
+                "nodeRef",
+                "nodeStatus"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "runRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "interactionRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "resultRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "versionGuardDecision"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "properties": {
+                "eventType": {
+                  "enum": [
+                    "INTERACTION_WAITING"
+                  ]
+                },
+                "interactionRef": {
+                  "$ref": "#/definitions/interactionRef"
+                }
+              },
+              "required": [
+                "eventType",
+                "interactionRef"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "runRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "resultRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeStatus"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "versionGuardDecision"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "properties": {
+                "eventType": {
+                  "enum": [
+                    "INTERACTION_RESULT_RECORDED"
+                  ]
+                },
+                "resultRef": {
+                  "$ref": "#/definitions/interactionResultRef"
+                }
+              },
+              "required": [
+                "eventType",
+                "resultRef"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "runRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "interactionRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeStatus"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "versionGuardDecision"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "properties": {
+                "eventType": {
+                  "enum": [
+                    "NODE_RESULT_RECORDED"
+                  ]
+                },
+                "resultRef": {
+                  "$ref": "#/definitions/nodeResultRef"
+                }
+              },
+              "required": [
+                "eventType",
+                "resultRef"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "runRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "interactionRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeStatus"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "versionGuardDecision"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "properties": {
+                "eventType": {
+                  "enum": [
+                    "RUN_RESULT_RECORDED"
+                  ]
+                },
+                "resultRef": {
+                  "$ref": "#/definitions/runResultRef"
+                }
+              },
+              "required": [
+                "eventType",
+                "resultRef"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "runRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "interactionRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeStatus"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "versionGuardDecision"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "properties": {
+                "eventType": {
+                  "enum": [
+                    "VERSION_MISMATCH_BLOCKED"
+                  ]
+                },
+                "versionGuardDecision": {
+                  "$ref": "#/definitions/resetVersionGuardDecision"
+                }
+              },
+              "required": [
+                "eventType",
+                "runRef",
+                "versionGuardDecision"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "nodeRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "interactionRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "resultRef"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "nodeStatus"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "assetPublicationRequest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "controlRequestId",
+            "trustedContext",
+            "assetVersion",
+            "targetSlot",
+            "expectedServingRevision",
+            "payloadDigest"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "controlRequestId": {
+              "$ref": "#/definitions/identifier"
+            },
+            "trustedContext": {
+              "$ref": "#/definitions/trustedPrtContext"
+            },
+            "assetVersion": {
+              "$ref": "#/definitions/assetVersionRef"
+            },
+            "targetSlot": {
+              "enum": [
+                "PRT_CURRENT"
+              ]
+            },
+            "expectedServingRevision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "payloadDigest": {
+              "type": "string",
+              "pattern": "^(?!.*[\\r\\n])sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractRevision",
+            "controlRequestId",
+            "trustedContext",
+            "assetVersion",
+            "targetSlot",
+            "expectedServingRevision",
+            "payloadDigest"
+          ],
+          "properties": {
+            "contractRevision": {
+              "$ref": "#/definitions/contractRevision"
+            },
+            "controlRequestId": {
+              "$ref": "#/definitions/identifier"
+            },
+            "trustedContext": {
+              "$ref": "#/definitions/trustedOnlineContext"
+            },
+            "assetVersion": {
+              "$ref": "#/definitions/assetVersionRef"
+            },
+            "targetSlot": {
+              "enum": [
+                "ONLINE_STABLE",
+                "ONLINE_CANDIDATE"
+              ]
+            },
+            "expectedServingRevision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "payloadDigest": {
+              "type": "string",
+              "pattern": "^(?!.*[\\r\\n])sha256:[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "allowVersionGuardDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractRevision",
+        "decision",
+        "mismatches"
+      ],
+      "properties": {
+        "contractRevision": {
+          "$ref": "#/definitions/contractRevision"
+        },
+        "decision": {
+          "enum": [
+            "ALLOW"
+          ]
+        },
+        "mismatches": {
+          "type": "array",
+          "maxItems": 0,
+          "items": {
+            "$ref": "#/definitions/versionMismatch"
+          }
+        }
+      }
+    },
+    "resetVersionGuardDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractRevision",
+        "decision",
+        "mismatches"
+      ],
+      "properties": {
+        "contractRevision": {
+          "$ref": "#/definitions/contractRevision"
+        },
+        "decision": {
+          "enum": [
+            "RESET_REQUIRED"
+          ]
+        },
+        "mismatches": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/versionMismatch"
+          }
+        }
+      }
+    },
+    "skillKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)*$"
+    },
+    "useSkillRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skillKey"
+      ],
+      "properties": {
+        "skillKey": {
+          "$ref": "#/definitions/skillKey"
+        }
+      }
+    },
+    "invocationScope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "conversationId"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "CONVERSATION"
+              ]
+            },
+            "conversationId": {
+              "$ref": "#/definitions/identifier"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "runId",
+            "nodeId"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "WORKFLOW"
+              ]
+            },
+            "conversationId": {
+              "$ref": "#/definitions/identifier"
+            },
+            "runId": {
+              "$ref": "#/definitions/identifier"
+            },
+            "nodeId": {
+              "$ref": "#/definitions/identifier"
+            }
+          }
+        }
+      ]
+    },
+    "trustedInvocationContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractRevision",
+        "trustedContext",
+        "invocationScope",
+        "controlRequestId"
+      ],
+      "properties": {
+        "contractRevision": {
+          "$ref": "#/definitions/contractRevision"
+        },
+        "trustedContext": {
+          "$ref": "#/definitions/trustedContext"
+        },
+        "invocationScope": {
+          "$ref": "#/definitions/invocationScope"
+        },
+        "controlRequestId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "authorizedMaterialHandle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handleId",
+        "accessMode",
+        "logicalPath",
+        "mediaType",
+        "byteSize",
+        "contentDigest"
+      ],
+      "properties": {
+        "handleId": {
+          "$ref": "#/definitions/identifier"
+        },
+        "accessMode": {
+          "enum": [
+            "READ_ONLY"
+          ]
+        },
+        "logicalPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!.*[\\r\\n])(?!/)(?!\\.\\.?(?:/|$))(?!.*(?:/\\.\\.?(?:/|$)))(?!.*\\\\)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "byteSize": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contentDigest": {
+          "type": "string",
+          "pattern": "^(?!.*[\\r\\n])sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "skillAssetVersionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset",
+        "versionId"
+      ],
+      "properties": {
+        "asset": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assetType",
+            "assetId"
+          ],
+          "properties": {
+            "assetType": {
+              "enum": [
+                "SKILL"
+              ]
+            },
+            "assetId": {
+              "$ref": "#/definitions/identifier"
+            }
+          }
+        },
+        "versionId": {
+          "$ref": "#/definitions/identifier"
+        }
+      }
+    },
+    "skillVersionEvidence": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "environment",
+            "selection",
+            "versionId"
+          ],
+          "properties": {
+            "environment": {
+              "enum": [
+                "PRT"
+              ]
+            },
+            "selection": {
+              "enum": [
+                "PRT_CURRENT"
+              ]
+            },
+            "versionId": {
+              "$ref": "#/definitions/identifier"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "environment",
+            "selection",
+            "versionId"
+          ],
+          "properties": {
+            "environment": {
+              "enum": [
+                "ONLINE"
+              ]
+            },
+            "selection": {
+              "enum": [
+                "ONLINE_STABLE",
+                "ONLINE_GRAY"
+              ]
+            },
+            "versionId": {
+              "$ref": "#/definitions/identifier"
+            }
+          }
+        }
+      ]
+    },
+    "useSkillResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractRevision",
+        "content",
+        "artifact"
+      ],
+      "properties": {
+        "contractRevision": {
+          "$ref": "#/definitions/contractRevision"
+        },
+        "content": {
+          "$ref": "#/definitions/useSkillContent"
+        },
+        "artifact": {
+          "$ref": "#/definitions/useSkillArtifact"
+        }
+      }
+    },
+    "useSkillContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instructions",
+        "resources"
+      ],
+      "properties": {
+        "instructions": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/authorizedMaterialHandle"
+          }
+        },
+        "requiredToolNames": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/identifier"
+          },
+          "description": "Compatibility hints only; never an authorization grant."
+        }
+      }
+    },
+    "useSkillArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skillKey",
+        "resolvedVersion",
+        "contentDigest",
+        "environment",
+        "selection",
+        "evidenceRef"
+      ],
+      "properties": {
+        "skillKey": {
+          "$ref": "#/definitions/skillKey"
+        },
+        "resolvedVersion": {
+          "$ref": "#/definitions/skillAssetVersionRef"
+        },
+        "contentDigest": {
+          "type": "string",
+          "pattern": "^(?!.*[\\r\\n])sha256:[0-9a-f]{64}$"
+        },
+        "environment": {
+          "enum": [
+            "PRT",
+            "ONLINE"
+          ]
+        },
+        "selection": {
+          "enum": [
+            "PRT_CURRENT",
+            "ONLINE_STABLE",
+            "ONLINE_GRAY"
+          ]
+        },
+        "evidenceRef": {
+          "$ref": "#/definitions/identifier"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "environment": {
+              "enum": [
+                "PRT"
+              ]
+            },
+            "selection": {
+              "enum": [
+                "PRT_CURRENT"
+              ]
+            }
+          },
+          "required": [
+            "environment",
+            "selection"
+          ]
+        },
+        {
+          "properties": {
+            "environment": {
+              "enum": [
+                "ONLINE"
+              ]
+            },
+            "selection": {
+              "enum": [
+                "ONLINE_STABLE",
+                "ONLINE_GRAY"
+              ]
+            }
+          },
+          "required": [
+            "environment",
+            "selection"
+          ]
+        }
+      ]
+    }
+  }
+}

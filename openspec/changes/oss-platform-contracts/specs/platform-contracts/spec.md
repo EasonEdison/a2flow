@@ -1,76 +1,98 @@
-# Platform Contracts Specification
+# Phase 1 Platform Contracts Specification
 
-## ADDED Requirements
+## MODIFIED Requirements
 
-### Requirement: 稳定资产身份与不可变 Revision
+### Requirement: 可信 userId 与环境上下文
 
-系统 SHALL 使用稳定 `AssetKey` 标识逻辑资产，并 SHALL 为每次内容变化创建新的不可变 revision。展示名、slug 和可变 head SHALL NOT 成为跨域精确引用。
+系统 SHALL 只接受服务端可信边界构造的 `userId` 和 `environment`。`environment` SHALL 仅为 PRT 或 ONLINE。模型、Tool 参数和业务 payload SHALL NOT 选择或覆盖该上下文。
 
-#### Scenario: 并发创建 Revision
+#### Scenario: 模型参数伪造环境
 
-- **触发**：两个调用方基于相同 `expectedHeadRevision` 同时提交不同内容。
-- **期望结果**：至多一个调用成功推进 head；另一调用收到结构化前置条件失败，且任何已存在 revision 均未被覆盖。
+- **触发**：模型生成的 Tool 参数携带另一个 userId、ONLINE/PRT override 或凭证字段。
+- **期望结果**：Tool 执行器忽略或拒绝不可信字段，并只使用服务端 TrustedContext；不发生跨用户、跨环境或凭证泄露。
 
-### Requirement: 不可变 Release 冻结精确依赖
+### Requirement: use_skill 只暴露逻辑选择
 
-系统 SHALL 从一个精确 Revision 和零到多个精确依赖 Release 创建不可变 Release，并 SHALL 保存可重复验证的内容摘要。缺失依赖、可变引用或摘要不一致 SHALL fail closed。
+模型可见 `use_skill` 参数 SHALL 只含逻辑 `skillKey`。服务端 SHALL 在参数外注入可信上下文和调用作用域，并 SHALL 以 content + artifact 返回授权材料与版本证据。
 
-#### Scenario: 发布含可变依赖
+#### Scenario: 模型请求原始 Skill locator
 
-- **触发**：调用方以名称、latest 或环境 Pointer 代替精确依赖 Release 请求发布。
-- **期望结果**：发布被拒绝，错误指出依赖引用不精确；系统不创建部分 Release，也不推进任何 Pointer。
+- **触发**：模型参数除 skillKey 外还提供 userId、environment、version、raw locator 或 Workflow routing。
+- **期望结果**：请求 Schema 或服务端边界拒绝额外字段；resolver 只使用可信上下文，并且成功结果只返回 READ_ONLY opaque material handles。
 
+#### Scenario: chat 与 Workflow 使用同一 Skill
 
-### Requirement: 生效 Pointer 使用乐观并发控制
+- **触发**：chat 与 Workflow 在相同可信环境/userId 下分别选择同一 skillKey。
+- **期望结果**：二者解析同一有效 Skill version/contentDigest；差异只在服务端 invocationScope，不改写 Skill 内容或增加 routing 字段。
+### Requirement: 全资产共用环境内解析
 
-系统 SHALL 用带版本的 Activation Pointer 指向一个已存在 Release。更新 SHALL 要求当前版本前置条件，且 SHALL NOT 静默覆盖并发更新或自动回退。
+Skill、Ability、Component/Application 和 Workflow SHALL 通过同一个 environment-aware resolver 语义读取版本。PRT SHALL 只读 PRT 当前版本；ONLINE stable/gray SHALL 只读 ONLINE 存储。
 
-#### Scenario: 过期 Pointer 更新
+#### Scenario: ONLINE 灰度用户解析 candidate
 
-- **触发**：调用方使用已过期的 `expectedPointerVersion` 激活另一个 Release。
-- **期望结果**：系统返回 412 或等价前置条件失败，并返回可重读的当前版本信息；现有 Pointer 保持不变。
+- **触发**：可信环境为 ONLINE，userId 命中 ONLINE candidate 灰度规则。
+- **期望结果**：resolver 返回 `selection=ONLINE_GRAY` 和 ONLINE candidate version；不会查询或返回 PRT 版本。
 
-### Requirement: Runtime 在 Run 内钉住精确 Release
+#### Scenario: PRT 请求尝试读取 ONLINE
 
-Runtime 消费方 SHALL 在 Run 开始时解析一次 Activation Pointer，并 SHALL 持久化精确 `releaseId`、摘要和所见 Pointer 版本。运行和恢复 SHALL NOT 随后续 Pointer 更新漂移。
+- **触发**：PRT 请求的候选 payload 指向 ONLINE stable/candidate。
+- **期望结果**：解析失败关闭；不 fallback 到 ONLINE，也不由模型更改环境。
 
-#### Scenario: 运行期间切换生效版本
+### Requirement: serving 限制不删除历史
 
-- **触发**：Run 已钉住 Release A 后，有权主体把相同 Activation Pointer 更新为 Release B。
-- **期望结果**：现有 Run 及其恢复继续使用 A；仅新 Run 可解析到 B，并能审计两次选择。
+PRT SHALL 同时服务一个当前版本。ONLINE SHALL 在灰度中至多服务 stable 和 candidate 两版，灰度结束后服务一版。该限制 SHALL NOT 删除历史资产版本。
 
-### Requirement: 授权上下文由可信边界构造
+#### Scenario: 发布第三个 ONLINE serving 版本
 
-系统 SHALL 以 `issuer + subject` 标识主体，以 workspace 隔离资源，并 SHALL 在公共创建/读取/激活操作上默认拒绝。客户端 payload 中自报的角色或权限 SHALL NOT 被信任。
+- **触发**：ONLINE 已有 stable 和 candidate 时请求再加入第三个 serving version。
+- **期望结果**：请求被拒绝且现有 serving 状态不变；历史版本记录不被删除。
 
-#### Scenario: 未授权主体尝试激活
+### Requirement: 入口版本不一致阻止新工作
 
-- **触发**：已认证但缺少 `release.activate` 权限的主体请求更新 Pointer。
-- **期望结果**：系统拒绝请求，不改变 Pointer、不泄露受保护 Release 内容，并写入脱敏审计结果。
+系统 SHALL 在执行、继续、node-bound input、interaction Action 和 A2UI retry 入口比较 recorded 与当前 effective 版本。任一不一致 SHALL 在新模型/Tool/业务调用前返回 RESET_REQUIRED。
 
-### Requirement: 公共错误机器可判定
+#### Scenario: 等待交互期间资产版本变化
 
-HTTP API SHALL 使用 RFC 9457 Problem Details 及稳定 `code`、`traceId`、`retryable` 扩展；客户端 SHALL NOT 依赖可本地化的 `detail` 做流程分支。
+- **触发**：Run 等待某 Interaction，随后相关资产 effective version 变化，用户提交 Action。
+- **期望结果**：Action 入口返回 mismatch 与 reset 提示；不执行 Action 业务 Tool，不迁移、不继续旧版本、不自动 restart。
 
-#### Scenario: 暂时不可用与业务校验失败
+### Requirement: 控制请求去重不等于业务幂等
 
-- **触发**：同一客户端分别遇到暂时基础设施故障和不可修复的 manifest 校验错误。
-- **期望结果**：前者明确 `retryable=true` 并可携带 `Retry-After`；后者返回 422、稳定违规字段且 `retryable=false`。
+系统 SHALL 以 controlRequestId 和 payloadDigest 去重平台控制命令。受版本门禁的命令 SHALL 携带非空 recordedAssetVersions，且同一 AssetRef SHALL NOT 出现两个版本。相同 ID/摘要 SHALL 返回原控制结果；相同 ID/不同摘要 SHALL 冲突。Workflow SHALL NOT 据此声明业务 exactly-once。
 
-### Requirement: 事件至少一次且可去重
+#### Scenario: 两实例竞争同一控制请求
 
-生产者 SHALL 以 CloudEvents 1.0 信封在业务提交后发出公共事件。消费者 SHALL 按 `(source,id)` 持久去重，并 SHALL 只把同一聚合的 `aggregateversion` 解释为顺序。
+- **触发**：两个实例同时接收相同 controlRequestId 和相同 payloadDigest。
+- **期望结果**：只有一个控制事实被接受，两个调用观察同一控制结果；不会产生两个 Run/继续/Action admission。
 
-#### Scenario: 重复且倒序交付
+#### Scenario: fresh restart 重复业务结果
 
-- **触发**：消费者收到重复的 `release.created`，随后先收到 aggregate version 5、后收到 version 4。
-- **期望结果**：重复事件不产生第二次副作用；倒序事件不会回滚投影，缺口进入重取或可观测失败流程。
+- **触发**：用户显式 fresh restart，新的 Run 再次调用产生业务副作用的 API。
+- **期望结果**：Workflow 不查询旧业务结果做跨 Run 去重；业务 API 后端按自身幂等契约处理，平台不宣称 exactly-once。
 
-### Requirement: PostgreSQL 是唯一正确性真值
+### Requirement: Run Node Interaction Result 引用分层
 
-开发、测试和部署 SHALL 仅使用 PostgreSQL 保存公共契约状态。多实例 SHALL 通过持久唯一约束、事务和 CAS 保证正确性，SHALL NOT 使用 MySQL、SQLite 或内存 fallback。
+InteractionRef SHALL 总是绑定一个 NodeRef。Interaction、Node 和 Run Result SHALL 使用不同 scope，且一个层级的 Result SHALL NOT 自动证明上层完成。Capability Release SHALL 发布命名 `ResultInterpretationPolicy` 与默认策略引用；Action definition SHALL 显式选择 `successPolicyRef` 并独立声明 `completeInteractionOnSuccess`。
 
-#### Scenario: 两实例竞争同一幂等键
+#### Scenario: Action 成功但交互未配置完成
 
-- **触发**：两个应用实例同时以同一幂等键和相同请求创建 Release。
-- **期望结果**：两个调用观察到同一成功结果，数据库中只有一个 Release、一个幂等结果和不重复的领域事实。
+- **触发**：Interaction Action 返回 configured business success，但发布配置未设置该结果完成交互。
+- **期望结果**：记录 INTERACTION Result，交互仍可保持等待；不产生 NODE/RUN Result 完成事实。
+
+### Requirement: 结果解释使用唯一最小策略
+
+Runtime SHALL 在独立输出 Schema 校验之后，用唯一纯解释器执行 `SCHEMA_VALID` 或 `JSON_POINTER_EQUALS`。JSON Pointer 路径缺失 SHALL NOT 等同于路径存在且值为 JSON null，且 SHALL NOT 产生成功；JSON 原生类型之间 SHALL NOT 隐式转换。
+
+#### Scenario: Pointer 路径缺失
+
+- **触发**：策略为 `JSON_POINTER_EQUALS`，结果中不存在配置的 jsonPointer，而 expectedLiteral 为 null 或任意其他值。
+- **期望结果**：解释结果不命中并报告 `PATH_MISSING`；不把缺失路径当作 null，不完成 Interaction。
+
+### Requirement: 事件边界不互相冒充
+
+系统 SHALL 分别记录 Interaction Result、Node Result、Run Result 和 VERSION_MISMATCH_BLOCKED 事实。每个事件 SHALL 携带独立 eventId 与单 Run `runSequence`，并 SHALL 只携带该 eventType 所需的最具体引用；同一事件 SHALL NOT 同时夹带其他层级引用、nodeStatus 或 versionGuardDecision 事实。sequence 的事务持久化/重放以及事件传输协议和版本在 main-brain 审查前 SHALL 保持候选。
+
+#### Scenario: Finalizer 生成最终结果
+
+- **触发**：所有必需节点和交互边界已满足，Finalizer 生成 Run Result。
+- **期望结果**：产生独立 RUN Result 引用；Finalizer 不改写已有失败/跳过/交互业务事实，也不把外部异步提交表示成已完成。
