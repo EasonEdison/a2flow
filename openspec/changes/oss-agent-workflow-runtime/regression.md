@@ -7,7 +7,7 @@
 - SDK 行为用例：15/15 GREEN（首批 Tool/A2UI/contract/provider-wire 切片）
 - 共享 contracts focused validator：57/57 GREEN；只代表 shape/fixture
 - 当前完成：Python 3.11 隔离环境、依赖解析/import、`SW-P1-SUBSET-01` 对齐、真实 Skill fixture、离线 Anthropic wire、A2UI mode/interrupt 探针
-- 当前阻塞：临时 PostgreSQL 尚未协调；双进程、并行推进、scoped retry、stop/restart 与 live model 尚未验证
+- 当前阻塞：LangGraph 1.2.11 单次 invoke 的 A interrupt 会在 B1 后返回，B2 不推进；临时 PostgreSQL 尚未协调，双进程、scoped retry、stop/restart 与 live model 尚未验证
 
 ## 已执行环境证据
 
@@ -55,6 +55,7 @@
 | Anthropic provider serialization | 两轮离线 Messages API，经 `StrictToolChatAnthropic` | 第二请求含 tool_result content | wire schema `additionalProperties=false` 且 skillKey pattern 等于批准 schema；请求 JSON 无 artifact/evidenceRef |
 | `render_application` DISPLAY_ONLY | integrated display fixture + Workflow context | `{rendered:true, interactionMode:DISPLAY_ONLY, interaction:null}` | 无 `__interrupt__` |
 | `render_application` INTERACTIVE | integrated interactive fixture + trusted run/node | `A2UI_INTERACTION_REQUIRED` interrupt | runId、nodeId、application/version、tool-call identity 均参与绑定；同 node 两次 render 不碰撞；ordinaryChatMayResume=false |
+| LangGraph parallel wait RED | A interrupt 与 B1→B2 平行，join 等待 A | assertion expected trace=`[B1,B2]`，actual=`[B1]` | interrupt 使单次 invoke 在当前 superstep 后返回；B2 未推进，join 未运行；未实现 fallback scheduler |
 
 上述 scripted 用例没有证明模型必然调用 use_skill；system prompt 不是授权机制。Anthropic MockTransport 证明的是实际 provider serializer 路径，但不是 live-model 行为。INTERACTIVE 尚未执行合法 Action resume。
 
@@ -81,7 +82,7 @@ InMemorySaver、MemorySaver、SQLite 或单进程 mock 不能作为通过证据�
 
 - Deep Agents 默认 middleware/Tool 暴露已审计并收口；Tool exception 与 A2UI-only retry 行为尚未完成。
 - scripted model 被预编程调用 use_skill，不能证明 live model 无法绕过；mandatory admission 仍需 Runtime guard。
-- A wait 时 B1→B2 是否能在原生 LangGraph superstep 中推进尚未证明。
+- A wait 时 B1→B2 的原生 LangGraph 1.2.11 最小复现已明确 RED：只观测到 B1；B2 未进入下一 superstep。
 - PostgreSQL setup/persistence、双进程恢复、合法 Action resume、并发 invoke 尚未证明。
 - stop/restart、Finalizer、完整 Workflow accumulator 与真实 Ability 调用尚未证明。
 - 真实模型、公共部署和业务系统均不在本次授权。

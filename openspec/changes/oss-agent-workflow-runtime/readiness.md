@@ -26,7 +26,7 @@
 | Tool-only Skill | PARTIAL | model schema/trusted context/provider wire 已通过；Workflow 入口和 mandatory admission 未证明 |
 | Deep Agents Tool surface | PASS_FOR_PROBE | 模型只绑定 Runtime-owned Tool；默认文件/shell/subagent Tool 全部排除 |
 | A2UI | PARTIAL | DISPLAY_ONLY 与 INTERACTIVE interrupt payload 通过；Action resume/success/completion/Finalizer 未通过 |
-| 并行映射 | NO READY | 原生 SDK 证明 A wait 时 B1→B2；不靠 thread_id 猜测 |
+| 并行映射 | NO READY | LangGraph 1.2.11 最小复现实际只有 B1，A interrupt 后 B2 未推进；需架构裁决且不得补第二 scheduler |
 | retry/stop/restart | NO READY | 仅 A2UI retry；stop 不可 resume；restart fresh |
 | PostgreSQL | NO READY | AsyncPostgresSaver + migration + process restart |
 | 多进程 | NO READY | 两个 stateless process 共享 PG 的查询/resume/冲突证据 |

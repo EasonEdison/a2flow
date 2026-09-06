@@ -28,7 +28,7 @@
 - [x] 先写 Deep Agents 默认隐式文件/子代理 Tool 暴露的失败测试。
 - [x] 先写 Anthropic provider wire strict schema 与 artifact 不出站的失败测试。
 - [x] 先写 `SW-P1-SUBSET-01` key/result shape 偏差的失败测试。
-- [ ] 先写 A 等待、B1→B2 独立推进、join 等待的失败测试。
+- [x] 先写 A 等待、B1→B2 独立推进、join 等待的失败测试；LangGraph 1.2.11 实际只返回 trace=`[B1]`，预期 `[B1,B2]`，保留为显式 RED reproducer。
 - [ ] 先写仅 A2UI owning node retry 的失败测试。
 - [ ] 先写 stop 不可 resume 与 restart 全新状态的失败测试。
 - [x] 已完成项目对应有效 RED→GREEN；依赖/import/network 错误未计为 RED。
@@ -40,7 +40,7 @@
 - [x] 关闭默认 `ls/read/write/edit/delete/glob/grep/task/execute` 模型可见入口，仅暴露 Runtime-owned Tool。
 - [x] 用离线 Anthropic MockTransport 证明 strict provider schema 且 artifact/evidenceRef 未序列化出站。
 - [x] 直接消费主干 `skillweave_contracts` 严格适配，对齐 `SW-P1-SUBSET-01` 的 use_skill/trusted-context 定义并复用 15 个共享 fixture；Pydantic 只承担 Tool argument/provider schema 边界。
-- [ ] 用 LangGraph StateGraph 表达 sequence/condition/parallel，不实现第二 scheduler。
+- [ ] 用 LangGraph StateGraph 表达 sequence/condition/parallel，不实现第二 scheduler；当前原生 interrupt 会阻断兄弟分支下一 superstep，等待 main-brain 裁决。
 - [ ] 用 AsyncPostgresSaver 替代所有内存/SQLite checkpointer。
 - [ ] 只为 A2UI render/Action 配置 scoped retry。
 - [x] 首批 15 个 Tool/A2UI/SDK 用例通过并保留 RED/GREEN 证据；其余行为未开始。

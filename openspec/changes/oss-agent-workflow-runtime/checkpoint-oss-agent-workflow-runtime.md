@@ -22,12 +22,13 @@
 
 ## 当前里程碑
 
-- 状态：PHASE1_SUBSET01_RUNTIME_PROBE_BATCH1_DELIVERED
+- 状态：PHASE1_PARALLEL_PROGRESSION_RED_RECORDED
 - Runtime：NO READY
 - 已完成：PY-01 安装/健康复核；task venv；SDK resolver/import；59 项实验 lock；主干 `skillweave_contracts` 严格适配；真实 Skill fixture；Deep Agent Tool surface；离线 Anthropic wire；A2UI mode/interrupt。
 - TDD：首批 15/15 GREEN；有效 RED 包括默认隐式 Tool 暴露、provider schema 非 strict/非批准 pattern、newline key、非法 resolver result 与 Interaction 碰撞。
 - 已交付：worker/source commit `1aa1410ca6ca9537507da776cd8d394c526f13b4` 已 push，并由独占 integration worktree 快进合入 `origin/main`；独立 reviewer 已批准（Critical=0，Important=0）。
-- 未开始：PostgreSQL setup、双进程 resume、独立并行 B1→B2、A2UI-only retry、stop/restart、生产 services/runtime。
+- 新证据：显式 RED reproducer 在 LangGraph 1.2.11 观测到 A interrupt 时 trace 只有 `[B1]`，B2 未进入下一 superstep，join 未运行；未实现 fallback scheduler。
+- 未完成：独立并行 B1→B2 GREEN、PostgreSQL setup、双进程 resume、A2UI-only retry、stop/restart、生产 services/runtime。
 
 ## 移除的冲突
 
@@ -54,12 +55,13 @@
 
 ## Next Executable Action
 
-向 main-brain 回传稳定源码 SHA 与合入态验证；随后开始 A 等待时 B1→B2 独立推进的最小 RED。PostgreSQL/双进程继续等待 main-brain 明确协调，不以其他 saver 替代。
+提交并回传 A 等待/B1→B2 的显式 RED reproducer 与实际 assertion；等待 main-brain 对并行执行模型裁决。不得自建第二 scheduler；PostgreSQL/双进程继续等待明确协调，不以其他 saver 替代。
 
 ## 交付状态
 
-- 本轮源码：`1aa1410ca6ca9537507da776cd8d394c526f13b4`
-- Worker push：PASS，远端 worker=`1aa1410ca6ca9537507da776cd8d394c526f13b4`
-- Integration：PASS，`origin/main=1aa1410ca6ca9537507da776cd8d394c526f13b4` 且包含 worker source commit
+- 已交付源码：`1aa1410ca6ca9537507da776cd8d394c526f13b4`
+- 并行 RED reproducer：未提交
+- Worker push：PASS，远端 worker 包含 source commit 与 checkpoint commit `9238e2fbcd811ab74f6dbb80cb3accc7bb367e49`
+- Integration：PASS，`origin/main` 包含 source commit `1aa1410ca6ca9537507da776cd8d394c526f13b4` 与 checkpoint commit `9238e2fbcd811ab74f6dbb80cb3accc7bb367e49`
 - OpenSpec structure：PASS；CLI 在 PATH/仓库中均不可用，未在线安装替代
 - Runtime readiness：NO READY

@@ -53,8 +53,10 @@ does not modify or compete with the root lock owned by main-brain.
 - The A2UI probe proves DISPLAY_ONLY return and INTERACTIVE interrupts bound
   to run/node/application/version/tool-call identity. Action validation and
   resume remain PostgreSQL-gated.
-- PostgreSQL persistence, two-process resume, independent parallel branch
-  progression, scoped retry, stop/restart, and live-model behavior are unverified.
+- The explicit RED reproducer under `red_reproducers/` observes that an A
+  interrupt returns after B1 and prevents B2 from reaching its next superstep.
+- PostgreSQL persistence, two-process resume, scoped retry, stop/restart, and
+  live-model behavior are unverified.
 
 ## Run
 
