@@ -1,40 +1,34 @@
-# Readiness: oss-skill-registry
+# Readiness: oss-skill-registry Phase 1
 
+> Baseline alignment: **LOCAL PASS / REVIEW CORRECTIONS APPLIED / CONTRACT PENDING**
 > Overall runtime readiness: **NO READY**
 > Design status: **PROPOSED**
-> 本 change 尚未获批、未实现、未部署、未执行回归，不得对外宣称 Skill Registry 可用。
+> Phase 1 已开工不等于接口获批、服务实现或产品可用。
 
 ## Gate Matrix
 
-| Gate | Status | Required evidence |
+| Gate | Status | Evidence / blocker |
 | --- | --- | --- |
-| Scope and clean-room review | PARTIAL | 本域文档范围与敏感信息检查记录；main-brain 复核 |
-| Architecture approval | NO READY | main-brain/CTO 对 proposal、两阶段绑定和 MVP 依赖范围的明确批准 |
-| Shared contracts | NO READY | 已冻结 AssetIdentity、ArtifactDescriptor、ReleaseRef、auth/idempotency/revocation |
-| Capability/Workflow contracts | NO READY | 可执行的 resolver/binding 合同与合同测试 |
-| PostgreSQL implementation | NO READY | migration、约束、并发状态机和恢复测试 |
-| Package inspector safety | NO READY | digest/size/path/symlink/resource-limit 的真实测试证据 |
-| Publication implementation | NO READY | 幂等发布、unknown outcome 恢复和单一 SemVer release 证据 |
-| Multi-instance verification | NO READY | 至少 2 个实例共享 PostgreSQL 的并发与重启证据 |
-| Regression | NO READY | `regression.md` 中 REG-01 至 REG-08 的真实 method/params/data/断言 |
-| Deployment/demo | NO READY | 已授权部署、HTTPS demo 和复现步骤；本轮不在授权范围 |
-| Source design delivery | DELIVERED | worker c83a869ded9f588c3241f003c072e17bc800a58a 已 push；首次集成 main 2970ca7548ec9d8d6c803d10e29198d5d172ef5d |
+| Baseline read and Git alignment | PASS | 已读取 SW-P1-20260907.2/PY-01 并合入 `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`；本任务不执行系统 Python 变更 |
+| Stale-design removal | PASS | main-brain 已审查实际 diff；Workflow-bound publication 已移除，评审修订已落盘 |
+| use_skill consumer requirements | PARTIAL | 本 change 已提交并经过边界评审；共享 Tool schema/Runtime 实现未批准 |
+| Independent reusable Skill sample | PARTIAL | 14 个 fixture 定义与样例静态检查 PASS、digest 已记录；validator 与 Runtime chat/Workflow 双入口仍无运行证据 |
+| Shared contracts | NO READY | trusted context、resolver、package/release ref、version evidence/error revision 未命名 |
+| Service implementation | NO READY | `services/skill-registry/` 尚未获 interface revision 放行 |
+| PostgreSQL implementation | NO READY | 无 migration、repository、多进程证据 |
+| Environment/authorization | NO READY | 无 PRT/ONLINE 分库 resolver 或普通用户拒绝运行证据 |
+| Runtime use_skill integration | NO READY | 无 Python Deep Agents Tool 集成或 chat/Workflow 原样复用运行证据 |
+| Package validator | NO READY | 只有候选规则/fixtures，无实现与安全运行证据 |
+| Deployment/demo | NO READY | 未授权、未部署；没有端口/服务变更 |
+| Source delivery | PENDING | 本批尚未 commit/push/integrate |
 
-## Go / No-go Rule
+## Current Blocks
 
-只有以下条件全部满足时，整体状态才可从 `NO READY` 变更：
+1. main-brain 尚未命名可实现的 shared contract revision。
+2. Runtime owner 尚未确认 `use_skill` 最终 input/material/version evidence。
+3. `services/skill-registry/` 的服务语言、统一 packaging 和根依赖所有权尚未放行。
+4. PostgreSQL、多实例、环境隔离和 Runtime 复用证据均不存在。
 
-1. 设计和公共合同均已明确批准，待裁决项为零。
-2. 所有实现 task 有对应 commit 与审查记录。
-3. PostgreSQL-only、两实例并发、重启恢复和幂等发布验证通过。
-4. REG-01 至 REG-08 均有实际响应与字段级断言，无必需 gate 为 PARTIAL/NO READY。
-5. 部署由用户另行授权并产生可复用运行证据。
+## Go Rule
 
-“文档已合入 main”“接口已编码”“单实例手工成功”都不能单独构成 runtime READY。
-
-## Current Blockers
-
-- 公共 artifact/release/auth/revocation 合同尚未冻结。
-- SkillRevision 与 WorkflowRelease 的两阶段关系尚未跨域批准。
-- Capability range 解析与 Workflow binding 端口尚无可执行合同。
-- 实现、测试、部署和 Runtime 证据均不存在。
+只有共享接口批准、最小服务实现完成、Focused Regression 有真实字段级证据、PostgreSQL 双进程与环境/权限门禁通过后，才可评估 readiness。文档、fixtures、Git merge 或单进程静态检查均不能把 Runtime 状态改为 READY。
