@@ -2,142 +2,207 @@
 
 ## Status
 
-PROPOSED。本文定义目标契约，不代表实现、部署或运行态证据。Runtime readiness 为 NO READY。
+`PROPOSED / PHASE 1 ALIGNED`。权威基线 `SW-P1-20260907.2`。本文定义目标契约和已验证的合成样例边界，不代表 registry、Runtime、Host、部署或运行态证据。Runtime readiness 为 `NO READY`。
+
+共享候选 `SW-CONTRACTS-P1-CANDIDATE.1` 已命名但尚未获 main-brain 批准；本文只声明消费需求，不复制其 schema 或把它当冻结接口。
 
 ## ADDED Requirements
 
-### Requirement: Drafts SHALL use explicit protocol and optimistic revision
+### Requirement: M SHALL author Component Catalog and Application assets
 
-系统 SHALL 为 CatalogDraft 与 PresentationDraft 保存明确 protocolProfile 和单调 revision。更新请求 MUST 提交 expectedRevision，服务 MUST 在 PostgreSQL 事务内比较并更新，不得用进程内锁保证正确性。
+系统 SHALL 将 Component Catalog 和 Application 作为 M 侧资产。Presentation SHALL 仅表示 Runtime 渲染产生的运行期输出，不得暴露第二套 Presentation Draft/Release 共享资产。
 
-#### Scenario: Reject a stale draft update
+#### Scenario: Compile an Application instead of a Presentation asset
 
-- GIVEN 一个 PresentationDraft 当前 revision 为 7
-- AND 两个 API 实例都可访问同一 PostgreSQL
-- WHEN 调用方提交 expectedRevision=6 的更新
-- THEN 系统返回 DRAFT_REVISION_CONFLICT
-- AND error.details.currentRevision 等于 7
-- AND 草稿内容与 revision 均不改变
+- GIVEN 一个引用精确 Component Catalog 的 ApplicationDraft
+- WHEN Composer 校验并编译该草稿
+- THEN 领域产物 kind 等于 APPLICATION
+- AND 产物包含逻辑 Surface 模板与精确依赖锁
+- AND 公共发布身份由 shared contracts 提供
+- AND 不创建 Presentation 类型共享资产
 
-### Requirement: Catalog validation SHALL be deterministic and declarative
+### Requirement: Application SHALL declare interaction mode explicitly
 
-系统 SHALL 依据锁定的 A2UI schema bundle 和 validatorRevision 校验 Catalog。Catalog MUST NOT 携带 JavaScript、HTML 执行体、远程模块或其他可执行代码。Schema 引用 MUST 从发布包或 allowlist 解析，校验期间 MUST NOT 访问网络。
+每个 Application SHALL 显式声明 `DISPLAY_ONLY` 或 `INTERACTIVE`。Runtime MUST NOT 根据组件类型、模型输出、action 数量或渲染结果猜测是否暂停。
 
-#### Scenario: Validate a safe Catalog draft
+#### Scenario: Display-only Application does not pause
 
-- GIVEN 一个使用已批准 A2UI profile 的 CatalogDraft
-- AND 组件、Child/ComponentId 引用、函数参数与可访问性要求均合法
-- WHEN 调用 validate 且指定精确 draftRevision
-- THEN data.valid 等于 true
-- AND data.reportDigest、data.dependencyLocks 与 validatorRevision 均存在
-- AND 相同输入重复校验产生相同 blocking 结果和 reportDigest
+- GIVEN Application 的 interactionMode 为 DISPLAY_ONLY
+- AND 其 actionPolicies 和交互 event 均为空
+- WHEN `render_application` 成功渲染
+- THEN Runtime 记录 RENDER_SUCCEEDED
+- AND 当前执行不因该 Application 建立 interaction wait
+- AND 后续节点仍由 Runtime 正常调度
 
-### Requirement: Presentation validation SHALL verify the complete component graph
+#### Scenario: Interactive Application establishes scoped wait
 
-系统 SHALL 校验唯一 root、componentId 唯一性、child 引用存在性、无环、可达性、Catalog 成员资格和资源上限。任一 blocking 规则失败时 MUST NOT 生成可发布 payload。
+- GIVEN Application 的 interactionMode 为 INTERACTIVE
+- AND actionPolicy 绑定到合法 sourceComponentId
+- WHEN `render_application` 成功渲染
+- THEN Runtime 创建 node/card/form 范围的持久化 interaction
+- AND 只有受信任 Action ingress 可以恢复
+- AND 普通聊天输入不能恢复该 interaction
+- AND 作者配置的确定性选择不经过 AI 重新判断
 
-#### Scenario: Reject an invalid component graph
+### Requirement: Action business success and interaction completion SHALL be separate
 
-- GIVEN 一个包含唯一 root 但 child 指向不存在节点的 PresentationDraft
-- AND 草稿还包含一个不可达节点
-- WHEN 调用 validate
-- THEN data.valid 等于 false
-- AND errors 分别包含 DANGLING_COMPONENT_REFERENCE 与 UNREACHABLE_COMPONENT
-- AND 每个错误包含稳定 jsonPointer
-- AND publish 对该 draftRevision 返回 VALIDATION_FAILED
+INTERACTIVE Application 的每个 ActionPolicy SHALL 引用 shared contracts 拥有的 `ResultCondition`，并 SHALL 显式声明 boolean `completeInteractionOnSuccess`。Action call success、业务 success 与 interaction completion MUST 分别记录。
 
-### Requirement: Bindings SHALL be type checked without executable expressions
+#### Scenario: Successful business result completes interaction when configured
 
-系统 SHALL 只接受声明式 JSON Pointer binding，并校验组件属性类型、inputSchema、精确 capability output schema 和 action payload schema 的兼容性。Presentation 对 capability 的引用 MUST NOT 隐式触发 capability 调用。
+- GIVEN Action 调用成功
+- AND ResultCondition 计算为 true
+- AND completeInteractionOnSuccess 等于 true
+- WHEN Runtime 记录 Action 结果
+- THEN 记录 ACTION_CALL_SUCCEEDED
+- AND 记录 ACTION_RESULT_SUCCEEDED
+- AND 记录 INTERACTION_COMPLETED
+- AND 节点后继可在 Runtime 规则允许时继续
 
-#### Scenario: Reject an incompatible capability output binding
+#### Scenario: Successful business result keeps interaction open when configured
 
-- GIVEN Text 组件属性要求字符串
-- AND binding 指向的精确 capability output schema 只允许对象
-- WHEN 调用 Presentation validate
-- THEN data.valid 等于 false
-- AND errors 包含 BINDING_TYPE_MISMATCH
-- AND error.dependencyRef 指向该精确 capability Release
-- AND Runtime invocation 信息不会被创建
+- GIVEN Action 调用成功
+- AND ResultCondition 计算为 true
+- AND completeInteractionOnSuccess 等于 false
+- WHEN Runtime 记录 Action 结果
+- THEN 记录 ACTION_RESULT_SUCCEEDED
+- AND 不记录 INTERACTION_COMPLETED
+- AND Runtime 等待后续显式 Action
 
-### Requirement: Publication SHALL lock dependencies and produce immutable content
+#### Scenario: Business result does not satisfy success condition
 
-发布系统 SHALL 对精确 draftRevision 重新校验，锁定所有 Catalog、capability schema 与 action contract ReleaseRef/digest，生成确定性领域 payload，并通过公共 Release Port 创建不可变 Release。不得发布 floating、draft、latest 或默认依赖。
+- GIVEN Action 调用成功
+- AND ResultCondition 计算为 false
+- WHEN Runtime 记录结果
+- THEN 记录 ACTION_RESULT_NOT_SUCCESS
+- AND 不完成 interaction
+- AND 只允许按 A2UI retry policy 处理该节点
 
-#### Scenario: Publish a validated Presentation revision
+### Requirement: Version admission SHALL precede new work
 
-- GIVEN PresentationDraft revision 4 已通过相同 validatorRevision 校验
-- AND 所有依赖均为已授权、可读取且 digest 匹配的精确 Release
-- WHEN 使用新的 Idempotency-Key 发布 revision 4
-- THEN data.releaseRef 指向一个不可变 Presentation Release
-- AND data.artifactDigest 与返回 payload 的规范化内容一致
-- AND dependencyLocks 完整包含 Catalog、capability schema 与 action contract
-- AND 后续修改草稿不会改变该 Release
+Runtime SHALL 在 execution、continue 和 Action ingress 做新工作前，通过 shared resolver 比较记录版本与当前有效版本。版本失配 MUST 返回 `RESET_REQUIRED`；系统 MUST NOT 继续冻结旧资产、静默迁移、自动重启或重放业务调用。
 
-### Requirement: Publication SHALL be idempotent under retries and concurrency
+#### Scenario: Reject an Action on stale Application version
 
-系统 SHALL 将 Idempotency-Key 与请求指纹持久化，并通过数据库唯一约束处理多实例竞争。相同 key 和相同指纹 MUST 返回同一结果；相同 key 和不同指纹 MUST 冲突。
+- GIVEN 历史交互记录的 Application 版本与当前有效版本不一致
+- WHEN 用户提交 Action
+- THEN Runtime 在调用业务 API 前返回 RESET_REQUIRED
+- AND version guard mismatch 记录 recorded/effective version
+- AND 业务 API 未被调用
+- AND 历史卡进入只读
+- AND 只有显式 reset 可以创建全新 run
 
-#### Scenario: Converge concurrent publish retries
+### Requirement: Trusted identity and environment SHALL remain outside Application
 
-- GIVEN 两个 API 实例同时发布同一 draftId、draftRevision 与 publicationProfile
-- AND 两个请求使用同一 Idempotency-Key 和相同请求指纹
-- WHEN 两个事务竞争
-- THEN 两个响应返回同一 releaseId 与 artifactDigest
-- AND 数据库只存在一个有效 Release
-- AND 不产生部分 payload 或未锁定依赖的 Release
+Application、模型 Tool 参数和客户端 action payload MUST NOT 提供可信 `userId`、PRT/ONLINE 环境或 gray target。服务端 SHALL 从 shared trusted context 解析身份、环境和有效版本。PRT 只读 PRT 当前版本；ONLINE 只读 ONLINE stable/gray，不读 PRT。
 
-### Requirement: Runtime consumption SHALL preserve generic ownership
+#### Scenario: Reject embedded trusted context
 
-PublishedPresentationResolver SHALL 通过精确 ReleaseRef 与 digest 返回 transport-neutral Artifact。Runtime SHALL 实例化 surfaceId、投影已有数据、按序发送消息、持久化 cursor 并关联 action；Composer MUST NOT 执行 capability、发送运行流或包含数字员工业务语义。
+- GIVEN 一个 Application fixture 含 userId、environment、grayTarget、credential 或 secret 字段
+- WHEN Composer 校验
+- THEN 校验失败
+- AND 失败指向禁止字段
+- AND 不产生可发布 payload
 
-#### Scenario: Instantiate and stream an exact Presentation Release
+### Requirement: Action dedupe SHALL not claim business exactly-once
 
-- GIVEN Runtime 获得一个 digest 匹配的 Presentation Release
-- AND Renderer 能力支持其 protocolProfile 与 catalogId
-- AND 输入 dataModel 符合发布的 inputSchema
-- WHEN Runtime 启动 presentation execution
-- THEN Runtime 先创建 Surface 再发送依赖它的更新
-- AND 每个消息带可恢复的单调 cursor
-- AND Composer 不接收 run state 或业务 action
-- AND 断线恢复由 Runtime 从持久化 cursor 重放
+平台 `controlRequestId` SHALL 只去重控制请求。Application SHALL 声明业务幂等归属为被调 API 后端，不得把平台 control dedupe 表述为业务调用 exactly-once、补偿或对账能力。
 
-### Requirement: Renderer negotiation SHALL fail closed on unsupported assets
+#### Scenario: Preserve an uncertain external outcome
 
-Web Renderer SHALL 广告 supportedCatalogIds 和协议 profile，并提供可核对精确 Catalog ReleaseRef/digest 的 RendererCatalogSupportManifest，只映射本地注册的 React 组件。Runtime 或 Renderer MUST NOT 将未知 Catalog 替换为默认/latest Catalog。用户 action MUST 带可验证的 Surface、来源组件和幂等关联信息。
+- GIVEN Runtime 已发出业务 Action 调用
+- AND 网络失败导致结果未知
+- WHEN 平台记录该 outcome
+- THEN 不把重复 control response 当作业务成功
+- AND 不自动重放业务 Action
+- AND 不由 Workflow 执行补偿或跨 run 去重
+- AND 后续策略服从被调 API 的业务幂等契约
 
-#### Scenario: Reject an unsupported Catalog without fallback
+### Requirement: A2UI node retry SHALL use a closed allowlist
 
-- GIVEN Presentation Release 精确引用 catalogA@digest1
-- AND Renderer 只广告 catalogB@digest2
-- WHEN Runtime 尝试启动该 Presentation
-- THEN Surface 不被创建
-- AND 返回 CATALOG_UNSUPPORTED
-- AND 不尝试 catalogB、latest 或运行时网络下载
-- AND 不产生业务 action 或 capability 副作用
+首期节点 retry reason SHALL 严格限定为 `RENDER_FAILED`、`ACTION_CALL_FAILED`、`ACTION_RESULT_NOT_SUCCESS`。系统 MUST NOT 用该机制重试 Skill 模型调用、脚本、非 A2UI Tool 或其他通用失败。
+
+#### Scenario: Accept all three A2UI retry outcomes
+
+- GIVEN 一个 INTERACTIVE Application
+- WHEN Composer 校验 retry policy
+- THEN allowedReasons 精确包含三种 A2UI outcome
+- AND 不包含重复或其他 reason
+
+#### Scenario: Reject a generic Skill retry reason
+
+- GIVEN retry policy 含 MODEL_FAILED
+- WHEN Composer 校验
+- THEN 校验失败
+- AND 不产生 Application Release
+
+### Requirement: Finalizer SHALL preserve facts and interaction boundaries
+
+Finalizer MUST NOT 覆盖 Action 业务事实、将失败转成功、调用业务 Action、触发 retry 或绕过仍未完成的必需 interaction。
+
+#### Scenario: Do not finalize through pending interaction
+
+- GIVEN INTERACTIVE Application 已渲染
+- AND 必需 interaction 尚未完成
+- WHEN Runtime 进入 finalization boundary
+- THEN Finalizer 不完成该 interaction
+- AND 不产生虚假的 node/Skill/Workflow success
+- AND 已保存的业务事实保持不变
+
+### Requirement: Application rendering SHALL enter through render_application
+
+Runtime SHALL 只通过授权 Tool `render_application` 消费 Application。Composer 产物保持 transport-neutral；Runtime 拥有 Surface、stream/cursor、等待/恢复和 Action dispatch；Host 拥有本地 React 映射与安全渲染。
+
+#### Scenario: Fail closed on unsupported Host capability
+
+- GIVEN Application 锁定某 protocol profile 与 Catalog digest
+- AND Host 不支持该组合
+- WHEN Runtime 调用 render_application
+- THEN 返回 PROTOCOL_UNSUPPORTED 或 CATALOG_UNSUPPORTED
+- AND 不创建可交互 Surface
+- AND 不选择 latest/default Catalog
+- AND 不下载执行代码
+- AND 不产生业务 Action 副作用
+
+### Requirement: Draft mutation and publication SHALL be PostgreSQL-correct
+
+ComponentCatalogDraft 与 ApplicationDraft 更新 SHALL 提交 expectedRevision，并在 PostgreSQL 事务中 compare-and-swap。发布 SHALL 重新校验精确 revision、锁定依赖并原子创建不可变领域 payload；不得使用 MySQL、SQLite、内存 fallback、floating 或 latest 依赖。
+
+#### Scenario: Reject a stale Application draft update
+
+- GIVEN ApplicationDraft 当前 revision 为 7
+- WHEN 调用方提交 expectedRevision=6
+- THEN 返回 DRAFT_REVISION_CONFLICT
+- AND currentRevision 等于 7
+- AND 草稿内容与 revision 不变
+
+#### Scenario: Publish immutable exact dependencies
+
+- GIVEN ApplicationDraft 的 Catalog、ability output schema 与 Action contract 都是已授权精确 ReleaseRef/digest
+- WHEN 使用公共 publication contract 发布
+- THEN 返回不可变 Application ReleaseRef 与 artifactDigest
+- AND dependencyLocks 完整
+- AND 后续修改草稿不改变历史 Release
+- AND 不存在 latest/default/draft fallback
 
 ## Cross-domain contract requirements
 
-### oss-platform-contracts input
+### platform-contracts input
 
-最终共享契约必须提供不可变 ReleaseRef、digest、授权上下文、审计主体、Idempotency-Key 和请求指纹语义。A2UI 域不得另建第二套公共 Release 身份。
+本域需要 approved revision 提供 server-only trustedContext、effective version resolution、Asset/Release、ResultCondition、control request、outcome 与 publication envelope。候选 `SW-CONTRACTS-P1-CANDIDATE.1` 仅是审查输入。
 
-### oss-capability-registry input
+### Runtime output expectation
 
-必须能按精确 ReleaseRef 读取 capability output schema 与 action contract schema。读取只用于编译/校验证据，不等价于执行授权。
+Runtime 实现 `render_application`、版本准入、Surface、持久化 interaction、Action dispatch、A2UI-only retry、stop/restart 与 Finalizer 边界，并保持业务无关。
 
-### oss-agent-workflow-runtime output expectation
+### digital employee output expectation
 
-Runtime 必须定义 resolver、presentation execution、stream cursor、replay、action correlation 和 typed failure contract；不得依赖数字员工业务模型。
-
-### oss-digital-employee output expectation
-
-数字员工必须定义 Renderer supportedCatalogIds/profile、RendererCatalogSupportManifest、React 组件映射、安全渲染、可访问性和 action 回传契约。Renderer 不拥有发布资产变更权。
+`packages/a2ui-host/` 提供 supported Catalog/profile、本地 React 映射、安全渲染、可访问性和可信 Action 回传；Host 无资产发布权。
 
 ## Acceptance gates
 
-1. main-brain 批准协议 profile 与升级策略。
-2. 公共 ReleaseRef/digest/幂等字段完成跨域对齐。
-3. Runtime 与 Renderer 分别接受本 spec 的输入输出和失败语义。
-4. Validator、PostgreSQL 并发与 publication contract 测试全部实现并通过。
-5. 端到端运行证据覆盖精确 Catalog 协商、流式恢复与 action 去重。
+1. main-brain 批准 shared contract 与 A2UI protocol profile。
+2. main-brain 下发命名 approved revision 和 registry IMPLEMENT。
+3. registry Validator/PostgreSQL/publication 实现与测试完成。
+4. Runtime 与 Host 联合证据覆盖 display、interactive、Action、version reset、retry 与 Finalizer。
+5. readiness.md 的必要门禁全部 READY。

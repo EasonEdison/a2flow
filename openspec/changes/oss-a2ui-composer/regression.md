@@ -1,119 +1,124 @@
-# A2UI 组件编排平台回归计划
+# A2UI 组件编排平台回归记录
 
 ## 当前结论
 
-- 状态：PLANNED
-- 已执行测试：0
-- 构建证据：无
-- 集成证据：无
-- 部署证据：无
-- 运行态证据：无
-- Runtime readiness：NO READY
+- 基线：`SW-P1-20260907.2`
+- 合成夹具静态校验：`PASS`
+- Registry build/API/PostgreSQL：`NO READY`
+- Shared contract：`SW-CONTRACTS-P1-CANDIDATE.1` 已命名但未批准
+- Runtime/Host 联合验证：`NO READY`
+- Deployment/E2E：`NO READY`
+- 总体 Runtime readiness：`NO READY`
 
-下面的方法、参数与响应字段均为 PROPOSED API 契约。只有实现完成、实际执行并记录时间、环境、命令和原始结果后，场景状态才可从 PLANNED 改为 PASS 或 FAIL。
+静态夹具只证明本域候选语义能被确定性拒绝/接受，不证明 shared schema 已冻结，不证明 `render_application`、Action dispatch、Host 或数据库实现存在。
 
-## 公共断言
+## 已执行证据
 
-候选成功 envelope：
+### R1 两份合成 Application 正例
 
-- requestId：非空且可关联审计日志。
-- data：唯一业务结果对象；调用方不从 message 文案解析状态。
+- 状态：`PASS`
+- 时间：`2026-09-07T01:24:14+08:00`
+- 环境：服务器 worker worktree；Node `v20.20.2`；无依赖安装、无网络 schema 访问
+- Command：`node --test packages/a2ui-contract-fixtures/test/validate-fixtures.test.mjs`
+- Result：`tests 12, pass 12, fail 0`
+- 字段级断言：
+  - 两份 fixture 都是 synthetic、`PROVISIONAL`、`APPLICATION`，baseline 为 `SW-P1-20260907.2`。
+  - protocolProfileRef 保持 `PENDING_CROSS_DOMAIN_REVIEW`。
+  - render Tool 为 `render_application`。
+  - DISPLAY_ONLY 不暂停、无 Action、retry 仅 `RENDER_FAILED`。
+  - INTERACTIVE 暂停且绑定 node/card/form，普通聊天不能恢复，确定性选择不经 AI 重选。
+  - Action 通过精确 ability release + resultConditionName 引用 shared ResultCondition，并显式声明 `completeInteractionOnSuccess`；内联 success DSL 会被拒绝。
+  - 平台仅 `controlRequest` 去重，业务幂等 owner 为 `CALLED_API_BACKEND`。
+  - execution、continue 与 Action ingress 都要求先做版本比较；失配返回 `RESET_REQUIRED`。
+  - Finalizer 不改写业务事实、不绕过必需交互。
+  - 禁止嵌入 userId/environment/grayTarget/secret/credential/script/html。
 
-候选失败 envelope：
+### R2 目录级校验
 
-- requestId：非空。
-- error.code：稳定机器码。
-- error.message：人类可读但不作为程序契约。
-- error.details：包含 jsonPointer、currentRevision 或 dependencyRef 等结构化证据。
+- 状态：`PASS`
+- Command：`node packages/a2ui-contract-fixtures/validate-fixtures.mjs --directory packages/a2ui-contract-fixtures/fixtures`
+- Result：`validated 2 synthetic Application fixtures`
+- 断言：目录精确包含两份 `*.application.json`，每份分别通过结构、组件图和策略检查。
 
-## 计划场景
+### R3 A2UI-only retry 负例 TDD
 
-### P1 安全 Catalog 校验
+- 状态：`PASS`
+- RED：删除 INTERACTIVE fixture 中 `ACTION_CALL_FAILED` 与 `ACTION_RESULT_NOT_SUCCESS` 后，旧校验器未抛异常，测试以 `Missing expected exception` 失败。
+- GREEN：新增 exact-set 校验后，同一变异 fixture 被拒绝；随后加入信任/三入口版本/交互/Finalizer 等负例，最终完整结果为 `pass 12, fail 0`。
+- 价值：证明 allowlist 不仅拒绝额外 reason，也拒绝缺少任一必需 A2UI outcome。
 
-- 状态：PLANNED
-- Method：POST /api/a2ui/catalog-drafts/{draftId}:validate
-- Params：draftRevision、明确 protocolProfile；已有合法 Catalog 文档。
-- 期望 data：valid、reportDigest、errors、warnings、dependencyLocks、validatorRevision。
-- 字段断言：valid=true；errors=[]；reportDigest 非空；protocolProfile 与草稿一致；重复请求 reportDigest 相同。
-- 价值：证明 Catalog 校验确定且不依赖网络或进程状态。
+## 待实现联合场景
 
-### P2 非法组件图拒绝
+### P1 DISPLAY_ONLY 渲染后继续
 
-- 状态：PLANNED
-- Method：POST /api/a2ui/presentation-drafts/{draftId}:validate
-- Params：draftRevision；Surface 含悬空 child 与不可达节点。
-- 期望 data：valid、reportDigest、errors、warnings。
-- 字段断言：valid=false；errors 同时含 DANGLING_COMPONENT_REFERENCE 与 UNREACHABLE_COMPONENT；每项有 jsonPointer。
-- 后续断言：相同 revision 调 publish 返回 VALIDATION_FAILED，不产生 releaseRef。
-- 价值：防止部分树进入 Runtime。
+- 状态：`PLANNED / Runtime`
+- Method：`render_application`
+- Params：精确 Application ReleaseRef、run/node/attempt、trusted context ref、dataModel。
+- 成功 data/outcome：RENDER_SUCCEEDED、surfaceId、`requiresPause=false`。
+- 断言：不创建 interaction，不阻断后继，不把 render success 记为 Skill/Workflow success。
 
-### P3 capability 输出绑定类型不兼容
+### P2 INTERACTIVE 渲染并等待
 
-- 状态：PLANNED
-- Method：POST /api/a2ui/presentation-drafts/{draftId}:validate
-- Params：draftRevision；Text 属性 binding 指向对象类型的精确 capability output schema Release。
-- 期望 data：valid、errors、dependencyLocks。
-- 字段断言：valid=false；error.code=BINDING_TYPE_MISMATCH；error.dependencyRef 精确匹配输入 Release；不创建运行记录。
-- 价值：证明 capability 引用只用于定义期校验，不隐式执行能力。
+- 状态：`PLANNED / Runtime + Host`
+- Method：`render_application`
+- Params：INTERACTIVE Application 与支持的 Host capabilities。
+- 成功 data/outcome：RENDER_SUCCEEDED、surfaceId、interactionId、`requiresPause=true`。
+- 断言：持久化 node/card/form 绑定；普通聊天无法 resume；Host Action 可关联来源组件。
 
-### P4 草稿乐观并发
+### P3 Action 业务成功并完成交互
 
-- 状态：PLANNED
-- Method：PUT /api/a2ui/presentation-drafts/{draftId}
-- Params：expectedRevision=6；数据库当前 revision=7；提交任意合法 mutable fields。
-- 期望 error：DRAFT_REVISION_CONFLICT。
-- 字段断言：error.details.currentRevision=7；数据库 revision 和内容未变化；两个 API 实例结果一致。
-- 价值：证明多实例下不会丢失更新。
+- 状态：`PLANNED / Runtime`
+- Method：受信任 `SUBMIT_INTERACTION` 候选控制命令。
+- Params：runId/nodeId/interactionId/surfaceId/sourceComponentId、recordedAssetVersions、payload digest。
+- 成功 data/outcome：ACTION_CALL_SUCCEEDED、ACTION_RESULT_SUCCEEDED、INTERACTION_COMPLETED。
+- 断言：ResultCondition 为真且 `completeInteractionOnSuccess=true`；三种事实分别存在。
 
-### P5 精确依赖不可变发布
+### P4 Action 业务成功但保持交互
 
-- 状态：PLANNED
-- Method：POST /api/a2ui/presentation-drafts/{draftId}:publish
-- Params：draftRevision=4、完整 dependencyLocks；Header Idempotency-Key 为新值。
-- 期望 data：releaseRef、artifactDigest、validationReportDigest、dependencyLocks。
-- 字段断言：releaseRef 为精确不可变引用；artifactDigest 等于规范化 payload 重算值；依赖锁包含 Catalog/capability/action；不存在 latest/default 引用。
-- 后续断言：更新 draft 到 revision=5 后，revision=4 的 Release 内容和 digest 不变。
-- 价值：证明发布即冻结。
+- 状态：`PLANNED / Runtime`
+- Method/Params：同 P3，但 `completeInteractionOnSuccess=false`。
+- 期望：有 ACTION_RESULT_SUCCEEDED，无 INTERACTION_COMPLETED，后继不启动。
 
-### P6 并发与重复发布收敛
+### P5 Action 结果不满足成功条件
 
-- 状态：PLANNED
-- Method：两个实例并发调用 POST /api/a2ui/presentation-drafts/{draftId}:publish
-- Params：相同 draftRevision、publicationProfile、Idempotency-Key 与请求指纹。
-- 期望 data：两个响应均含 releaseRef、artifactDigest。
-- 字段断言：两个 releaseId 和 artifactDigest 完全相同；数据库只有一个有效 Release 和完整 payload。
-- 反例断言：同一 Idempotency-Key 配不同请求指纹返回 IDEMPOTENCY_KEY_REUSED。
-- 价值：证明网络重试和多实例竞争不会重复发布。
+- 状态：`PLANNED / Runtime`
+- 期望：ACTION_CALL_SUCCEEDED 与 ACTION_RESULT_NOT_SUCCESS 分开记录；交互保持；只可按对应 A2UI retry reason 有界重试。
 
-### P7 Runtime 精确解析与有序恢复
+### P6 版本失配阻断 Action
 
-- 状态：PLANNED，归属 Runtime 联合契约测试。
-- Method：Runtime 提议的 startPresentation/replayPresentation，最终名称待对齐。
-- Params：exact releaseRef、artifactDigest、runId、attemptId、rendererCapabilities、dataModel、resumeCursor。
-- 期望 data：surfaceId、protocolProfile、catalogId、nextCursor、orderedEnvelopes。
-- 字段断言：先 createSurface 后依赖 Surface 的更新；cursor 单调；断线后从持久化 cursor 重放；无数字员工业务字段。
-- 价值：证明 Composer Artifact 可由通用 Runtime 执行，但本域不承担运行状态。
+- 状态：`PLANNED / contracts + Runtime`
+- Params：recordedAssetVersions 与 effective version 不同。
+- 期望 error/data：`RESET_REQUIRED` 与非空 mismatches。
+- 断言：比较发生在业务调用前；零业务调用；历史卡只读；无自动迁移/重启/重放。
 
-### P8 Renderer 不支持时失败关闭
+### P7 Finalizer 不越权
 
-- 状态：PLANNED，归属 Runtime 与数字员工联合契约测试。
-- Method：Runtime 提议的 negotiatePresentation/startPresentation。
-- Params：Presentation 锁定 catalogA@digest1；Renderer 仅支持 catalogB@digest2。
-- 期望 error：CATALOG_UNSUPPORTED。
-- 字段断言：不创建 Surface；不尝试 catalogB/latest/网络下载；不产生 action 或 capability 副作用；错误可用 runId/requestId 关联。
-- 价值：证明三方不会用隐式兼容掩盖契约不一致。
+- 状态：`PLANNED / Runtime`
+- Params：未完成交互与已记录失败事实。
+- 断言：Finalizer 不调 Action、不 retry、不完成交互、不将 node/Skill/Workflow 标为成功。
 
-## 执行记录模板
+### P8 Host 不支持时失败关闭
 
-每个场景执行后必须补充：
+- 状态：`PLANNED / Runtime + Host`
+- Params：Application 锁定的 protocol/Catalog 与 Host capabilities 不匹配。
+- 期望 error：PROTOCOL_UNSUPPORTED 或 CATALOG_UNSUPPORTED。
+- 断言：不建可交互 Surface、不 fallback、不下载代码、不产生业务副作用。
 
-- 执行时间与提交 SHA
-- 环境与 PostgreSQL 版本
-- 实际命令或测试类
-- 请求 method/params 和已脱敏输入摘要
-- 成功 data 字段或失败 error 字段原始断言
-- 多实例拓扑与并发方式
-- PASS/FAIL/PARTIAL
+### P9 PostgreSQL 多实例与不可变发布
+
+- 状态：`PLANNED / registry`
+- Method：Application Draft update/validate/publish 候选 API。
+- 断言：expectedRevision 冲突、精确 dependencyLocks、原子 publication、控制请求幂等、多实例唯一约束；无 SQLite/MySQL/内存 fallback。
+
+## 证据纪律
+
+联合场景只有在记录以下信息后才能改为 PASS：
+
+- 执行时间、worker/content SHA 与服务器 main integration SHA
+- 工具与依赖版本
+- 实际 method/params 或测试命令
+- 成功 data 或失败 error 的字段级断言
+- 多实例/数据库拓扑（适用时）
 - 未覆盖风险
 
-当前不得填写虚构结果。
+本文件不填写虚构的 API、数据库、部署或运行结果。
