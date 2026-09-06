@@ -13,6 +13,7 @@ Phase 1 已授权 ALIGN/PROVE。勾选只表示本任务真实完成的设计或
 - [x] 1.5 收到候选 `SW-CONTRACTS-P1-CANDIDATE.1`；记录为未批准依赖，不据此冻结 registry 实现。
 - [x] 1.6 向 Runtime/Host 暴露 `render_application`、交互绑定、Action ingress 与失败关闭需求。
 - [x] 1.7 读取 ENG-01：future A2UI registry 后端使用 Python 可导入模块，但不据此启动服务或编辑 root dependency files。
+- [x] 1.8 校验并读取 `SW-P1-SUBSET-01`：只确认共享 ResultInterpretationPolicy 定义子集获准实现，A2UI Action/profile/Registry/Host 未放行。
 
 ## 2. Phase 1 独立契约夹具
 

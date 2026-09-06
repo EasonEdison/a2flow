@@ -25,7 +25,7 @@ tasks.md 只记录工作完成情况，不能替代本文件的证据门禁。�
 | Design convergence | PARTIAL | Component/Application、interaction/completion、version/reset、retry/Finalizer 边界已写入 | main-brain 审查实际 diff 并关闭歧义 |
 | Synthetic fixture validation | READY | Node v20.20.2；`20/20 tests PASS`；`validated 2 synthetic Application fixtures` | 若 shared contract 改动，更新夹具并重新验证 |
 | A2UI protocol decision | NO READY | fixture profile 为 `PENDING_CROSS_DOMAIN_REVIEW` | main-brain 批准 profile/wire version/升级策略 |
-| Shared contract | NO READY | `SW-CONTRACTS-P1-CANDIDATE.1` 固定快照已进 main 且 54/54 owner fixtures GREEN，但尚未获 main-brain 批准 | main-brain 命名 approved revision |
+| Shared contract | NO READY | `SW-P1-SUBSET-01` 只批准 ResultInterpretationPolicy 等列明定义用于共享薄包；wire 仍为 PROVISIONAL `SW-CONTRACTS-P1-CANDIDATE.1` | main-brain 另行命名 A2UI Action/profile 所需 approved revision |
 | Registry implementation | NO READY | ENG-01 已选 Python 可导入模块，但 `services/a2ui-registry/` 未实现；当前有意受门禁阻断 | approved revision + package review + 明确 IMPLEMENT 放行后实现 |
 | PostgreSQL correctness | NO READY | 无 schema、migration、事务或多实例证据 | PostgreSQL-only 实现与集成测试通过 |
 | Runtime `render_application` | NO READY | 只有消费需求和 synthetic fixture | Runtime 实现并证明 display/interactive/version/action/retry |
@@ -57,5 +57,4 @@ tasks.md 只记录工作完成情况，不能替代本文件的证据门禁。�
 
 ## 下一准出动作
 
-1. main-brain 审查实际提交与 `SW-CONTRACTS-P1-CANDIDATE.1` 依赖。
-2. 只有 main-brain 命名 approved revision 并下发 IMPLEMENT 后，才实现 `services/a2ui-registry/`。
+等待 main-brain 下发 A2UI Action/profile 的明确 subset；当前不修改 checker，不实现 `services/a2ui-registry/` 或 Host。

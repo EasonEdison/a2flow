@@ -14,9 +14,9 @@
 ## 当前磁盘真值
 
 - Phase 1 基线：`SW-P1-20260907.2`
-- 服务器同步：有自有改动时安全合入到 `255475d…`；后续依次快进多个 main 增量，review hardening 最终集成为 `origin/main=3eac2f9de3a7b306b62a5175dae374d550223959`。全程无冲突、未 stash/reset/覆盖。
+- 服务器同步：review hardening 最终集成为 `3eac2f9…`；其后安全快进到 `origin/main=3a48d4b106db8f382c3c96bbc8992f328b81e259` 并读取首批 release。全程无冲突、未 stash/reset/覆盖。
 - PY-01：只撤销“系统 Python 不可替换”的禁令；Runtime 是唯一协调执行 owner，本任务不修改系统 Python。
-- 工作区状态：review hardening `3eac2f9de3a7b306b62a5175dae374d550223959` 已集成；当前仅准备本任务交付元数据。
+- 工作区状态：review hardening 与证据元数据已集成；当前只记录 `SW-P1-SUBSET-01` 对本任务的同步影响。
 - 设计状态：`PROPOSED / PHASE 1 ALIGNED`
 - 运行态：`NO READY`
 
@@ -37,22 +37,22 @@
 13. 已读取 main-brain ENG-01：future A2UI registry 后端使用 Python 可导入模块；这不解除 shared contract/IMPLEMENT 门禁，也不授权独立服务、root dependency 或系统 Python 变更。
 14. main-brain review 六个反例先得到 `20 tests / 14 pass / 6 fail`；逐项修复 credential、retry duplicate、@latest 与 Action/event 映射后为 `20 pass / 0 fail`，目录校验仍为 `validated 2 synthetic Application fixtures`。
 15. review hardening `3eac2f9de3a7b306b62a5175dae374d550223959` 已 push，并在独占 integration worktree fresh 验证 20/20 后集成服务器 `origin/main`。
+16. 已完整读取 `implementation-release-01.md`；SHA256 为 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`，与下发值一致。该 release 只批准共享 Policy 定义等列明子集，不批准完整 A2UI 协议、Registry 或 Host。
 
 ## 当前依赖
 
-- shared contracts：候选 `SW-CONTRACTS-P1-CANDIDATE.1` 已命名但未批准。
+- shared contracts：`SW-P1-SUBSET-01` 已批准 ResultInterpretationPolicy 定义子集用于共享薄包；A2UI Action/profile 所需完整 contract 仍未批准。
 - Runtime：`render_application`、版本准入、Surface、interaction、Action、retry/stop/restart/Finalizer。
 - digital employee：`packages/a2ui-host/` 的本地组件映射与可信 Action 回传。
-- main-brain：批准协议/profile、shared revision，并明确下发 registry IMPLEMENT。
+- main-brain：后续统一下发 A2UI Action/profile subset；在此之前不实现 registry/Host。
 
 ## 下一可执行动作
 
-1. 提交并集成交付元数据。
-2. 回传 main-brain：`SW-P1-20260907.2`、actual diff、worker SHA、integrated SHA、测试证据与 NO READY 门禁。
+等待 main-brain 明确下发 A2UI Action/profile subset。保持现有 checker 20/20 范围，不继续扩展、不实现 Registry/Host。
 
 ## 禁止越界
 
-- 未获 approved shared revision 与 IMPLEMENT 放行前，不实现 `services/a2ui-registry/`。
+- `SW-P1-SUBSET-01` 不含 A2UI Registry/Host；未获对应 subset 前不实现 `services/a2ui-registry/`。
 - 不部署、不开放端口、不启动服务、不修改系统包或系统 Python。
 - 不把 synthetic fixture、source integration 或 contracts candidate 当作 Runtime READY。
 - 不读取或更新其他任务 checkpoint。
