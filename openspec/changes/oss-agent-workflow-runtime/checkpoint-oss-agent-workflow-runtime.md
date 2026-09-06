@@ -55,13 +55,13 @@
 
 ## Next Executable Action
 
-提交并回传 A 等待/B1→B2 的显式 RED reproducer 与实际 assertion；等待 main-brain 对并行执行模型裁决。不得自建第二 scheduler；PostgreSQL/双进程继续等待明确协调，不以其他 saver 替代。
+向 main-brain 回传已集成的 A 等待/B1→B2 显式 RED reproducer 与实际 assertion；等待其对并行执行模型裁决。不得自建第二 scheduler；PostgreSQL/双进程继续等待明确协调，不以其他 saver 替代。
 
 ## 交付状态
 
 - 已交付源码：`1aa1410ca6ca9537507da776cd8d394c526f13b4`
-- 并行 RED reproducer：未提交
-- Worker push：PASS，远端 worker 包含 source commit 与 checkpoint commit `9238e2fbcd811ab74f6dbb80cb3accc7bb367e49`
-- Integration：PASS，`origin/main` 包含 source commit `1aa1410ca6ca9537507da776cd8d394c526f13b4` 与 checkpoint commit `9238e2fbcd811ab74f6dbb80cb3accc7bb367e49`
+- 并行 RED reproducer：`730331d0b91fb3ec98db5bae6c578c777edc5fcd`；显式执行 exit=1，expected `[B1,B2]` / actual `[B1]`
+- Worker push：PASS，远端 worker=`730331d0b91fb3ec98db5bae6c578c777edc5fcd`
+- Integration：PASS，`origin/main` 包含 source commit `1aa1410ca6ca9537507da776cd8d394c526f13b4` 与 RED commit `730331d0b91fb3ec98db5bae6c578c777edc5fcd`
 - OpenSpec structure：PASS；CLI 在 PATH/仓库中均不可用，未在线安装替代
 - Runtime readiness：NO READY
