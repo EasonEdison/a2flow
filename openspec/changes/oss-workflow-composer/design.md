@@ -7,6 +7,7 @@
 - 设计状态：`PROPOSED`
 - Runtime 状态：`NO READY`
 - 权威边界：本 change 只提供 workflow-registry 消费者需求、图候选和 validation examples；共享 contract 字段、版本和包由 `oss-platform-contracts` 单一所有。
+- 实现放行边界：`SW-P1-SUBSET-01` 已命名 exact `skillKey/use_skill` 依赖闭包，但未列入 Workflow owner，也未批准 graph/context/control/events；本任务仍不实现 source。
 - PY-01：系统 Python 必要变更已获授权，但主机兼容评估、可恢复方案和唯一执行均归 Runtime/main-brain；Composer 不并发执行主机变更。
 
 ## 2. 目标与非目标
@@ -72,7 +73,7 @@ PublishedWorkflowGraph
 关键要求：
 
 - Skill 节点保存共享契约定义的 exact `skillKey`，所有执行统一通过 `use_skill`；不得内嵌 Skill body、凭证或运行环境，也不得由 Runtime 拆 `skill:` 前缀猜测映射。
-- 当前 `SW-CONTRACTS-P1-CANDIDATE.1` 的 `skillKey` grammar 是 `^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)*$`。若通用 `configurationRefs.logicalRef` 继续存在，发布边界必须通过显式 typed mapping 转为 `skillKey`；该字段形态仍待 main-brain 审查，不由本 change 冻结。
+- `SW-P1-SUBSET-01` 已批准 corrected snapshot `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 中的 `skillKey` 定义，grammar 为 `^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)*$`，并包含 CR/LF 负例修正；wire revision 仍为 `SW-CONTRACTS-P1-CANDIDATE.1`。若通用 `configurationRefs.logicalRef` 继续存在，发布边界必须通过显式 typed mapping 转为 `skillKey`；graph 字段形态仍待 main-brain 的对应 named subset，不由本 change 冻结。
 - Decision 候选是发布时有限集合，候选必须唯一映射到可达目标。AI 和用户都不能跳到集合外。
 - A2UI 选择卡引用已发布 Application 配置；卡片属于 decision 节点 interaction，不要求上游 Skill 改输出。
 - `failureRequirement` 是 authoring intent；运行状态必须保持真实 SUCCESS/FAILED/SKIPPED/WAITING，不得改写为成功。
@@ -181,7 +182,7 @@ Runtime feasibility 必须至少证明：
 - 用户选择 interaction/node/version 不匹配：拒绝，不触发新业务调用。
 - Skill identity 不符合获批 `skillKey` 或缺失显式 typed mapping：发布失败关闭，不拆字符串前缀补救。
 - join 配置不完整、嵌套 parallel、循环或不可达：拒绝发布。
-- 共享 contract 尚未批准：只交付 requirement fixture 和模块/依赖候选，不实现依赖接口。
+- 共享 graph/context/control/events 尚未批准：只消费 `SW-P1-SUBSET-01` 已命名的 exact `skillKey/use_skill` 闭包，并继续交付 requirement fixture 和模块/依赖候选；不实现 Workflow 接口。
 - shared schema dialect 与内部模型不一致：失败关闭；不得由 Pydantic coercion 或 schema 方言升级把非法 payload 变为合法。
 
 ## 14. 第一阶段文件边界
