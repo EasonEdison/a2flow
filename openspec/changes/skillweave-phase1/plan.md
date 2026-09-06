@@ -1,6 +1,6 @@
 # Phase 1 execution plan
 
-Baseline: SW-P1-20260907.1 (`baseline.md` in this change). Coordinator: main-brain. Status: AUTHORIZED / runtime NO READY.
+Baseline: SW-P1-20260907.2 (`baseline.md` in this change). Coordinator: main-brain. Status: AUTHORIZED / runtime NO READY. Delta PY-01 permits necessary system Python replacement, with Runtime as the single executor coordinated by main-brain.
 
 ## First milestone
 
@@ -45,7 +45,7 @@ Every worker retains exclusive ownership of `openspec/changes/<actual-task-title
 
 - Work only on the assigned server worktree/branch. Before edits and before delivery, inspect status, fetch origin, merge origin/main. Never rebase, force-push, stash/reset/clean or touch another worker's changes/checkpoint.
 - Retain each task's own checkpoint. Report baseline/commit/owned diff/evidence to main-brain; root does not read worker checkpoints. Update own tasks/regression/readiness separately.
-- Shared machine is small and hosts unrelated services. No concurrent bulk dependency installation, container startup or full builds. Runtime owns the first bounded dependency feasibility check; coordinate any ephemeral PostgreSQL validation with main-brain before starting it. No system package replacement or background production services.
+- Shared machine is small and hosts unrelated services. No concurrent bulk dependency installation, container startup or full builds. Runtime owns the first bounded dependency feasibility check; coordinate any ephemeral PostgreSQL validation with main-brain before starting it. System Python replacement is user-authorized under delta PY-01: first check system-tool/service dependencies, identify the exact change and recovery path, then verify compatibility after any change. Only Runtime may execute this coordinated host change; other workers must not race it. Other system package replacement and background production services remain outside this grant.
 - Use public docs and project-owned synthetic fixtures. No company repository reading/copying in these tasks. Do not copy private control-workspace documents wholesale into Git.
 - No broad unit-test campaign required. Use focused schema/contract checks and explicitly requested integration/spike evidence; report missing runtime prerequisites honestly.
 - Shared files, dependency pins and protocol versions are one-owner decisions reviewed by main-brain. Other tasks submit a requirement/diff suggestion without writing the owner's files.

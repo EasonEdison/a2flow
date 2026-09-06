@@ -1,4 +1,4 @@
-# SkillWeave implementation baseline SW-P1-20260907.1
+# SkillWeave implementation baseline SW-P1-20260907.2
 
 Status: phase 1 execution authorized by the user on 2026-09-07. This baseline supersedes conflicting earlier proposed designs. Authorization is not implementation or runtime evidence.
 
@@ -28,10 +28,14 @@ Only independently restated product requirements and public sources may enter th
 16. Ordinary users can browse M assets and use authorized B chat/Skills/Workflows/cards. Administrators create/edit/publish assets. Read-only M access does not mean read-only B execution. Do not expose authoring or script-upload powers to ordinary users.
 17. Distinguish conversation history, cross-session memory and knowledge retrieval. Reuse mature knowledge components; Deep Agents is not a complete zero-development knowledge-base platform. Lightweight personal-memory view/delete/disable in conversation settings is conditionally approved if low cost, not a separate platform. Disable long-term reads/new writes without disabling current chat; memory deletion is not chat deletion. Assess cost first and escalate material expansion.
 
+## Authorization delta PY-01
+
+On 2026-09-07 the user explicitly permits replacing/upgrading this server's system Python if needed for implementation. This supersedes the former prohibition; it is permission, not a requirement to replace it immediately or evidence of completion. Runtime owns dependency/compatibility checks, a recoverable change plan and post-change verification; main-brain coordinates the single host-level executor. Do not treat missing replacement authorization as a blocker. This does not authorize changes to unrelated services, other system packages, public deployment or secrets.
+
 ## Not approved / not phase 1 implementation assumptions
 
 - Exact knowledge-base product scope, unrestricted user uploads, demo real-world business-write authority and live-model provider/secret configuration.
-- Public deployment, new exposed ports, Nginx/firewall changes, existing unrelated service changes, system Python replacement or destructive data operations.
+- Public deployment, new exposed ports, Nginx/firewall changes, existing unrelated service changes or destructive data operations.
 - Arbitrary cyclic graphs, multi-agent employee swarms, unrestricted shell/script execution, general internal Skill recovery, business transaction/reconciliation infrastructure.
 - A transport/protocol or service language merely because an old worker draft proposed it. Shared interfaces need coordinator review.
 
