@@ -23,7 +23,20 @@
 | Publication Adapter | 将已通过校验的图提交共享 publication contract | 自建第四套 release/resolver |
 | Runtime Graph Consumer | 把已解析发布图映射为 LangGraph，并持久化运行状态 | 由 Composer 实现第二套 scheduler |
 
-## 4. 非规范发布图候选
+## 4. Python 模块与校验栈候选
+
+推荐 `JSON Schema -> strict Pydantic domain model -> NetworkX DiGraph -> Workflow domain validators -> external resolver ports` 的分层流水线：
+
+- shared contracts 的 JSON Schema 是 wire authority；适配器按 artifact 的 `$schema` 方言执行，不能复制、放宽或静默升级当前 Draft 4 候选。
+- Pydantic 只构建严格内部模型，拒绝未知字段和隐式容错；不能覆盖 schema 结论。
+- NetworkX 提供 cycle、reachability、ancestor/descendant 和拓扑遍历；Composer 只实现 decision/MERGE、split/JOIN、failure requirement 等领域规则。
+- LangGraph/Deep Agents 不进入 M validator；Runtime 只消费已校验的发布图。
+- 外部 Skill/Application 引用通过只读端口校验，纯 graph validator 不直连数据库或网络。
+- issue 按固定键排序；公共 code/envelope 仍服从 main-brain 命名的 shared revision。
+
+候选源码布局放在未来 `services/workflow-registry/src/skillweave_workflow_registry/`，分为 `models`、`validation`、`ports`、`adapters`；首个实现切片只做纯 validator 和 fake resolver 测试，不先接 PostgreSQL。完整方案比较、依赖版本/许可证/Python 要求和测试门禁见 `inputs/python-module-validation-candidates.md`。该研究未修改根 manifest、未安装包，也不构成服务器兼容证据。
+
+## 5. 非规范发布图候选
 
 以下只表达消费者所需语义，字段名和 contractVersion 不具有共享契约权威：
 
@@ -65,9 +78,9 @@ PublishedWorkflowGraph
 - `failureRequirement` 是 authoring intent；运行状态必须保持真实 SUCCESS/FAILED/SKIPPED/WAITING，不得改写为成功。
 - 发布物不携带 userId 或模型可修改的 environment。Runtime 从可信 ingress context 获取它们并调用共享 resolver。
 
-## 5. 首版静态校验
+## 6. 首版静态校验
 
-### 5.1 全局图约束
+### 6.1 全局图约束
 
 - 恰好一个 START、一个 FINALIZER、一个 END；所有成功完成路径经 FINALIZER 到 END。
 - 图必须有限、无环、全可达；所有非 END 节点至少有一个出边，所有非 START 节点至少有一个入边。
@@ -75,27 +88,27 @@ PublishedWorkflowGraph
 - condition candidate 在进入 parallel JOIN 前必须通过显式 CONDITION_MERGE 汇合；未选 candidate 不构成 join 成员。
 - 节点/边 key 唯一，所有引用存在；编辑 layout 不进入发布语义或摘要。
 
-### 5.2 Sequence
+### 6.2 Sequence
 
 - 普通节点只能使用一种路由机制；不得同时配置无条件边和 decision candidates。
 - REQUIRED 节点失败时不得激活其普通后继。
 - ALLOW_SKIP 节点失败保持 FAILED，但可按已配置后继传播；真实 skip 保持 SKIPPED。等待不是 skip。
 
-### 5.3 AI decision
+### 6.3 AI decision
 
 - 至少两个 candidate；candidate key、展示 label 和 target 均唯一、完整。
 - AI 只能从 candidates 返回一个 route key；Skills 无需路由字段。
 - 语义无法判断才创建 node-bound INTERACTIVE selection；技术错误返回 FAILED，不展示伪 fallback。
 - 用户选择必须命中当前 interaction 和候选集合，直接路由且不再交给 AI 重选。
 
-### 5.4 Parallel 与 join
+### 6.4 Parallel 与 join
 
 - 每个 split 必须有唯一对应 join 和不少于两个 branch key。
 - 每个 branch 从 split 后第一个节点到 join 前最后一个节点必须可静态归属，首版分支不得交叉或嵌套。
 - join 的成员集合必须等于 split 的 branch 集合；缺失、重复、额外成员均拒绝发布。
 - join 不以同一次 invoke/super-step 已返回作为语义；它依据每个 branch 的持久化终态判断。
 
-## 6. 执行真值表
+## 7. 执行真值表
 
 | 分支状态 | 独立兄弟分支 | 对应 join |
 | --- | --- | --- |
@@ -109,7 +122,7 @@ PublishedWorkflowGraph
 
 已确认样例：split 后 A 进入 INTERACTIVE decision 并等待；B1 成功后 B2 必须继续；B2 到 join 后等待 A。A 获得合法用户选择并完成后，join 才可满足。该行为必须由 Runtime spike 实证，不能仅从 LangGraph `thread_id` 或一次 graph invocation 推断。
 
-## 7. 前序/祖先上下文
+## 8. 前序/祖先上下文
 
 - Skill、decision 和 Finalizer 默认读取全部相关、已实际执行祖先节点的最终结果及真实状态，而不是只读直接前驱或前一个 Skill payload。A→B→C 时 C 的默认 context 必须同时包含 A、B。
 - condition 未选 candidate 从未执行，不能生成占位结果；parallel JOIN 后的下游/Finalizer 汇总真实执行分支的祖先结果和状态，不虚构未选分支事实。
@@ -117,7 +130,7 @@ PublishedWorkflowGraph
 - 不要求 Skill 输出 route、branch 或 Workflow 专用字段；Runtime 通过统一 context envelope 和 exact `skillKey` 调用 `use_skill`，不得硬编码字符串前缀转换。
 - context envelope 和结果引用属于 shared contracts；实际执行祖先的累积、确定性顺序/引用和预算策略属于 Runtime 映射。本任务只要求 branch/node identity 稳定可关联并保留全部相关已执行祖先事实。
 
-## 8. A2UI、Finalizer 与 retry
+## 9. A2UI、Finalizer 与 retry
 
 - DISPLAY_ONLY Application 呈现后不暂停；INTERACTIVE Application 产生 node-bound interaction 并等待。
 - Action 的业务成功和是否完成 interaction 由 A2UI 配置判定；render/Action transport success 不等于 Skill success。
@@ -127,7 +140,7 @@ PublishedWorkflowGraph
 - A2UI retry 保留已完成前驱和独立分支，重入 owning node；其他 Skill/model/script/non-A2UI Tool failure 不提供通用 retry。
 - LangGraph interrupt resume 会从 owning node 开头重跑，Runtime 必须隔离 interrupt 前副作用并依赖 control request dedupe；业务副作用幂等仍归被调用 API 后端。
 
-## 9. environment、userId 与版本失配
+## 10. environment、userId 与版本失配
 
 - PRT 与 ONLINE 使用分离资产数据库。PRT 只解析 PRT current；ONLINE 只解析 ONLINE stable/gray，绝不读取 PRT。
 - `userId` 是唯一灰度身份词；trusted context 由后端注入，模型和图定义不能覆盖。
@@ -135,7 +148,7 @@ PublishedWorkflowGraph
 - 在执行、continue 或 Action ingress 发现当前有效版本与记录值不一致时，必须在新业务调用前阻断并提示 reset。
 - reset 只提示；显式 restart 创建全新 run，不继承旧 context/checkpoint/result/interaction，也不检查旧业务结果。
 
-## 10. 发布、并发与 PostgreSQL
+## 11. 发布、并发与 PostgreSQL
 
 - Draft 保存使用 expected revision 乐观并发；旧 revision 不得覆盖新 revision。
 - 发布操作对同一 control request 保持幂等，但不得声称业务 exactly-once。
@@ -143,7 +156,7 @@ PublishedWorkflowGraph
 - PostgreSQL 是唯一关系型持久化；多实例正确性不得依赖进程内锁、缓存或 session affinity。
 - 具体表和 API 在 main-brain 批准 shared graph revision 后进入 `services/workflow-registry/` 实现计划。
 
-## 11. LangGraph 映射要求
+## 12. LangGraph 映射要求
 
 公开 Graph API 可表达普通边、conditional edges 和同 super-step 的 parallel destination；interrupt/persistence 可保存等待并通过 Command resume。它们是实现候选，不自动证明产品语义。
 
@@ -160,7 +173,7 @@ Runtime feasibility 必须至少证明：
 
 若标准 LangGraph 调用模型不能满足 A 等待/B 继续，Runtime owner 必须提供最小 reproducer 并向 main-brain 报告；不得由 Composer 增加自研调度器规避。
 
-## 12. 失效边界
+## 13. 失效边界
 
 - Skill/Application/Workflow 引用解析失败、跨环境读取、未授权或版本不支持：发布或 ingress 失败关闭。
 - AI 返回候选外 route：decision FAILED，不选择默认分支。
@@ -168,15 +181,16 @@ Runtime feasibility 必须至少证明：
 - 用户选择 interaction/node/version 不匹配：拒绝，不触发新业务调用。
 - Skill identity 不符合获批 `skillKey` 或缺失显式 typed mapping：发布失败关闭，不拆字符串前缀补救。
 - join 配置不完整、嵌套 parallel、循环或不可达：拒绝发布。
-- 共享 contract 尚未批准：只交付 requirement fixture，不实现依赖接口。
+- 共享 contract 尚未批准：只交付 requirement fixture 和模块/依赖候选，不实现依赖接口。
+- shared schema dialect 与内部模型不一致：失败关闭；不得由 Pydantic coercion 或 schema 方言升级把非法 payload 变为合法。
 
-## 13. 第一阶段文件边界
+## 14. 第一阶段文件边界
 
-- 当前拥有并修改：`openspec/changes/oss-workflow-composer/`。
+- 当前拥有并修改：`openspec/changes/oss-workflow-composer/`，包括 `inputs/python-module-validation-candidates.md`。
 - 已预留但暂不实现：`services/workflow-registry/`。
 - 不修改：`packages/contracts/`、Runtime、A2UI registry、Skill registry、数字员工、根 manifests 和其他任务 checkpoint。
 
-## 14. 公开依据
+## 15. 公开依据
 
 - LangGraph Graph API 说明 multiple outgoing edges 在下一 super-step 并行，conditional edges 可返回一个或多个目标。
 - LangGraph Interrupts 说明持久化等待、resume、multiple parallel interrupts，以及 resume 时 owning node 从开头重跑。

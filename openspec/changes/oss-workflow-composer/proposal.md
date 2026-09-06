@@ -4,6 +4,7 @@
 
 - 统一基线：`SW-P1-20260907.2` + `ENG-01`
 - 工程决策：Workflow registry 后端按 ENG-01 规划为可导入 Python 模块；不自动启动独立常驻服务，根依赖仍由 main-brain 单一协调。
+- 模块研究：已形成 `inputs/python-module-validation-candidates.md`，推荐 JSON Schema 权威边界 + 严格 Pydantic 域模型 + NetworkX DAG 算法；仅为 `DOC_RESEARCH_ONLY`，未安装或锁定依赖。
 - 基线集成 SHA：`c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`
 - 设计：`PROPOSED`
 - 实现：等待 main-brain 对共享契约实际差异审查后放行
@@ -63,6 +64,10 @@ M 侧需要发布可被 Python + LangGraph Runtime 编译执行的多 Skill Work
 
 表达力强，但会把循环、嵌套、脚本和运行细节带入首阶段，也容易形成第二套调度抽象。本轮仅参考公开图概念，不声明兼容。
 
+## Python 模块/校验栈候选
+
+ENG-01 下推荐把 shared JSON Schema、严格内部域模型和成熟 DAG 算法分层：shared schema 保持 wire authority；Pydantic 只负责域模型；NetworkX 负责 cycle、reachability、ancestor/descendant 和拓扑遍历。领域 validator 只实现 decision/MERGE、split/JOIN、failure requirement 等产品约束，不把 LangGraph 当发布校验器，也不创建第二套 Runtime。精确布局、版本/许可证/兼容数据和替代方案见 `inputs/python-module-validation-candidates.md`。
+
 ## 已确认的图执行语义
 
 1. Sequence：节点完成为可传播终态后才激活后继。
@@ -84,7 +89,7 @@ M 侧需要发布可被 Python + LangGraph Runtime 编译执行的多 Skill Work
 
 ## 首个可执行切片
 
-当前可独立完成：修订本 change，增加一份有效 parallel/decision 图候选，以及 A→B→C 和 join 后真实执行分支 context cases，用 Python 标准库做 JSON 结构/断言检查。`services/workflow-registry/` 仅预留所有权，不在共享 graph revision 获批前写实现。
+当前独立设计切片已覆盖：有效 parallel/decision 图、A→B→C 与 join 真实执行分支 context cases、Python 标准库 fixture checker，以及 Python 模块/校验栈候选。`services/workflow-registry/` 仅预留所有权；必须等 main-brain 命名 shared graph revision 并确认根依赖后，才按 TDD 创建首个纯 validator 实现。
 
 ## 公开参考
 

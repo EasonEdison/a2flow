@@ -9,11 +9,11 @@
 - [ ] 0.1 接入 main-brain 批准的 graph identity/version、exact `skillKey`/typed mapping、trusted context 和 environment-local resolver revision。
 - [ ] 0.2 接入 interaction/result references、control request dedupe 和配置版本比较契约。
 - [ ] 0.3 与 Runtime 固化发布图到 Python LangGraph 的版本化 consumer contract。
-- [ ] 0.4 按 ENG-01 提交可导入的 Python workflow-registry 模块布局；根 `pyproject`/lock 仍由 main-brain 单一协调。
+- [ ] 0.4 main-brain 审查 `inputs/python-module-validation-candidates.md` 的可导入 Python 模块布局、Python 3.11+ 候选和依赖/许可证矩阵；根 `pyproject`/lock 仍由 main-brain 单一协调。
 
 ## 1. Workflow registry 最小骨架
 
-- [ ] 1.1 在 `services/workflow-registry/` 创建最小 Python 模块，不修改共享根 manifest，也不默认启动独立常驻服务。
+- [ ] 1.1 在 `services/workflow-registry/` 创建最小 Python 模块：shared-schema adapter、严格内部模型、纯 validation/ports；不修改共享根 manifest，也不默认启动独立常驻服务。
 - [ ] 1.2 实现 PostgreSQL-only draft/revision repository 和 expected-revision 乐观并发。
 - [ ] 1.3 通过共享 publication/resolver 保存 PRT/ONLINE 分离资产，不自建 gray/fallback。
 - [ ] 1.4 验证两个无状态实例共享 PostgreSQL 时草稿写入和发布控制请求不丢更新。
@@ -24,7 +24,8 @@
 - [ ] 2.2 拒绝循环、孤儿节点、未知 candidate、缺失/重复 branch、未配对 join 和嵌套 parallel。
 - [ ] 2.3 校验 decision candidate 与 A2UI selection Application 引用，不要求 Skill 路由字段。
 - [ ] 2.4 校验 REQUIRED/ALLOW_SKIP 传播边界和真实状态不改写。
-- [ ] 2.5 输出稳定 issue code 和 node/edge/region 定位。
+- [ ] 2.5 输出稳定 issue code、node/edge/region 定位和确定性排序；公共 issue envelope/code 服从 named shared revision。
+- [ ] 2.6 按 TDD 对每个 mutation 实际调用产品 validator，并验证输入顺序打乱后 normalized graph 与 issues 仍确定；当前 DOC fixture checker 不计入完成。
 
 ## 3. 发布与读取适配
 

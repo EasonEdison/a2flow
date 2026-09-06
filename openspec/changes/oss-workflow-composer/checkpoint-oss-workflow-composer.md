@@ -3,11 +3,11 @@
 ## 当前状态
 
 - 任务：M 侧 Skill Workflow Composer Phase 1 对齐与图契约需求。
-- 阶段：main-brain 首轮审查后的 context/Skill identity 小修订。
+- 阶段：context/Skill identity 修订已交付；继续完成独立 Python 模块/validator 方案收敛。
 - 权威基线：`SW-P1-20260907.2 + ENG-01`。
 - 基线提交：`1bcc61a4137436f5c3811d555d2af8244c0fc971`。
 - 基线集成 SHA：`c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`。
-- 本次修订前 `origin/main` 同步 SHA：`f419910d387eab687359baabdbf7af384eae1da3`。
+- 本轮提交前 `origin/main` 同步 SHA：`b34941ba1786f8cb53d4bc42f482a9608e4d6345`。
 - 设计状态：`PROPOSED`。
 - Runtime 状态：`NO READY`。
 - 工作区：`/home/admin/OpenSource/repos/.parallel/oss-workflow-composer/platform`。
@@ -26,6 +26,9 @@
 - 已向 main-brain 发送首个对齐回执，包含基线、冲突、专属范围、首个切片和真实依赖。
 - 已修订 spec/tasks/regression/readiness，并增加有效图、验证场景和标准库自检脚本。
 - 已按 TDD 先验证缺失 context case 和旧 `skillRef` 均会使 checker 失败，再修正为：`PASS nodes=11 edges=12 staticCases=5 runtimeCases=5 contextCases=2`。
+- 已接收 Contracts 固定候选快照：内容 commit `404bbcacc1ef176c273c9a90fc4ae91bfadc42fd` 已进入 main；状态仍为 `SW-CONTRACTS-P1-CANDIDATE.1 / PROVISIONAL`，未冒充 named graph approval。
+- 已基于官方项目元数据形成 `inputs/python-module-validation-candidates.md`：推荐 shared JSON Schema + strict Pydantic + NetworkX，提出未来 Python 包布局、分层 pipeline、复杂度/限额和 TDD/mutation 门禁。
+- 本任务未安装依赖、未修改根 manifest/lock、未创建 `services/workflow-registry/`、未更改系统 Python。
 - 首轮 10 个专属文件已由 worker `255475d4a5a71ed767adf22362c6353a40fc4e12` push 并集成；main-brain 实际复核后指出“直接前驱”偏差。
 - 服务器未安装 OpenSpec CLI；未安装依赖，未执行 strict CLI validate。
 
@@ -57,7 +60,7 @@
 
 ## 下一可执行动作
 
-等待 main-brain 复核本轮 context/Skill identity 小修订并命名 shared graph revision；在放行前不实现 `services/workflow-registry/`。
+向 main-brain 交付 Python 模块/validator 候选的 owned diff、依赖取舍和证据；继续接受 main-brain 直接协调。named shared graph revision 与根依赖未放行前，不实现 `services/workflow-registry/`。
 
 ## 交付记录
 

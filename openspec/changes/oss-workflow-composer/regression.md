@@ -3,6 +3,7 @@
 ## 总体状态
 
 - 图 fixture 自检：`PASS (DOC_FIXTURE_ONLY)`
+- Python 模块/依赖研究：`PASS (DOC_RESEARCH_ONLY)`
 - 服务实现验证：`PLANNED`
 - Runtime 集成：`NO READY`
 - 说明：fixture 自检只证明项目自有 JSON 样例结构和声明的 case 编码一致；它没有施加 5 种 mutation，也没有运行 5 类 Runtime 行为，不证明共享 contract、LangGraph 行为或产品可用。
@@ -15,6 +16,14 @@
 - Expected output：`phase1-workflow-fixtures: PASS nodes=11 edges=12 staticCases=5 runtimeCases=5 contextCases=2`
 - Actual output：`phase1-workflow-fixtures: PASS nodes=11 edges=12 staticCases=5 runtimeCases=5 contextCases=2`（2026-09-07）
 - 断言：JSON 可解析；node/edge key 唯一；全图无环；START/FINALIZER/END 唯一；decision candidates 与 CONDITIONAL edges 一致；parallel split/JOIN branch 集合闭合；A→B→C 与 join 后已执行分支 context cases 编码完整；样例不携带 environment/userId/credential。static/runtime cases 仍只是待执行用例目录。
+
+## R0b Python 模块/校验栈公开资料研究
+
+- 状态：`EXECUTED (DOC_RESEARCH_ONLY)`
+- Method：读取 Pydantic、jsonschema、NetworkX、Python graphlib、pytest、Hypothesis、Psycopg、Deep Agents 的官方文档/PyPI 元数据，形成 `inputs/python-module-validation-candidates.md`
+- Params：2026-09-07 可见的最新发布元数据、Python 要求、许可证和公开 DAG API；未安装或 import 候选包
+- Success `data`：推荐 `shared JSON Schema + strict Pydantic + NetworkX`；Python `3.11+` 仅为兼容候选；根 pins/lock、系统 Python 和 Runtime 组合仍待单一 owner 实测
+- 字段级断言：没有新增 `services/workflow-registry/`、根 manifest/lock、系统包或进程；研究结果不能把 G1-G7 改为 READY
 
 ## R1 发布合法 sequence/condition/parallel 图
 
@@ -30,7 +39,7 @@
 - Method：`ValidateWorkflowDraft`
 - Params：分别应用 cycle、unknown candidate target、missing join branch、nested parallel、unreachable node fixtures
 - Expected error：`data.valid=false`；issues 分别含 `GRAPH_CYCLE`、`DECISION_TARGET_UNKNOWN`、`PARALLEL_BRANCH_MISMATCH`、`PARALLEL_NESTING_NOT_SUPPORTED`、`GRAPH_UNREACHABLE`
-- 字段级断言：每个 issue 含 node/edge/region 定位；不得生成发布 artifact。
+- 字段级断言：每个 issue 含 node/edge/region 定位并按获批顺序稳定输出；nodes/edges 输入重排不改变语义结果；不得生成发布 artifact。
 
 ## R3 AI 不确定进入同节点 A2UI 选择
 
