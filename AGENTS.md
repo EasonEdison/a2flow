@@ -2,7 +2,8 @@
 
 ## Current phase authorization (2026-09-07)
 
-- The user authorized phase 1 execution and main-brain-led coordination. Read `openspec/changes/skillweave-phase1/baseline.md` (SW-P1-20260907.1) and `plan.md` before working. These supersede conflicting old design-only instructions and proposed languages/semantics below.
+- The user authorized phase 1 execution and main-brain-led coordination. Read `openspec/changes/skillweave-phase1/baseline.md` (SW-P1-20260907.2) and `plan.md` before working. These supersede conflicting old design-only instructions and proposed languages/semantics below.
+- Delta PY-01: the user permits necessary system Python replacement on this server. Runtime owns compatibility/dependency checks, a recoverable change plan and post-change verification; main-brain coordinates one executor. Do not treat replacement permission as missing. This is not an instruction to replace immediately and does not authorize other package/service/deployment changes.
 - Start baseline alignment, shared contract candidates and the isolated Runtime feasibility spike now. Dependent application implementation follows main-brain's recorded interface/design review, not another user-mediated kickoff.
 - Own only your existing change directory and the explicitly reserved paths in the phase 1 plan. Shared files need an exclusive owner grant. main-brain owns this AGENTS.md and the phase 1 baseline/plan.
 - Runtime is Python + Deep Agents SDK + LangGraph; PostgreSQL only. Respect the baseline's Tool, PRT/ONLINE userId gray, A2UI, retry/stop/restart and clean-room boundaries. Old drafts are not authority.
