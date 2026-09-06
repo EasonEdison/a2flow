@@ -51,7 +51,7 @@ A successful Tool result needs：
 - resolved logical identity and immutable release/version；
 - configuration/version evidence for execution and continue checks；
 - `SKILL.md` instructions；
-- authorized read-only resource descriptors or opaque handles with media type/digest/size；text references and binary assets remain distinguishable；
+- authorized read-only resource descriptors or opaque handles with normalized `logicalPath`、media type、digest and size；text references and binary assets remain distinguishable；
 - content digest；
 - compatibility hints such as required Tool names, never authorization。
 

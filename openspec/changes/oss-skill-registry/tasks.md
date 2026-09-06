@@ -19,9 +19,10 @@
 
 - [ ] 1.1 获得 trusted context、environment-local resolver、package/release reference、version evidence 和共享错误语义的命名 revision。
 - [ ] 1.2 与 Runtime owner 确认 `use_skill` model-visible input、trusted injection 和 success material 的最终合同。
-- [ ] 1.3 与 main-brain 确认 `services/skill-registry/` 的语言、目录和根依赖所有权。
+- [x] 1.3 main-brain 已确认 Python、`services/skill-registry/` 独立 import package、根 pyproject/lock 由主控统一，且不新建常驻进程。
 - [ ] 1.4 确认 `requiredToolNames` 是 revision 元数据还是只从指令推导；不得授予权限。
 - [ ] 1.5 在以上 gate 完成前，不写共享 contracts、根 manifest 或跨域 Runtime 代码。
+- [x] 1.6 提交格式校验、安全 YAML、资源读取候选调研和模块路径清单；未安装依赖或实现通用解包。
 
 ## 2. Minimal Domain Slice after Review
 
@@ -46,5 +47,5 @@
 ## 4. Delivery
 
 - [x] 4.1 提交前重新 fetch/merge 最新 `origin/main`，执行精确范围、`git diff --check` 与敏感信息扫描。
-- [ ] 4.2 push worker 分支并通过本任务独占 integration worktree 合入服务器 `origin/main`，禁止强推。
-- [ ] 4.3 回报 worker/integration SHA、实际检查和剩余 NO READY 门禁。
+- [x] 4.2 push worker 分支并通过本任务独占 integration worktree 合入服务器 `origin/main`，未强推。
+- [x] 4.3 已向 main-brain 回报 worker/integration SHA、实际检查和剩余 NO READY 门禁。
