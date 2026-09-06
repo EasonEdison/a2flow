@@ -1,49 +1,65 @@
 # oss-agent-workflow-runtime 执行检查点
 
-## 身份与边界
+## 身份与所有权
 
-- 任务标题：`oss-agent-workflow-runtime`
-- Worker worktree：`/home/admin/OpenSource/repos/.parallel/oss-agent-workflow-runtime/platform`
-- Worker 分支：`codex/oss-agent-workflow-runtime/design`
-- 集成目标：`origin/main`
-- 所有权：仅 `openspec/changes/oss-agent-workflow-runtime/`
-- 禁止项：不实现代码、不安装依赖、不修改数据库、服务、端口或部署状态；不读取其他任务 checkpoint。
+- 任务标题：oss-agent-workflow-runtime
+- Worker：/home/admin/OpenSource/repos/.parallel/oss-agent-workflow-runtime/platform
+- 分支：codex/oss-agent-workflow-runtime/design
+- 集成目标：origin/main
+- 独占规格：openspec/changes/oss-agent-workflow-runtime/
+- 预留实验：experiments/runtime-phase1/
+- 预留实现：services/runtime/
+- 禁止：其他任务 checkpoint、共享根文件/依赖/版本、部署、secret、现有服务/数据库/端口；Python 仅按 PY-01 单执行者边界变更
 
-## 当前磁盘真值
+## 基线真值
 
-- 初始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`
-- 2026-09-06 已核对 pwd、branch、status、worktree list 和 origin。
-- 开始前已 fetch/merge 当时最新 main；设计期间 main 并发前进，均以普通 merge 同步，无 rebase 或强推。
-- Worker 最终远端分支为 `2d998e60e662b4a3be8eb6e89bb2fa799767e45a`，工作区干净。
-- Integration worktree：`/home/admin/OpenSource/repos/.parallel/oss-agent-workflow-runtime/integration-platform`。
-- Integration 从 main `ab3e948e2116f3b485d95e0a691de1ea54824eab` 合入 worker，内容提交为 `c4e04e0793f0ba4706b427b371cfdfa9817f96c0`。
-- `origin/main` 已确认等于 `c4e04e0793f0ba4706b427b371cfdfa9817f96c0`。
+- 基线 ID：SW-P1-20260907.2
+- 基线提交：1bcc61a4137436f5c3811d555d2af8244c0fc971
+- 工程批准子集：`SW-P1-SUBSET-01`；release SHA256 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
+- 2026-09-07 已核对 linked worktree、branch、status、worktree list。
+- 2026-09-07 多次 fetch/merge origin/main；本里程碑已合入 `28dde023e323c4fa4f9f509b9f6e3954bc669b7a`。
+- 所有未提交文件均在本任务 owned OpenSpec 与 `experiments/runtime-phase1/`；未触碰其他 owner 文件。
 
 ## 当前里程碑
 
-- 状态：`SOURCE_INTEGRATED`
-- 设计证据：仅使用用户净化后的需求、本仓库边界文档及公开官方资料。
-- Runtime 准出：`NO READY`
-- 已完成：本次限定设计草案的文档、自审、校验、worker push、独占 integration 合并与 main push。
-- 本设计切片无剩余执行项；语言、协议和实现仍等待 CTO/main-brain 审查授权。
+- 状态：PHASE1_SUBSET01_RUNTIME_PROBE_BATCH1_GREEN
+- Runtime：NO READY
+- 已完成：PY-01 安装/健康复核；task venv；SDK resolver/import；59 项实验 lock；主干 `skillweave_contracts` 严格适配；真实 Skill fixture；Deep Agent Tool surface；离线 Anthropic wire；A2UI mode/interrupt。
+- TDD：首批 15/15 GREEN；有效 RED 包括默认隐式 Tool 暴露、provider schema 非 strict/非批准 pattern、newline key、非法 resolver result 与 Interaction 碰撞。
+- 进行中：worker commit/push 与自动 integration；独立 reviewer 已批准（Critical=0，Important=0）。
+- 未开始：PostgreSQL setup、双进程 resume、独立并行 B1→B2、A2UI-only retry、stop/restart、生产 services/runtime。
+
+## 移除的冲突
+
+- TypeScript/LangGraphJS 选型与 parity spike。
+- Runtime 业务幂等、跨 run dedup/补偿、通用 lease/fencing scheduler。
+- 通用 Skill retry/recovery、冻结旧版本续跑、固定 Skill 子图。
+- presentation 即暂停、Action success 即完成、Finalizer 越界。
+- thread_id 可证明独立并行推进的假设。
+
+## 环境证据
+
+- DNF transaction 9：只新增 Python 3.11.13/pip 及相关 7 包；0 update/remove。
+- 默认 `/usr/bin/python3` 仍为 platform-python 3.6.8；`/usr/bin/python3.11` 为 3.11.13。
+- 安装后 DNF 4.7.0、tuned active；现有系统工具/服务未改解释器。
+- venv：`/home/admin/OpenSource/.venvs/skillweave-runtime-p1`，admin-owned。
+- deepagents 0.7.13、langchain 1.4.0、langchain-core 1.6.2、langgraph 1.2.11、checkpoint-postgres 3.1.2。
+- `langgraph==1.2.10` 首次 resolver 因 LangChain 要求 >=1.2.11 被拒；未锁入。
+- `AsyncPostgresSaver` 首次 import 因无 libpq implementation 失败；加入 venv-only psycopg-binary 3.3.5 后通过。
+- `pip check` 无 broken requirements；`requirements.lock` 59 项。
+- psycopg-binary metadata 为 LGPL-3.0-only；正式分发/notice 评审未完成。
+- `SW-P1-SUBSET-01` 共享相关 fixtures 15 个全部匹配主干共享严格适配；全 bundle focused validator 57/57。
+- Runtime suite 首批 15/15 GREEN。
+- 未启动 PostgreSQL/容器/公开服务，未触碰现有 MySQL 或真实 key。
 
 ## Next Executable Action
 
-等待 main-brain 审查本提案并统一语言与跨域契约；未经新授权不进入实现。
+提交当前 staged worker、push，并通过独占 integration worktree 自动合入 main。合入后先回传稳定源码 SHA；PostgreSQL/双进程继续等待 main-brain 明确协调，不以其他 saver 替代。
 
-## 交付证据
+## 交付状态
 
-- Worker 内容 commit：`9d9100f4401c373680623d1dd094f44dffd0dd69`
-- Worker 最终 SHA / push：`2d998e60e662b4a3be8eb6e89bb2fa799767e45a`；PASS
-- Integration 内容 commit / 首轮 main push：`c4e04e0793f0ba4706b427b371cfdfa9817f96c0`；PASS
-- 本 checkpoint 更新将作为后续 main 提交；最终 main SHA 以 Git 真值和任务回报为准。
-- `git diff --check`：PASS
-- 场景结构：8 个 Scenario、8 个触发、8 个期望；PASS
-- 实现任务勾选检查：全部未勾选；PASS
-- OpenSpec strict validate：CLI 不可用，未执行；未安装依赖
-- 来源与敏感信息检查：仅公开官方 URL；未发现公司标识、内部域名、凭据或 secret 模式；PASS
-
-## 阻塞与待决
-
-- 非阻塞：TypeScript/LangGraphJS 与 Python/LangGraph 的最终选择由 CTO/main-brain 统一裁决。
-- 非阻塞：公共运行协议版本、A2UI/AG-UI 边界与发布资产契约尚未批准。
+- 本轮修改：未提交
+- Worker push：待执行
+- Integration：待执行
+- OpenSpec structure：PASS；CLI 在 PATH/仓库中均不可用，未在线安装替代
+- Runtime readiness：NO READY

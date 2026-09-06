@@ -1,0 +1,10 @@
+anthropic==1.4.0
+deepagents==0.7.13
+httpx2==2.12.0
+langchain==1.4.0
+langchain-anthropic==1.7.1
+langchain-core==1.6.2
+langgraph==1.2.11
+langgraph-checkpoint-postgres==3.1.2
+psycopg-binary==3.3.5
+pydantic==2.13.5

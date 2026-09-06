@@ -1,34 +1,87 @@
-# Agent/Workflow Runtime 回归计划
+# Agent/Workflow Runtime Phase 1 回归与证据
 
-## 状态
+## 当前结论
 
-- 回归状态：PLANNED
-- 已执行场景：0
-- Runtime 准出：NO READY
-- 说明：方法名和字段是消费者需求草案，不代表共享协议已批准；所有结果均为期望值，不是实测证据。
+- 回归状态：PARTIAL
+- Runtime：NO READY
+- SDK 行为用例：15/15 GREEN（首批 Tool/A2UI/contract/provider-wire 切片）
+- 共享 contracts focused validator：57/57 GREEN；只代表 shape/fixture
+- 当前完成：Python 3.11 隔离环境、依赖解析/import、`SW-P1-SUBSET-01` 对齐、真实 Skill fixture、离线 Anthropic wire、A2UI mode/interrupt 探针
+- 当前阻塞：临时 PostgreSQL 尚未协调；双进程、并行推进、scoped retry、stop/restart 与 live model 尚未验证
 
-## 计划场景
+## 已执行环境证据
 
-| ID | Method | Params | 期望成功 data / error | 字段级断言 |
+| 检查 | 命令 | 实际输出 | 结论 |
+| --- | --- | --- | --- |
+| Worker 主干 | `git rev-parse HEAD` after merge | `28dde023e323c4fa4f9f509b9f6e3954bc669b7a` | 已消费 `SW-P1-SUBSET-01` release 与 schema snapshot |
+| PY-01 安装 | DNF transaction 9 | 新增 python3.11 3.11.13、pip 22.3.1 等 7 包；无 update/remove | 已按批准精确事务完成 |
+| 系统解释器 | `python3 --version` / `/usr/bin/python3.11 --version` | 3.6.8 / 3.11.13 | 默认 platform-python 未替换 |
+| 系统健康 | `dnf --version` / `systemctl is-active tuned` | 4.7.0 / active | 安装后系统工具与 tuned 正常 |
+| task venv | `/home/admin/OpenSource/.venvs/skillweave-runtime-p1` | admin-owned；Python 3.11.13 | 未污染系统 Python 包 |
+| 首次 resolver | pin `langgraph==1.2.10` | `ResolutionImpossible`；LangChain 1.4.0 要求 >=1.2.11 | 1.2.10 未被错误锁定 |
+| 最终 resolver/import | 1.2.11 + `AsyncPostgresSaver` import | deepagents 0.7.13、langchain 1.4.0、langgraph 1.2.11、checkpoint-postgres 3.1.2 | SDK/API import 通过 |
+| Psycopg 实现 | 首次 import / 加入 `psycopg-binary==3.3.5` | 首次无 libpq implementation；binary wheel 后通过 | 不改系统 libpq；LGPL-3.0-only 仍是发布门禁 |
+| 依赖一致性 | `python -m pip check` | `No broken requirements found.` | task venv 依赖闭包一致 |
+| 依赖冻结 | `python -m pip freeze` | `requirements.lock` 共 59 项 | 仅实验锁；根 lock 未修改 |
+| Release 记录 | SHA256 `implementation-release-01.md` | `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4` | 使用获批 `SW-P1-SUBSET-01` 闭包 |
+| Contracts Python adapter | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src ... -m unittest discover -s packages/contracts/tests/python -v` | `Ran 16 tests ... OK` | 共享薄包 strict parse/serialize 通过 |
+| Contracts fixture | `python3 packages/contracts/tests/validate_contracts.py` | `SUMMARY total=57 passed=57 failed=0` | 只证明 shared shape/fixture |
+| Skill fixture | `sha256sum .../evidence-first-brief/SKILL.md` | `1cc034c1d066b24771e9b0d91bc74abd89012268cf225802c25dd33316e06434` | Runtime 测试读取主干真实 package bytes |
+| Runtime suite | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src:experiments/runtime-phase1 ... -m unittest discover ... -v` | `Ran 15 tests ... OK` | 首批 SDK/Tool/A2UI/provider-wire 行为通过 |
+
+## 计划行为场景
+
+下列 method 名是实验适配名，不是已批准共享协议。
+
+| ID | Method | Params | 期望 data / interrupt / error | 字段级断言 |
 | --- | --- | --- | --- | --- |
-| R01 | RuntimeCommand.StartRun | runType=AGENT；assetRef/revision；中性 input；idempotencyKey；authContext | data={runId,state,revision,resolvedAsset} | state 为可运行态；resolvedAsset revision 与请求一致；重复同 key/同 fingerprint 返回相同 runId |
-| R02 | RuntimeCommand.StartRun + Worker.AdvanceRun | runType=WORKFLOW；graphRef/revision；包含一个 Agent 节点 | data={runId,state,revision,childRuns} | Workflow 调度节点依赖；Agent 节点创建独立 childRunId；父运行不暴露子 Agent 内部消息 |
-| R03 | RuntimeCommand.StartRun | 未发布或未知 asset revision / contractVersion | error={code,data:null} | code 为稳定的资产/版本拒绝类；不创建可运行 run；不尝试旧版本或其他协议 fallback |
-| R04 | Worker.ClaimRunnable + Worker.CommitAttempt | 两个 worker 同时领取；首个租约过期；旧/新 fencingToken | data={runId,leaseOwner,fencingToken,state,revision} | 同一时刻仅一个有效 owner；接管 token 递增；旧 worker 晚写被拒；新 worker 从 PostgreSQL checkpoint 恢复 |
-| R05 | CapabilityExecutionPort.Invoke | capabilityRef/revision；typedInput；固定 operationKey；注入“外部成功后进程退出” | data={typedOutput,effectReceipt,idempotencyStatus} | 恢复调用复用 operationKey；effectReceipt 稳定；外部副作用只发生一次；无幂等声明时不自动重试 |
-| R06 | RuntimeCommand.SubmitAction | actionRequestId；expectedRunRevision；decision；authContext；重复/冲突 decision | data={runId,state,revision,acceptedDecision} | 首次合法决策原子生效；相同重复返回相同结果；不同决策或过期 revision 返回冲突；恢复不重复 interrupt 前副作用 |
-| R07 | RuntimeCommand.CancelRun + Worker.CommitAttempt | cancel 与节点完成并发；expectedRevision；reasonCode | data={runId,state,revision,cancelAccepted} | 先提交的终态规则确定；取消后不启动新副作用；晚结果不推进主状态并产生审计事件；不声称已撤回既有副作用 |
-| R08 | RuntimeQuery.SubscribeRunEvents | runId；afterSequence；authContext；包含 presentation/action event | data={events,nextSequence} | 只返回游标后的已提交事件；sequence 单调无复用；重复投递可按 runId+sequence 去重；payload 为通用 artifact/data/action 契约且无业务文案、renderer 或 raw chain-of-thought |
+| P1 | DeepAgent.invoke(chat) / WorkflowSkillNode.invoke | `skillKey`、trusted invocation context | Tool trace + final result | 两个入口都先出现 use_skill；Skill fixture 无 Workflow 专用字段；当前仅 chat probe 已执行 |
+| P2 | RuntimeTool.use_skill | model args 仅 `{skillKey}`；context 为获批 nested shape | result=`{contractRevision,content,artifact}` | Tool schema 无 userId/environment/versionId；请求/结果 Skill 与环境必须匹配 |
+| P3 | VersionAdmissionGuard.check | recordedVersions、effectiveVersions、ingress | data={admitted:true} 或 error={code:RESET_REQUIRED} | start/continue/Action 都检查；不匹配前没有新业务 Tool |
+| P4 | RuntimeTool.render_application | mode=DISPLAY_ONLY | data={rendered:true,mode,interaction:null} | 不产生 interrupt；同 branch 可继续 |
+| P5 | RuntimeTool.render_application + Command(resume) | mode=INTERACTIVE、nodeId、interactionId、Action result | interrupt 或 data={businessSuccess,interactionCompleted} | 只有匹配 node/interaction/version 的 Action 可续跑；success/completion 分离；Finalizer 不越过等待 |
+| P6 | WorkflowGraph.invoke/stream | A wait，B1、B2、join | state/events/checkpoint | A 未 resume 时 B1、B2 完成；join 未完成；thread_id 不被当锁或 branch selector |
+| P7 | A2UIRetryPolicy.apply | render/Action failure、Skill/ability failure | data={retryOwnerNodeId,retryCount} 或 error | 只重试 A2UI owning node；已完成 predecessor/branch 不重放；其他失败不 retry |
+| P8 | StopRun / RestartRun | stopped run、旧 interaction、fresh start | data={stopped:true} / data={newRunId,fresh:true} | stop 后无新工作且不可 resume；旧 card 拒绝；restart 不继承或核对旧业务结果 |
 
-## 计划测试层次
+## 首批实际行为证据
 
-- 契约测试：命令 fingerprint、error/data envelope、schema/version fail closed。
-- PostgreSQL 集成测试：真实事务、unique constraint、租约时间、fencing 与 event sequence。
-- 多进程故障注入：kill -9 worker、租约过期、网络超时、结果提交前崩溃。
-- 端口假实现：记录 operationKey、调用次数和 effectReceipt，不使用业务 fixture。
-- 传输适配测试：断线后按 afterSequence 回放，再切 live tail。
-- 依赖检查：Runtime 包不得引用数字员工包、业务名词或 renderer 实现。
+| Method | Params | 实际 data / wire / interrupt | 字段级断言 |
+| --- | --- | --- | --- |
+| `RuntimeTool.use_skill` via ToolNode | model args=`{skillKey}`；trusted `TrustedInvocationContext` | ToolMessage `content` + server `artifact` | schema 只见 skillKey；userId/environment/versionId spoof 全部 error 且 resolver 0 次 |
+| `skillweave_contracts.UseSkillResult.from_mapping` | `SW-P1-SUBSET-01` 15 个相关 shared fixtures | valid 通过、invalid 抛 ContractValidationError | extra/type、CR/LF、resource path、PRT/ONLINE selection 与 logicalPath 唯一性保持 |
+| `DeepAgent.invoke` scripted | use_skill Tool call + trusted conversation context | final=`Completed from authorized Skill material.` | resolver 收到后端 context；model ToolMessage 只含 content |
+| Deep Agents Harness Profile | 默认 SDK implicit Tool 集合 | bound tools=`{use_skill}` | `ls/read/write/edit/delete/glob/grep/task/execute` 均不暴露 |
+| Anthropic provider serialization | 两轮离线 Messages API，经 `StrictToolChatAnthropic` | 第二请求含 tool_result content | wire schema `additionalProperties=false` 且 skillKey pattern 等于批准 schema；请求 JSON 无 artifact/evidenceRef |
+| `render_application` DISPLAY_ONLY | integrated display fixture + Workflow context | `{rendered:true, interactionMode:DISPLAY_ONLY, interaction:null}` | 无 `__interrupt__` |
+| `render_application` INTERACTIVE | integrated interactive fixture + trusted run/node | `A2UI_INTERACTION_REQUIRED` interrupt | runId、nodeId、application/version、tool-call identity 均参与绑定；同 node 两次 render 不碰撞；ordinaryChatMayResume=false |
 
-## 证据写入规则
+上述 scripted 用例没有证明模型必然调用 use_skill；system prompt 不是授权机制。Anthropic MockTransport 证明的是实际 provider serializer 路径，但不是 live-model 行为。INTERACTIVE 尚未执行合法 Action resume。
 
-执行后每个场景必须记录：commit、数据库版本、实例数、触发步骤、原始命令参数的脱敏摘要、成功 data 或 error、字段级断言和日志/trace 位置。只跑单测不能宣称多实例恢复或 Runtime READY。
+## PostgreSQL 门禁
+
+SDK 场景必须最终使用 AsyncPostgresSaver 和真实 PostgreSQL：
+
+- 调用 setup/migration；
+- 两个独立 Python 进程共享同一数据库；
+- process A 写 checkpoint/interrupt 后退出；
+- process B 查询并按合法 InteractionRef resume；
+- 并发 invoke、pending writes、node replay 和失败恢复均记录实际输出。
+
+InMemorySaver、MemorySaver、SQLite 或单进程 mock 不能作为通过证据。
+
+## TDD 证据规则
+
+- 每个行为先运行失败测试，并确认失败原因是目标行为缺失。
+- import error、Python 版本错误、网络失败或 PostgreSQL 未启动不算 RED。
+- 实现后运行同一测试通过，再运行完整实验 suite。
+- 所有 fixture 必须标记 synthetic/scripted；不能把 scripted model 结果宣传为 live-model 能力。
+
+## 未验证门禁
+
+- Deep Agents 默认 middleware/Tool 暴露已审计并收口；Tool exception 与 A2UI-only retry 行为尚未完成。
+- scripted model 被预编程调用 use_skill，不能证明 live model 无法绕过；mandatory admission 仍需 Runtime guard。
+- A wait 时 B1→B2 是否能在原生 LangGraph superstep 中推进尚未证明。
+- PostgreSQL setup/persistence、双进程恢复、合法 Action resume、并发 invoke 尚未证明。
+- stop/restart、Finalizer、完整 Workflow accumulator 与真实 Ability 调用尚未证明。
+- 真实模型、公共部署和业务系统均不在本次授权。
