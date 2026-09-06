@@ -9,7 +9,7 @@
 - 当前基线：SW-P1-20260907.2
 - 基线提交：`b1a0c9f32497c04dd623edb0bb8858a01b5ae7ad`
 - 消费者内容已合入 main SHA：`57d11fcfee3481512d444a51fee0db3280357789`
-- 阶段：`SW-P1-SUBSET-01` 源码实现与验证已完成；待最终 worker push/main 集成
+- 阶段：`SW-P1-SUBSET-01` 源码/evidence 已集成 main `3884af129d8bcd0772d4517cedae7c22888475c6`；本批准切片 COMPLETE
 - Runtime：`NO READY`
 
 ## 本轮已核对
@@ -77,7 +77,7 @@
 
 ## Next Executable Action
 
-提交本轮 evidence 文档，merge 最新 `origin/main` 后 fresh verify，push worker 并通过独占 integration worktree 集成 main。
+等待 main-brain 的下一条独立 release；不继续到 PostgreSQL、Runtime、部署或 E2E。
 
 ## 交付记录
 
@@ -95,4 +95,5 @@
 - README commit：`a1e7b1a2ef73c2f557ff61acdcac15f90738fc14`。
 - shared adapter commit：`331c47b0eda2862df3f3c5575d2d8986856c6994`。
 - 主控审查边界修正 commit：`1286435737f869599a2179dc506b2dfd2d8fe725`。
-- 源码已验证，仍待最终 worker push/main 集成；Runtime 仍 NO READY。
+- 源码/evidence 首次 main 集成：`3884af129d8bcd0772d4517cedae7c22888475c6`。
+- 本批准源码切片 COMPLETE；Runtime/PostgreSQL/部署/E2E 仍 NO READY。

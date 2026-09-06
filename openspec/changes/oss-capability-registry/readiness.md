@@ -10,7 +10,7 @@
 
 | 门禁 | 状态 | 当前证据 | 仍需 |
 | --- | --- | --- | --- |
-| 对齐源码交付 | PARTIAL | consumer 已集成；Capability 源码内容至 `1286435737f869599a2179dc506b2dfd2d8fe725` 已获主控变异审查并修正 | 本轮最终 push/main 集成 |
+| 对齐源码交付 | YES | Capability 源码/evidence 已集成 main `3884af129d8bcd0772d4517cedae7c22888475c6`，包含主控变异审查修正 `1286435737f869599a2179dc506b2dfd2d8fe725` | 后续完整 Phase 1 另行放行 |
 | 基线/工程决策读取 | YES | worker 已合入 SW-P1-20260907.2、ENG-01、`SW-P1-SUBSET-01` 与稳定 Contracts main | 完整 Phase 1 仍需后续 release |
 | 旧冲突移除 | PARTIAL | 已移除 ResultCondition AST、NOT_EQUALS 和隐式类型转换；保留最小 policy | A2UI/Runtime 最终接入评审 |
 | 成功解释器所有权 | PARTIAL | Contracts/main-brain 收敛 Runtime 单实现；A2UI main 已统一 successPolicyRef 并拒绝旧引用 | Runtime 实现与跨域验证 |
@@ -39,4 +39,4 @@
 
 ## 下一门禁
 
-先将本源码切片集成 main；后续按独立 release 实现 JSON Schema/output-policy 完整校验、PostgreSQL、发布接口、resolver/admission、Runtime contract 和 E2E，任何阶段都不在 Registry 增加第二解释器。
+本源码切片已集成 main；后续按独立 release 实现 JSON Schema/output-policy 完整校验、PostgreSQL、发布接口、resolver/admission、Runtime contract 和 E2E，任何阶段都不在 Registry 增加第二解释器。

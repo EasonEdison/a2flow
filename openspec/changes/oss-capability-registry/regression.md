@@ -23,6 +23,7 @@
 
 - 环境：服务器独立 worker worktree；`/bin/python3.11` 为 Python 3.11.13；未安装或升级依赖。
 - Contracts 稳定主干：`e7797830b09ac367db21f7dde51236e3189e77f3`；公开实现内容：`54a807bc061e79f77a7ba52bcf6d6827d6966481`。
+- Capability 源码/evidence main 集成：`3884af129d8bcd0772d4517cedae7c22888475c6`。
 - 命令：`python3 packages/contracts/tests/validate_contracts.py`；输出 `SUMMARY total=57 passed=57 failed=0`。
 - 命令：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src /bin/python3.11 -m unittest discover -s packages/contracts/tests/python -v`；输出 `Ran 16 tests`、`OK`。
 - 命令：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src:services/capability-registry/src /bin/python3.11 -m unittest discover -s services/capability-registry/tests -v`；输出 `Ran 19 tests`、`OK`。

@@ -183,6 +183,6 @@ Run import smoke, `git diff --check`, owned-path scope check and sensitive-data 
 
 Record exact test counts and commands. Keep shared full-bundle, PostgreSQL, Runtime and deployment gates as `NO READY`.
 
-- [ ] **Step 4: Commit, merge latest main, reverify and integrate**
+- [x] **Step 4: Commit, merge latest main, reverify and integrate**
 
 Push the worker branch, merge through the existing exclusive integration worktree and push `HEAD:main` without force.
