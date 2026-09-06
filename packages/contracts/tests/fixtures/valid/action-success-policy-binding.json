@@ -1,0 +1,4 @@
+{
+  "successPolicyRef": "success_policy_demo",
+  "completeInteractionOnSuccess": true
+}

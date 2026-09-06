@@ -1,40 +1,30 @@
-# 实现任务
+# Phase 1 任务
 
-> 本文件只记录未来实现工作。当前交付仅为 `PROPOSED` 设计；以下任务均未开始、均未完成。
+> Baseline: SW-P1-20260907.2 + ENG-01。勾选只代表本任务源码/文档证据，不代表接口批准或 Runtime READY。
 
-## 1. 契约裁决
+## 1. ALIGN
 
-- [ ] 1.1 主控审查四层模型、环境 Pointer 范围和公共 schema 版本策略。
-- [ ] 1.2 汇总六个领域回交的接口、权限、幂等、并发和失败需求，解决命名/字段冲突。
-- [ ] 1.3 用 ADR 冻结传输基线、Runtime 语言、CloudEvents 使用方式和幂等键策略。
+- [x] 1.1 worker 已在提交前再次 fetch/merge `origin/main` 到 `0980f0ae304a340f24d7421ab4a51818af612b32`。
+- [x] 1.2 识别并移除 preview/stable、workspaceId/issuer、frozen continuation、业务幂等和协议预冻结冲突。
+- [x] 1.3 向 main-brain 回传基线、独占范围、首个切片和真实依赖。
 
-## 2. 公共 Schema
+## 2. CONTRACT candidate
 
-- [ ] 2.1 定义并版本化 AssetKey、RevisionRef、ReleaseRef、ActivationPointer 与 PrincipalRef schema。
-- [ ] 2.2 定义 RFC 9457 扩展、稳定错误码注册表和字段级校验错误。
-- [ ] 2.3 定义 CloudEvents 类型注册表、data schema、命名规则和固定兼容性样例。
-- [ ] 2.4 提供 RFC 8785 + SHA-256 跨语言摘要 fixture。
+- [x] 2.1 先创建 Schema 正反例和聚焦校验入口，并观察缺失 Schema 的 RED。
+- [x] 2.2 实现 TrustedContext、Asset serving/resolution、VersionGuard、ControlRequest、ExecutionEvent 最小 JSON Schema。
+- [x] 2.3 覆盖 PRT/ONLINE、ONLINE stable/gray、第三 serving 版本、版本失配、控制去重与 Result 层级正反例。
+- [x] 2.4 记录 Python/Runtime 打包建议和六域回交字段，不改根 manifest/lockfile。
+- [x] 2.5 按 main-brain 审阅收敛 `ResultInterpretationPolicySet`、package-relative `logicalPath` 与单一 `skillKey`，不增加通用表达式引擎或字符串前缀解析。
+- [x] 2.6 按独立 pre-merge review 修复非空/asset-unique 版本集、closed event + runSequence、policy/resource 语义唯一性和 Action 四事实片段。
 
-## 3. PostgreSQL 正确性基础
+## 3. VERIFY
 
-- [ ] 3.1 设计并评审 revision、Release、Pointer、幂等记录、审计和 outbox 的 PostgreSQL 迁移。
-- [ ] 3.2 实现唯一约束、事务边界和 Pointer CAS，不引入 MySQL、SQLite 或内存 fallback。
-- [ ] 3.3 实现 outbox 发布和消费者持久去重。
+- [x] 3.1 执行聚焦 Schema 检查并记录命令、Python/jsonschema 版本、case 数与输出。
+- [ ] 3.2 执行 `git diff --check`、专属路径、来源和敏感信息检查。
+- [ ] 3.3 更新 regression/readiness；保留未验证的 PostgreSQL、多实例、Runtime 和协议门禁。
 
-## 4. 应用接口
+## 4. DELIVER
 
-- [ ] 4.1 实现 CreateRevision、CreateRelease、ActivateRelease 和 ResolveRelease。
-- [ ] 4.2 接入可信认证上下文、默认拒绝权限检查与脱敏审计。
-- [ ] 4.3 为六个领域提供经批准的共享契约包或 schema，不内置领域状态机。
-
-## 5. 自动验证
-
-- [ ] 5.1 完成错误、幂等、摘要、不可变和授权单元/契约测试。
-- [ ] 5.2 用两个应用实例和 PostgreSQL 验证 revision 竞争、Pointer CAS 与同键重试。
-- [ ] 5.3 验证事件重复、倒序、缺口、进程重启与 outbox 恢复。
-- [ ] 5.4 完成 Runtime pin Release 和跨域最小 vertical slice。
-
-## 6. 准出
-
-- [ ] 6.1 记录真实 method、params、响应 data、trace 与字段级断言到 regression.md。
-- [ ] 6.2 所有必需门禁满足后更新 readiness.md；在此之前保持 `NO READY`。
+- [ ] 4.1 fetch/merge 最新 `origin/main`，只提交本 change 与 `packages/contracts/`。
+- [ ] 4.2 push worker，再通过独占 integration worktree 合入 `origin/main`。
+- [ ] 4.3 向 main-brain 回传实际文件、SHA、检查、剩余冲突与 `NO READY` 门禁。

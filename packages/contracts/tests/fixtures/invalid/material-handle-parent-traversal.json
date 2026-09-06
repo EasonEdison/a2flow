@@ -1,0 +1,8 @@
+{
+  "handleId": "material_demo_001",
+  "mediaType": "text/markdown",
+  "byteSize": 128,
+  "contentDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "accessMode": "READ_ONLY",
+  "logicalPath": "../private.txt"
+}

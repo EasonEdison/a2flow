@@ -1,0 +1,19 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "controlRequestId": "control_demo_start_fresh",
+  "commandType": "START_RUN",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "target": {
+    "workflowVersion": {
+      "asset": {
+        "assetType": "WORKFLOW",
+        "assetId": "workflow_demo"
+      },
+      "versionId": "workflow_v1"
+    }
+  },
+  "payloadDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+}

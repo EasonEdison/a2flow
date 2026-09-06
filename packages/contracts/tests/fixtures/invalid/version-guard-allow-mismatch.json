@@ -1,0 +1,14 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "decision": "ALLOW",
+  "mismatches": [
+    {
+      "asset": {
+        "assetType": "SKILL",
+        "assetId": "skill_demo"
+      },
+      "recordedVersionId": "skill_v1",
+      "effectiveVersionId": "skill_v2"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "resultInterpretationPolicies": [
+    {
+      "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+      "policyRef": "schema_policy_demo",
+      "operator": "SCHEMA_VALID"
+    }
+  ],
+  "defaultSuccessPolicyRef": "missing_policy"
+}

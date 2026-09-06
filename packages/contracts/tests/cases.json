@@ -1,0 +1,326 @@
+[
+  {
+    "name": "trusted context uses userId and ONLINE",
+    "definition": "trustedContext",
+    "fixture": "fixtures/valid/trusted-context-online.json",
+    "expectedValid": true
+  },
+  {
+    "name": "trusted context rejects sellerId alias",
+    "definition": "trustedContext",
+    "fixture": "fixtures/invalid/trusted-context-seller-id.json",
+    "expectedValid": false
+  },
+  {
+    "name": "ONLINE serving exposes stable and one candidate",
+    "definition": "assetServingState",
+    "fixture": "fixtures/valid/serving-online-gray.json",
+    "expectedValid": true
+  },
+  {
+    "name": "ONLINE serving rejects a third active version",
+    "definition": "assetServingState",
+    "fixture": "fixtures/invalid/serving-online-third.json",
+    "expectedValid": false
+  },
+  {
+    "name": "ONLINE gray resolution reads ONLINE version",
+    "definition": "assetResolution",
+    "fixture": "fixtures/valid/resolution-online-gray.json",
+    "expectedValid": true
+  },
+  {
+    "name": "ONLINE resolution rejects PRT source",
+    "definition": "assetResolution",
+    "fixture": "fixtures/invalid/resolution-online-prt-source.json",
+    "expectedValid": false
+  },
+  {
+    "name": "version guard allows empty mismatch set",
+    "definition": "versionGuardDecision",
+    "fixture": "fixtures/valid/version-guard-allow.json",
+    "expectedValid": true
+  },
+  {
+    "name": "version guard reset includes mismatch",
+    "definition": "versionGuardDecision",
+    "fixture": "fixtures/valid/version-guard-reset.json",
+    "expectedValid": true
+  },
+  {
+    "name": "version guard rejects ALLOW with mismatch",
+    "definition": "versionGuardDecision",
+    "fixture": "fixtures/invalid/version-guard-allow-mismatch.json",
+    "expectedValid": false
+  },
+  {
+    "name": "interaction control request is fully bound",
+    "definition": "controlRequest",
+    "fixture": "fixtures/valid/control-request-interaction.json",
+    "expectedValid": true
+  },
+  {
+    "name": "control request rejects business idempotency field",
+    "definition": "controlRequest",
+    "fixture": "fixtures/invalid/control-request-business-idempotency.json",
+    "expectedValid": false
+  },
+  {
+    "name": "interaction control request requires source component",
+    "definition": "controlRequest",
+    "fixture": "fixtures/invalid/control-request-missing-component.json",
+    "expectedValid": false
+  },
+  {
+    "name": "result interpretation policy supports explicit equality",
+    "definition": "resultInterpretationPolicy",
+    "fixture": "fixtures/valid/result-condition-equals.json",
+    "expectedValid": true
+  },
+  {
+    "name": "result interpretation policy rejects unapproved operator",
+    "definition": "resultInterpretationPolicy",
+    "fixture": "fixtures/invalid/result-condition-unsupported-operator.json",
+    "expectedValid": false
+  },
+  {
+    "name": "interaction result event keeps interaction scope",
+    "definition": "executionEvent",
+    "fixture": "fixtures/valid/event-interaction-result.json",
+    "expectedValid": true
+  },
+  {
+    "name": "node result event keeps node scope",
+    "definition": "executionEvent",
+    "fixture": "fixtures/valid/event-node-result.json",
+    "expectedValid": true
+  },
+  {
+    "name": "run result event keeps run scope",
+    "definition": "executionEvent",
+    "fixture": "fixtures/valid/event-run-result.json",
+    "expectedValid": true
+  },
+  {
+    "name": "interaction event requires node reference",
+    "definition": "executionEvent",
+    "fixture": "fixtures/invalid/event-interaction-missing-node.json",
+    "expectedValid": false
+  },
+  {
+    "name": "node event rejects run-scoped result",
+    "definition": "executionEvent",
+    "fixture": "fixtures/invalid/event-node-scope-mismatch.json",
+    "expectedValid": false
+  },
+  {
+    "name": "PRT serving exposes one current version",
+    "definition": "assetServingState",
+    "fixture": "fixtures/valid/serving-prt-current.json",
+    "expectedValid": true
+  },
+  {
+    "name": "ONLINE serving state carries CAS revision",
+    "definition": "assetServingState",
+    "fixture": "fixtures/valid/serving-online-gray.json",
+    "expectedValid": true
+  },
+  {
+    "name": "single publication request targets ONLINE candidate",
+    "definition": "assetPublicationRequest",
+    "fixture": "fixtures/valid/publication-online-candidate.json",
+    "expectedValid": true
+  },
+  {
+    "name": "PRT publication rejects ONLINE slot",
+    "definition": "assetPublicationRequest",
+    "fixture": "fixtures/invalid/publication-prt-online-slot.json",
+    "expectedValid": false
+  },
+  {
+    "name": "continue ingress requires recorded versions",
+    "definition": "controlRequest",
+    "fixture": "fixtures/invalid/control-request-continue-no-versions.json",
+    "expectedValid": false
+  },
+  {
+    "name": "A2UI retry accepts closed render failure reason",
+    "definition": "controlRequest",
+    "fixture": "fixtures/valid/control-request-a2ui-retry.json",
+    "expectedValid": true
+  },
+  {
+    "name": "A2UI retry rejects generic Skill failure",
+    "definition": "controlRequest",
+    "fixture": "fixtures/invalid/control-request-generic-retry.json",
+    "expectedValid": false
+  },
+  {
+    "name": "version mismatch event rejects ALLOW decision",
+    "definition": "executionEvent",
+    "fixture": "fixtures/invalid/event-version-mismatch-allow.json",
+    "expectedValid": false
+  },
+  {
+    "name": "model use_skill request selects logical Skill only",
+    "definition": "useSkillRequest",
+    "fixture": "fixtures/valid/use-skill-request.json",
+    "expectedValid": true
+  },
+  {
+    "name": "model use_skill request rejects user override",
+    "definition": "useSkillRequest",
+    "fixture": "fixtures/invalid/use-skill-request-user-override.json",
+    "expectedValid": false
+  },
+  {
+    "name": "trusted chat invocation carries server scope",
+    "definition": "trustedInvocationContext",
+    "fixture": "fixtures/valid/invocation-context-chat.json",
+    "expectedValid": true
+  },
+  {
+    "name": "trusted Workflow invocation binds run and node",
+    "definition": "trustedInvocationContext",
+    "fixture": "fixtures/valid/invocation-context-workflow.json",
+    "expectedValid": true
+  },
+  {
+    "name": "Workflow invocation rejects missing node binding",
+    "definition": "trustedInvocationContext",
+    "fixture": "fixtures/invalid/invocation-context-workflow-no-node.json",
+    "expectedValid": false
+  },
+  {
+    "name": "authorized material handle is opaque and digest bound",
+    "definition": "authorizedMaterialHandle",
+    "fixture": "fixtures/valid/material-handle.json",
+    "expectedValid": true
+  },
+  {
+    "name": "authorized material handle rejects raw locator",
+    "definition": "authorizedMaterialHandle",
+    "fixture": "fixtures/invalid/material-handle-raw-locator.json",
+    "expectedValid": false
+  },
+  {
+    "name": "use_skill result returns version evidence and read-only materials",
+    "definition": "useSkillResult",
+    "fixture": "fixtures/valid/use-skill-result.json",
+    "expectedValid": true
+  },
+  {
+    "name": "use_skill result rejects Workflow routing output",
+    "definition": "useSkillResult",
+    "fixture": "fixtures/invalid/use-skill-result-workflow-route.json",
+    "expectedValid": false
+  },
+  {
+    "name": "schema-valid policy needs no pointer",
+    "definition": "resultInterpretationPolicy",
+    "fixture": "fixtures/valid/result-policy-schema-valid.json",
+    "expectedValid": true
+  },
+  {
+    "name": "pointer policy requires expected literal",
+    "definition": "resultInterpretationPolicy",
+    "fixture": "fixtures/invalid/result-policy-missing-expected.json",
+    "expectedValid": false
+  },
+  {
+    "name": "material handle rejects parent traversal",
+    "definition": "authorizedMaterialHandle",
+    "fixture": "fixtures/invalid/material-handle-parent-traversal.json",
+    "expectedValid": false
+  },
+  {
+    "name": "policy set names default interpretation",
+    "definition": "resultInterpretationPolicySet",
+    "fixture": "fixtures/valid/result-policy-set.json",
+    "expectedValid": true
+  },
+  {
+    "name": "policy set rejects empty policies",
+    "definition": "resultInterpretationPolicySet",
+    "fixture": "fixtures/invalid/result-policy-set-empty.json",
+    "expectedValid": false
+  },
+  {
+    "name": "Action success binding keeps completion explicit",
+    "definition": "actionSuccessPolicyBinding",
+    "fixture": "fixtures/valid/action-success-policy-binding.json",
+    "expectedValid": true
+  },
+  {
+    "name": "Action success binding requires completion flag",
+    "definition": "actionSuccessPolicyBinding",
+    "fixture": "fixtures/invalid/action-success-policy-binding-no-completion.json",
+    "expectedValid": false
+  },
+  {
+    "name": "Action outcome records four independent facts",
+    "definition": "actionOutcomeFacts",
+    "fixture": "fixtures/valid/action-outcome-facts.json",
+    "expectedValid": true
+  },
+  {
+    "name": "Action outcome rejects missing policy fact",
+    "definition": "actionOutcomeFacts",
+    "fixture": "fixtures/invalid/action-outcome-facts-missing-policy.json",
+    "expectedValid": false
+  },
+  {
+    "name": "guarded control rejects empty recorded versions",
+    "definition": "controlRequest",
+    "fixture": "fixtures/invalid/control-request-empty-versions.json",
+    "expectedValid": false
+  },
+  {
+    "name": "guarded control rejects conflicting asset versions",
+    "definition": "controlRequest",
+    "fixture": "fixtures/invalid/control-request-conflicting-versions.json",
+    "expectedValid": false
+  },
+  {
+    "name": "policy set rejects duplicate refs",
+    "definition": "resultInterpretationPolicySet",
+    "fixture": "fixtures/invalid/result-policy-set-duplicate-ref.json",
+    "expectedValid": false
+  },
+  {
+    "name": "policy set rejects dangling default",
+    "definition": "resultInterpretationPolicySet",
+    "fixture": "fixtures/invalid/result-policy-set-dangling-default.json",
+    "expectedValid": false
+  },
+  {
+    "name": "use_skill result rejects duplicate logical paths",
+    "definition": "useSkillResult",
+    "fixture": "fixtures/invalid/use-skill-result-duplicate-logical-path.json",
+    "expectedValid": false
+  },
+  {
+    "name": "material handle rejects trailing newline",
+    "definition": "authorizedMaterialHandle",
+    "fixture": "fixtures/invalid/material-handle-trailing-newline.json",
+    "expectedValid": false
+  },
+  {
+    "name": "event rejects redundant mismatched run ref",
+    "definition": "executionEvent",
+    "fixture": "fixtures/invalid/event-cross-ref-mismatch.json",
+    "expectedValid": false
+  },
+  {
+    "name": "event rejects foreign fact fields",
+    "definition": "executionEvent",
+    "fixture": "fixtures/invalid/event-foreign-facts.json",
+    "expectedValid": false
+  },
+  {
+    "name": "fresh START needs no recorded versions",
+    "definition": "controlRequest",
+    "fixture": "fixtures/valid/control-request-start-fresh.json",
+    "expectedValid": true
+  }
+]

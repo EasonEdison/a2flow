@@ -1,0 +1,7 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "policyRef": "success_policy_demo",
+  "operator": "JSON_POINTER_EQUALS",
+  "jsonPointer": "/status",
+  "expectedLiteral": "SUCCEEDED"
+}

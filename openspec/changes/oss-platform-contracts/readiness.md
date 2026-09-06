@@ -1,37 +1,28 @@
-# Readiness
+# Phase 1 Readiness
 
 ## Overall
 
-- Design review: `PROPOSED`
-- Source artifact: `DESIGN ONLY`
-- Implementation: `NOT STARTED`
-- Automated contract validation: `NOT RUN`
+- Baseline: `SW-P1-20260907.2 + ENG-01`
+- Shared contract revision: `SW-CONTRACTS-P1-CANDIDATE.1`
+- Schema/examples: `PASS (54/54)`
+- Main-brain interface review: `PENDING`
+- Runtime implementation: `NOT OWNED / NOT PROVEN`
 - Deployment: `NOT RUN`
-- Runtime: `NO READY`
-- Evidence label: `C`
+- Runtime readiness: `NO READY`
 
 ## Gate status
 
-| Gate | Status | Required evidence |
+| Gate | Status | Evidence required |
 | --- | --- | --- |
-| 主控批准公共模型与待裁决项 | `NO` | 审查结论与 ADR |
-| 六域接口需求完成归并 | `NO` | 六份输入/输出/边界回交和冲突清单 |
-| Schema/错误码/事件类型冻结 | `NO` | 版本化 schema、兼容策略、固定 fixture |
-| PostgreSQL 多实例正确性实现 | `NO` | 迁移、事务/CAS/outbox 代码与双实例测试 |
-| 授权与审计实现 | `NO` | 默认拒绝、主体传播、脱敏审计负向证据 |
-| Regression 计划执行 | `NO` | PC-01 至 PC-08 的真实 method/params/data/trace 证据 |
-| Demo/部署/恢复验证 | `NO` | 目标环境、部署 SHA、重启恢复与 Run pin 证据 |
+| 旧方案与 SW-P1 对齐 | `YES` | active OpenSpec + baseline acknowledgement |
+| JSON Schema 正反例 | `YES` | 7 轮 RED/GREEN + fresh START 检查；最终 54/54 |
+| A2UI/Skill/Runtime consumer 输入 | `PARTIAL` | 已纳入三域；其余域由 main-brain 继续归并 |
+| Named revision/API review | `PENDING` | main-brain 审查并命名 approved revision |
+| Python adapter/SDK visibility | `PARTIAL` | 已有 3.11/Pydantic 2.13 实测矩阵与零 Runtime 依赖布局；仍待 approved revision、根依赖 owner 与 Runtime spike A-D |
+| 可信上下文 provenance | `NO EVIDENCE` | 模型/Tool override 负向集成测试 |
+| PRT/ONLINE 分库与 ONLINE-only gray | `NO EVIDENCE` | 双库、stable/candidate resolver 证据 |
+| PostgreSQL 多实例 publication/control | `NO EVIDENCE` | 两进程 CAS/去重与结果回读 |
+| Runtime version ingress guard | `NO EVIDENCE` | execution/continue/Action/A2UI retry 阻断证据 |
+| 事件/交互/Finalizer 边界 | `NO EVIDENCE` | Runtime+A2UI+数字员工 E2E |
 
-## 当前可以声称
-
-- 已形成一份供主控审查的公共契约候选。
-- 已明确公共层与六个领域的所有权、依赖输入输出、失败、重试和并发边界。
-
-## 当前不能声称
-
-- 不能声称设计已批准、接口已冻结、实现已完成、测试通过、已部署或 Runtime 可用。
-- 合入 `main` 也只表示 proposed 设计源码完成集成，不提升上述状态。
-
-## 升级条件
-
-只有主控裁决三个架构闸门、六域契约归并完成、实现任务有真实证据且 regression 中必需用例全部通过，才可重新评估 READY。任一关键门禁为 NO/PARTIAL 时保持 `NO READY`。
+候选 Schema 合入只证明 54 个合成 fixture 的结构和有界交叉引用检查；不表示 sequence 事务性/重放、协议冻结、业务 exactly-once、产品可用或 Runtime READY。

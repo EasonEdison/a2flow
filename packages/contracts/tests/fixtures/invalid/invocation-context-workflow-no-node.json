@@ -1,0 +1,12 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "invocationScope": {
+    "kind": "WORKFLOW",
+    "runId": "run_demo"
+  },
+  "controlRequestId": "control_demo_009"
+}

@@ -1,0 +1,29 @@
+{
+  "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+  "controlRequestId": "control_demo_conflicting_versions",
+  "commandType": "CONTINUE_RUN",
+  "trustedContext": {
+    "userId": "user_demo_001",
+    "environment": "ONLINE"
+  },
+  "target": {
+    "runId": "run_demo"
+  },
+  "payloadDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "recordedAssetVersions": [
+    {
+      "asset": {
+        "assetType": "WORKFLOW",
+        "assetId": "workflow_demo"
+      },
+      "versionId": "workflow_v1"
+    },
+    {
+      "asset": {
+        "assetType": "WORKFLOW",
+        "assetId": "workflow_demo"
+      },
+      "versionId": "workflow_v2"
+    }
+  ]
+}

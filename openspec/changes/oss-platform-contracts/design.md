@@ -1,147 +1,162 @@
-# 公共平台契约设计
+# Phase 1 公共契约设计
 
-## 状态与原则
+## 0. 状态与所有权
 
-- Design: `PROPOSED`
+- Authority: `SW-P1-20260907.2 + ENG-01`
+- Design: `PROVISIONAL / MAIN-BRAIN REVIEW PENDING`
 - Runtime: `NO READY`
-- 数据基线：开发、测试、部署均为 PostgreSQL-only；应用正确性支持多实例。
-- 所有跨域引用都精确、不可变、可审计；没有隐式 latest、静默 fallback 或进程内正确性状态。
+- Exclusive paths: `openspec/changes/oss-platform-contracts/`, `packages/contracts/`
 
-本域拥有公共外壳和发布原子语义；领域拥有自己的定义 payload、校验规则、审批/发布门禁和业务状态机。主控拥有最终跨域裁决。
+本任务单一拥有公共候选 Schema。四个 M 域拥有各自资产 payload、校验和作者态；Runtime 拥有执行状态机；A2UI 域拥有展示/交互成功配置；数字员工拥有 UI 和业务适配。公共层不复制这些状态机。
 
-## 1. 概念模型
+## 1. 语言与打包建议
 
-| 概念 | 推荐语义 | 所有权 | 不负责事项 |
+首轮以中立 JSON Schema + 合成 examples 作为跨语言真值，放在 `packages/contracts/`。ENG-01 允许后续在同一路径增加薄 `skillweave_contracts` Python 包；Runtime 已实测 Python 3.11.13/Pydantic 2.13.5，建议兼容范围为 Python `>=3.11,<4`、可选 Pydantic `>=2.13,<3`，精确 patch 由根 lock 固定。最小包只含 `models.py`、`schema_loader.py`、`py.typed` 等 schema/model 适配，不依赖 Deep Agents、LangGraph、PostgreSQL driver 或 Runtime adapter。模块局部 pyproject 需待批准 revision 与主控授权，不能自带第二份 lock。React/TypeScript 端可在根构建方案确定后生成只读类型。
+
+本任务不修改根 manifest、lockfile 或协议依赖，不固定 HTTP/SSE/AG-UI/A2UI/事件总线版本。
+
+## 2. 可信上下文
+
+候选 `TrustedContext`：
+
+~~~json
+{"userId":"user_demo_001","environment":"ONLINE"}
+~~~
+
+- `userId` 是唯一身份与灰度术语；没有 sellerId alias。
+- `environment` 只允许 `PRT` 或 `ONLINE`。
+- 可信上下文由服务端认证/路由边界构造并以进程内参数传给 resolver/Tool 执行器。
+- Tool 对模型暴露的参数 Schema 不得包含 `userId`、`environment`、凭证或权限；即使业务 payload 出现同名字段，也不能覆盖可信上下文。
+- 权限判定和密钥传递在服务端完成，不把角色、token 或 credential 固化进资产/事件 payload。
+
+JSON Schema 只能校验形状，不能证明 provenance；服务端注入与 override 拒绝必须由后续集成测试证明。
+
+## 3. `use_skill` 服务端 envelope
+
+模型可见请求只允许 `{skillKey}`。服务端在模型参数之外构造 `TrustedInvocationContext={trustedContext,invocationScope,controlRequestId}`；conversation scope 绑定 conversationId，Workflow scope 至少绑定 runId/nodeId。
+
+`skillKey` 是 Skill 在公共契约中的唯一逻辑 identity，使用小写字母/数字/连字符和可选的 `/` 分段（例如 `route-fast` 或 `demo/route-fast`）。Workflow/其他域不得保存 `skill:route-fast` 后让 Runtime 拆前缀；如领域内保留通用 logicalRef，必须在发布边界通过显式 typed mapping 转换成 exact `skillKey`。
+
+候选返回遵循 `content + artifact` 分层，但是否直接映射 Deep Agents `content_and_artifact` 由 Runtime spike 证明：
+
+- `content={instructions,resources,requiredToolNames?}`；resource 是 `READ_ONLY`、digest-bound opaque handle，并携带规范化的包内相对 `logicalPath`（例如 `references/output-format.md`）；不含服务器绝对路径、URL、凭证或执行权限。
+- `requiredToolNames` 只是兼容性提示，不能让 Runtime 动态授权或开放 Tool。
+- `artifact={skillKey,resolvedVersion,contentDigest,environment,selection,evidenceRef}`；版本与 resolver evidence 不由模型提供。
+- `resolvedVersion.asset.assetType=SKILL` 已表达类型，不在 artifact 顶层重复 assetType。
+
+同一 Skill package 在 chat/Workflow 使用相同内容，不增加 routing、next-node 或 Workflow-specific output。Schema PASS 不证明 artifact 不进入模型输入、Checkpoint 可恢复或跨进程 PostgreSQL reopen；这些由 Runtime 验证。
+## 4. 资产版本、历史与 serving 状态
+
+公共 `AssetRef` 由 `{assetType, assetId}` 组成。候选 `assetType`：`SKILL`、`ABILITY`、`COMPONENT`、`APPLICATION`、`WORKFLOW`；最终枚举以六域审查为准。`AssetVersionRef` 增加不可空 `versionId`，但不强制 UUID/SemVer 生成算法。
+
+历史资产版本与当前 serving 状态是不同集合：
+
+| 环境 | 当前可服务版本 | 数据来源 | 灰度选择 |
 | --- | --- | --- | --- |
-| `AssetKey` | `{workspaceId, assetType, assetId}`，稳定逻辑身份 | 公共契约定义外壳，领域登记 `assetType` | 展示名、slug 不参与身份 |
-| `RevisionRef` | `AssetKey + revision + contentDigest`，创建后不可变 | 各 M 域创建内容，公共层保证引用语义 | 不定义领域校验状态 |
-| `ReleaseRef` | `releaseId + RevisionRef + dependencyReleases[]`，冻结可执行/可渲染输入 | 公共发布语义；领域门禁决定能否创建 | 不定义审批流 |
-| `ActivationKey` | `AssetKey + environment` | 公共契约 | 环境枚举待主控裁决 |
-| `ActivationPointer` | `ActivationKey -> releaseId`，带 `pointerVersion` | 公共发布语义 | 不自动回退旧 Release |
-| `PrincipalRef` | `{issuer, subject, principalType}` | 可信认证边界构造 | 不在 payload 中信任客户端声明的角色 |
+| PRT | 一个 `currentVersionId` | PRT 数据库 | 无 |
+| ONLINE | 一个 `stableVersionId`；灰度期间可再有一个 `candidateVersionId` | ONLINE 数据库 | 可信 `userId` |
 
-`assetId` 与 `releaseId` 推荐 UUIDv7。`revision` 是单 Asset 内严格递增的正整数；允许有间隙，不承诺全局顺序。`contentDigest` 采用 `sha256:<lowercase-hex>`。JSON 载荷先按 RFC 8785 规范化；摘要覆盖哪些元数据必须由每个资产类型提交 manifest 定义并由主控确认。
+ONLINE 不能出现第三个 serving version；这是活动 serving 限制，不是历史保留限制。灰度结束只改变 serving 指针/状态，不删除旧版本记录。
 
-## 2. 推荐的最小数据形状
+`AssetResolution` 返回：可信上下文、AssetRef、`effectiveVersionId` 与 `selection`。候选 selection 为 `PRT_CURRENT`、`ONLINE_STABLE`、`ONLINE_GRAY`。结构必须保证 PRT 只能对应 `PRT_CURRENT`，ONLINE 只能对应两个 ONLINE selection；没有跨库 fallback。
 
-以下是语义模型，不是已批准的语言类型或网络协议：
+`AssetServingState` 带 `servingRevision`。单一 `AssetPublicationRequest` 以 controlRequestId、payloadDigest、expectedServingRevision 做并发保护：PRT 只能写 `PRT_CURRENT`，ONLINE 只能写 `ONLINE_STABLE` 或 `ONLINE_CANDIDATE`。它适用于所有 assetType，不是四套发布服务。
 
-~~~json
-{
-  "asset": {"workspaceId": "ws_...", "assetType": "skill", "assetId": "uuidv7"},
-  "revision": 3,
-  "contentDigest": "sha256:..."
-}
-~~~
+四个 M 域调用同一 publication/resolver 端口或模块；不得各自复制环境、灰度或版本选择算法。其实现位置和部署形态待 main-brain 评审。
 
-~~~json
-{
-  "releaseId": "uuidv7",
-  "assetRevision": {"asset": {}, "revision": 3, "contentDigest": "sha256:..."},
-  "dependencyReleases": [{"relation": "uses", "releaseId": "uuidv7", "contentDigest": "sha256:..."}],
-  "manifestSchema": "urn:portfolio:release-manifest:v1",
-  "createdAt": "RFC3339",
-  "createdBy": {"issuer": "https://issuer.example", "subject": "opaque", "principalType": "USER"}
-}
-~~~
+## 5. 版本比较和入口拒绝
 
-Release 创建后所有字段不可修改。重新校验、补依赖、改展示信息或重新构建都产生新 Release；相同规范 manifest 可按幂等规则返回原 Release。
+`RecordedAssetVersion` 保存某次已接受工作所见的 AssetVersionRef。执行、继续、node-bound input、interaction Action、A2UI retry 入口先调用 resolver，再生成 `VersionGuardDecision`：
 
-## 3. 写入、读取与并发边界
+- 所有 recorded/effective version 相同：`ALLOW`，`mismatches=[]`。
+- 任一不同或当前无法解析：`RESET_REQUIRED`，至少一条 mismatch，拒绝新工作。
 
-| 逻辑方法 | 必需输入 | 成功输出 | 失败与重试 | 并发边界 |
-| --- | --- | --- | --- | --- |
-| `CreateRevision` | `AssetKey`、领域 payload、`expectedHeadRevision`、`idempotencyKey`、可信主体 | `RevisionRef`、`createdAt` | 校验失败不可重试；超时可用同键重试 | 比较 asset head；旧期望值失败，不覆盖 |
-| `CreateRelease` | 精确 `RevisionRef`、精确依赖 Release、manifest schema、幂等键、可信主体 | 完整 `ReleaseRef` | 缺依赖/摘要不符失败关闭；未知提交结果只用同键查询或重试 | 唯一幂等指纹；Release 本身只插入不更新 |
-| `ActivateRelease` | `ActivationKey`、`releaseId`、`expectedPointerVersion`、幂等键、可信主体 | 新 `ActivationPointer` 与审计信息 | 冲突需重读并由调用方决定；不得自动 latest-wins | PostgreSQL 条件更新/CAS，一次只有一个胜者 |
-| `ResolveRelease` | 精确 `releaseId`，或显式 `ActivationKey` | Release manifest、摘要、pointerVersion（如经 Pointer） | 不存在/无权访问失败关闭；只读暂时错误可退避重试 | 一次 Run 开始后钉住 releaseId，不随 Pointer 漂移 |
+mismatch 至少含 AssetRef、`recordedVersionId`、`effectiveVersionId`（无法解析时为显式缺失原因）。响应给前端的是轻量 reset 提示所需事实，不自动 restart，不切换到旧版本，不静默迁移，不回放业务写入。
 
-HTTP 映射推荐用 `ETag`/`If-Match` 表达 `expectedPointerVersion`；缺少必须的前置条件返回 428，值过期返回 412。若非 HTTP 传输，必须保持等价 CAS 语义。409 只用于非前置条件的领域冲突。
+此门禁和引擎代码/Checkpoint 兼容性是两类问题，错误码与可观察证据必须分开。
 
-幂等键的作用域为 `workspaceId + principal + logicalMethod`。服务端保存请求规范摘要与结果：同键同摘要返回首次结果；同键异摘要返回 `IDEMPOTENCY_KEY_REUSED`。保留时长、最大键长度和最终 Header 名待主控裁决；当前 IETF Idempotency-Key 仍是草案，不作为已冻结标准。
+## 6. 控制请求去重
 
-## 4. 授权主体与审计
+`ControlRequest` 候选字段：
 
-认证技术可以变化，但领域服务接收的可信上下文必须至少包含：
+- `controlRequestId`：调用方生成的控制命令标识。
+- `commandType`：`START_RUN`、`CONTINUE_RUN`、`SUBMIT_NODE_INPUT`、`SUBMIT_INTERACTION`、`RETRY_A2UI_NODE`、`STOP_RUN`。
+- `target`：按命令包含 RunRef、NodeRef 或 InteractionRef。
+- `payloadDigest`：控制 payload 的稳定摘要，算法暂不冻结。
+- `recordedAssetVersions`：需要版本门禁的入口携带已记录版本。
 
-- `PrincipalRef.issuer + subject`：联合形成稳定主体键；`subject` 本身不得假设全局唯一。
-- `principalType`: `USER` 或 `SERVICE`；代理执行可另带 `delegationId`，不能覆盖原主体。
-- `workspaceId`：资源隔离边界，由可信中间件解析并与路径/资源核对。
-- `traceparent`：按 W3C Trace Context 传播，仅用于追踪，不承载身份或个人信息。
+服务端以控制作用域 + controlRequestId 持久去重：同 ID 同摘要返回首次控制结果；同 ID 异摘要返回冲突；并发首写只有一个胜者。`START_RUN` 的 fresh restart 使用新的 controlRequestId 和新的 runId，且不继承旧状态。
 
-公共操作权限建议为 `asset.readRevision`、`asset.createRevision`、`release.create`、`release.activate`、`release.read`；各领域提交增量权限。角色到权限的映射由产品/部署策略拥有，公共资产不可把角色名固化进 manifest。
+`CONTINUE_RUN`、`SUBMIT_NODE_INPUT`、`SUBMIT_INTERACTION`、`RETRY_A2UI_NODE` 必须携带至少一个 recordedAssetVersion；同一 AssetRef 只能出现一次，完整性仍由 Runtime 按当前入口依赖集合校验。`RETRY_A2UI_NODE.retryReason` 只允许 `RENDER_FAILED`、`ACTION_CALL_FAILED`、`ACTION_RESULT_NOT_SUCCESS`；其他命令不得携带 retryReason。
 
-默认拒绝。403 与 404 的选择必须服从不泄露资源存在性的策略；错误详情、事件和审计不得包含令牌、凭证或完整敏感 payload。所有创建 Revision、创建 Release、切换 Pointer 的成功与拒绝都要有主体、资源、结果、时间和 trace 关联的审计记录。
+`ControlRequest` 不包含业务 idempotency key，也不保存“业务已执行所以禁止 fresh run”的判断。被调用 API 后端独立拥有业务幂等、重试和未知结果处理。
 
-## 5. 公共错误约定
+## 7. 引用、ResultInterpretationPolicy 与事件事实
 
-HTTP 错误采用 `application/problem+json`，保留 RFC 9457 的 `type`、`title`、`status`、`detail`、`instance`，并增加：
+`ResultInterpretationPolicy` 是唯一公共结果解释结构，由 `policyRef` 命名，只允许：
 
-~~~json
-{
-  "type": "https://docs.example/problems/precondition-failed",
-  "title": "Precondition failed",
-  "status": 412,
-  "detail": "The activation pointer has changed.",
-  "instance": "urn:problem:uuidv7",
-  "code": "ACTIVATION_VERSION_MISMATCH",
-  "traceId": "32-lowercase-hex",
-  "retryable": false,
-  "violations": [{"path": "expectedPointerVersion", "reason": "stale"}]
-}
-~~~
+- `SCHEMA_VALID`：引用 Ability Release 的输出 Schema 校验事实。
+- `JSON_POINTER_EQUALS`：使用 `jsonPointer` 与 JSON 原生 `expectedLiteral` 做严格类型和值相等比较。
 
-`detail` 只供人读，客户端只分支稳定的 `code`、HTTP status 与结构化扩展。建议映射：400 格式错误，401 未认证，403 无权，404 不存在/隐藏，409 领域冲突或幂等键复用，412 前置条件失败，422 领域校验失败，429 限流，503 暂时不可用。只有服务端明确 `retryable=true` 时客户端才自动重试；429/503 可配 `Retry-After`。
+Runtime 在独立的输出 Schema 校验之后运行一个纯解释器。JSON Pointer 路径缺失与路径存在且值为 JSON null 是不同事实；缺失路径必须返回不命中与 `PATH_MISSING`，绝不能产生成功。字符串、数字、布尔值和 null 不做隐式转换，也不增加脚本、正则或通用表达式引擎。
 
-## 6. 公共事件约定
+Capability Release 发布 `resultInterpretationPolicies` 数组与 `defaultSuccessPolicyRef`；每个数组项用 `policyRef` 命名，聚焦语义校验保证引用唯一且 default 可解析。A2UI Action 通过公共 `actionSuccessPolicyBinding` 选择 `successPolicyRef` 并单独声明 `completeInteractionOnSuccess`；`actionOutcomeFacts` 分别记录 `outputSchemaValid`、`successPolicyMatched`、`actionCallSucceeded` 与 `interactionCompleted`。四项事实不能从可见控件或其中任一事实推断其他事实。
 
-事件推荐 CloudEvents 1.0 JSON 信封。必需字段为 `specversion=1.0`、`id`、`source`、`type`、`subject`、`time`、`datacontenttype`、`data`；`dataschema` 在有稳定公开 schema 时提供。公共扩展建议为 `workspaceid`、`aggregateversion`、`correlationid`、`causationid` 与 `traceparent`。
+公共引用只表达定位：
 
-- 交付是至少一次，不承诺 exactly-once；消费者以 `(source,id)` 持久化去重。
-- 只保证同一聚合根的 `aggregateversion` 单调，不承诺跨资产全局顺序。
-- 消费者遇到重复事件必须无副作用；遇到缺口或倒序必须延迟、重取聚合或进入可观测失败，不能猜测填补。
-- 生产者只在业务事务提交后发布。实现阶段推荐 PostgreSQL transactional outbox，但本 change 不提交 DDL。
-- 事件 `data` 只携带最小引用与变更事实；大 payload 通过有授权的精确 Release/Revision 读取。
-- 领域事件类型和 data schema 由领域提交，公共层只校验信封、命名、版本和去重边界。
+- `RunRef={runId}`。
+- `NodeRef={runId,nodeId}`。
+- `InteractionRef={runId,nodeId,interactionId}`，必须绑定一个具体节点。
+- `ResultRef={runId,resultId,scope}`；`scope` 为 `INTERACTION`、`NODE` 或 `RUN`，交互/节点结果额外带所属 ID。
 
-建议首批公共事件：`asset.revision.created.v1`、`release.created.v1`、`activation.changed.v1`。完整命名域由主控统一，不能由本任务单方面冻结。
+候选事件外壳包含 `eventId`、单 Run 严格递增的 `runSequence`、`eventType`、`occurredAt`、`trustedContext`、该事件最具体且唯一的引用，以及可选 `causationControlRequestId`。Run 生命周期/版本失配使用 RunRef；Node 状态使用 NodeRef；等待交互使用 InteractionRef；三层结果事件只使用对应 ResultRef。事件分支拒绝其他层级引用和外来事实字段，因此不产生重复 ID 的交叉归因。协议版本、消息总线、sequence 持久化/重放和 delivery guarantee 尚未冻结。
 
-## 7. 发布与运行数据流
+首轮事件边界：
 
-1. 领域在 M 端校验输入并调用 `CreateRevision`，产生新的不可变 Revision。
-2. 领域发布门禁通过后提交 Revision 和精确依赖 Release，公共层验证引用与摘要并创建 Release。
-3. 有权主体以当前 Pointer 版本执行 `ActivateRelease`；事务写入新 Pointer、审计和 outbox。
-4. Runtime 在 Run 开始时以显式环境解析一次 Pointer，保存 `releaseId + contentDigest + pointerVersion`。
-5. 后续 Pointer 变化只影响新 Run；恢复中的 Run 继续使用已钉住 Release。
+| 事件事实 | 必需引用 | 不代表 |
+| --- | --- | --- |
+| `RUN_ACCEPTED` | RunRef | Run 已完成 |
+| `NODE_STATUS_CHANGED` | NodeRef | 交互或全 Run 完成 |
+| `INTERACTION_WAITING` | InteractionRef | 可见控件自动暂停或自动完成 |
+| `INTERACTION_RESULT_RECORDED` | INTERACTION ResultRef | Node/Run 成功 |
+| `NODE_RESULT_RECORDED` | NODE ResultRef | Finalizer 已完成 |
+| `RUN_RESULT_RECORDED` | RUN ResultRef | 外部异步业务已经完成 |
+| `VERSION_MISMATCH_BLOCKED` | RunRef + VersionGuardDecision | 已 reset 或已 restart |
 
-任何步骤失败都不得自动换用旧 Revision、旧 Release、其他环境或可变 head。
+A2UI DISPLAY_ONLY/INTERACTIVE、Action businessSuccess 与 completesInteraction 由已发布配置和 A2UI/Runtime 边界判断；公共事件只保存最终事实。Finalizer 可以产出 RUN Result，但不能改写 Interaction/Node 的业务事实。
 
-## 8. 六个领域必须提交给主控的接口需求
+## 8. 失败、重试和并发
 
-| 领域 | 必须提交的输入 | 必须提交的输出/事件 | 必须说明的边界 |
+| 边界 | 失败处理 | 重试责任 | 并发正确性 |
 | --- | --- | --- | --- |
-| Skill registry | Skill manifest 的摘要覆盖范围、依赖类型、创建/发布权限 | Revision/Release payload schema、校验错误码、领域事件 | 名称唯一性、兼容性和发布门禁；不得自建公共 Release 语义 |
-| Capability registry | 输入/输出 schema 格式、provider binding 是否进入摘要、Runtime 调用身份 | 可执行 Capability Release、调用端口版本、错误映射和事件 | 注册与真实业务实现分离；超时/副作用/幂等由调用契约明示 |
-| A2UI composer | 组件与 composition 的资产拆分、动作引用、资源依赖 | 可渲染 Release、presentation/action schema、事件 | M 端组合、Runtime 搬运/校验、B 前端渲染三方边界 |
-| Workflow composer | 图 manifest、Skill/Capability 精确依赖、编译产物摘要 | Runtime 可消费的 graph Release、校验错误和事件 | 图校验/发布与运行调度状态机分离 |
-| Agent/Workflow Runtime | 解析/缓存所需字段、run pin 证据、调用主体、事件关联 | 接受的 Release contract、运行引用回执、不可重试错误清单 | 不解析数字员工业务语义；缓存不可覆盖 PostgreSQL 真值 |
-| Digital employee | workspace/用户主体传播、启动时选择环境、A2UI action 授权 | 前后端所需查询投影、错误本地化字段、run/trace 关联 | 产品语义和适配器归 B 产品；Runtime 合同保持通用 |
+| TrustedContext | 缺失/非法/override 一律拒绝 | 调用方重新认证，不降级身份 | 服务端上下文不可由模型 payload 覆盖 |
+| AssetResolution | 环境内版本不存在即失败关闭 | 可重试暂时读错；不跨环境 fallback | PostgreSQL 真值；缓存不可决定正确性 |
+| VersionGuard | mismatch 拒绝新工作并提示 reset | 不自动重试/迁移/restart | 每个 ingress 重新比较 |
+| ControlRequest | 同 ID 异摘要冲突 | 同 ID 同摘要可安全查询/重试 | PostgreSQL 唯一约束/事务，支持多实例 |
+| ExecutionEvent | 引用或边界非法拒绝记录 | 传输重试策略待定 | 事件事实与运行事务边界由 Runtime 证明 |
+| Business Tool | 公共层不承诺业务 exactly-once | 被调用 API 后端拥有 | Workflow 不补偿、不对账、不跨 Run 去重 |
 
-每个领域还必须给出：方法名或端点候选、必需/可选字段、版本策略、权限矩阵、幂等范围、并发期望、超时/重试责任、负向场景与最小 fixture。主控在 Wave 2 统一后，公共层才可生成共享 schema/SDK。
+## 9. 六域必须回交的接口需求
 
-## 9. PostgreSQL 与多实例实现门禁
+| 领域 | 必须回交给 contracts/main-brain | 公共层不会拥有 |
+| --- | --- | --- |
+| Skill registry | Skill AssetVersion payload、resource/body 加载引用、`use_skill` 需要的输入/结果外壳 | Skill 指令执行和固定子图 |
+| Ability registry | Ability 版本引用、Tool 调用/结果引用、命名 `ResultInterpretationPolicy` 集合与 `defaultSuccessPolicyRef` | 业务幂等、业务重试、真实业务实现 |
+| A2UI composer | Component/Application 关系、DISPLAY_ONLY/INTERACTIVE、Action `successPolicyRef` 与 `completeInteractionOnSuccess` | Renderer、Action 业务状态机、协议版本 |
+| Workflow composer | graph version、节点稳定 ID、依赖资产版本集合和 AI/user choice 引用 | LangGraph 调度和每 Skill 子图 |
+| Runtime | Python 字段命名/序列化、ingress guard 调用点、control result、事件落库边界 | 产品业务模型和第二套 scheduler |
+| Digital employee | 服务端可信上下文注入、卡片 Node/Interaction ref、reset/stopped 展示所需字段 | 身份选择、Runtime 状态机、M 发布 |
 
-- 身份、revision、Release、Pointer、幂等结果、审计、outbox 和消费者去重均需持久化。
-- 唯一约束/条件更新承担并发正确性；进程锁、单机定时器、缓存只可优化，不能成为真值。
-- 至少用两个 API/worker 实例的集成测试证明并发 revision、Pointer CAS、重复命令和重复事件。
-- 不创建 MySQL/SQLite profile，也不提供数据库不可用时的内存 fallback。
+main-brain 归并实际需求并命名契约 revision 后，六域才能把本候选作为实现依赖。
 
-## 10. 待主控裁决（最多三个架构闸门）
+## 10. 验证策略
 
-1. 是否批准“四层分离”以及 Release manifest 的公共 schema 版本策略；推荐批准。
-2. 是否批准 HTTP + RFC 9457 + CloudEvents 1.0 作为首个跨模块基线，并由未来 ADR 冻结具体传输；推荐批准外壳、保留消息载体选择。
-3. `environment` 的首批值、Pointer 作用域和幂等键保留策略；推荐 MVP 仅 `preview`/`stable`，Pointer 作用域为 `workspace + asset + environment`。
+首轮使用项目自造、无业务数据的 JSON 正反例。正例覆盖 PRT current、ONLINE stable/gray、ALLOW、RESET_REQUIRED、控制请求、两种结果解释策略、包内相对材料引用和三层 Result；反例覆盖 sellerId/环境 override、ONLINE->PRT、第三 serving 版本、mismatch 却 ALLOW、未批准策略操作符、缺少 expected literal、父目录穿越、错误作用域引用和业务幂等字段。
 
-## 11. 失效与重新评估触发器
+聚焦校验只证明 Schema 形状和部分交叉约束；不证明服务端可信注入、PostgreSQL 多实例去重、Runtime ingress 拦截、事件事务性、A2UI/Finalizer 语义或产品可用。
 
-若主控选择单仓同进程也不放松边界；若未来需要跨仓、签名制品、离线镜像或多租户，再评估 OCI/签名/策略引擎。若跨语言固定样例不能产生同一摘要，必须阻止发布并重新选择规范化方案。
+## 11. 待 main-brain 审查
+
+1. `assetType` 候选枚举是否把 Component 与 Application 分开，以及 ResultInterpretationPolicy v0 的两个操作符是否批准。
+2. Runtime 的 Python 消费方式：直接 JSON Schema + Pydantic 手写模型，还是经批准后生成类型。
+3. ControlRequest/ExecutionEvent 的最终字段命名与持久化 owner；HTTP/SSE/事件总线版本继续保持未冻结。
