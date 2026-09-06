@@ -10,10 +10,10 @@
 
 | 门禁 | 状态 | 当前证据 | 仍需 |
 | --- | --- | --- | --- |
-| 对齐源码交付 | YES | 内容 commit `a661f2c78055b20dda91fc74ebd61cc46e6e6177` 已进入 main | main-brain 实际 diff 审阅 |
-| 基线读取 | YES | worker 已合入 `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e` | main-brain 检查实际修订 |
+| 对齐源码交付 | YES | consumer 内容 `6883610b70e6a8502b45084b953bb1de05a83558` 已随 main `57d11fcfee3481512d444a51fee0db3280357789` 集成 | main-brain 实际 diff 审阅 |
+| 基线/工程决策读取 | YES | worker 已合入 SW-P1-20260907.2、ENG-01 与最新 A2UI consumer | named approved contracts revision |
 | 旧冲突移除 | PARTIAL | 已移除 ResultCondition AST、NOT_EQUALS 和隐式类型转换；保留最小 policy | A2UI/Runtime 最终接入评审 |
-| 成功解释器所有权 | PARTIAL | Contracts/main-brain 收敛 Runtime 单实现；A2UI 已通知统一 successPolicyRef | Runtime 实现与跨域验证 |
+| 成功解释器所有权 | PARTIAL | Contracts/main-brain 收敛 Runtime 单实现；A2UI main 已统一 successPolicyRef 并拒绝旧引用 | Runtime 实现与跨域验证 |
 | 共享契约 | NO READY | `SW-CONTRACTS-P1-CANDIDATE.1` consumer 对齐 | main-brain 命名并审阅 approved revision |
 | 合成 fixture | YES | 3 个 PROVISIONAL 文件；9 cases + 2 rejected policies 检查通过 | approved revision 后转为正式契约测试 |
 | Registry 实现 | NO READY | 无服务代码 | 接口放行后最小实现 |
