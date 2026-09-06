@@ -22,11 +22,11 @@
 
 ## 当前里程碑
 
-- 状态：PHASE1_SUBSET01_RUNTIME_PROBE_BATCH1_GREEN
+- 状态：PHASE1_SUBSET01_RUNTIME_PROBE_BATCH1_DELIVERED
 - Runtime：NO READY
 - 已完成：PY-01 安装/健康复核；task venv；SDK resolver/import；59 项实验 lock；主干 `skillweave_contracts` 严格适配；真实 Skill fixture；Deep Agent Tool surface；离线 Anthropic wire；A2UI mode/interrupt。
 - TDD：首批 15/15 GREEN；有效 RED 包括默认隐式 Tool 暴露、provider schema 非 strict/非批准 pattern、newline key、非法 resolver result 与 Interaction 碰撞。
-- 进行中：worker commit/push 与自动 integration；独立 reviewer 已批准（Critical=0，Important=0）。
+- 已交付：worker/source commit `1aa1410ca6ca9537507da776cd8d394c526f13b4` 已 push，并由独占 integration worktree 快进合入 `origin/main`；独立 reviewer 已批准（Critical=0，Important=0）。
 - 未开始：PostgreSQL setup、双进程 resume、独立并行 B1→B2、A2UI-only retry、stop/restart、生产 services/runtime。
 
 ## 移除的冲突
@@ -54,12 +54,12 @@
 
 ## Next Executable Action
 
-提交当前 staged worker、push，并通过独占 integration worktree 自动合入 main。合入后先回传稳定源码 SHA；PostgreSQL/双进程继续等待 main-brain 明确协调，不以其他 saver 替代。
+向 main-brain 回传稳定源码 SHA 与合入态验证；随后开始 A 等待时 B1→B2 独立推进的最小 RED。PostgreSQL/双进程继续等待 main-brain 明确协调，不以其他 saver 替代。
 
 ## 交付状态
 
-- 本轮修改：未提交
-- Worker push：待执行
-- Integration：待执行
+- 本轮源码：`1aa1410ca6ca9537507da776cd8d394c526f13b4`
+- Worker push：PASS，远端 worker=`1aa1410ca6ca9537507da776cd8d394c526f13b4`
+- Integration：PASS，`origin/main=1aa1410ca6ca9537507da776cd8d394c526f13b4` 且包含 worker source commit
 - OpenSpec structure：PASS；CLI 在 PATH/仓库中均不可用，未在线安装替代
 - Runtime readiness：NO READY
