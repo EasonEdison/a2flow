@@ -1,55 +1,49 @@
-# Tasks: oss-skill-registry
+# Tasks: oss-skill-registry Phase 1
 
-> 状态：**PROPOSED**。本轮仅交付设计，以下实现任务全部未开始、不得视为授权。
-> Runtime readiness：**NO READY**。
+> Baseline: SW-P1-20260907.2
+> Runtime readiness: **NO READY**
+> Checked items below are documentation/example alignment only, not service implementation or runtime proof.
 
-## 0. Architecture Gates
+## 0. ALIGN
 
-- [ ] 0.1 main-brain 冻结公共 `AssetIdentity`、`ArtifactDescriptor`、`ReleaseRef`、授权、幂等和撤销语义。
-- [ ] 0.2 main-brain 与 Workflow Composer 裁决两阶段 `SkillRevisionRef → WorkflowReleaseRef → SkillRelease`。
-- [ ] 0.3 main-brain 裁决 OCI-compatible transport、允许的 locator，以及 M 侧模块化单体/独立服务形态。
-- [ ] 0.4 main-brain 确认 MVP 仅含 Capability/Workflow 依赖，不含 Skill-to-Skill 依赖。
-- [ ] 0.5 审查并批准本 change；在此之前禁止 scaffold 应用代码。
+- [x] 0.1 核对专属 worktree/分支/状态，fetch 并 merge `origin/main` 到基线集成 SHA `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`。
+- [x] 0.2 读取仓库 `AGENTS.md`、Phase 1 `baseline.md`、`plan.md` 和本任务 checkpoint。
+- [x] 0.3 从活跃设计中移除 Workflow-bound Skill publication、WorkflowReleaseRef 门禁和固定依赖图。
+- [x] 0.4 对齐 `use_skill` 唯一入口、trusted userId/environment、PRT/ONLINE 分库和普通用户权限边界。
+- [x] 0.5 提交 use_skill 消费需求与候选包约束，明确共享 schema 仍由 contracts owner 冻结。
+- [x] 0.6 准备 `evidence-first-brief` 通用指令样例、chat/Workflow 原样复用案例和校验正反例。
+- [ ] 0.7 main-brain 审查实际 diff，记录冲突消除结果并命名可实现的共享 contract revision。
 
-## 1. Contract and Persistence
+## 1. Approved-contract Gate
 
-- [ ] 1.1 根据已批准公共合同定义 Skill Registry 的 command/query port 与错误码。
-- [ ] 1.2 设计 PostgreSQL-only schema、唯一约束、乐观并发列、审计字段和迁移。
-- [ ] 1.3 定义 `SkillCatalogEntry`、`SkillVersionDraft`、`SkillRevision`、`ValidationReport` 和 publication record。
-- [ ] 1.4 验证多实例下 metadata update、freeze、validation claim 和 publish compare-and-set。
-- [ ] 1.5 定义无密钥、可审计的 artifact locator 与 credential provider 边界。
+- [ ] 1.1 获得 trusted context、environment-local resolver、package/release reference、version evidence 和共享错误语义的命名 revision。
+- [ ] 1.2 与 Runtime owner 确认 `use_skill` model-visible input、trusted injection 和 success material 的最终合同。
+- [ ] 1.3 与 main-brain 确认 `services/skill-registry/` 的语言、目录和根依赖所有权。
+- [ ] 1.4 确认 `requiredToolNames` 是 revision 元数据还是只从指令推导；不得授予权限。
+- [ ] 1.5 在以上 gate 完成前，不写共享 contracts、根 manifest 或跨域 Runtime 代码。
 
-## 2. Catalog and Metadata
+## 2. Minimal Domain Slice after Review
 
-- [ ] 2.1 实现目录注册及 `namespace + slug` 唯一性与幂等。
-- [ ] 2.2 实现 metadataRevision compare-and-set 编辑，冲突时返回当前 revision。
-- [ ] 2.3 实现 ACTIVE/ARCHIVED 策略，不隐式删除既有 release。
-- [ ] 2.4 实现只暴露 PUBLISHED 项的稳定游标目录查询。
-- [ ] 2.5 增加授权与审计，禁止日志记录正文和凭证。
+- [ ] 2.1 在 `services/skill-registry/` scaffold 经批准的最小模块，不安装未批准的共享依赖。
+- [ ] 2.2 实现 Agent Skills-compatible package validator core：frontmatter、name/directory、digest/size、安全路径和资源上限。
+- [ ] 2.3 实现 catalog/material application ports，接口显式接受后端 trusted context，模型参数不含 userId/environment。
+- [ ] 2.4 实现普通用户 authoring denial 与 discovery/material 权限分离。
+- [ ] 2.5 实现 PRT current、ONLINE stable/gray 的 resolver adapter；只消费共享 contract，不自造 gray 算法。
+- [ ] 2.6 实现 PostgreSQL repository 与唯一/乐观并发约束；不提供 SQLite/MySQL fallback。
+- [ ] 2.7 保证 published Skill 无 WorkflowReleaseRef、graph、route 或 mode-specific output。
 
-## 3. Versioning and Validation
+## 3. Focused Verification
 
-- [ ] 3.1 实现 SkillVersionDraft、generation 并原子 freeze 为不可变 SkillRevision。
-- [ ] 3.2 实现 SemVer 解析和同一 Skill 单一发布版本约束。
-- [ ] 3.3 实现受限 ArtifactInspectorPort：size/digest/path/symlink/timeout 配额。
-- [ ] 3.4 实现 Agent Skills `SKILL.md` frontmatter/name/description/name-directory 校验，绝不执行脚本。
-- [ ] 3.5 通过 Capability Registry port 解析 range 并生成精确 dependency lock。
-- [ ] 3.6 实现 validation fingerprint、TTL、policyVersion、失效与最多 3 次有界重试。
-- [ ] 3.7 验证 `allowed-tools` 只作为实验兼容性信息，不提升权限。
+- [ ] 3.1 用独立样例验证同一 package digest 在 chat/Workflow 的 use_skill 结果一致。
+- [ ] 3.2 验证普通用户可浏览/授权使用但不能 create/edit/upload/publish。
+- [ ] 3.3 验证 ONLINE 不读 PRT，gray 只使用 trusted userId，且没有第三 serving version。
+- [ ] 3.4 验证 native-directory/raw-locator bypass 无法加载正文或资源。
+- [ ] 3.5 验证 scripts/allowed-tools 不执行、不提升权限。
+- [ ] 3.6 用两个进程和 PostgreSQL 验证唯一性、CAS 和 environment-local resolution。
+- [ ] 3.7 将真实 method、params、成功 data 和字段断言写入 `regression.md`；无证据项保持 PLANNED/NO READY。
 
-## 4. Workflow Binding and Publication
+## 4. Delivery
 
-- [ ] 4.1 校验精确 WorkflowReleaseRef 绑定当前 SkillRevisionRef。
-- [ ] 4.2 实现 publish gate，对 catalog、SemVer、validation、dependencies、workflow、metadataRevision 做最终核对。
-- [ ] 4.3 通过公共 PublicationPort 发布，不复制公共 release 状态机。
-- [ ] 4.4 处理超时后的 unknown outcome：同一 idempotencyKey 查询/重试。
-- [ ] 4.5 输出 Runtime 只读可消费的 PublishedSkillRef，不暴露 draft 或私有表。
-
-## 5. Verification and Delivery
-
-- [ ] 5.1 编写单元/合同测试覆盖规范中的 8 个验收场景及稳定错误码。
-- [ ] 5.2 以 PostgreSQL 启动至少两个 API/worker 实例，验证并发注册、freeze、任务领取和发布。
-- [ ] 5.3 用真实测试制品验证 digest mismatch、路径穿越、逃逸 symlink 和 size 限额。
-- [ ] 5.4 验证 Capability/Workflow 端口的 timeout、429、5xx、撤销和 stale validation。
-- [ ] 5.5 执行纵向切片回归并在 `regression.md` 填入真实 method、params、data 与字段断言。
-- [ ] 5.6 所有必需门禁通过后更新 `readiness.md`；存在 PARTIAL/NO READY 时不得宣称可用或归档。
+- [x] 4.1 提交前重新 fetch/merge 最新 `origin/main`，执行精确范围、`git diff --check` 与敏感信息扫描。
+- [ ] 4.2 push worker 分支并通过本任务独占 integration worktree 合入服务器 `origin/main`，禁止强推。
+- [ ] 4.3 回报 worker/integration SHA、实际检查和剩余 NO READY 门禁。

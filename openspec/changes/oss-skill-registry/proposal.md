@@ -1,90 +1,92 @@
-# Change Proposal: M 侧 Skill 注册平台首个设计切片
+# Change Proposal: Phase 1 Skill 注册、发现与 use_skill 边界
 
-> 状态：**PROPOSED**
+> 基线：SW-P1-20260907.2
+> 状态：**ALIGNMENT CANDIDATE / PROPOSED**
 > Runtime 准出：**NO READY**
-> 审批者：main-brain / CTO
-> 本文描述设计候选，不代表协议已冻结、实现已完成或功能可用。
+> 本 change 服从已集成基线；字段名和协议形状仍由 main-brain 与 `oss-platform-contracts` 审核。
 
 ## Why
 
-M 侧需要一个边界清晰的 Skill 注册平台，向作者提供目录、注册、元数据编辑、版本化包引用和依赖校验，并向后续 Workflow Composer 与通用 Runtime 提供稳定、不可变、可审计的发布引用。若把可编辑元数据、包存储、依赖解析和运行执行混在一起，将很难保证发布可复现，也会把 Runtime 错误耦合到 M 侧数据库。
+Phase 1 要证明同一份 Skill 指令可以在对话和 Workflow 中原样复用，并且所有 Skill 使用只经过授权 Tool `use_skill`。Skill Registry 负责 M 侧目录、作者态版本和包校验；它不能把 Skill 固化成 Workflow 子图，不能要求 Workflow 路由输出，也不能让 Deep Agents 原生目录加载绕过统一 Tool、环境和授权边界。
 
-## First Slice
+## Superseded Design Removed
 
-本 change 只设计以下能力：
+本修订明确撤销旧方案中的以下活跃设计：
 
-1. 创建和查询 Skill 目录项。
-2. 以乐观并发方式编辑目录元数据。
-3. 为一个 Skill 创建带 SemVer 的版本候选，绑定内容寻址的包描述符。
-4. 校验 Agent Skills 基础结构，以及已声明的 Capability/Workflow 依赖。
-5. 发布前把版本约束解析为精确、不可变的依赖锁；发布动作复用公共发布协议。
-6. 目录查询仅暴露已发布版本，并能返回可供消费者解析的发布引用。
+1. 撤销 `SkillRevisionRef → WorkflowReleaseRef → SkillRelease` 两阶段发布；Skill 发布不绑定任何 Workflow。
+2. 从 `PublishedSkillRef`、发布请求、校验门禁和回归场景中移除 `WorkflowReleaseRef`。
+3. 撤销“Skill 发布时锁定 Workflow/Capability 依赖图”的首片要求。Skill 可以声明运行所需 Tool 的兼容性需求，但这不是固定业务子图，也不授予权限。
+4. 不把 SDK 的 `skills=[directory]` 配置作为已发布 Skill 的另一条入口。Phase 1 的正文/资源加载必须由 `use_skill` 完成。
+5. 撤销“设计获批前禁止一切 Phase 1 工作”的旧口径；当前已获准完成 ALIGN、消费者需求、候选包契约与合成样例。服务实现仍等待 main-brain 指定共享契约 revision。
 
-本轮不实现代码、数据库、接口或部署。
+## First Executable Slice
 
-## Explicit Non-goals
+当前可独立交付且不依赖共享 schema 冻结的切片：
 
-- 不做 AI Coding/Prompt 编辑器、在线文件树或通用低代码 IDE。
-- 不接收、解压、重打包或管理任意 ZIP；注册平台只接收公共协议定义的包描述符。
-- 不执行 `SKILL.md`、`scripts/` 或包内任意代码。
-- 不设计任意 Skill-to-Skill 传递依赖、依赖求解器或插件市场。
-- 不拥有 Workflow 图、Capability 契约、制品仓库、Runtime 运行状态或 B 侧展示。
-- 不在协议未裁决前绑定具体 Runtime 语言、AG-UI/A2UI 版本或单一部署形态。
+- 修订本域 OpenSpec，使 Skill 独立于 Workflow，并对齐 Python Deep Agents/LangGraph Runtime。
+- 提交 `use_skill` 消费需求，要求 trusted context 注入、环境内解析、授权正文加载和版本证据。
+- 提交 Agent Skills 兼容的候选包约束，不自造公共发布协议。
+- 提交一份独立创作的 `evidence-first-brief` 指令 Skill；对话与 Workflow 均引用同一包和同一 Skill key。
+- 提交正反校验案例：格式、越权、跨环境、原生目录绕过、脚本执行和 Workflow 专用字段。
+- 做轻量静态检查并回传 main-brain，等待其按实际 diff 放行 `services/skill-registry/` 最小实现。
 
-## Options and Recommendation
+## Scope
 
-### 包引用
+### In scope
 
-| 候选 | 优点 | 主要代价 | 结论 |
-| --- | --- | --- | --- |
-| Git URL + commit | 易审查、MVP 简单 | 分发、鉴权、media type 与完整性语义需另补 | 保留为导入来源，不作为发布主引用 |
-| 平台自管 ZIP/对象存储路径 | 可完全控制 | 会扩展成上传、压缩、清理和安全扫描平台；路径可变 | 首片拒绝 |
-| 公共 `ArtifactDescriptor`，以 digest 寻址并兼容 OCI descriptor | 不可变、可校验、可替换后端；与共享发布协议对齐 | 需 contracts 任务冻结字段与制品后端 | **推荐** |
+- M 侧 Skill 目录、作者态创建/编辑、不可变发布版本和包校验候选。
+- 普通用户可浏览的描述性目录信息。
+- 管理员作者态操作和普通用户拒绝案例。
+- PRT/ONLINE 分库解析需求及 ONLINE stable/gray 的 userId 灰度需求。
+- Runtime `use_skill` Tool 的消费者输入/输出、拒绝和版本证据需求。
+- 独立合成样例及静态/合同验证计划。
 
-推荐注册平台只持久化公共 `ArtifactDescriptor`（至少包括 `mediaType`、`digest`、`size` 和受控 locator），由公共发布协议/制品端口负责上传、下载与鉴权。OCI descriptor 将 media type、digest 和 size 作为内容描述核心，且 OCI manifest 明确允许承载非容器制品，适合作为兼容目标，而非要求首片自建 OCI Registry。
+### Out of scope
 
-### 版本与依赖
+- 固定 Skill 子图、Workflow 路由字段、Skill 输出适配器或 per-Skill node factory。
+- Workflow 图发布、条件/并行调度、A2UI 完成判定、业务 API 幂等。
+- SDK 原生 Skill 目录作为对外已发布资产的激活入口。
+- 普通用户作者态能力、脚本上传入口或任意脚本执行。
+- 自建公共 release/resolver/auth schema、OCI 服务、ZIP 管理器或对象存储。
+- 服务 scaffold、依赖 pin、数据库迁移和部署；这些等待接口 revision 审核。
 
-| 候选 | 结论 |
-| --- | --- |
-| 全部依赖只能手填精确发布引用 | 确定性强，但作者体验差 |
-| Runtime 每次按 SemVer range 动态解析 | 同一 Skill Release 可能随时间执行出不同结果，拒绝 |
-| 草稿声明 SemVer range，校验/发布时锁定精确 release + digest | **推荐**：兼顾作者体验与可复现执行 |
+## Recommended Boundary
 
-SemVer 2.0.0 要求已发布版本内容不可修改；本方案据此将发布快照设计为不可变，并把后续变更发布为新版本。
+### Catalog versus authorized material
 
-### 部署边界
+目录查询只暴露 `skillKey`、名称、描述、标签和可用性等发现元数据。正文、references、assets 和任何 script bytes 不属于匿名/普通目录响应；它们只能在 Runtime 调用 `use_skill` 后，经 trusted user/environment 授权加载。
 
-逻辑上保持独立 Skill Registry 模块与端口。为匹配首个纵向切片和小型主机，建议四个 M 侧能力先作为模块化单体中的独立模块部署；是否拆成独立服务由 main-brain 统一裁决，本文不冻结。
+### Package
 
-## Public References
+采用 [Agent Skills Specification](https://agentskills.io/specification) 的目录与 `SKILL.md` 结构作为候选作者格式。公共发布层只需给本域一个不可变、可校验、无凭证的 package reference；digest、media type、size、locator/handle 的最终字段由 contracts 单一所有。本域不要求首版自建 OCI Registry。
 
-- [Agent Skills Specification](https://agentskills.io/specification)：`SKILL.md`、YAML frontmatter、目录名/name 一致性及可选资源目录。
-- [OCI Content Descriptor](https://specs.opencontainers.org/image-spec/descriptor/)：media type、digest、size 与内容寻址/校验。
-- [OCI Image Manifest - Artifact Usage](https://specs.opencontainers.org/image-spec/manifest/)：非容器制品可使用 manifest 与 artifact type。
-- [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)：版本优先级和已发布内容不可变。
+### Runtime entry
 
-## Cross-domain Dependencies
+Deep Agents 官方支持把 Skills 目录直接传给 SDK，并按描述做 progressive disclosure；本项目有意不把已发布 M 资产直接接入该目录入口。Runtime 对模型暴露 `use_skill(skillKey)`，由后端注入 `userId` 与当前环境、解析有效版本、授权并返回指令/资源句柄。若未来内部使用 Deep Agents Backend/Middleware 投影内容，`use_skill` 仍必须是唯一授权入口。
 
-| 依赖方 | 本域输入 | 本域输出 | 所有权 |
-| --- | --- | --- | --- |
-| oss-platform-contracts | `AssetIdentity`、`ArtifactDescriptor`、`ReleaseRef`、幂等/授权/撤销语义 | Skill 消费者对字段和状态的要求 | contracts 最终冻结公共发布协议 |
-| oss-capability-registry | Capability 可解析/可发布状态与精确 release ref | 版本候选中的 capability requirements | capability registry 拥有契约和发布状态 |
-| oss-workflow-composer | Workflow 校验结果与精确 release ref | `SkillRevisionRef` 和绑定要求 | workflow composer 拥有图与图发布 |
-| oss-agent-workflow-runtime | 无草稿访问；仅消费已发布、已锁定 Skill release | `PublishedSkillRef` 与 dependency lock | Runtime 拥有执行，不得读取本域数据库 |
+## Environment and Authorization
 
-为避免 Skill 与 Workflow 发布循环，建议先产生不可变 `SkillRevisionRef`，Workflow 以该 revision 编排；最终 Skill Release 再绑定精确 `WorkflowReleaseRef`。该两阶段边界需 main-brain 与 workflow/contracts 任务共同裁决。
+- PRT 与 ONLINE 使用不同数据库；本域不提供跨库 fallback。
+- PRT 只解析 PRT current。
+- ONLINE 只解析 ONLINE stable 或按 trusted `userId` 命中的 ONLINE gray；不得读取 PRT，且同一时刻最多服务两个 ONLINE 版本。
+- `userId`、environment、credentials 不进入模型可选择的 Tool 参数。
+- 普通用户可以浏览目录，并在 B 侧通过授权 `use_skill` 使用 Skill；只有管理员可以创建、编辑、校验和发布。
+- 发现元数据可见不等于正文/资源已授权。
 
-## Success Criteria
+## Cross-domain Inputs
 
-- 规范明确可编辑目录、不可变版本、校验报告和发布引用的区别。
-- 发布结果只包含精确依赖与 digest，不允许运行时动态解析。
-- 失败、重试、并发、多实例和失效边界有可验证定义。
-- 5–8 个验收场景覆盖成功、冲突、非法包、缺失依赖、完整性和幂等发布。
-- 所有运行态门禁维持 `NO READY`，直到实现与回归证据齐备。
+| Owner | Skill Registry submits/needs | This task does not own |
+| --- | --- | --- |
+| oss-platform-contracts | trusted execution context、environment-local `resolveAsset`、不可变 package/release reference、版本比较、统一错误/授权语义 | 共享 schema、发布状态机、gray 算法 |
+| oss-agent-workflow-runtime | `use_skill` Tool 消费需求、同包复用样例、loaded material 与 version evidence 需求 | Tool 实现、模型循环、继续/重置控制 |
+| oss-workflow-composer | Workflow 节点只保存/传递 Skill 逻辑引用并调用同一 `use_skill` 路径 | Workflow 图与调度；Skill 发布不反向依赖 Workflow |
+| oss-capability-registry | Skill 可声明 Tool/ability 兼容性信息；真实调用仍走 `execute_ability` 和其授权 | Ability schema、业务调用与业务幂等 |
+| main-brain | 服务语言/packaging、共享 revision 和 `services/skill-registry/` 实现放行 | 根 manifest、依赖版本与跨域最终决策 |
 
-## Decisions Requested from main-brain
+## Acceptance for ALIGN
 
-1. 公共发布协议是否采用 OCI-compatible descriptor 作为规范形状，以及 locator 是否允许 registry URL 之外的后端。
-2. 是否批准“两阶段 SkillRevision → WorkflowRelease → SkillRelease”以消除循环依赖。
-3. MVP 是否只允许 Capability/Workflow 依赖，暂不支持 Skill-to-Skill 依赖；以及四个 M 模块是否先同一部署单元。
+- 旧 change 中不再存在 Workflow-bound Skill publication。
+- `use_skill` 请求不允许模型提供 userId/environment/credentials。
+- 同一个 `evidence-first-brief` 包用于 chat 与 Workflow 示例，正文无模式分支或路由字段。
+- 普通用户作者态、PRT→ONLINE/ONLINE→PRT fallback、native-directory bypass 和脚本执行均有拒绝案例。
+- 所有实现与运行门禁保持 `NO READY`，直到 main-brain 指定共享契约 revision 并产生真实实现证据。

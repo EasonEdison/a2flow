@@ -1,39 +1,61 @@
 # oss-skill-registry 执行检查点
 
-## 身份与边界
+## Identity and Scope
 
-- 任务：`oss-skill-registry`
-- Worker worktree：`/home/admin/OpenSource/repos/.parallel/oss-skill-registry/platform`
-- Worker 分支：`codex/oss-skill-registry/design`
-- 目标分支：`origin/main`
-- 交付范围：仅 `openspec/changes/oss-skill-registry/` 下的 PROPOSED 设计文档
-- 明确不做：实现代码、依赖安装、服务或数据库变更、端口与部署变更、Runtime READY 声明
+- Task: `oss-skill-registry`
+- Worker: `/home/admin/OpenSource/repos/.parallel/oss-skill-registry/platform`
+- Branch: `codex/oss-skill-registry/design`
+- Integration target: `origin/main`
+- Owns: `openspec/changes/oss-skill-registry/` and, after review release, `services/skill-registry/`
+- Does not own: root files, `packages/contracts/`, Runtime/Workflow/A2UI/ability source or other task checkpoints
 
-## 磁盘真值
+## Baseline Truth
 
-- 2026-09-06：工作区起点为 `3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`。
-- 已确认 worker worktree 干净，分支为 `codex/oss-skill-registry/design`。
-- 已执行 `git fetch origin` 与 `git merge --no-edit origin/main`，结果为 `Already up to date`。
-- 提交、集成与状态证据更新前均重新同步最新 origin/main；本域文件无冲突。
-- 已读取本任务允许的仓库入口 `AGENTS.md` 与 `docs/workstreams.md`；未读取其他任务 checkpoint。
-- 设计 worker c83a869ded9f588c3241f003c072e17bc800a58a 已 push，并首次集成到 main 2970ca7548ec9d8d6c803d10e29198d5d172ef5d。
+- Active baseline: `SW-P1-20260907.2`
+- Baseline commit: `b1a0c9f32497c04dd623edb0bb8858a01b5ae7ad`
+- PY-01 worker 1bcc61a4137436f5c3811d555d2af8244c0fc971 and integrated main c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e were read; system Python authorization belongs to Runtime execution only and is not a blocker for this task.
+- Baseline integration SHA read and merged: `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`
+- 2026-09-07 start: worker was clean at `cfede4966140f567c500f51bc697cb35376225e2`; `git fetch origin && git merge --no-edit origin/main` fast-forwarded it to the baseline integration SHA.
+- Repository `AGENTS.md`, Phase 1 `baseline.md`, `plan.md` and this checkpoint were read. No other task checkpoint was read.
+- Runtime readiness: `NO READY`.
 
-## 当前状态
+## Superseded Conflicts Removed in This Batch
 
-- 阶段：7 份要求内设计文档已完成源码交付，正在同步 checkpoint/readiness 证据。
-- Runtime 准出：`NO READY`。
-- 设计状态：`PROPOSED`，尚未经 main-brain/CTO 审批。
-- `tasks.md` 中 33 个实现任务全部未勾选；`regression.md` 中 8 个场景全部为 `PLANNED`。
+- Workflow-bound Skill publication and required `WorkflowReleaseRef`.
+- Fixed dependency graph/route/result semantics inside Skill release.
+- Native Deep Agents Skill directory as an alternate published-asset entry.
+- Model-selected userId/environment/gray target.
+- Design-only prohibition on authorized ALIGN examples; service implementation remains gated by named contract revision.
+
+## Owned Batch
+
+- Revise proposal/design/spec/tasks/regression/readiness/checkpoint.
+- Add `inputs/use-skill-consumer-requirements.md`.
+- Add `inputs/skill-package-candidate.md`.
+- Add one independently authored `examples/evidence-first-brief/` Skill.
+- Add chat/Workflow same-package reuse and positive/negative validation cases.
+- No service code, dependency install, database/service/port/secret/deployment mutation.
+
+## Current State
+
+- Stage: ALIGN documents/fixtures and focused static evidence complete；ready for source delivery.
+- Design: PROPOSED against SW-P1-20260907.2.
+- Runtime: NO READY.
+- Shared contracts and `services/skill-registry/` implementation are not released.
 
 ## Next Executable Action
 
-提交并 push 本次状态证据，通过任务独占 integration worktree 合入最新 origin/main 后结束本轮，等待 main-brain 审查。
+Commit and push the 13-file owned ALIGN batch，then merge it through the exclusive integration worktree into `origin/main`. Send exact SHAs/evidence to main-brain and wait for a named shared contract revision before service implementation.
 
-## 最近验证
+## Evidence
 
-- `git diff --check`：通过。
-- 精确范围：仅 `openspec/changes/oss-skill-registry/` 下 7 个文件。
-- 结构计数：8 个 `#### Scenario:`，8 个 `PLANNED` 回归项，33 个未勾选任务，0 个已勾选任务。
-- 敏感/私有模式扫描：未发现公司域名、业务标识、cookie、常见 access key/私钥模式；仅 4 个公开规范 URL。
-- 服务器未安装 `openspec` CLI，未为本轮验证安装依赖，因此 strict validate 尚未执行。
-- 首次 diff check 发现 Markdown 硬换行尾空格，且复审发现转义反引号；已机械清理并重新通过检查。
+- Initial status/branch/worktree and baseline merge were verified through SSH as admin.
+- Public sources consulted: Agent Skills specification and current Deep Agents Skills/Customization documentation.
+- First `git diff --check` found repeated Markdown hard-break trailing spaces; formatting was normalized and the next full check passed.
+- Focused fixture assertion ran with existing Python 3.6.8 and PyYAML 3.12；no install or system change.
+- Fixture output: `fixture_static_check=PASS`, `validation_cases=9`, `reuse_cases=2`, `same_model_input=true`.
+- Sample `SKILL.md` digest: `1cc034c1d066b24771e9b0d91bc74abd89012268cf225802c25dd33316e06434`.
+- `openspec` and `skills-ref` CLI are absent；strict validator was not run and no dependency was installed.
+- Sensitive/private pattern scan and forbidden sample-field scan returned no hits.
+- Initial ALIGN receipt was sent to main-brain task `01a070ef-5da9-7591-ac2a-25bf89a44763` with baseline .2、removed conflicts、owned diff、first slice、dependencies and explicit NO READY.
+- Pre-delivery `git fetch origin && git merge --no-edit origin/main` returned `Already up to date` at `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`; the repeated full static check passed.

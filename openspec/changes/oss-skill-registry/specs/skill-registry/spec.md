@@ -1,100 +1,123 @@
 # Skill Registry Capability Specification
 
+> Baseline: SW-P1-20260907.2
 > Status: **PROPOSED**
 > Runtime readiness: **NO READY**
 
 ## ADDED Requirements
 
-### Requirement: Register a unique Skill catalog entry
+### Requirement: Separate discovery from authorized material loading
 
-The system MUST create a stable Skill identity for a valid `namespace + slug`, MUST enforce uniqueness across all application instances through PostgreSQL, and MUST return the same result for the same scoped idempotency key. Namespace, slug and identity become immutable after creation.
+The system MUST expose descriptive Skill catalog metadata separately from instructions and resources. Browsing permission MUST NOT imply authorization to load a Skill body, resource bytes, package locator or credential.
 
-#### Scenario: Register a new Skill
+#### Scenario: Ordinary user browses catalog metadata
 
-- **GIVEN** an authorized author and no existing `demo/research-assistant` entry
-- **WHEN** the author submits namespace `demo`, slug `research-assistant`, required display metadata and an idempotency key
-- **THEN** the system returns one `skillId`, `metadataRevision = 1`, and `lifecycleState = ACTIVE`
-- **AND** repeating the same request with the same idempotency key returns the same identity rather than creating a duplicate
+- **GIVEN** an ordinary authenticated user can browse M-side assets
+- **WHEN** the user lists available Skills
+- **THEN** the response contains only authorized discovery fields such as skillKey, name, description, tags and availability
+- **AND** it does not contain instructions, resource bytes, private locator, credential or administrator metadata
 
-### Requirement: Edit metadata without lost updates
+### Requirement: Restrict authoring to administrators
 
-The system MUST update editable catalog metadata only when `expectedMetadataRevision` matches the current value. It MUST NOT mutate immutable identity fields or silently overwrite a concurrent change.
+The system MUST allow administrators to create, edit, validate and publish Skill assets in the current M environment. It MUST deny the same operations to ordinary users even though they can browse and use authorized Skills.
 
-#### Scenario: Reject a stale metadata update
+#### Scenario: Ordinary user attempts to publish
 
-- **GIVEN** a Skill whose current `metadataRevision` is 4
-- **WHEN** one author successfully updates with expected revision 4 and another request still submits expected revision 4
-- **THEN** the first update returns `metadataRevision = 5`
-- **AND** the stale request returns a conflict containing current revision 5 and does not overwrite the stored metadata
+- **GIVEN** an ordinary user with catalog browse and B-side Skill-use permission
+- **WHEN** the user calls a create, edit, package-upload or publish operation
+- **THEN** the operation is denied with the shared authorization error
+- **AND** no draft, package reference or publication record is created
 
-### Requirement: Freeze an immutable Skill revision
+### Requirement: Use environment-local resolution
 
-The system MUST freeze a version draft atomically against its expected generation. A frozen `SkillRevisionRef`, revision envelope and `revisionDigest` MUST be immutable and independently addressable before final publication.
+The system MUST resolve every Skill inside the trusted current environment. PRT MUST read only PRT current. ONLINE MUST read only ONLINE stable or one ONLINE gray version selected by trusted userId, never PRT, and MUST serve no third version.
 
-#### Scenario: Freeze a current draft generation
+#### Scenario: ONLINE caller cannot fall back to PRT
 
-- **GIVEN** version draft generation 3 with a valid SemVer, package descriptor and declared capability requirements
-- **WHEN** the author freezes it with `expectedGeneration = 3`
-- **THEN** the system returns one stable `skillRevisionRef` and `revisionDigest`
-- **AND** later draft edits or retries cannot modify the frozen revision
-- **AND** a freeze request using an older generation is rejected as a conflict
+- **GIVEN** a Skill exists in PRT but has no eligible ONLINE release
+- **WHEN** an ONLINE use_skill request is resolved
+- **THEN** resolution returns Skill not found/unavailable for ONLINE
+- **AND** it does not query or return the PRT release
 
-### Requirement: Validate a Skill package without executing it
+#### Scenario: ONLINE gray uses trusted userId
 
-The system MUST verify descriptor size and digest, enforce bounded safe inspection, and validate the Agent Skills `SKILL.md` structure. It MUST NOT execute scripts, Markdown instructions or declared tools during registration.
+- **GIVEN** ONLINE stable and ONLINE gray releases exist
+- **WHEN** trusted backend context identifies a userId in the gray cohort
+- **THEN** the resolver returns the ONLINE gray release and its version evidence
+- **AND** a model-supplied userId, environment or gray target is rejected or ignored as untrusted input
 
-#### Scenario: Validate a conforming package
+### Requirement: Route all Skill usage through use_skill
 
-- **GIVEN** a content-addressed artifact within configured limits whose root contains `SKILL.md` with valid `name` and `description`, and whose directory name matches `name`
-- **WHEN** validation inspects the frozen Skill revision
-- **THEN** structural and integrity checks are marked passed
-- **AND** presence of `scripts/` does not cause any script to run
-- **AND** an experimental `allowed-tools` field is recorded only as compatibility metadata, never as authorization
+The system MUST require Runtime to load published Skill instructions/resources through the authorized `use_skill` Tool. Native SDK directory activation, raw package locator access or direct registry body reads MUST NOT be alternate first-version entry paths.
 
-### Requirement: Fail closed on malformed or unsafe package structure
+#### Scenario: Deny native-directory bypass
 
-The system MUST produce stable, field/path-scoped validation errors for missing required metadata, name mismatch, path traversal, absolute paths, device files, escaping symlinks or configured resource-limit violations. Deterministic invalid input MUST NOT be retried automatically.
+- **GIVEN** a published Skill is visible in discovery metadata
+- **WHEN** a caller attempts to activate it through a native SDK skills directory or a raw locator without use_skill authorization
+- **THEN** material loading is denied
+- **AND** no instructions or resources are projected into the agent context
 
-#### Scenario: Reject an unsafe package
+### Requirement: Keep Skill reusable across conversation and Workflow
 
-- **GIVEN** a package containing a path traversal entry or escaping symlink, or lacking a valid root `SKILL.md`
-- **WHEN** validation inspects the artifact
-- **THEN** the report status is `FAILED` with a stable error code and safe path context
-- **AND** no package content is executed or written outside the inspection boundary
-- **AND** publication remains blocked
+The system MUST publish instructions/resources independently from Workflow graphs. The same immutable Skill release MUST be consumable through use_skill in conversation and in any authorized Workflow node without package rewriting, mode flags, routing fields or Workflow-specific output adaptation.
 
-### Requirement: Fail closed on content-integrity mismatch
+#### Scenario: Reuse one package unchanged
 
-The system MUST recompute the artifact digest and observed size. It MUST NOT accept locator contents that differ from the registered descriptor, even if retrying the locator later would return another payload.
+- **GIVEN** the `evidence-first-brief` package has one skillKey, version and digest
+- **WHEN** conversation execution and a Workflow Skill node each call use_skill with that skillKey
+- **THEN** both resolve the same effective release for the same trusted environment/user context
+- **AND** both receive byte-identical instructions/resources
+- **AND** neither requires route, nextNode, workflowId or mode-specific output fields
 
-#### Scenario: Detect a mutable locator or corrupted artifact
+### Requirement: Validate Agent Skills package structure without executing it
 
-- **GIVEN** a revision declaring digest D and size S
-- **WHEN** the artifact provider returns bytes whose digest or size differs from D/S
-- **THEN** validation reports an integrity failure
-- **AND** the system does not substitute the returned digest, does not downgrade to a warning, and does not publish
+The system MUST validate a package against the approved Agent Skills-compatible profile, including required `SKILL.md`, valid frontmatter, name/directory match, digest/size and safe paths. Validation MUST NOT execute Markdown, scripts or tools.
 
-### Requirement: Resolve and lock dependencies before publication
+#### Scenario: Accept the independent instruction sample
 
-The system MUST resolve each required Capability SemVer range to an exact published `CapabilityReleaseRef` and digest during validation. Final publication MUST also require one exact `WorkflowReleaseRef` bound to the current `SkillRevisionRef`. Runtime MUST NOT resolve ranges dynamically.
+- **GIVEN** `examples/evidence-first-brief/` contains valid `SKILL.md` and a referenced read-only output guide
+- **WHEN** the candidate validator inspects it
+- **THEN** required metadata, name/directory match and reference existence pass
+- **AND** the package has no Workflow-specific routing contract
 
-#### Scenario: Block missing, stale or mismatched dependencies
+#### Scenario: Reject unsafe or malformed packages
 
-- **GIVEN** a Skill revision whose required Capability range has no eligible release, whose previously locked release is revoked, or whose Workflow release points to another Skill revision
-- **WHEN** validation or the final publish gate runs
-- **THEN** publication is rejected with a dependency-specific error
-- **AND** a previously passed report that is expired, policy-stale or dependency-stale cannot be reused
-- **AND** the author must revalidate after dependencies become valid
+- **GIVEN** a package is missing SKILL.md, has an invalid name, name/directory mismatch, path traversal, absolute path, device file, escaping symlink or digest mismatch
+- **WHEN** validation runs
+- **THEN** validation fails closed with a stable candidate error code
+- **AND** no content is executed and publication remains blocked
 
-### Requirement: Publish exactly one immutable release
+### Requirement: Treat scripts and allowed-tools as non-authorizing content
 
-The system MUST use the shared publication contract and a scoped idempotency key so concurrent or retried publish requests produce at most one release for a Skill SemVer. Only a successfully published release may appear in the public directory.
+The system MUST NOT grant tool or script execution permission from package contents. Phase 1 MAY preserve script bytes as non-executable package resources for format compatibility, but executing them requires a future separately authorized sandbox Tool.
 
-#### Scenario: Recover an ambiguous concurrent publication
+#### Scenario: Package asks to execute a script
 
-- **GIVEN** a passed, current validation report, an exact matching Workflow release, an unused Skill SemVer and two application instances processing the same publish idempotency key
-- **WHEN** the shared PublicationPort accepts the request but one caller loses the response
-- **THEN** retries/query-by-key converge on the same `PublishedSkillRef`
-- **AND** PostgreSQL contains one publication for the Skill SemVer
-- **AND** directory lookup returns the immutable package descriptor, dependency lock and Workflow release only after public state is PUBLISHED
-- **AND** no caller treats timeout alone as proof of failure or creates a second release
+- **GIVEN** a package includes scripts or an experimental allowed-tools field
+- **WHEN** it is validated or loaded by use_skill
+- **THEN** no script runs and no Runtime permission is added
+- **AND** the result records only compatibility metadata or a policy warning
+
+### Requirement: Publish Skill independently from Workflow
+
+The system MUST publish a Skill release without a WorkflowReleaseRef, graph binding or route/result adapter. Workflow definitions MAY reference a published Skill, but Skill publication MUST NOT depend on any Workflow.
+
+#### Scenario: Publish a standalone Skill
+
+- **GIVEN** an administrator has a valid Skill revision and approved shared publication inputs
+- **WHEN** the administrator publishes the revision
+- **THEN** one immutable Skill release is created by the shared publication contract
+- **AND** the release contains no Workflow binding or routing fields
+- **AND** multiple conversations and Workflows can reference it
+
+### Requirement: Return version evidence for admission checks
+
+A successful material load MUST include effective Skill release/version and configuration evidence needed by Runtime to compare execution/continue ingress with current configuration. The registry MUST NOT instruct Runtime to continue silently on a stale version.
+
+#### Scenario: Effective version changes before continue
+
+- **GIVEN** a waiting run recorded Skill version evidence V1
+- **WHEN** the current trusted environment resolves V2 before continue
+- **THEN** the material/resolver contract exposes the mismatch
+- **AND** Runtime can block new work and prompt explicit Workflow reset
+- **AND** the registry does not serve V1 as a frozen continuation fallback
