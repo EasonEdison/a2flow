@@ -1,49 +1,53 @@
-# 业务能力注册平台任务
+# 业务能力注册平台 Phase 1 任务
 
 ## 状态说明
 
-本文件只记录未来实现任务。当前 change 为 PROPOSED 设计，以下任务均未开始、未勾选；文档集成不代表设计批准或 Runtime READY。
+`tasks.md` 只记录未来实现/可执行验证。基线对齐事实记录在本任务 checkpoint。共享接口未获 main-brain 命名 revision 前，不实现依赖共享 schema 的服务代码。
 
-## 0. 前置裁决
+## 0. 独立契约样例
 
-- [ ] 0.1 main-brain 批准共享资产身份、`ReleaseRef`、不可变发布包络与内容摘要规范。
-- [ ] 0.2 main-brain 批准 JSON Schema 方言、MVP 关键字能力集和远程 `$ref` 策略。
-- [ ] 0.3 main-brain 明确可信上下文目录及 `CredentialRef` 的所有者。
-- [ ] 0.4 main-brain 明确 Runtime 调用端口的传输映射与版本策略。
+- [x] 0.1 在 `services/capability-registry/` 提供合成 ability、execute_ability 调用、授权失败、版本失配、成功/业务失败结果样例。
+- [x] 0.2 用现有轻量工具验证 JSON 语法、可信字段不进入 modelArguments、失败样例 adapterCalled=false 等本地不变量。
+- [x] 0.3 将样例明确标记为 PROVISIONAL，不作为共享 contracts 定稿。
 
-## 1. 领域与持久化
+## 1. 共享契约接入门禁
 
-- [ ] 1.1 定义 `CapabilityDraft`、草稿 revision 和验证报告领域模型。
-- [ ] 1.2 定义发布 payload 与共享 `ReleaseEnvelope` 的组合。
-- [ ] 1.3 使用 PostgreSQL 实现草稿、发布快照和发布幂等记录。
-- [ ] 1.4 用数据库约束与事务验证多实例并发发布只有一个确定结果。
+- [ ] 1.1 main-brain 命名已审阅的 contracts revision。
+- [ ] 1.2 接入共享 TrustedContext、Environment、ReleaseRef、CredentialRef 和错误包络。
+- [ ] 1.3 接入共享 resolver/version guard 与 AuthorizationDecision。
+- [ ] 1.4 接入共享 ResultInterpretationPolicy，不新增领域私有 DSL。
 
-## 2. Schema 与来源绑定
+## 2. 领域与 PostgreSQL
 
-- [ ] 2.1 集成经过兼容性验证的 JSON Schema 2020-12 验证器，不自研 schema 引擎。
-- [ ] 2.2 实现 `modelArgumentSchema`、`resolvedInputSchema`、`outputSchema` 元校验。
-- [ ] 2.3 实现 RFC 6901 Pointer 绑定解析、目标重叠检测和 required 闭合检查。
-- [ ] 2.4 实现模型参数、静态常量、可信上下文三来源不可覆盖规则。
-- [ ] 2.5 实现远程 `$ref` 禁止/自包含发布检查和确定性规范化摘要。
+- [ ] 2.1 定义 AbilityDraft、schema/binding/success policy payload 领域模型。
+- [ ] 2.2 使用 PostgreSQL 实现草稿、验证报告、发布 payload repository。
+- [ ] 2.3 显式配置 PRT/ONLINE 分库，不提供跨环境读取和数据库 fallback。
+- [ ] 2.4 用 revision/唯一约束验证多实例编辑与发布竞争。
 
-## 3. 草稿、校验与发布接口
+## 3. 静态验证
 
-- [ ] 3.1 实现草稿创建、按 revision 更新和读取。
-- [ ] 3.2 实现显式静态校验及稳定 `ruleCode` 报告。
-- [ ] 3.3 实现带幂等键的原子发布与不可变版本查询。
-- [ ] 3.4 实现草稿/未发布/不支持版本的失败关闭行为。
+- [ ] 3.1 接入成熟 JSON Schema 2020-12 验证器并记录许可证/兼容能力。
+- [ ] 3.2 实现 schema、Pointer 绑定、来源闭合和常量类型验证。
+- [ ] 3.3 验证 trusted context/credential 不可由模型或常量提供。
+- [ ] 3.4 验证命名 success policy 与 output schema 一致，不执行任意脚本。
 
-## 4. Runtime 契约
+## 4. Registry 接口
 
-- [ ] 4.1 产出语言中立的 `PublishedCapabilityCatalogPort` 契约。
-- [ ] 4.2 产出语言中立的 `CapabilityInvocationPort`、失败分类和副作用状态契约。
-- [ ] 4.3 与 Runtime 任务完成 source binding、deadline、幂等键和 trace 责任对齐。
-- [ ] 4.4 与业务适配器边界完成 `CredentialRequirement`/`CredentialRef` 联调样例，不接真实企业 API。
+- [ ] 4.1 实现管理员草稿创建、revision 更新、显式验证和发布。
+- [ ] 4.2 实现普通用户只读发现与授权读取边界。
+- [ ] 4.3 提供环境内有效 ability 数据供共享 resolver 使用。
+- [ ] 4.4 对未发布、跨环境、版本不支持和摘要不一致失败关闭。
 
-## 5. 验证与文档
+## 5. Runtime 契约验证
 
-- [ ] 5.1 实现 CR-01 至 CR-08 自动化测试。
-- [ ] 5.2 在两个应用实例共享 PostgreSQL 的测试中验证 revision 冲突和发布幂等。
-- [ ] 5.3 验证日志、错误和事件不包含凭证明文或未经允许的业务值。
-- [ ] 5.4 补充本地启动、样例适配器和公开契约说明。
-- [ ] 5.5 更新 regression/readiness；只有运行证据完整后才评估 READY。
+- [ ] 5.1 与 Runtime 验证 execute_ability 模型 schema 不暴露 userId/environment/credential/version。
+- [ ] 5.2 验证版本失配与授权失败发生在 adapter 调用前。
+- [ ] 5.3 验证 Runtime 唯一成功解释器及 A2UI successPolicyRef 选择。
+- [ ] 5.4 验证一次 Tool call 最多一次 adapter 调用，Runtime 不做业务自动重试。
+
+## 6. 准出
+
+- [ ] 6.1 执行聚焦契约测试和 PostgreSQL 多实例集成测试。
+- [ ] 6.2 回填 method/params/result 字段级断言及实际命令输出。
+- [ ] 6.3 通过来源/凭证/环境隔离负向测试。
+- [ ] 6.4 所有必需门禁有实际证据后再评估 readiness；禁止以源码合入替代 Runtime 证据。

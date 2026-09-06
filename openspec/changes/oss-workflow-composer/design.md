@@ -1,168 +1,178 @@
-# Skill Workflow Composer 设计
+# Skill Workflow Composer Phase 1 设计
 
-## 1. 状态与目标
+## 1. 状态与权威
 
+- 统一基线：`SW-P1-20260907.2`
 - 设计状态：`PROPOSED`
-- 运行状态：`NO READY`
-- 目标：用最小串行链路证明“编辑草稿 -> 服务端校验 -> 不可变发布 -> Runtime 消费”的稳定边界。
-- 非目标：通用 DAG、运行态调度、业务流程语义、A2UI 渲染和部署拓扑。
+- Runtime 状态：`NO READY`
+- 权威边界：本 change 只提供 workflow-registry 消费者需求、图候选和 validation examples；共享 contract 字段、版本和包由 `oss-platform-contracts` 单一所有。
+- PY-01：系统 Python 必要变更已获授权，但主机兼容评估、可恢复方案和唯一执行均归 Runtime/main-brain；Composer 不并发执行主机变更。
 
-本设计描述逻辑模块和端口，不决定四个 M 平台是独立服务还是同一部署物内的模块。
+## 2. 目标与非目标
 
-## 2. 设计原则
+目标是发布可静态验证的 sequence、condition、parallel 图，让 Runtime 能用 Python + LangGraph 编译并证明等待、独立分支推进、join、失败阻断和 A2UI-only retry。非目标是实现调度器、冻结共享 API、引入循环/嵌套语义或把 Skill 变成固定业务节点。
 
-1. 编辑模型与执行模型分离：画布布局不能成为 Runtime 契约。
-2. 引用不可变发布物：每次执行都能定位到确定的 Workflow 和 Skill release。
-3. 前端早反馈，服务端作最终裁决：客户端限制不能替代发布校验。
-4. 首版失败关闭：依赖未知、schema 不兼容或协议不支持时不发布、不 fallback。
-5. 多实例正确性依赖 PostgreSQL 事务、唯一约束和 compare-and-set，不依赖进程内状态。
-
-## 3. 组件边界
+## 3. 逻辑组件
 
 | 组件 | 职责 | 不负责 |
 | --- | --- | --- |
-| Workflow Editor | 呈现受限画布、选择已发布 Skill、展示校验问题、提交带 revision 的草稿 | 最终校验、发布、运行调度 |
-| Draft Application | 创建/读取/保存草稿，实施乐观并发 | Skill 生命周期、Runtime 状态 |
-| Graph Validator | 结构、拓扑、依赖、schema 链四层校验 | 自动修图、隐式转换、运行重试 |
-| Publication Application | 对指定 revision 重新校验、确定性编译、幂等发布 | 修改已发布 artifact、自动升级依赖 |
-| Publication Read Port | 按 release ref 返回不可变 manifest 与摘要 | 创建 Run 或推送运行事件 |
-| PostgreSQL Repositories | 草稿、release、依赖快照和幂等记录的持久化 | 使用 MySQL/SQLite fallback |
+| Workflow Editor | 编辑受限图、配置候选/并行区域/失败要求、展示校验结果 | 运行调度、版本解析、业务调用 |
+| Draft Application | 草稿 revision 和乐观并发 | 共享发布/gray 规则 |
+| Graph Validator | 结构、可达性、decision、parallel/join、引用和边界校验 | 自动修图、运行态恢复 |
+| Publication Adapter | 将已通过校验的图提交共享 publication contract | 自建第四套 release/resolver |
+| Runtime Graph Consumer | 把已解析发布图映射为 LangGraph，并持久化运行状态 | 由 Composer 实现第二套 scheduler |
 
-## 4. 编辑态模型
+## 4. 非规范发布图候选
 
-以下字段是概念契约，命名和协议版本仍由 shared contracts 统一：
-
-```text
-WorkflowDraft
-  draftId
-  workflowKey
-  name
-  description
-  draftRevision
-  status = DRAFT
-  graph
-    nodes[]: nodeId, nodeType(START|SKILL|END), skillReleaseRef?
-    edges[]: edgeId, sourceNodeId, targetNodeId
-    layout: nodeId -> x,y
-```
-
-约束：
-
-- `START` 和 `END` 各一个；Skill 节点 1 至 8 个。
-- `START` 入度 0、出度 1；`END` 入度 1、出度 0；每个 Skill 入度和出度均为 1。
-- 全部节点从 `START` 可达且最终到达 `END`；禁止环、分支、自环、悬空节点和重复边。
-- Skill 节点必须带精确 `skillReleaseRef`；其他节点不得携带。
-- `layout` 只服务编辑器，不参与 artifact 摘要或运行语义。
-
-草稿保存只要求请求结构可解析、节点/边数量在资源上限内；允许用户保存尚未连完或依赖尚未选择的草稿。校验和发布返回具体问题，不静默修复。
-
-## 5. 校验流水线
-
-校验在一个明确的 `draftRevision` 上执行，并返回：
+以下只表达消费者所需语义，字段名和 contractVersion 不具有共享契约权威：
 
 ```text
-ValidationResult
-  draftId
-  draftRevision
-  valid
-  issues[]: code, severity(ERROR|WARNING), nodeId?, fieldPath?, message
-  resolvedDependencies[]: nodeId, skillReleaseRef, inputSchemaRef, outputSchemaRef
+PublishedWorkflowGraph
+  workflowRef
+  graphRevision
+  configurationRefs[]
+  nodes[]
+    nodeKey
+    kind = START | SKILL | AI_DECISION | CONDITION_MERGE | PARALLEL_SPLIT | PARALLEL_JOIN | FINALIZER | END
+    skillRef?
+    candidates[]?
+    selectionApplicationRef?
+    failureRequirement = REQUIRED | ALLOW_SKIP
+  edges[]
+    from
+    to
+    edgeKind
+    routeKey?
+    branchKey?
+  decisionRegions[]
+    decisionNodeKey
+    mergeNodeKey
+    candidateKeys[]
+  parallelRegions[]
+    splitNodeKey
+    joinNodeKey
+    branchKeys[]
+    branchExitNodeKeys
 ```
 
-四层顺序：
+关键要求：
 
-1. 结构：字段、类型、数量、唯一性和引用存在性。
-2. 拓扑：单入口、单出口、单链路、全可达、无环。
-3. 依赖：Skill release 存在、处于允许执行的发布状态、调用方有权引用。
-4. schema 链：首版按规范化 `schemaRef` 完全相等校验相邻输出/输入。
+- Skill 节点引用逻辑 Skill identity，所有执行统一通过 `use_skill`；不得内嵌 Skill body、凭证或运行环境。
+- Decision 候选是发布时有限集合，候选必须唯一映射到可达目标。AI 和用户都不能跳到集合外。
+- A2UI 选择卡引用已发布 Application 配置；卡片属于 decision 节点 interaction，不要求上游 Skill 改输出。
+- `failureRequirement` 是 authoring intent；运行状态必须保持真实 SUCCESS/FAILED/SKIPPED/WAITING，不得改写为成功。
+- 发布物不携带 userId 或模型可修改的 environment。Runtime 从可信 ingress context 获取它们并调用共享 resolver。
 
-问题 code 必须稳定，message 可本地化。建议首版 code 包含 `GRAPH_CYCLE`、`GRAPH_BRANCH_NOT_SUPPORTED`、`GRAPH_DISCONNECTED`、`SKILL_RELEASE_NOT_PUBLISHED`、`SKILL_RELEASE_UNAVAILABLE`、`STEP_SCHEMA_MISMATCH` 和 `DRAFT_REVISION_CONFLICT`。
+## 5. 首版静态校验
 
-## 6. 发布事务
+### 5.1 全局图约束
 
-逻辑操作 `PublishWorkflowDraft(draftId, expectedDraftRevision, requestKey)`：
+- 恰好一个 START、一个 FINALIZER、一个 END；所有成功完成路径经 FINALIZER 到 END。
+- 图必须有限、无环、全可达；所有非 END 节点至少有一个出边，所有非 START 节点至少有一个入边。
+- 禁止子流程、递归、动态生成节点和嵌套 parallel region。
+- condition candidate 在进入 parallel JOIN 前必须通过显式 CONDITION_MERGE 汇合；未选 candidate 不构成 join 成员。
+- 节点/边 key 唯一，所有引用存在；编辑 layout 不进入发布语义或摘要。
 
-1. 查询幂等记录；若该 key 已成功，返回原 release。
-2. 读取草稿并比较 `expectedDraftRevision`；不一致则冲突失败。
-3. 在同一 revision 上重新执行全部校验，不接受客户端传入的 `valid=true`。
-4. 按唯一拓扑序生成 canonical `steps[]`，去除 layout、展示文案和草稿字段。
-5. 计算 canonical artifact 摘要，创建不可变 Workflow release、依赖快照和幂等结果。
-6. 在 PostgreSQL 单事务内提交；已提交但响应丢失时，相同 `requestKey` 返回同一 release。
+### 5.2 Sequence
 
-对 Skill registry 的依赖查询无法与本地事务形成分布式原子性。首版依赖 shared contracts 保证 published release 不被原地修改；若存在撤销，发布和 Runtime 启动都必须失败关闭，撤销后已运行实例的处理由 Runtime 与 shared contracts 另行裁决。
+- 普通节点只能使用一种路由机制；不得同时配置无条件边和 decision candidates。
+- REQUIRED 节点失败时不得激活其普通后继。
+- ALLOW_SKIP 节点失败保持 FAILED，但可按已配置后继传播；真实 skip 保持 SKIPPED。等待不是 skip。
 
-## 7. 发布态 execution manifest
+### 5.3 AI decision
 
-```text
-WorkflowExecutionManifest
-  contractName = workflow-execution-manifest
-  contractVersion
-  workflowReleaseRef
-  artifactDigest
-  inputSchemaRef
-  outputSchemaRef
-  steps[]
-    stepKey
-    ordinal
-    skillReleaseRef
-    inputBinding = WORKFLOW_INPUT | PREVIOUS_STEP_OUTPUT
-```
+- 至少两个 candidate；candidate key、展示 label 和 target 均唯一、完整。
+- AI 只能从 candidates 返回一个 route key；Skills 无需路由字段。
+- 语义无法判断才创建 node-bound INTERACTIVE selection；技术错误返回 FAILED，不展示伪 fallback。
+- 用户选择必须命中当前 interaction 和候选集合，直接路由且不再交给 AI 重选。
 
-语义：
+### 5.4 Parallel 与 join
 
-- `steps` 非空，`ordinal` 从 1 连续递增；`stepKey` 在 release 内稳定唯一。
-- 第一步输入来自 Workflow 输入，其余步骤输入来自前一步成功输出。
-- manifest 只引用 Skill release，不内嵌 Skill 包、凭证或业务配置。
-- 相同 Workflow release ref 永远返回相同 manifest 与摘要。
-- Runtime 遇到未知 `contractVersion`、摘要不符或 release 不可解析时不得猜测执行。
+- 每个 split 必须有唯一对应 join 和不少于两个 branch key。
+- 每个 branch 从 split 后第一个节点到 join 前最后一个节点必须可静态归属，首版分支不得交叉或嵌套。
+- join 的成员集合必须等于 split 的 branch 集合；缺失、重复、额外成员均拒绝发布。
+- join 不以同一次 invoke/super-step 已返回作为语义；它依据每个 branch 的持久化终态判断。
 
-具体字段封装、数字版本和传输协议在 main-brain 协调后冻结。本任务只拥有上述消费者需求和领域语义。
+## 6. 执行真值表
 
-## 8. Runtime 交互边界
+| 分支状态 | 独立兄弟分支 | 对应 join |
+| --- | --- | --- |
+| `RUNNING` | 继续 | 等待 |
+| `WAITING_INTERACTION` | 继续运行 B1、B2 等后继 | 等待，不自动 skip |
+| `SUCCESS` | 继续 | 该分支满足 |
+| `SKIPPED` 且节点允许 skip | 继续 | 该分支满足，保留 SKIPPED |
+| `FAILED` 且节点为 ALLOW_SKIP | 继续 | 该分支满足，保留 FAILED |
+| `FAILED` 且节点为 REQUIRED | 已运行兄弟不回滚；不再错误扩展该失败分支 | join 阻断并保留原因 |
+| `STOPPED` | 所有分支不得接纳新工作 | 不进入 Finalizer |
 
-推荐启动链路：数字员工提交 `workflowReleaseRef + workflowInput + runRequestKey` 给 Runtime；Runtime 经 Publication Read Port 解析 manifest，再按 `ordinal` 调用 Skill execution port。
+已确认样例：split 后 A 进入 INTERACTIVE decision 并等待；B1 成功后 B2 必须继续；B2 到 join 后等待 A。A 获得合法用户选择并完成后，join 才可满足。该行为必须由 Runtime spike 实证，不能仅从 LangGraph `thread_id` 或一次 graph invocation 推断。
 
-Composer 不创建 `runId`，不保存 Run/Attempt，不决定 worker 选举、租约、checkpoint、退避或最大重试次数。为让 Runtime 安全重试，每个步骤提供稳定 `stepKey`；Runtime 组合 `runId + stepKey + attempt` 和能力侧幂等协议。首版 manifest 不提供用户自定义重试策略，避免 M 侧冻结未经裁决的 Runtime 语义。
+## 7. 前驱上下文
 
-## 9. 并发、失效与重试边界
+- Skill 和 decision 默认读取所有直接前驱的最终结果及真实状态，而不是只读前一个 Skill 的 payload。
+- final summarization 读取本次 run 的前驱/节点最终结果和状态；中间 Tool 结果按需通过只读 retrieval Tool 获取，不能重放业务调用。
+- 不要求 Skill 输出 route、branch 或 Workflow 专用字段；Runtime 通过统一 context envelope 调用 `use_skill`。
+- context envelope、结果引用和预算属于 shared contracts/Runtime；本任务只要求 branch/node identity 稳定可关联。
 
-- 并发保存：`expectedDraftRevision` 必须等于当前值；成功后原子递增。旧写入返回冲突并带当前 revision，不自动合并。
-- 并发发布：同 key 返回同一结果；不同 key 针对同一 draft revision 也只能产生一个规范 release，具体唯一键由 shared contracts 裁决。
-- 依赖查询超时：校验结果可返回不可判定问题，发布必须失败；客户端可重试，不生成半成品。
-- 发布响应丢失：调用方使用相同 `requestKey` 重试并得到原结果。
-- Runtime 解析失败：由 Runtime 记录运行启动失败；Composer 不降级到草稿或其他 Skill 版本。
-- 多实例：任意 API 实例可处理下一请求；session affinity 和本地缓存均不能参与正确性。
+## 8. A2UI、Finalizer 与 retry
 
-## 10. PostgreSQL 持久化边界
+- DISPLAY_ONLY Application 呈现后不暂停；INTERACTIVE Application 产生 node-bound interaction 并等待。
+- Action 的业务成功和是否完成 interaction 由 A2UI 配置判定；render/Action transport success 不等于 Skill success。
+- Decision 选择卡只能在 AI 语义不确定时展示；技术失败不能伪装成用户选择。
+- Finalizer 只能基于已保存事实生成最终表达，不能把 FAILED/SKIPPED 改成 SUCCESS，不能绕过未完成 required interaction，也不能在 accepted stop 后执行。
+- 节点 retry 入口仅在 A2UI render failure、Action call failure 或 Action result 不满足配置成功条件时存在。
+- A2UI retry 保留已完成前驱和独立分支，重入 owning node；其他 Skill/model/script/non-A2UI Tool failure 不提供通用 retry。
+- LangGraph interrupt resume 会从 owning node 开头重跑，Runtime 必须隔离 interrupt 前副作用并依赖 control request dedupe；业务副作用幂等仍归被调用 API 后端。
 
-首版只需要四个逻辑聚合，物理表设计在实现计划中确定：
+## 9. environment、userId 与版本失配
 
-- Draft head：当前 revision 和元数据。
-- Draft snapshot：指定 revision 的 graph/layout，用于审计与确定发布输入。
-- Workflow release：不可变 manifest、摘要、发布时间和发布主体。
-- Release dependency/idempotency：固定 Skill release 列表与发布请求结果。
+- PRT 与 ONLINE 使用分离资产数据库。PRT 只解析 PRT current；ONLINE 只解析 ONLINE stable/gray，绝不读取 PRT。
+- `userId` 是唯一灰度身份词；trusted context 由后端注入，模型和图定义不能覆盖。
+- run 记录用于比较的 Workflow、Skill、Application 等有效版本标识。
+- 在执行、continue 或 Action ingress 发现当前有效版本与记录值不一致时，必须在新业务调用前阻断并提示 reset。
+- reset 只提示；显式 restart 创建全新 run，不继承旧 context/checkpoint/result/interaction，也不检查旧业务结果。
 
-关键约束由唯一索引和事务表达：`draftId + draftRevision` 唯一、Workflow release identity 唯一、`publisherScope + requestKey` 唯一。不得增加 MySQL、SQLite 或内存持久化 profile。
+## 10. 发布、并发与 PostgreSQL
 
-## 11. 前端方案
+- Draft 保存使用 expected revision 乐观并发；旧 revision 不得覆盖新 revision。
+- 发布操作对同一 control request 保持幂等，但不得声称业务 exactly-once。
+- Workflow registry 通过 shared publication/resolver contract 持久化环境分离的资产；不得自建独立 gray 或跨环境 fallback。
+- PostgreSQL 是唯一关系型持久化；多实例正确性不得依赖进程内锁、缓存或 session affinity。
+- 具体表和 API 在 main-brain 批准 shared graph revision 后进入 `services/workflow-registry/` 实现计划。
 
-React + TypeScript 编辑器使用受控 nodes/edges 状态。React Flow 是推荐实现候选，因为其公开 API 已覆盖节点、边、连接和受控状态；本轮不安装或锁定版本。UI 应在连接时限制多出边、显示节点级问题、区分“已保存”与“可发布”，但服务端仍是权威。
+## 11. LangGraph 映射要求
 
-若依赖评估未通过，应停止前端实现并返回 main-brain 重新选择方案；不得静默改用步骤列表。
+公开 Graph API 可表达普通边、conditional edges 和同 super-step 的 parallel destination；interrupt/persistence 可保存等待并通过 Command resume。它们是实现候选，不自动证明产品语义。
 
-## 12. 安全与可观测性
+Runtime feasibility 必须至少证明：
 
-- 发布权限、资产可见性和租户/主体范围依赖 shared contracts；所有依赖引用必须服务端鉴权。
-- 禁止在 draft/manifest 中存储 secret、cookie、任意脚本、任意 URL 或原始 chain-of-thought。
-- M 侧记录审计事件：草稿创建/更新、校验、发布请求和发布结果，包含 actor、draft/release ref、revision、requestKey 摘要与 issue codes。
-- Runtime 的 step/run 事件、trace、checkpoint 和重试证据不回写为 Composer 的正确性状态。
+1. 编译发布图时拒绝孤儿节点、环、非法 candidate 和 split/join。
+2. A interrupt 后，B1 和 B2 能在 A 未恢复前完成，且 join 等待 A。
+3. resume 只命中 node-bound interaction；无效/旧 interaction 被拒绝。
+4. allow-skip failure 和 required failure 按真值表传播。
+5. A2UI owning-node retry 不重跑已完成前驱或独立分支。
+6. accepted stop 后没有新 node/model/Tool/Action/retry/Finalizer。
 
-## 13. 演进路径
+若标准 LangGraph 调用模型不能满足 A 等待/B 继续，Runtime owner 必须提供最小 reproducer 并向 main-brain 报告；不得由 Composer 增加自研调度器规避。
 
-只有在串行纵切片通过运行态门禁后，才提出 DAG 扩展：先增加条件分支，再评估并行与 join；循环、子流程和表达式语言分别独立提案。演进必须提升 manifest contract 版本并保持旧 release 可解析，不能改变既有 release 的含义。
+## 12. 失效边界
 
-## 14. 待裁决项
+- Skill/Application/Workflow 引用解析失败、跨环境读取、未授权或版本不支持：发布或 ingress 失败关闭。
+- AI 返回候选外 route：decision FAILED，不选择默认分支。
+- AI 技术异常：FAILED，不打开选择卡。
+- 用户选择 interaction/node/version 不匹配：拒绝，不触发新业务调用。
+- join 配置不完整、嵌套 parallel、循环或不可达：拒绝发布。
+- 共享 contract 尚未批准：只交付 requirement fixture，不实现依赖接口。
 
-1. shared contracts 的 release identity、摘要规范、授权和撤销模型。
-2. Runtime 的 manifest 解析方向、版本协商和启动失败标准错误。
-3. 是否接受首版严格 schemaRef 相等规则；若拒绝，受限映射必须作为独立设计，而非隐式转换。
+## 13. 第一阶段文件边界
+
+- 当前拥有并修改：`openspec/changes/oss-workflow-composer/`。
+- 已预留但暂不实现：`services/workflow-registry/`。
+- 不修改：`packages/contracts/`、Runtime、A2UI registry、Skill registry、数字员工、根 manifests 和其他任务 checkpoint。
+
+## 14. 公开依据
+
+- LangGraph Graph API 说明 multiple outgoing edges 在下一 super-step 并行，conditional edges 可返回一个或多个目标。
+- LangGraph Interrupts 说明持久化等待、resume、multiple parallel interrupts，以及 resume 时 owning node 从开头重跑。
+- LangGraph Persistence 区分 thread-scoped Checkpointer 与跨 thread Store，并给出 PostgreSQL checkpointer 入口。
+- 上述文档不构成版本/API 已安装或 A 等待/B1→B2 已通过的证据；这些仍是 Runtime `NO READY` 门禁。

@@ -1,47 +1,40 @@
-# 业务能力注册平台准出状态
+# 业务能力注册平台 Phase 1 准出
 
 ## 总结
 
 **Runtime：NO READY**
 
-本 change 只有 PROPOSED 设计。设计文件已进入 `origin/main`；这只能证明源码交付，不能证明设计已批准、实现存在、服务已部署或 Runtime 可用。
+本 change 已按 SW-P1-20260907.2 修订设计，但 main-brain 尚未审阅共享接口，服务实现、数据库、Runtime 调用和 E2E 均没有运行证据。设计/fixture 源码合入不等于产品可用。
 
-## 证据矩阵
+## 矩阵
 
-| 门禁 | 状态 | 当前证据 | 达到 READY 仍需 |
+| 门禁 | 状态 | 当前证据 | 仍需 |
 | --- | --- | --- | --- |
-| 设计源码交付 | YES | 首版内容 commit `a8cdbf9f3e47b99f5018db111a9304e5253e3d6e` 已集成 | main-brain 设计审查 |
-| 需求边界 | PARTIAL | proposal/spec 已描述候选边界 | main-brain 审批跨域所有权 |
-| 共享契约 | NO READY | 仅提出消费者需求 | `ReleaseRef`、错误、上下文和凭证引用正式版本 |
-| 实现 | NO READY | 无代码 | 完成 tasks 中实现并审查 |
-| PostgreSQL 持久化 | NO READY | 仅设计 | schema、迁移和集成证据 |
-| 多实例一致性 | NO READY | 仅并发规则 | 两实例共享 PostgreSQL 的运行测试 |
-| 安全/凭证 | NO READY | 仅边界规则 | 实现、扫描与负向用例 |
-| Runtime 契约 | NO READY | 逻辑端口 PROPOSED | 传输映射、契约测试和真实 Runtime 消费 |
-| 回归 | NO READY | CR-01 至 CR-08 为 PLANNED | 自动化和 E2E 实际通过 |
-| 部署 | NO READY | 未授权、未执行 | 独立部署授权和运行证据 |
+| 对齐源码交付 | YES | 内容 commit `a661f2c78055b20dda91fc74ebd61cc46e6e6177` 已进入 main | main-brain 实际 diff 审阅 |
+| 基线读取 | YES | worker 已合入 `c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e` | main-brain 检查实际修订 |
+| 旧冲突移除 | PARTIAL | proposal/design 已修订语言、环境、重试/幂等边界 | 跨域评审 |
+| 成功解释器所有权 | PARTIAL | 提出 contracts schema + Runtime 单实现 + A2UI 选择 | main-brain/A2UI/Runtime/Contracts 同意 |
+| 共享契约 | NO READY | 仅消费者需求 | 命名并审阅 contracts revision |
+| 合成 fixture | YES | 3 个 PROVISIONAL 文件；JSON + stdlib invariant 检查通过 | 共享 revision 后转为正式契约测试 |
+| Registry 实现 | NO READY | 无服务代码 | 接口放行后最小实现 |
+| PostgreSQL | NO READY | 仅设计 | 分库 schema 与多实例证据 |
+| Runtime 调用 | NO READY | 仅逻辑端口 | Python/Deep Agents Tool 契约测试 |
+| 真实外部写 | NOT PLANNED | 本批明确禁止 | 需要独立授权，不是本批准出项 |
+| 回归/E2E | NO READY | CA-01 至 CA-08 为 PLANNED | 实际自动化与端到端证据 |
 
-## 阻断项
+## 当前可以声明
 
-- 共享资产/发布契约未批准。
-- JSON Schema 方言及允许能力集未批准。
-- Runtime 语言、传输协议和版本未批准。
-- 可信上下文目录、CredentialRef 所有权未批准。
-- 无实现、构建、数据库、部署、调用或 E2E 证据。
+- 已读取并对齐统一基线。
+- 已提出 execute_ability 消费需求和成功解释器单一归属建议。
+- 已交付合成契约样例与轻量静态证据；它们明确标记为非 Runtime 证据。
 
-## 可接受的当前结论
+## 当前不得声明
 
-- 可以说：“业务能力注册平台首版契约草案已完成并进入源码评审。”
-- 不可以说：“业务能力注册平台已实现、可部署、可调用或 Runtime READY。”
-- 设计文档合入 main 不改变以上结论。
+- 共享契约已批准。
+- capability-registry 已实现或已部署。
+- Runtime、授权、环境路由、数据库或业务幂等已经验证。
+- 产品或真实外部写 READY。
 
-## READY 判定条件
+## 下一门禁
 
-只有以下条件全部满足后，才允许把 Runtime 准备度改为 READY：
-
-1. 待裁决项形成已接受的共享契约/ADR。
-2. 所有必需实现任务完成并通过代码审查。
-3. PostgreSQL-only、多实例、重启恢复和并发发布证据通过。
-4. Runtime 与公开样例适配器完成契约测试。
-5. CR-01 至 CR-08 有可复现实际证据且无必需门禁为 PARTIAL/NO READY。
-6. 独立部署与运行验证获得明确授权并执行成功。
+main-brain 审阅实际 OpenSpec 修订并命名共享契约 revision；在此之前只继续独立 fixture/validation 工作。

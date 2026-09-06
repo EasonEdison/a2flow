@@ -1,47 +1,48 @@
-# 实现任务
+# Phase 1 实现任务
 
 ## 状态
 
-本文件只跟踪实现进度。当前设计为 `PROPOSED`，所有实现任务均未开始；设计文档写入和 Git 集成不勾选实现项。
+本文件只跟踪待实现工作。统一基线对齐、OpenSpec 修订和非规范 fixture 证据记录在 checkpoint/regression，不将它们冒充服务实现。共享 graph revision 未经 main-brain 审查前，以下任务全部保持未勾选。
 
-## 0. 共享契约门禁
+## 0. 共享契约与打包门禁
 
-- [ ] 0.1 接入 main-brain 批准的 `AssetRef`、`ReleaseRef`、摘要和发布幂等契约。
-- [ ] 0.2 与 Skill registry 固化按 release 查询发布状态及输入/输出 schemaRef 的只读端口。
-- [ ] 0.3 与 Runtime 固化 execution manifest 版本协商、解析方向和失败关闭语义。
-- [ ] 0.4 固化首版 schema 兼容规则及 Adapter Skill 边界。
+- [ ] 0.1 接入 main-brain 批准的 graph identity/version、trusted context 和 environment-local resolver revision。
+- [ ] 0.2 接入 interaction/result references、control request dedupe 和配置版本比较契约。
+- [ ] 0.3 与 Runtime 固化发布图到 Python LangGraph 的版本化 consumer contract。
+- [ ] 0.4 由 main-brain 确认 workflow-registry 的服务语言、包布局和根依赖写入所有权。
 
-## 1. PostgreSQL 草稿与发布物
+## 1. Workflow registry 最小骨架
 
-- [ ] 1.1 实现 draft head、draft snapshot、Workflow release、release dependency 和 idempotency repositories。
-- [ ] 1.2 增加 revision、release identity 与 requestKey 唯一约束和事务测试。
-- [ ] 1.3 验证多 API 实例并发保存/发布不依赖本地锁或缓存。
+- [ ] 1.1 在 `services/workflow-registry/` 创建获批语言的最小模块，不修改共享根 manifest。
+- [ ] 1.2 实现 PostgreSQL-only draft/revision repository 和 expected-revision 乐观并发。
+- [ ] 1.3 通过共享 publication/resolver 保存 PRT/ONLINE 分离资产，不自建 gray/fallback。
+- [ ] 1.4 验证两个无状态实例共享 PostgreSQL 时草稿写入和发布控制请求不丢更新。
 
-## 2. 应用端口与校验
+## 2. 图模型与静态校验
 
-- [ ] 2.1 实现创建、读取、保存 Workflow draft 的应用端口和乐观并发。
-- [ ] 2.2 实现结构、拓扑、Skill release 和 schema 链四层校验器。
-- [ ] 2.3 实现稳定 issue code、nodeId/fieldPath 定位和失败关闭行为。
-- [ ] 2.4 实现确定性线性编译和 layout/展示字段剥离。
+- [ ] 2.1 实现 sequence、AI decision、condition MERGE、parallel split/JOIN、FINALIZER 的受限无环模型。
+- [ ] 2.2 拒绝循环、孤儿节点、未知 candidate、缺失/重复 branch、未配对 join 和嵌套 parallel。
+- [ ] 2.3 校验 decision candidate 与 A2UI selection Application 引用，不要求 Skill 路由字段。
+- [ ] 2.4 校验 REQUIRED/ALLOW_SKIP 传播边界和真实状态不改写。
+- [ ] 2.5 输出稳定 issue code 和 node/edge/region 定位。
 
-## 3. 幂等发布与读取
+## 3. 发布与读取适配
 
-- [ ] 3.1 实现指定 draft revision 的服务端重新校验与原子发布。
-- [ ] 3.2 实现相同 requestKey 返回同一 release 的响应丢失恢复。
-- [ ] 3.3 实现按 Workflow release ref 读取不可变 manifest 与摘要的端口。
-- [ ] 3.4 实现依赖超时、撤销和不支持 contractVersion 的失败关闭测试。
+- [ ] 3.1 对指定 draft revision 重新校验并生成确定性发布图，剥离 layout。
+- [ ] 3.2 通过共享 publish control request dedupe 返回同一发布结果，不声明业务 exactly-once。
+- [ ] 3.3 实现 Runtime 按共享 identity/version 读取图候选的适配端口。
+- [ ] 3.4 对跨环境、未授权、版本不支持和引用不可解析失败关闭。
 
-## 4. React + TypeScript 编辑器
+## 4. Consumer contract 验证
 
-- [ ] 4.1 评估并锁定 React Flow 或经批准的替代依赖及许可证。
-- [ ] 4.2 实现 START/SKILL/END 受限画布和已发布 Skill release 选择器。
-- [ ] 4.3 实现受控连接、节点级校验展示、保存状态和发布确认。
-- [ ] 4.4 增加键盘操作、错误可访问性和 1 至 8 个 Skill 节点边界测试。
+- [ ] 4.1 与 Skill registry 验证 logical Skill ref 和统一 `use_skill`，同一 Skill 无 Workflow 适配。
+- [ ] 4.2 与 A2UI registry 验证 selection Application、interaction mode 和 Action success/completion。
+- [ ] 4.3 与 Runtime 验证 A WAITING 时 B1→B2 继续且 JOIN 等 A。
+- [ ] 4.4 与 Runtime 验证 ALLOW_SKIP failure/真实 skip 可 join、REQUIRED failure 阻断。
+- [ ] 4.5 与 Runtime 验证 A2UI-only retry、Finalizer/stop、版本失配 reset 门禁。
 
-## 5. 跨域集成与准出
+## 5. 准出
 
-- [ ] 5.1 接入真实 Skill registry contract test，覆盖发布/不可用/无权 release。
-- [ ] 5.2 接入 Runtime manifest consumer contract test，验证顺序、摘要和版本拒绝。
-- [ ] 5.3 执行并记录 `regression.md` 全部 planned 场景。
-- [ ] 5.4 在 PostgreSQL 上完成双 API 实例并发与发布幂等测试。
-- [ ] 5.5 更新 `readiness.md`；只有全部必需门禁有运行证据后才改变 `NO READY`。
+- [ ] 5.1 执行 PostgreSQL focused integration 和双实例竞争控制请求验证。
+- [ ] 5.2 在 `regression.md` 记录 method、params、success data、字段断言和真实输出。
+- [ ] 5.3 只有 shared contract、服务实现和 Runtime 证据齐全后才更新 `readiness.md`，否则保持 `NO READY`。

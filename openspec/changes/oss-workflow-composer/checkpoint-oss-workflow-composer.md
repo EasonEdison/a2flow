@@ -2,44 +2,64 @@
 
 ## 当前状态
 
-- 任务：M 侧 Skill Workflow 编排平台首轮设计草案。
-- 阶段：首轮设计草案 source delivery 完成后等待 main-brain 审查。
+- 任务：M 侧 Skill Workflow Composer Phase 1 对齐与图契约需求。
+- 阶段：Phase 1 对齐与 fixture source delivery 完成后等待 main-brain 审查。
+- 权威基线：`SW-P1-20260907.2`。
+- 基线提交：`1bcc61a4137436f5c3811d555d2af8244c0fc971`。
+- 基线集成 SHA：`c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`。
+- 提交前 `origin/main` 同步 SHA：`271df0e8585a1cafa12c24ce2c1d1417a4d0fd9b`。
 - 设计状态：`PROPOSED`。
-- 运行状态：`NO READY`。
+- Runtime 状态：`NO READY`。
 - 工作区：`/home/admin/OpenSource/repos/.parallel/oss-workflow-composer/platform`。
 - Worker 分支：`codex/oss-workflow-composer/design`。
-- 目标分支：`origin/main`。
-- 初始基线：`3fa291bf4ec1f175ce2d259fb4ddf20640f945eb`。
-- 提交前同步基线：`a8cdbf9f3e47b99f5018db111a9304e5253e3d6e`。
+- 目标：`origin/main`。
 
 ## 已完成
 
-- 已核对服务器工作目录、分支、状态和 worktree 列表。
-- 已执行 `git fetch origin` 与 `git merge --no-edit origin/main`；同步后基线不变。
-- 已读取仓库级 `AGENTS.md` 与 `docs/workstreams.md`。
-- 已确认本轮只修改 `openspec/changes/oss-workflow-composer/`，不实现代码、不安装依赖、不部署。
-- 提交前再次 fetch/merge 最新 `origin/main`，无冲突快进到 `a8cdbf9f3e47b99f5018db111a9304e5253e3d6e`。
-- 已核对 Open Workflow Specification、JSON Schema 和 React Flow 的公开官方资料。
-- 已写入 proposal、design、tasks、regression、readiness 和 workflow-composition capability spec 草案。
-- 已手工校验 7 个文件、8 个 capability scenarios、WHEN/THEN 完整性、24 个未勾选实现任务和 8 个 planned regression cases。
-- 已执行 `git diff --check`、范围检查、占位符扫描和敏感/专有信息扫描，结果通过。
-- 服务器未安装 OpenSpec CLI；未为本轮验证安装依赖，未执行 strict CLI validate。
+- 已核对 pwd、branch、status 和 worktree list；worker worktree 无未知脏改动。
+- 已执行 `git fetch origin` 和 `git merge --no-edit origin/main`，无冲突快进到统一基线集成 SHA。
+- 已读取仓库 `AGENTS.md`、Phase 1 `baseline.md` 和 `plan.md`。
+- 已读取并合入 PY-01 增量：系统 Python 变更已授权但仅 Runtime 可执行；本任务未触碰主机 Python。
+- 已重写 proposal/design 的 active first-version semantics，并清理冲突旧 design-only 方案。
+- 已向 main-brain 发送首个对齐回执，包含基线、冲突、专属范围、首个切片和真实依赖。
+- 已修订 spec/tasks/regression/readiness，并增加有效图、验证场景和标准库自检脚本。
+- 已在 Python 3.6.8 标准库下运行 fixture 自检：`PASS nodes=11 edges=12 staticCases=5 runtimeCases=5`。
+- 已执行 10 个专属文件的结构、范围、旧口径、占位符、敏感信息、ownership 和 `git diff --check`；结果通过。
+- 服务器未安装 OpenSpec CLI；未安装依赖，未执行 strict CLI validate。
 
-## 边界与所有权
+## 已移除的冲突
 
-- 本任务拥有：受限首版 Workflow 图编辑/校验、已发布 Skill 版本引用、发布图的 Runtime 消费契约提案。
-- Runtime 拥有：运行实例、调度、状态、checkpoint、重试执行、并发执行和可观测性。
-- 共享 contracts 任务拥有：通用资产身份、不可变 revision/release、授权与发布语义。
-- Skill registry 任务拥有：Skill revision 的注册、校验和发布。
-- 本任务不会读取或修改其他任务 checkpoint。
+- 串行-only 和“条件/并行以后再说”。
+- 相邻 schemaRef 必须完全相等并强制 Adapter Skill。
+- 固定旧 Skill release 继续执行和 Runtime 技术栈待定。
+- 线性 ordinal-only manifest。
+- 未限定的 retry/idempotency 口径。
+- 缺失的 AI 不确定 A2UI 选择和 Finalizer 事实边界。
+
+## 专属范围
+
+- 可修改：`openspec/changes/oss-workflow-composer/`。
+- 已预留、待共享契约审查后才实现：`services/workflow-registry/`。
+- 不修改共享 contracts、Runtime、其他 registry、根配置和其他任务 checkpoint。
+
+## 首个可执行切片
+
+完成 sequence/AI condition/non-nested parallel/explicit join 发布图候选、A 等待/B1→B2/join 真值表、失败/skip/Finalizer/A2UI-only retry 边界，并增加非规范 JSON 样例与 Python 标准库验证。
+
+## 真实依赖
+
+- platform-contracts：graph identity/version、trusted context、resolver、interaction/result refs、control dedupe。
+- Runtime：LangGraph 编译映射和 A waits/B1→B2/join/A2UI retry 实证。
+- Skill registry：逻辑 Skill 引用和统一 `use_skill`。
+- A2UI registry：selection Application、interaction mode、Action success/completion。
 
 ## 下一可执行动作
 
-等待 main-brain 审查三项跨域契约分歧；在明确批准前不开始实现。
+等待 main-brain 审查实际差异并命名 shared graph revision；在放行前不实现 `services/workflow-registry/`。
 
 ## 交付记录
 
-- Worker commit：以本 checkpoint 所在 `codex/oss-workflow-composer/design` HEAD 为磁盘真值。
-- Worker push：交付完成时 `origin/codex/oss-workflow-composer/design` 与上述 HEAD 对齐。
-- `origin/main` 集成：交付完成时包含上述 worker HEAD；精确 SHA 由 Git ref 与最终回报给出。
+- 本轮 worker commit/push：交付完成时以本 checkpoint 所在 worker HEAD 与 `origin/codex/oss-workflow-composer/design` 对齐为真值。
+- 本轮 `origin/main` 集成：交付完成时包含上述 worker HEAD；精确 SHA 由 Git ref 和最终回报给出。
+- 服务实现：未开始，等待共享 contract revision 审查放行。
 - Runtime 证据：无，保持 `NO READY`。

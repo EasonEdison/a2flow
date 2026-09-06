@@ -2,74 +2,74 @@
 
 ## ADDED Requirements
 
-### Requirement: 受限串行 Workflow 草稿
+### Requirement: Phase 1 受限无环发布图
 
-系统 MUST 允许作者创建和保存由一个 START、一个 END 及 1 至 8 个 SKILL 节点组成的草稿。草稿 MUST 使用 nodes/edges 表达编辑关系，layout MUST 与执行语义分离。草稿保存 MAY 接受尚未满足发布语义的中间状态。
+系统 MUST 支持由 sequence、AI decision condition、非嵌套 parallel region、condition MERGE、explicit JOIN、FINALIZER 组成的有限无环图。所有发布图 MUST 服务端校验全可达、引用完整和区域闭合；循环、递归、子流程及嵌套 parallel MUST 被拒绝。
 
-#### Scenario: 保存尚未连完的草稿
+#### Scenario: 发布包含顺序、条件和并行的合法图
 
-- **WHEN** 作者以当前 `expectedDraftRevision` 保存结构可解析但存在悬空 Skill 节点的草稿
-- **THEN** 系统保存新 draft revision，并明确保持 `DRAFT`，且不把它标记为可发布
+- **WHEN** 管理员提交包含一个 AI decision、一个受限 parallel region、显式 condition MERGE 和 JOIN 的无环草稿并请求发布
+- **THEN** 系统返回可解析的发布图候选，保留稳定 node/branch/candidate identity，并移除 layout 等纯编辑信息
 
-### Requirement: 服务端权威图校验
+### Requirement: AI 只从发布候选路由
 
-系统 MUST 在校验和发布时检查唯一节点标识、单入口单出口、全可达、无环和每个非端点入度/出度为 1。客户端限制 MUST NOT 替代服务端校验。
+AI decision MUST 从该节点发布时配置的 candidate 集合中选择一个 route。上游 Skill MUST NOT 被要求输出 Workflow 专用路由字段。AI 技术失败 MUST 保持失败，MUST NOT 被解释为语义不确定。
 
-#### Scenario: 分支或环阻断发布
+#### Scenario: AI 无法做出语义选择
 
-- **WHEN** 作者校验或发布包含多出边分支或有向环的草稿 revision
-- **THEN** 系统返回稳定 issue code 和 node/field 定位，发布失败且不产生 release
+- **WHEN** AI decision 对前驱最终结果和状态无法在配置候选中做出语义选择
+- **THEN** 同一节点展示配置的 INTERACTIVE A2UI 选择卡并等待 node-bound 用户选择，合法选择直接路由且不再交给 AI 重选
 
-### Requirement: 只引用已发布 Skill release
+### Requirement: 条件汇合与并行汇合分离
 
-每个 SKILL 节点 MUST 引用精确、已发布、可访问的 `skillReleaseRef`。系统 MUST NOT 接受 `latest`、版本范围、草稿引用或静默替代版本。
+发布图 MUST 区分“已选择一个候选即可继续”的 condition MERGE 与“全部成员分支达到可 join 终态”的 parallel JOIN。未被选择的 decision candidate MUST NOT 被 JOIN 当成缺失的并行分支。
 
-#### Scenario: 浮动 Skill 选择器被拒绝
+#### Scenario: 条件分支合并后进入并行 JOIN
 
-- **WHEN** 草稿节点使用 `latest` 或非发布 Skill revision 并请求校验
-- **THEN** 系统将校验标记为无效，定位该节点，且不生成可发布 dependency snapshot
+- **WHEN** parallel 分支 A 内的 decision 选择一个候选并到达其 condition MERGE，而另一个候选从未激活
+- **THEN** 分支 A 被视为到达 JOIN，未选候选不产生等待项，JOIN 只按发布的 parallel branch 成员集合判定
 
-### Requirement: 首版数据契约直通
+### Requirement: 等待分支不冻结独立分支
 
-系统 MUST 让第一步接收 Workflow 输入、后续步骤接收前一步输出，并以第一步输入和最后一步输出派生 Workflow 输入/输出 schema。首版相邻步骤 MUST 使用相同规范化 `schemaRef`，且 MUST NOT 隐式转换。
+某分支进入 `WAITING_INTERACTION` 时 MUST 只阻塞依赖它的 JOIN，不得冻结独立分支的后继调度。JOIN MUST 读取各 branch 的持久化真实状态，而不是把一次调用或 super-step 结束当成完成。
 
-#### Scenario: 相邻步骤 schema 不一致
+#### Scenario: A 等待时 B1 继续到 B2
 
-- **WHEN** 上游输出 schemaRef 与下游输入 schemaRef 不相同
-- **THEN** 系统返回 `STEP_SCHEMA_MISMATCH` 并阻断发布，且不创建转换脚本或 fallback
+- **WHEN** parallel 分支 A 等待 A2UI 用户选择，独立分支 B 的 B1 已达到可传播成功终态
+- **THEN** B2 在 A 恢复前仍被激活并可完成，B 到达 JOIN 后 JOIN 保持等待 A
 
-### Requirement: 乐观并发草稿写入
+### Requirement: required 与 allow-skip 保留真实结果
 
-草稿更新 MUST 携带 `expectedDraftRevision`。服务端 MUST 以 PostgreSQL 原子 compare-and-set 保护更新，旧 revision MUST NOT 覆盖新 revision。
+节点 MUST 明确区分 REQUIRED 与 ALLOW_SKIP authoring intent。成功、真实 SKIPPED、或 ALLOW_SKIP 节点的真实 FAILED 可向已配置后继/JOIN 传播；REQUIRED 节点 FAILED MUST 阻断。等待 MUST NOT 被自动改成 SKIPPED，容忍失败 MUST NOT 被改成 SUCCESS。
 
-#### Scenario: 两个实例并发更新同一 revision
+#### Scenario: 两类失败到达 JOIN
 
-- **WHEN** 两个 API 实例以同一 expected revision 提交不同草稿内容
-- **THEN** 恰好一个更新成功并递增 revision，另一个返回冲突和当前 revision，成功内容不被覆盖
+- **WHEN** 一个 ALLOW_SKIP 分支节点失败而另一个 REQUIRED 分支节点失败
+- **THEN** 前者以 FAILED 事实满足其 branch join 条件，后者阻断 JOIN，并且两个状态都原样进入审计和最终读取
 
-### Requirement: 确定性且幂等的不可变发布
+### Requirement: Skill 在对话与 Workflow 中复用
 
-发布 MUST 针对指定 draft revision 重新执行全部校验，移除 layout 和草稿字段，生成确定性 manifest 与摘要。相同发布 `requestKey` 的重试 MUST 返回同一 release；已发布 release MUST NOT 被原地修改。
+Workflow 中的 Skill 执行 MUST 统一经过 `use_skill`，并默认获得所有直接前驱的最终结果和真实状态。发布图 MUST NOT 内嵌 Skill body、业务凭证或要求 Skill 增加 routing/branch 专用字段。中间 Tool 结果只能通过只读 retrieval Tool 读取，不能重新执行业务调用。
 
-#### Scenario: 发布提交后响应丢失
+#### Scenario: 同一 Skill 无适配复用
 
-- **WHEN** 首次发布已提交但响应丢失，调用方用相同 requestKey 重试
-- **THEN** 系统返回同一 workflowReleaseRef 和 artifactDigest，且数据库中只有一个 release
+- **WHEN** 同一已发布 Skill 分别从普通会话和 Workflow 节点通过 `use_skill` 调用
+- **THEN** 两种入口使用同一 Skill 内容和 Tool 边界，Workflow 仅由 Runtime 提供通用 predecessor context，不要求修改 Skill 输出
 
-### Requirement: Runtime 消费契约与所有权边界
+### Requirement: 可信环境解析与轻量版本失配重置
 
-发布物 MUST 包含 Workflow release ref、contract version、artifact digest、输入/输出 schemaRef 和按 ordinal 排序的步骤；每一步 MUST 包含稳定 stepKey 和固定 skillReleaseRef。Composer MUST NOT 创建 Run、调度步骤、保存 checkpoint 或执行重试。
+Workflow、Skill、Application 等资产 MUST 按后端可信 environment/userId 通过共享 resolver 解析。PRT 只读 PRT current，ONLINE 只读 ONLINE stable/gray 且不读 PRT。run MUST 记录比较用版本；执行、continue 或 Action ingress 失配时 MUST 在新业务调用前阻断并提示 reset，MUST NOT 冻结旧配置继续、静默迁移或自动 restart。
 
-#### Scenario: Runtime 解析发布物
+#### Scenario: ONLINE 灰度 run 的 Action 到达时版本已变化
 
-- **WHEN** Runtime 以受支持版本解析一个已发布 Workflow release
-- **THEN** 它获得连续有序且不含 layout、secret、脚本或业务展示字段的 steps，并可用 digest 验证内容
+- **WHEN** node-bound Action ingress 使用可信 ONLINE/userId 解析出的当前版本与 run 记录版本不一致
+- **THEN** 后端拒绝该 Action 的新业务调用并返回 reset-required 结果，只有用户显式 restart 才创建无继承的新 run
 
-### Requirement: 依赖与协议失效时失败关闭
+### Requirement: A2UI-only retry 与 Finalizer 事实边界
 
-Skill registry 查询超时、release 不可用、contract version 未支持或 artifact digest 不符时，系统 MUST 失败关闭。Composer MUST NOT 回退到草稿、旧 Skill 版本、其他数据库或进程内状态。
+首版节点 retry MUST 仅对 A2UI render failure、Action call failure 或 Action result 不满足配置成功条件开放，并重入 owning node。其他 Skill/model/script/non-A2UI Tool failure MUST NOT 获得通用节点 retry。FINALIZER MUST NOT 改写真实状态、绕过 required interaction、补业务调用或在 accepted stop 后运行。
 
-#### Scenario: 发布期间 Skill registry 不可判定
+#### Scenario: A2UI Action 失败后重试 owning node
 
-- **WHEN** 发布校验无法确认任一 Skill release 的发布和可访问状态
-- **THEN** 发布失败且不生成半成品 artifact，调用方可在依赖恢复后重试
+- **WHEN** A2UI Action 结果不满足配置的 success condition，用户对 owning node 发出合法 retry control request
+- **THEN** Runtime 保留已完成前驱和独立分支，只重入该 owning node；业务重复调用处理仍由被调用 API 后端负责

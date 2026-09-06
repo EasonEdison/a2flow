@@ -1,75 +1,75 @@
-# Capability Registry Specification
+# Capability Registry Phase 1 Specification
 
-## ADDED Requirements
+## MODIFIED Requirements
 
-### Requirement: 草稿必须支持并发安全的修改
+### Requirement: execute_ability 必须隔离模型参数与可信上下文
 
-系统 SHALL 以 `draftRevision` 表示草稿并发版本。更新必须携带 `expectedDraftRevision`；不匹配时不得覆盖服务器内容。
+系统 SHALL 只向模型暴露 `abilityKey` 和 `arguments`。userId、环境、权限、凭证、生效版本和运行标识必须由后端 ToolRuntime 注入或解析，不得由模型提供。
 
-#### Scenario: 过期 revision 更新草稿
+#### Scenario: 模型伪造环境与身份
 
-- **WHEN** 客户端使用旧 `expectedDraftRevision` 更新已被其他实例修改的草稿
-- **THEN** 系统返回 `DRAFT_REVISION_CONFLICT`，且草稿内容与 revision 均保持最新已提交值
+- **WHEN** 模型在 arguments 中提交 userId、environment、credentialRef 或 releaseVersion
+- **THEN** Tool 在 adapter 调用前拒绝请求，返回稳定错误且 `adapterCalled=false`
 
-### Requirement: 最终输入必须按来源隔离
+### Requirement: 能力解析必须遵守 PRT/ONLINE 分库
 
-系统 SHALL 分别维护 `modelArgumentSchema`、`resolvedInputSchema` 和 `inputBindings`。每个最终 required 输入必须由 `MODEL_ARGUMENT`、`STATIC_CONSTANT` 或 `TRUSTED_CONTEXT` 中恰好一个来源构造；来源不得覆盖。
+系统 SHALL 通过共享 resolver 解析能力。PRT 只读取 PRT current；ONLINE 只读取 ONLINE stable/gray 并以受信 userId 灰度，绝不读取 PRT。
 
-#### Scenario: 两种来源竞争同一输入路径
+#### Scenario: ONLINE 灰度用户解析能力
 
-- **WHEN** 草稿把同一 targetPath 同时绑定为模型参数和可信上下文
-- **THEN** 静态验证返回路径冲突，发布不产生任何 release
+- **WHEN** 受信环境为 ONLINE 且 userId 命中 candidate 灰度
+- **THEN** resolver 返回 ONLINE candidate release，PRT 数据源读取次数为 0
 
-### Requirement: 可信上下文和凭证必须失败关闭
+### Requirement: 版本失配必须在业务调用前阻断
 
-系统 SHALL 禁止模型参数提供可信上下文或 `CredentialRef`。必需可信上下文或凭证槽位缺失时，Runtime 必须在调用适配器前终止。
+系统 SHALL 在 execute_ability、continue/recovery 和 A2UI Action 业务入口比较 observed 与 effective 配置版本。失配时必须提示全新 reset，不得继续旧版本、静默迁移或自动重放。
 
-#### Scenario: 模型伪造可信身份字段
+#### Scenario: 执行前检测到能力版本变化
 
-- **WHEN** 模型参数包含只允许由 `TRUSTED_CONTEXT` 提供的字段，且 Runtime 没有对应可信值
-- **THEN** Runtime 拒绝组装输入，适配器不被调用，错误不得回显凭证明文或可信值
+- **WHEN** run 记录的 ability version 与当前 resolver 返回版本不同
+- **THEN** 返回 `CONFIG_VERSION_MISMATCH`、`resetRequired=true` 和 `adapterCalled=false`
 
-### Requirement: 发布前必须进行确定性静态验证
+### Requirement: 授权和参数校验必须先于 adapter
 
-系统 SHALL 在发布事务内针对精确 draftRevision 重跑 schema、远程引用、绑定闭合、来源隔离、常量、执行声明和敏感信息门禁。失败报告必须包含稳定 ruleCode 与 JSON Pointer path。
+系统 SHALL 在调用 adapter 前完成 ability/operation/credential slot 授权、modelArgumentSchema 校验、来源绑定和 resolvedInputSchema 校验。模型描述不得扩大 allowlist。
 
-#### Scenario: required 字段没有来源
+#### Scenario: 用户没有 credential slot 权限
 
-- **WHEN** `resolvedInputSchema` 声明一个 required 字段，而 `inputBindings` 无法构造该字段
-- **THEN** 发布失败并返回定位该字段的稳定规则错误，数据库中不存在部分发布产物
+- **WHEN** 主体可发现 ability 但无权使用其 credential slot
+- **THEN** 返回 `AUTHORIZATION_DENIED`，adapter 不被调用，错误不泄露凭证或其他用户信息
 
-### Requirement: 已发布契约必须不可变且可精确寻址
+### Requirement: 发布契约必须分离 schema、绑定和成功策略
 
-系统 SHALL 将发布内容写入共享 `ReleaseEnvelope`，保存规范化内容摘要，并只允许通过精确 `ReleaseRef` 读取。草稿不得被 Runtime 当作发布版本消费。
+系统 SHALL 发布 model argument、resolved input、output schema、来源绑定、credential requirement、adapter operation、命名 success policy 和模型不可选择的 defaultSuccessPolicyRef；实际 release/version 包络由共享 contracts 拥有。
 
-#### Scenario: 两实例并发发布同一 revision
+#### Scenario: success policy 与输出 schema 不兼容
 
-- **WHEN** 两个应用实例用不同幂等键并发发布同一 draftRevision
-- **THEN** 只有一个请求创建不可变 release，另一个收到明确冲突，已发布内容与摘要保持不变
+- **WHEN** JSON_POINTER_EQUALS 指向 output schema 不支持的路径或 literal 类型不兼容
+- **THEN** 发布静态验证失败并返回稳定 ruleCode/path，不产生发布版本
 
-### Requirement: Runtime 必须通过逻辑端口消费能力
+### Requirement: 成功解释器必须只有一个实现
 
-系统 SHALL 提供 `PublishedCapabilityCatalogPort` 的只读语义，并定义 Runtime 消费、业务适配器实现的 `CapabilityInvocationPort`。逻辑端口不得预先绑定 Runtime 语言或传输协议。
+系统 SHALL 使用共享 ResultInterpretationPolicy schema，并由 Runtime 在 output schema 校验后执行唯一解释器。Capability Registry 发布命名策略；A2UI 选择 policyRef 并拥有 interaction completion，不得实现第二套解释器。
 
-#### Scenario: 精确发布版本被调用
+#### Scenario: 业务成功条件未命中
 
-- **WHEN** Runtime 解析一个受支持的 releaseRef，校验模型参数并以三类来源构造最终输入
-- **THEN** 适配器收到通过 `resolvedInputSchema` 的输入、逻辑凭证引用、deadline 和调用标识，且调用记录关联同一 releaseRef
+- **WHEN** adapter 返回通过 output schema 的结果，但配置的 successPolicyRef 判定 matched=false
+- **THEN** execute_ability 返回 `BUSINESS_NOT_SUCCESSFUL`，A2UI/Finalizer 不得把当前事实改写为成功
 
-### Requirement: 适配器输出必须经过契约校验
+### Requirement: 一次 Tool 调用不得自动重试业务调用
 
-系统 SHALL 在传播成功结果前使用发布版本的 `outputSchema` 校验适配器输出；不合规输出不得被伪装为成功。
+系统 SHALL 对一个已授权 execute_ability Tool call 最多调用 adapter 一次。Runtime/Workflow 不拥有业务重试、业务幂等、对账、补偿或跨 run 去重。
 
-#### Scenario: 适配器返回错误形状的成功结果
+#### Scenario: adapter 调用超时
 
-- **WHEN** 适配器把不满足 `outputSchema` 的载荷标为成功
-- **THEN** Runtime 将结果分类为 `TERMINAL_FAILURE`，不把原始载荷作为成功数据传播
+- **WHEN** adapter 在调用后超时且业务结果未知
+- **THEN** 返回 `ADAPTER_TIMEOUT`、`adapterCalled=true`，Runtime 自动重试次数为 0
 
-### Requirement: 重试必须受副作用和幂等语义约束
+### Requirement: 全新 restart 不得复用旧调用状态
 
-系统 SHALL 区分 `READ_ONLY`、`IDEMPOTENT_WRITE` 与 `NON_IDEMPOTENT_WRITE`，并保留 `NOT_STARTED`、`COMMITTED` 与 `UNKNOWN` 副作用状态。自动重试不得越过声明的安全边界。
+系统 SHALL 将 Workflow restart 视为从入口创建的新 run，不继承旧上下文、checkpoint、结果、interaction、invocation 或完成标识，也不查询旧业务结果来决定是否开始。
 
-#### Scenario: 非幂等写在超时后状态未知
+#### Scenario: 用户对失败 run 发起 restart
 
-- **WHEN** `NON_IDEMPOTENT_WRITE` 调用超时且适配器只能返回 `effectState=UNKNOWN`
-- **THEN** Runtime 不自动重试，并保留相同 invocationId、独立 attemptId 和等待人工/业务对账的状态
+- **WHEN** 用户显式 restart 一个包含旧 execute_ability 失败的 run
+- **THEN** 新 run 使用新 invocation 上下文从入口开始，Capability Registry/Runtime 不执行旧业务结果对账

@@ -1,0 +1,41 @@
+{
+  "_meta": {
+    "status": "PROVISIONAL_CONSUMER_REQUIREMENT",
+    "baseline": "SW-P1-20260907.2",
+    "productValidatorEvidence": false
+  },
+  "staticCases": [
+    {"caseId": "cycle", "mutation": "add end->start", "expectedIssues": ["GRAPH_CYCLE"]},
+    {"caseId": "unknown-candidate-target", "mutation": "route fast to missing node", "expectedIssues": ["DECISION_TARGET_UNKNOWN"]},
+    {"caseId": "parallel-branch-mismatch", "mutation": "remove branch B exit from join", "expectedIssues": ["PARALLEL_BRANCH_MISMATCH"]},
+    {"caseId": "nested-parallel", "mutation": "add split inside branch A", "expectedIssues": ["PARALLEL_NESTING_NOT_SUPPORTED"]},
+    {"caseId": "unreachable-node", "mutation": "add disconnected skill", "expectedIssues": ["GRAPH_UNREACHABLE"]}
+  ],
+  "runtimeCases": [
+    {
+      "caseId": "a-waits-b-continues",
+      "given": ["A=WAITING_INTERACTION", "B1=SUCCESS"],
+      "expected": ["B2=SUCCESS", "JOIN=WAITING"]
+    },
+    {
+      "caseId": "allow-skip-failure-can-join",
+      "given": ["A=SUCCESS", "B2=FAILED_ALLOW_SKIP"],
+      "expected": ["B_STATUS=FAILED", "JOIN=READY"]
+    },
+    {
+      "caseId": "required-failure-blocks",
+      "given": ["A_REQUIRED=FAILED", "B=SUCCESS"],
+      "expected": ["JOIN=BLOCKED", "FINALIZER=NOT_ADMITTED"]
+    },
+    {
+      "caseId": "a2ui-owning-node-retry",
+      "given": ["A2UI_ACTION_SUCCESS_CONDITION=FALSE", "B=SUCCESS"],
+      "expected": ["DECISION_A=RETRY_ELIGIBLE", "B=UNCHANGED"]
+    },
+    {
+      "caseId": "accepted-stop-blocks-finalizer",
+      "given": ["RUN=STOPPED"],
+      "expected": ["NEW_WORK=DENIED", "FINALIZER=NOT_ADMITTED"]
+    }
+  ]
+}

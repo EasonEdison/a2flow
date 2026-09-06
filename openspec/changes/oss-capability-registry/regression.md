@@ -1,48 +1,55 @@
-# 业务能力注册平台回归计划
+# 业务能力注册平台 Phase 1 回归计划
 
 ## 当前结论
 
+- 基线：SW-P1-20260907.2
 - 状态：PLANNED
-- 已执行自动化测试：0
-- 已执行集成测试：0
-- 已执行 Runtime/E2E：0
-- 当前 Runtime 准备度：NO READY
-- 说明：以下均为计划场景和字段级断言，不是已验证证据。
+- 自动化/集成/Runtime/E2E 实际通过：0
+- Runtime：NO READY
+- 合成 fixture 静态检查：PASS；仅代表 fixture evidence，不升级 Runtime readiness。
+
+## 已执行合成 fixture 证据
+
+- 环境：服务器独立 worker worktree；现有 `Python 3.6.8`，未安装或升级任何依赖。
+- 命令：`python3 -m json.tool services/capability-registry/fixtures/phase1/execute-ability.examples.json >/dev/null`。
+- 命令：`python3 services/capability-registry/fixtures/phase1/validate_examples.py`。
+- 输出：`PASS baseline=SW-P1-20260907.2 cases=6`。
+- 输出：`PASS trusted_fields_hidden pre_call_failures_closed runtime_business_retries=0`。
+- 限制：`runtime_evidence=false`；未运行 Registry、Runtime、PostgreSQL、adapter 或真实外部请求。
 
 ## 计划矩阵
 
-| ID | 层级 | 触发 | 计划断言 |
-| --- | --- | --- | --- |
-| CR-01 | 领域/持久化 | 更新请求携带过期 `expectedDraftRevision` | 返回 `DRAFT_REVISION_CONFLICT`；draftRevision 与内容均未改变 |
-| CR-02 | 静态验证 | 同一最终路径被模型参数和可信上下文同时绑定 | 发布失败；报告包含稳定 ruleCode 与冲突 targetPath；无发布快照 |
-| CR-03 | 静态验证 | required 最终输入字段没有任何来源 | 发布失败；报告定位缺失路径；无部分发布记录 |
-| CR-04 | 安全 | 模型尝试提供可信上下文或凭证槽位 | 模型参数校验/绑定拒绝；适配器调用次数为 0；错误不回显敏感值 |
-| CR-05 | 发布并发 | 两实例并发发布同一 draftRevision | 仅一个不可变 release 成功；另一个明确冲突；内容摘要稳定 |
-| CR-06 | Runtime 契约 | 读取精确 release 并以三来源组装输入 | resolvedInput 字段和值符合绑定；输入 schema 通过；调用使用精确 releaseRef |
-| CR-07 | 输出校验 | 适配器返回不符合 outputSchema 的成功载荷 | outcome 为 `TERMINAL_FAILURE`；不合规载荷不作为成功输出传播 |
-| CR-08 | 重试边界 | 非幂等写调用超时且 effectState 未知 | outcome 为 `UNKNOWN`；Runtime 不自动重试；保留 invocationId/attemptId 证据 |
+| ID | 触发 | 计划断言 |
+| --- | --- | --- |
+| CA-01 | 模型参数包含 userId/environment/credential/version | Tool schema/参数校验拒绝；adapterCalled=false |
+| CA-02 | PRT 调用且 PRT current 存在 | 只访问 PRT 数据源；releaseRef=PRT current；ONLINE 读取数=0 |
+| CA-03 | ONLINE 灰度 userId 命中 candidate | 只访问 ONLINE 数据源；releaseRef=ONLINE candidate；PRT 读取数=0 |
+| CA-04 | observed 配置版本与 effective 版本不一致 | status=CONFIG_VERSION_MISMATCH；resetRequired=true；adapterCalled=false |
+| CA-05 | 主体无 ability/operation/credential slot 权限 | status=AUTHORIZATION_DENIED；adapterCalled=false；不泄露其他主体/凭证 |
+| CA-06 | modelArguments 或 resolved input 不符合 schema | status=ARGUMENT_INVALID；adapterCalled=false；错误含稳定 path/code |
+| CA-07 | output schema 通过但 JSON_POINTER_EQUALS 未命中 | status=BUSINESS_NOT_SUCCESSFUL；interpretation.matched=false；不改写为成功 |
+| CA-08 | adapter 超时或业务失败 | 一次 Tool call 的 adapter 调用数=1；Runtime 自动重试数=0；业务幂等不由平台宣称 |
 
-## 计划字段级断言
+## 计划接口证据
 
-每个自动化用例至少断言：
+### execute_ability
 
-- `releaseRef`、`draftRevision` 或 `invocationId` 与触发请求一致。
-- 失败使用稳定 `errorCode/ruleCode`，不解析自然语言 detail。
-- 成功发布的 `contentDigest` 与规范化 payload 一致。
-- `PublishedCapabilityContract.contract` 包含三份 schema、绑定、凭证需求和 invocation 声明。
-- 日志/事件中不存在 `CredentialRef.referenceId` 对应的凭证明文。
-- 失败路径的适配器调用计数、数据库发布行数和幂等记录符合预期。
+- model params：`abilityKey`、`arguments`。
+- trusted params：`userId`、`environment`、`authorizationContext`、observed versions、run/node context、`invocationId`。
+- success data：`invocationId`、`abilityReleaseRef`、`status=SUCCEEDED`、`output`、`interpretation.matched=true`、`adapterCalled=true`。
+- pre-call failure data：稳定 status/errorCode、`resetRequired`、`adapterCalled=false`。
+- adapter failure data：`adapterCalled=true`、失败分类；无平台业务 retry/effect 推断。
 
-## 未来执行门禁
+## 未来验证层级
 
-1. 单元/属性测试覆盖 schema 元校验、Pointer 重叠和来源闭合。
-2. PostgreSQL 集成测试覆盖事务、唯一约束、重启后幂等和多实例竞争。
-3. Runtime 契约测试覆盖输入组装、输出验证、deadline、`UNKNOWN` 和幂等键复用。
-4. 公开样例适配器 E2E 覆盖一次成功、一次可安全重试和一次人工处理。
-5. 执行命令、环境、commit、实际结果和证据链接在运行后回填；不得预写通过。
+1. JSON/contract fixture：语法、字段分区和负向不变量。
+2. Registry 单元测试：schema/binding/success policy 静态验证。
+3. PostgreSQL 集成：PRT/ONLINE 分库、revision、发布竞争。
+4. Runtime contract：ToolRuntime 隐藏字段、resolver、授权、一次调用和唯一解释器。
+5. A2UI integration：Action 选择 successPolicyRef；configured success 与 completion 分离。
 
-## 本轮文档检查
+## 本批证据限制
 
-- `git diff --check`：提交前执行并记录到 checkpoint。
-- OpenSpec strict validate：服务器未发现 OpenSpec CLI，当前计划为未执行；不为此设计切片安装依赖。
-- 来源/敏感信息扫描：提交前对本 change 精确文件集执行。
+- OpenSpec CLI 与项目依赖未安装时，不进行重型安装。
+- 合成 fixture 不调用真实 endpoint、不证明授权系统、数据库或 Runtime 已实现。
+- 运行命令、环境、commit 和输出必须在实际执行后回填。

@@ -1,0 +1,68 @@
+{
+  "_meta": {
+    "status": "PROVISIONAL_CONSUMER_REQUIREMENT",
+    "baseline": "SW-P1-20260907.2",
+    "sharedSchemaAuthority": false
+  },
+  "workflowRef": "workflow:request-triage",
+  "graphRevision": 1,
+  "configurationRefs": [
+    {"assetType": "SKILL", "logicalRef": "skill:route-fast"},
+    {"assetType": "SKILL", "logicalRef": "skill:route-review"},
+    {"assetType": "SKILL", "logicalRef": "skill:branch-b1"},
+    {"assetType": "SKILL", "logicalRef": "skill:branch-b2"},
+    {"assetType": "APPLICATION", "logicalRef": "application:decision-choice"}
+  ],
+  "nodes": [
+    {"nodeKey": "start", "kind": "START", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "split", "kind": "PARALLEL_SPLIT", "failureRequirement": "REQUIRED"},
+    {
+      "nodeKey": "decision_a",
+      "kind": "AI_DECISION",
+      "failureRequirement": "REQUIRED",
+      "selectionApplicationRef": "application:decision-choice",
+      "candidates": [
+        {"candidateKey": "fast", "label": "快速处理", "targetNodeKey": "a_fast"},
+        {"candidateKey": "review", "label": "人工复核", "targetNodeKey": "a_review"}
+      ]
+    },
+    {"nodeKey": "a_fast", "kind": "SKILL", "skillRef": "skill:route-fast", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "a_review", "kind": "SKILL", "skillRef": "skill:route-review", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "merge_a", "kind": "CONDITION_MERGE", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "b1", "kind": "SKILL", "skillRef": "skill:branch-b1", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "b2", "kind": "SKILL", "skillRef": "skill:branch-b2", "failureRequirement": "ALLOW_SKIP"},
+    {"nodeKey": "join", "kind": "PARALLEL_JOIN", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "finalizer", "kind": "FINALIZER", "failureRequirement": "REQUIRED"},
+    {"nodeKey": "end", "kind": "END", "failureRequirement": "REQUIRED"}
+  ],
+  "edges": [
+    {"from": "start", "to": "split", "edgeKind": "NORMAL"},
+    {"from": "split", "to": "decision_a", "edgeKind": "PARALLEL", "branchKey": "A"},
+    {"from": "split", "to": "b1", "edgeKind": "PARALLEL", "branchKey": "B"},
+    {"from": "decision_a", "to": "a_fast", "edgeKind": "CONDITIONAL", "routeKey": "fast", "branchKey": "A"},
+    {"from": "decision_a", "to": "a_review", "edgeKind": "CONDITIONAL", "routeKey": "review", "branchKey": "A"},
+    {"from": "a_fast", "to": "merge_a", "edgeKind": "NORMAL", "branchKey": "A"},
+    {"from": "a_review", "to": "merge_a", "edgeKind": "NORMAL", "branchKey": "A"},
+    {"from": "merge_a", "to": "join", "edgeKind": "NORMAL", "branchKey": "A"},
+    {"from": "b1", "to": "b2", "edgeKind": "NORMAL", "branchKey": "B"},
+    {"from": "b2", "to": "join", "edgeKind": "NORMAL", "branchKey": "B"},
+    {"from": "join", "to": "finalizer", "edgeKind": "NORMAL"},
+    {"from": "finalizer", "to": "end", "edgeKind": "NORMAL"}
+  ],
+  "decisionRegions": [
+    {
+      "decisionNodeKey": "decision_a",
+      "mergeNodeKey": "merge_a",
+      "candidateKeys": ["fast", "review"]
+    }
+  ],
+  "parallelRegions": [
+    {
+      "splitNodeKey": "split",
+      "joinNodeKey": "join",
+      "branchKeys": ["A", "B"],
+      "branchExitNodeKeys": {"A": "merge_a", "B": "b2"}
+    }
+  ],
+  "finalizerNodeKey": "finalizer"
+}

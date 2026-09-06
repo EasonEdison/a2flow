@@ -1,0 +1,313 @@
+{
+  "fixtureMetadata": {
+    "baseline": "SW-P1-20260907.2",
+    "status": "PROVISIONAL_CONSUMER_EXAMPLE",
+    "synthetic": true,
+    "runtimeEvidence": false
+  },
+  "abilityDefinition": {
+    "abilityKey": "demo.catalog.lookup",
+    "modelArgumentSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query"
+      ],
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "resolvedInputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query",
+        "userId"
+      ],
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        }
+      }
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "items"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "inputBindings": [
+      {
+        "targetPath": "/query",
+        "source": "MODEL_ARGUMENT",
+        "sourcePath": "/query"
+      },
+      {
+        "targetPath": "/userId",
+        "source": "TRUSTED_CONTEXT",
+        "sourcePath": "/userId"
+      }
+    ],
+    "credentialRequirements": [
+      {
+        "slotId": "demoRead",
+        "required": true
+      }
+    ],
+    "adapterOperationRef": "demo.catalog.lookup.read",
+    "defaultSuccessPolicyRef": "okTrue",
+    "successPolicies": [
+      {
+        "policyId": "okTrue",
+        "rule": {
+          "kind": "JSON_POINTER_EQUALS",
+          "path": "/ok",
+          "expected": true
+        }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "caseId": "prt_current_success",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-prt"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-prt",
+        "environment": "PRT",
+        "authorizationContext": "fixture-authorized",
+        "observedConfigVersions": {
+          "ability": "provisional-prt-v1"
+        },
+        "invocationId": "fixture-invocation-001"
+      },
+      "resolvedAbility": {
+        "releaseRef": "provisional-ability-prt-v1",
+        "environment": "PRT",
+        "servingTrack": "CURRENT"
+      },
+      "credentialBindings": {
+        "demoRead": {
+          "providerId": "fixture-provider",
+          "referenceId": "synthetic-demo-read-prt"
+        }
+      },
+      "adapterInput": {
+        "query": "synthetic-prt",
+        "userId": "fixture-user-prt"
+      },
+      "adapterOutput": {
+        "ok": true,
+        "items": [
+          "fixture-item"
+        ]
+      },
+      "result": {
+        "status": "SUCCEEDED",
+        "adapterCalled": true,
+        "runtimeRetryCount": 0,
+        "resetRequired": false,
+        "interpretation": {
+          "policyRef": "okTrue",
+          "matched": true,
+          "evidencePath": "/ok"
+        }
+      }
+    },
+    {
+      "caseId": "online_gray_success",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-online"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-gray",
+        "environment": "ONLINE",
+        "authorizationContext": "fixture-authorized",
+        "observedConfigVersions": {
+          "ability": "provisional-online-v2"
+        },
+        "invocationId": "fixture-invocation-002"
+      },
+      "resolvedAbility": {
+        "releaseRef": "provisional-ability-online-v2",
+        "environment": "ONLINE",
+        "servingTrack": "GRAY_CANDIDATE"
+      },
+      "credentialBindings": {
+        "demoRead": {
+          "providerId": "fixture-provider",
+          "referenceId": "synthetic-demo-read-online"
+        }
+      },
+      "adapterInput": {
+        "query": "synthetic-online",
+        "userId": "fixture-user-gray"
+      },
+      "adapterOutput": {
+        "ok": true,
+        "items": []
+      },
+      "result": {
+        "status": "SUCCEEDED",
+        "adapterCalled": true,
+        "runtimeRetryCount": 0,
+        "resetRequired": false,
+        "interpretation": {
+          "policyRef": "okTrue",
+          "matched": true,
+          "evidencePath": "/ok"
+        }
+      }
+    },
+    {
+      "caseId": "version_mismatch",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-stale"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-stale",
+        "environment": "ONLINE",
+        "authorizationContext": "fixture-authorized",
+        "observedConfigVersions": {
+          "ability": "provisional-online-v1"
+        },
+        "invocationId": "fixture-invocation-003"
+      },
+      "effectiveConfigVersions": {
+        "ability": "provisional-online-v2"
+      },
+      "result": {
+        "status": "CONFIG_VERSION_MISMATCH",
+        "errorCode": "ABILITY_CONFIG_VERSION_MISMATCH",
+        "adapterCalled": false,
+        "runtimeRetryCount": 0,
+        "resetRequired": true
+      }
+    },
+    {
+      "caseId": "authorization_denied",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-denied"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-denied",
+        "environment": "PRT",
+        "authorizationContext": "fixture-denied",
+        "observedConfigVersions": {
+          "ability": "provisional-prt-v1"
+        },
+        "invocationId": "fixture-invocation-004"
+      },
+      "result": {
+        "status": "AUTHORIZATION_DENIED",
+        "errorCode": "ABILITY_INVOCATION_NOT_ALLOWED",
+        "adapterCalled": false,
+        "runtimeRetryCount": 0,
+        "resetRequired": false
+      }
+    },
+    {
+      "caseId": "configured_success_not_matched",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-empty"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-result",
+        "environment": "PRT",
+        "authorizationContext": "fixture-authorized",
+        "observedConfigVersions": {
+          "ability": "provisional-prt-v1"
+        },
+        "invocationId": "fixture-invocation-005"
+      },
+      "resolvedAbility": {
+        "releaseRef": "provisional-ability-prt-v1",
+        "environment": "PRT",
+        "servingTrack": "CURRENT"
+      },
+      "adapterOutput": {
+        "ok": false,
+        "items": []
+      },
+      "result": {
+        "status": "BUSINESS_NOT_SUCCESSFUL",
+        "adapterCalled": true,
+        "runtimeRetryCount": 0,
+        "resetRequired": false,
+        "interpretation": {
+          "policyRef": "okTrue",
+          "matched": false,
+          "evidencePath": "/ok"
+        }
+      }
+    },
+    {
+      "caseId": "adapter_timeout_without_platform_retry",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-timeout"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-timeout",
+        "environment": "ONLINE",
+        "authorizationContext": "fixture-authorized",
+        "observedConfigVersions": {
+          "ability": "provisional-online-v1"
+        },
+        "invocationId": "fixture-invocation-006"
+      },
+      "resolvedAbility": {
+        "releaseRef": "provisional-ability-online-v1",
+        "environment": "ONLINE",
+        "servingTrack": "STABLE"
+      },
+      "result": {
+        "status": "ADAPTER_TIMEOUT",
+        "errorCode": "ABILITY_ADAPTER_TIMEOUT",
+        "adapterCalled": true,
+        "runtimeRetryCount": 0,
+        "resetRequired": false
+      }
+    }
+  ]
+}

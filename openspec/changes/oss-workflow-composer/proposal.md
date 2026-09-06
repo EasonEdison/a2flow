@@ -1,81 +1,91 @@
-# Skill Workflow 编排平台首版提案
+# Skill Workflow 编排平台 Phase 1 对齐提案
 
 ## 状态
 
+- 统一基线：`SW-P1-20260907.2`
+- 基线集成 SHA：`c168f2c3b7f86cb0bd5e2bec48caf4ec1de1df7e`
 - 设计：`PROPOSED`
-- 实现：未开始
+- 实现：等待 main-brain 对共享契约实际差异审查后放行
 - Runtime：`NO READY`
-- 交付含义：本 change 进入 `main` 只表示可审查的设计源码已交付，不表示设计获批、功能可用或运行态已验证。
+- PY-01：必要时替换/升级系统 Python 已获授权，但仅 Runtime 可在 main-brain 协调下执行；本任务不改系统 Python，也不以授权缺失为 blocker。
+
+本 change 合入 `main` 只表示 Phase 1 图契约需求和验证样例可供审查，不表示共享契约已冻结、服务已实现或 LangGraph 运行语义已经证明。
 
 ## Why
 
-M 侧需要把多个已发布 Skill 版本组合成可发布、可追溯且可被通用 Runtime 消费的 Workflow。首个纵向切片的重点是证明定义、校验、发布和执行契约可以闭环，而不是提前建设通用低代码或复杂 DAG 平台。
+M 侧需要发布可被 Python + LangGraph Runtime 编译执行的多 Skill Workflow。首版必须覆盖顺序、条件和并行，同时保持 Skill 为可复用的 AI 指令/资源包，不把每个 Skill 固化为业务子图，也不要求 Skill 输出专用路由字段。
 
-## 本轮范围
+## 旧方案冲突清理
 
-- React + TypeScript 方向的受限图编辑：`START -> SKILL... -> END`。
-- 每个 Workflow 含 1 至 8 个 Skill 节点；仅允许单入口、单出口、单链路。
-- 节点只引用已发布且不可变的 Skill release；禁止 `latest`、版本范围和草稿引用。
-- 草稿允许暂时语义无效；校验和发布必须由服务端重新执行并失败关闭。
-- 发布时把编辑图编译为去除布局信息的线性、不可变 execution manifest。
-- 定义 Workflow 发布物与 Runtime 的消费边界，不定义 Run、调度、checkpoint、重试执行或运行态事件。
+| 旧提案 | Phase 1 修订 |
+| --- | --- |
+| 只允许 `START -> SKILL... -> END` 串行链 | 支持顺序、AI 条件选择、非嵌套并行和显式 join |
+| 相邻 Skill 必须完全相同 `schemaRef`，否则新增 Adapter Skill | 下游默认读取所有直接前驱的最终结果/状态；Skill 无需 Workflow 适配，精确上下文契约由 contracts/Runtime 审查 |
+| 固定 Skill release 并按旧版本继续执行 | 由可信 `environment + userId` 解析有效配置；入口发现版本失配即阻断并提示重置，不冻结旧配置继续 |
+| Runtime 语言和图协议仍待选择 | Runtime 固定为 Python + Deep Agents SDK + LangGraph；具体版本/API 仍需 Runtime 实证 |
+| 只定义线性 manifest 和 ordinal | 发布物必须保留节点、候选边、并行区域、join 和失败容忍语义 |
+| 泛化 Runtime 重试由后续决定 | 首版仅允许 A2UI 渲染或 Action 失败的 owning node 重试；其他 Skill/Tool 失败无通用节点重试 |
+| 未定义 AI 不确定和 Finalizer 边界 | AI 只能从配置候选选择；不确定时同节点显示 A2UI 选择卡；Finalizer 不得改写事实或绕过交互 |
+
+## Phase 1 范围
+
+- 编辑和发布有限无环图：sequence、AI decision condition、parallel split、explicit join、Finalizer。
+- AI decision 节点从静态配置的候选中选择一个目标；Skills 不提供路由专用字段。
+- AI 无法做出语义选择时，该 decision 节点展示配置好的 INTERACTIVE A2UI 选择卡，等待一次 node-bound 用户选择并直接路由，不再交给 AI 重选。
+- 并行区域首版不嵌套。A 分支等待交互时，独立 B 分支必须继续 B1、B2，直到对应 join；join 仍等待 A。
+- 节点成功、真实 `SKIPPED`、或配置为 allow-skip 的节点保持真实 `FAILED` 后可满足后继/join；required 节点失败阻断。
+- 发布图记录逻辑 Skill/Application 引用和图语义；共享 resolver 依据可信 environment/userId 解析实际版本。
+- 提供非规范图样例和 validation cases；共享 schema 字段名、版本和封装由 contracts 单一所有。
 
 ## 明确不做
 
-- 条件分支、并行、循环、子流程、动态节点、定时触发和多 Agent swarm。
-- 任意表达式、脚本、URL、密钥、数据映射语言和用户可配置重试算法。
-- Runtime 实现、数字员工业务语义、A2UI 渲染、部署、数据库或服务变更。
-- 自动升级 Skill 依赖、静默 fallback 或在依赖不可用时发布不完整 artifact。
+- 循环、递归、嵌套并行、子流程、动态生成拓扑和多 Agent swarm。
+- 自研调度器、第二套 checkpoint/interrupt 引擎或修改 LangGraph/Deep Agents 源码。
+- 每 Skill 固定业务子图、强制路由字段、隐式数据转换或自动 Adapter Skill。
+- 通用 Skill/model/script/non-A2UI Tool retry、Workflow 业务补偿、跨 run 对账或业务幂等。
+- 允许模型提供 userId、environment、凭证或越过 `use_skill` / Tool 边界。
+- 未经 main-brain 共享契约审查即实现 `services/workflow-registry/`。
 
 ## 候选方案
 
-### A. 节点/边草稿，发布为线性 manifest（推荐）
+### A. 受限 DAG + 显式 decision/split/join（推荐）
 
-编辑态保留 `nodes`、`edges` 和独立 `layout`，服务端强制单链路拓扑；发布态按拓扑序生成 `steps[]`。它既能支持有意义的图编辑体验，又让 Runtime 只消费简单确定的执行序列，并保留未来引入 DAG 的演进空间。
+发布图保留稳定 node key 和有向边；decision 明确候选集合，parallel split 与 join 成对且首版禁止嵌套。它能表达已确认的三类拓扑，并给 Runtime 足够信息验证独立分支进度和 join 门禁。
 
-代价是需要两层校验和一次确定性编译，但复杂度仍可被首版边界控制。
+### B. 任意 DAG + Runtime 推断 join
 
-### B. 直接编辑有序步骤数组
+作者自由连边、Runtime 根据拓扑猜测并发区和失败传播。灵活但难以静态验证 A 等待/B 继续、join 归属和 required failure，首版不采用。
 
-实现最小、Runtime 契约最直接，但不能真实验证图编辑能力；后续迁移到 DAG 时还需要新增节点标识、边和布局模型。若选择该方案需 main-brain 显式批准；不得在推荐方案实现失败时静默切换。
+### C. 完整 Workflow DSL 或 workflow-as-code
 
-### C. 首版采用完整 DAG 或 Open Workflow DSL
+表达力强，但会把循环、嵌套、脚本和运行细节带入首阶段，也容易形成第二套调度抽象。本轮仅参考公开图概念，不声明兼容。
 
-标准能力和表达力更强，但会立即引入分支、并发、表达式、错误策略和更大的兼容面，超出单机资源下的首个纵切片目标。本轮只把 Open Workflow Specification 作为术语与演进参考，不声明兼容。
+## 已确认的图执行语义
 
-## 推荐的最小数据流
+1. Sequence：节点完成为可传播终态后才激活后继。
+2. Decision：AI 读取前驱最终结果/状态，从配置候选中选一个；语义不确定才进入 A2UI 用户选择。技术失败必须保持失败，不伪装成不确定。
+3. Parallel：split 激活多个独立分支；一个分支 `WAITING_INTERACTION` 不冻结其他分支。
+4. Join：等待所有成员分支达到可 join 终态；waiting 继续等待，allow-skip failure/实际 skip 可 join，required failure 阻断。
+5. Finalizer：只读取本次 run 已保存的真实结果/状态并生成最终表达；不能改变状态、补业务调用、绕过交互或在 stop 后运行。
+6. Retry：仅 A2UI 渲染/Action 失败满足配置条件时重试 owning node，并保留已完成前驱和独立分支；整图 restart 是无继承的新 run。
 
-- Workflow 输入契约由第一个 Skill release 的输入 schema 派生。
-- 第一个步骤接收 Workflow 输入；后续步骤只接收前一步输出。
-- 相邻步骤首版要求输出与输入使用完全相同的规范化 `schemaRef`；不做隐式类型转换。
-- Workflow 输出契约由最后一个 Skill release 的输出 schema 派生。
-- 不兼容时应新增显式 Adapter Skill，而不是在编排器中嵌入映射脚本。
+## 所有权与真实依赖
 
-## 依赖与交付
+| 所有者 | 本任务需要 | 本任务提供 |
+| --- | --- | --- |
+| platform-contracts | graph identity/version、可信 context、resolver、事件/interaction/result refs、control request dedupe | sequence/decision/parallel/join 的消费者约束和样例 |
+| skill-registry | `use_skill` 可解析逻辑 Skill 引用和可发现元数据 | 无 Workflow 专用 Skill 输出/适配要求 |
+| a2ui-registry | decision selection Application、DISPLAY_ONLY/INTERACTIVE、Action success/completion 语义 | node-bound 选择和 A2UI-only retry 的引用需求 |
+| Runtime | LangGraph 编译映射、状态传播、interrupt/checkpoint、独立分支进度实证 | 发布图候选、join truth table、失败/等待边界 |
+| digital employee | node-bound 输入/Action 和 reset UX | 可浏览/启动的 Workflow identity，不暴露草稿和调度内部 |
 
-| 依赖方 | 需要的输入 | 本任务输出 | 失效边界 |
-| --- | --- | --- | --- |
-| shared contracts | `AssetRef` / `ReleaseRef`、不可变发布、授权、幂等语义 | Workflow 对这些语义的消费者要求 | 未裁决时不得冻结协议版本 |
-| Skill registry | 按 release ref 查询发布状态、输入/输出 schemaRef、可执行性 | 被引用 release 列表与校验错误 | 查询超时、无权或非发布状态均阻断发布 |
-| Runtime | manifest 版本协商与解析确认 | 不可变线性 execution manifest | 不支持版本、摘要不符或依赖不可用时失败关闭 |
-| 数字员工 | 选择已发布 Workflow release 并发起运行 | 稳定 Workflow release ref | 不直接依赖编辑草稿或 M 侧布局 |
+## 首个可执行切片
 
-## 风险控制
-
-- 并发编辑使用 `expectedDraftRevision` 乐观并发；旧 revision 写入不得覆盖新 revision。
-- 发布需要 `requestKey` 幂等语义；响应丢失重试不得创建第二个 release。
-- 发布前同一 revision 内重新校验拓扑、Skill release 和 schema 链；不复用陈旧 UI 校验结果。
-- 正确性状态只落 PostgreSQL；多实例不得依赖进程内锁、会话或缓存。
-- 发布物不含 secret、URL、脚本、业务字段或编辑器位置。
-
-## 待 main-brain 裁决
-
-1. 统一 `AssetRef` / `ReleaseRef`、发布幂等键和 release 撤销语义由 shared contracts 采用何种字段与版本规则。
-2. Runtime 通过 release ref 拉取 manifest，还是由启动请求携带 manifest；无论选择哪种，摘要校验和版本协商必须一致。
-3. MVP 是否批准“相邻 `schemaRef` 完全相等 + Adapter Skill”规则，还是引入受限显式映射；本提案推荐前者。
+当前可独立完成：修订本 change，增加一份有效 parallel/decision 图候选和一组无依赖验证样例，用 Python 标准库做 JSON 结构/断言检查。`services/workflow-registry/` 仅预留所有权，不在共享 graph revision 获批前写实现。
 
 ## 公开参考
 
-- [Open Workflow Specification](https://github.com/open-workflow-specification/specification)：作为声明式工作流和可移植执行定义的能力上界参考，本轮不承诺兼容。
-- [JSON Schema 官方说明](https://json-schema.org/understanding-json-schema/about)：结构校验与跨字段/拓扑语义校验需要分层处理。
-- [React Flow 官方概念](https://reactflow.dev/learn/concepts/terms-and-definitions)：验证 React 图编辑器的 nodes、edges、handles 和受控状态模型可承载本轮交互；具体依赖版本仍待实现阶段评估。
+- [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api)：nodes、edges、conditional routing、parallel super-step 和 compile checks。
+- [LangGraph Interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)：持久化 interrupt、node restart、multiple interrupts 与 resume 约束。
+- [LangGraph Persistence](https://docs.langchain.com/oss/python/langgraph/persistence)：Checkpointer、Store 和 PostgreSQL 持久化边界。
+- [Deep Agents overview](https://docs.langchain.com/oss/python/deepagents/overview)：Runtime SDK 入口；本任务不锁定依赖版本。
