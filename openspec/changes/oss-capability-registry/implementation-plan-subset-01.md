@@ -4,7 +4,7 @@
 
 **Goal:** Build the first importable Capability Registry Python domain slice for authored Ability validation, adapter-operation binding validation and immutable publication metadata.
 
-**Architecture:** Keep the domain module independent of Runtime and transport. `AbilityDefinitionValidator` consumes an `AdapterOperationCatalogPort` plus a `ResultPolicySetValidatorPort`; `SharedResultPolicySetValidator` adapts `skillweave_contracts.models.ResultInterpretationPolicySet.from_mapping`, while this domain owns Ability fields, model/server input separation and adapter metadata compatibility.
+**Architecture:** Keep the domain module independent of Runtime and transport. `AbilityDefinitionValidator` consumes an `AdapterOperationCatalogPort` plus a `ResultPolicySetValidatorPort`; `SharedResultPolicySetValidator` adapts the public `skillweave_contracts.ResultInterpretationPolicySet.from_mapping`, while this domain owns Ability fields, model/server input separation and adapter metadata compatibility.
 
 **Tech Stack:** Python 3.11 standard library, immutable dataclasses, `typing.Protocol`, `unittest`.
 
@@ -132,15 +132,15 @@ Require zero failures and no warnings.
 - Create: `services/capability-registry/tests/test_contract_adapter.py`
 
 **Interfaces:**
-- Consumes: `skillweave_contracts.models.ResultInterpretationPolicySet.from_mapping(payload)`.
+- Consumes: `skillweave_contracts.ResultInterpretationPolicySet.from_mapping(payload)`.
 - Consumes: `skillweave_contracts.ContractValidationError.issues` containing immutable `(path, code, message)` issues.
 - Produces: `SharedResultPolicySetValidator.validate(policy_set)` returning Capability-domain `ValidationIssue` tuples.
 
-- [ ] **Step 1: Add failing shared-adapter tests**
+- [x] **Step 1: Add failing shared-adapter tests**
 
 Pass one valid policy set and one duplicate-ref/dangling-default set. Assert valid returns no issues and invalid preserves the shared issue paths/codes; do not test or implement policy evaluation.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 ```bash
 PYTHONPATH=packages/contracts/src:services/capability-registry/src /bin/python3.11 -m unittest services/capability-registry/tests/test_contract_adapter.py -v
@@ -148,11 +148,11 @@ PYTHONPATH=packages/contracts/src:services/capability-registry/src /bin/python3.
 
 Expected: import failure because `SharedResultPolicySetValidator` does not exist.
 
-- [ ] **Step 3: Implement the thin adapter**
+- [x] **Step 3: Implement the thin adapter**
 
 Call `ResultInterpretationPolicySet.from_mapping` exactly once. Convert `ContractValidationError.issues` without changing code/path/message, and return an immutable tuple. Do not catch unrelated exceptions.
 
-- [ ] **Step 4: Run shared adapter and all domain tests GREEN**
+- [x] **Step 4: Run shared adapter and all domain tests GREEN**
 
 Use both package `src` roots in `PYTHONPATH`; require zero failures.
 
@@ -168,18 +168,18 @@ Use both package `src` roots in `PYTHONPATH`; require zero failures.
 **Interfaces:**
 - Documents the import command and the boundary between source evidence and Runtime readiness.
 
-- [ ] **Step 1: Run contract compatibility and module tests**
+- [x] **Step 1: Run contract compatibility and module tests**
 
 ```bash
 python3 packages/contracts/tests/validate_contracts.py
 PYTHONPATH=services/capability-registry/src /bin/python3.11 -m unittest discover -s services/capability-registry/tests -v
 ```
 
-- [ ] **Step 2: Inspect imports, exact diff and clean-room boundary**
+- [x] **Step 2: Inspect imports, exact diff and clean-room boundary**
 
 Run import smoke, `git diff --check`, owned-path scope check and sensitive-data scan. Confirm the module contains no policy evaluation, HTTP/database client, retry/idempotency implementation or credential values.
 
-- [ ] **Step 3: Update evidence without upgrading Runtime readiness**
+- [x] **Step 3: Update evidence without upgrading Runtime readiness**
 
 Record exact test counts and commands. Keep shared full-bundle, PostgreSQL, Runtime and deployment gates as `NO READY`.
 

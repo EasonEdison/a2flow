@@ -8,10 +8,10 @@ module, not a deployable service.
 ## Import
 
 Until root packaging metadata is coordinated by the main task, import the
-module through its source root:
+module through the Contracts and Capability source roots:
 
 ```bash
-PYTHONPATH=services/capability-registry/src /bin/python3.11 -c \
+PYTHONPATH=packages/contracts/src:services/capability-registry/src /bin/python3.11 -c \
   'from capability_registry import AbilityDefinitionValidator'
 ```
 

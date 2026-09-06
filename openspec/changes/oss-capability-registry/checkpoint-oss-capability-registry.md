@@ -9,7 +9,7 @@
 - 当前基线：SW-P1-20260907.2
 - 基线提交：`b1a0c9f32497c04dd623edb0bb8858a01b5ae7ad`
 - 消费者内容已合入 main SHA：`57d11fcfee3481512d444a51fee0db3280357789`
-- 阶段：`SW-P1-SUBSET-01` 已批准；正在执行 Capability Registry 第一实现切片
+- 阶段：`SW-P1-SUBSET-01` 源码实现与验证已完成；待最终 worker push/main 集成
 - Runtime：`NO READY`
 
 ## 本轮已核对
@@ -35,8 +35,14 @@
 - TDD Task 2：15 个 boundary 断言先失败，再实现字段、模型/服务端分离、Pointer/target 冲突门禁，10/10 GREEN。
 - TDD Task 3：operation 缺失、input path 与 credential slot 不支持三例先失败，再实现 catalog 兼容校验，13/13 GREEN。
 - 边界 review 新增 2 个畸形 JSON RED 用例；混合类型顶层 key 与非标量 binding source 现均失败关闭，15/15 GREEN。
-- Contracts owner 已确认最终薄包 import API，但稳定主干 SHA 尚待其独立 review、push 与集成；本线程未读取其脏 worktree。
-- 所有测试均使用 `/bin/python3.11` 和标准库；未安装依赖、未调用外部服务。
+- Contracts owner 的稳定主干为 `e7797830b09ac367db21f7dde51236e3189e77f3`，公开实现内容 `54a807bc061e79f77a7ba52bcf6d6827d6966481`；本线程只在其集成 main 后消费。
+- TDD Task 4：先观察缺少 `SharedResultPolicySetValidator` 的 ImportError；薄 adapter 只调用共享 `from_mapping`，duplicate/dangling 的 path/code/message 保真，2/2 GREEN。
+- 主控对象级审查发现 model binding 可写 `/userId` 和 required resolved input 可缺来源；两条最小变异先失败，修正后领域测试 17/17 GREEN。
+- 完整 Capability 测试 19/19 GREEN；Contracts Python 16/16、schema 57/57、import smoke 和 9-case fixture 均 PASS。
+- owned-path、`git diff --check`、clean-room sensitive scan、生产行为、bytecode 与 `admin:admin` 属主检查均 PASS。
+- worker 源码内容至 `1286435737f869599a2179dc506b2dfd2d8fe725`；仅依赖 Python 3.11 标准库和仓库内共享 Contracts 源码。
+- 未安装依赖、未调用外部服务、未部署、未访问数据库或 credential value。
+- Runtime/PostgreSQL/部署/E2E 均保持 `NO READY`。
 
 ## 已移除的活动冲突
 
@@ -56,12 +62,12 @@
 
 不修改共享 contracts、根依赖、其他任务目录和其他 checkpoint。不部署、不配 secret、不调用真实外部写。
 
-## 首个可执行切片
+## 已批准源码切片
 
 - 修订本任务 OpenSpec 并向 main-brain 回传基线、冲突、范围、切片、依赖。
 - 创建 PROVISIONAL 合成 ability/call/failure/result fixture。
 - 用现有轻量工具验证 JSON 与可信边界。
-- 等待 Contracts 稳定 commit 与 main-brain 命名 approved revision 后再实现 Registry Python 模块。
+- `SW-P1-SUBSET-01` Python 域模块、共享 policy adapter、README 与源码验证已完成。
 
 ## 真实依赖
 
@@ -71,7 +77,7 @@
 
 ## Next Executable Action
 
-等待 Contracts 薄包稳定 SHA；随后先写 `SharedResultPolicySetValidator` 失败测试，再实现仅做异常 issue 映射的 adapter。
+提交本轮 evidence 文档，merge 最新 `origin/main` 后 fresh verify，push worker 并通过独占 integration worktree 集成 main。
 
 ## 交付记录
 
@@ -83,4 +89,10 @@
 - ResultInterpretationPolicy consumer 内容 commit：`6883610b70e6a8502b45084b953bb1de05a83558`。
 - 同步最新 main 后 worker/main：`57d11fcfee3481512d444a51fee0db3280357789`（fast-forward 集成）。
 - fixture 输出：9 cases、2 rejected policies；missing/null/strict JSON type 检查通过。
-- 设计/共享契约仍待 named approved revision；Runtime 仍 NO READY。
+- 实现计划 commit：`b59c15ce92172708b78f2915731dcbb7562840f0`。
+- 核心实现 commit：`92eeb151edf6132d0d873ad3fbbd82a054465cf8`。
+- 畸形 JSON fail-closed commit：`26eb1123e98343d84457fc68e830b5490670e087`。
+- README commit：`a1e7b1a2ef73c2f557ff61acdcac15f90738fc14`。
+- shared adapter commit：`331c47b0eda2862df3f3c5575d2d8986856c6994`。
+- 主控审查边界修正 commit：`1286435737f869599a2179dc506b2dfd2d8fe725`。
+- 源码已验证，仍待最终 worker push/main 集成；Runtime 仍 NO READY。
