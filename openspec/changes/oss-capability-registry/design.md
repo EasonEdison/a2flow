@@ -6,8 +6,9 @@
 | --- | --- |
 | 基线 | SW-P1-20260907.2 |
 | 设计 | PROPOSED / BASELINE ALIGNED |
-| 共享接口 | 等待 main-brain 审阅 contracts 候选 |
+| 共享接口 | `SW-CONTRACTS-P1-CANDIDATE.1` PROVISIONAL；等待 named approved revision |
 | Runtime | Python + Deep Agents SDK + LangGraph |
+| Registry backend | ENG-01：独立 Python 域模块；不自动等于独立常驻服务 |
 | 数据库 | PostgreSQL-only；PRT/ONLINE 分库 |
 | Runtime readiness | NO READY |
 | 本批范围 | OpenSpec 对齐 + 合成契约样例，不执行真实外部写 |
@@ -45,8 +46,8 @@ LangChain 官方 Tools 文档说明 `ToolRuntime` 参数由运行时注入并隐
 - `outputSchema`：adapter 成功返回的结构 schema。
 - `inputBindings[]`：按 RFC 6901 Pointer 映射模型参数、静态常量、可信上下文。
 - `credentialRequirements[]`：逻辑凭证槽位；不包含环境引用或明文。
-- `successPolicies[]`：命名成功策略，shape/语义依赖共享 contracts。
-- `defaultSuccessPolicyRef`：普通 execute_ability 使用的发布期默认策略；模型不可选择。
+- `resultInterpretationPolicies[]`：候选 `ResultInterpretationPolicy` array，每项携带唯一 `policyRef`。
+- `defaultSuccessPolicyRef`：必须解析到 array 内策略；普通 execute_ability 使用发布期默认策略，模型不可选择。
 - `adapterOperationRef`：逻辑适配器操作引用，不是任意 URL 或脚本。
 - `contractFormatVersion`：共享契约版本。
 
@@ -155,11 +156,25 @@ TrustedAbilityContext {
 
 ## 8. 成功解释器
 
-成功解释器必须是纯函数：输入已通过 `outputSchema` 的结果和已发布的 `ResultInterpretationPolicy`，输出结构化判定；不得进行网络调用、写数据库、触发重试或改变 Workflow 状态。
+成功解释器必须是 Runtime 内的纯函数：输入已通过 `outputSchema` 的结果和已发布的 `ResultInterpretationPolicy`，输出结构化判定；不得进行网络调用、写数据库、触发重试或改变 Workflow 状态。Capability Registry 和 A2UI 都不得实现另一解释器。
 
-首版候选：
+Contracts owner 当前给出的消费候选 revision 是 `SW-CONTRACTS-P1-CANDIDATE.1`，仍为 PROVISIONAL：
 
 ```text
+ResultInterpretationPolicy =
+  | {
+      contractRevision,
+      policyRef,
+      operator: "SCHEMA_VALID"
+    }
+  | {
+      contractRevision,
+      policyRef,
+      operator: "JSON_POINTER_EQUALS",
+      jsonPointer,
+      expectedLiteral: JsonPrimitive
+    }
+
 ResultInterpretation {
   policyRef
   matched: true | false
@@ -169,20 +184,17 @@ ResultInterpretation {
 }
 ```
 
-建议只支持：
+`JsonPrimitive` 只允许 string、number、boolean 或 null。首版禁止 conditions array、ANY/ALL、NOT_EQUALS、脚本、正则表达式链、模型判断和任意表达式。
 
-- `SCHEMA_VALID`：transport 成功且 output schema 合法。
-- `JSON_POINTER_EQUALS`：指定 output JSON Pointer 等于已发布 literal。
+`SCHEMA_VALID` 必须是显式发布并被选中的策略，不能把“output schema 通过”自动等同于业务成功。`JSON_POINTER_EQUALS` 使用 RFC 6901 JSON Pointer，并遵循以下失败关闭语义：
 
-不支持脚本、正则表达式链、模型判断或任意表达式。Capability Registry 校验并发布命名策略和 `defaultSuccessPolicyRef`；普通 execute_ability 使用该默认策略，模型不可选择。Runtime 实现唯一解释器；A2UI Action 只能从发布策略中选择 `successPolicyRef` 并配置 `completeInteractionOnSuccess`。若 main-brain 选择由 A2UI 内联策略，仍必须复用同一 contracts schema 和 Runtime 解释器。
+- `MISSING` 与 `FOUND(null)` 是不同解析结果；`MISSING` 永不匹配，reasonCode 为 `PATH_MISSING`。
+- `FOUND(null)` 可与 JSON null 比较。
+- string、number、boolean 与 null 只在同类型同值时相等，不做隐式转换。
 
-区分三个事实：
+Capability Registry 校验并发布 `resultInterpretationPolicies` 和 `defaultSuccessPolicyRef`。Runtime 对当前环境/userId 解析并通过版本 guard 后的精确 ability release 查找策略；这不允许冻结旧 release 继续执行，版本失配仍然 `resetRequired=true`。A2UI Action 只能对该精确 release 选择 `successPolicyRef` 并配置 `completeInteractionOnSuccess`。
 
-1. output schema 合法；
-2. 配置的业务成功条件命中；
-3. A2UI 交互是否完成。
-
-Finalizer 不得覆盖其中任何失败事实。
+四个事实必须分别记录：output schema validity、policy match、Action call、interaction completion。Ability 执行结果拥有前两项；A2UI/Runtime 交互记录拥有后两项。Finalizer 不得覆盖任何失败事实。
 
 ## 9. 逻辑端口与结果
 
@@ -229,6 +241,8 @@ ExecuteAbilityResult {
     | ADAPTER_TIMEOUT
     | OUTPUT_INVALID
   output?
+  outputSchemaValidated?
+  policyMatched?
   interpretation?
   errorCode?
   resetRequired
@@ -247,7 +261,7 @@ ExecuteAbilityResult {
 3. Pointer 绑定无重叠且 required 输入来源闭合。
 4. 可信字段/credential 不出现在模型参数和常量来源。
 5. 常量通过 resolved input 的对应子 schema。
-6. success policy 的 pointer 可由 output schema 支持，literal 类型兼容。
+6. `resultInterpretationPolicies` 的 policyRef 唯一、default ref 可解析；JSON Pointer 可由 output schema 支持，expectedLiteral 是类型兼容的 JSON primitive。
 7. adapterOperationRef 和 credential slot 引用完整。
 8. 合成定义不包含凭证明文、私有 endpoint 或任意脚本。
 
@@ -278,9 +292,9 @@ ExecuteAbilityResult {
 
 | 依赖 | 本域需要 | 本域提供 | 失败边界 |
 | --- | --- | --- | --- |
-| contracts | TrustedContext、Environment、ReleaseRef、resolver/version guard、AuthorizationDecision、CredentialRef、ResultInterpretationPolicy、错误包络 | ability payload 消费需求、合成样例 | 未批准 revision 前不实现依赖代码 |
+| contracts | TrustedContext、Environment、ReleaseRef、resolver/version guard、AuthorizationDecision、CredentialRef、ResultInterpretationPolicy、错误包络 | ability payload 消费需求、合成样例 | `SW-CONTRACTS-P1-CANDIDATE.1` 仍 PROVISIONAL；未命名 approved revision 前不实现依赖代码 |
 | Runtime | ToolRuntime 注入、统一 execute_ability、一次调用、唯一解释器 | model/resolved/output schema、binding、success policy、adapter ref | 不支持契约版本或失配时业务调用前失败 |
-| A2UI | successPolicyRef 选择、completion 配置 | 可引用的命名成功策略 | 不允许 A2UI 自建第二解释器 |
+| A2UI | 精确 ability release 上的 successPolicyRef 选择、completion 配置 | 可引用的命名成功策略 | 不允许 A2UI 自建第二解释器或 ResultConditionRef |
 | Skill/Workflow | ability allowlist、可信 run/node 上下文 | abilityKey 与发布引用的解析结果 | Skill 文案不能扩大授权 |
 | Adapter/API backend | 逻辑 operation、credential resolution、业务响应 | validated resolved input | adapter 失败只报告；业务幂等/重试归后端 |
 

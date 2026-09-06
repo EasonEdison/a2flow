@@ -40,21 +40,30 @@
 
 ### Requirement: 发布契约必须分离 schema、绑定和成功策略
 
-系统 SHALL 发布 model argument、resolved input、output schema、来源绑定、credential requirement、adapter operation、命名 success policy 和模型不可选择的 defaultSuccessPolicyRef；实际 release/version 包络由共享 contracts 拥有。
+系统 SHALL 发布 model argument、resolved input、output schema、来源绑定、credential requirement、adapter operation、`resultInterpretationPolicies` array 和模型不可选择的 `defaultSuccessPolicyRef`；每个 policy 必须有唯一 `policyRef`，default ref 必须可解析。实际 release/version 包络由共享 contracts 拥有。
 
 #### Scenario: success policy 与输出 schema 不兼容
 
-- **WHEN** JSON_POINTER_EQUALS 指向 output schema 不支持的路径或 literal 类型不兼容
+- **WHEN** `JSON_POINTER_EQUALS` 的 `jsonPointer` 指向 output schema 不支持的路径，或 JSON primitive `expectedLiteral` 类型不兼容
 - **THEN** 发布静态验证失败并返回稳定 ruleCode/path，不产生发布版本
 
 ### Requirement: 成功解释器必须只有一个实现
 
-系统 SHALL 使用共享 ResultInterpretationPolicy schema，并由 Runtime 在 output schema 校验后执行唯一解释器。Capability Registry 发布命名策略；A2UI 选择 policyRef 并拥有 interaction completion，不得实现第二套解释器。
+系统 SHALL 使用共享 `ResultInterpretationPolicy` schema，并由 Runtime 在 output schema 校验后执行唯一解释器。首版只允许 `SCHEMA_VALID` 和 `JSON_POINTER_EQUALS`；禁止 ANY/ALL、NOT_EQUALS 或其他表达式 AST。Capability Registry 发布命名策略；A2UI 对精确 ability release 选择 `successPolicyRef` 并拥有 `completeInteractionOnSuccess`，不得实现第二套解释器。
 
 #### Scenario: 业务成功条件未命中
 
 - **WHEN** adapter 返回通过 output schema 的结果，但配置的 successPolicyRef 判定 matched=false
 - **THEN** execute_ability 返回 `BUSINESS_NOT_SUCCESSFUL`，A2UI/Finalizer 不得把当前事实改写为成功
+
+### Requirement: JSON Pointer 判定必须失败关闭且类型严格
+
+系统 SHALL 区分 `MISSING` 与 `FOUND(null)`。`MISSING` 必须返回 `matched=false` 和 `PATH_MISSING`；`FOUND(null)` 可按 JSON null 参与比较。字符串、数字、布尔值和 null 必须同类型同值才相等，禁止隐式类型转换。
+
+#### Scenario: 路径缺失不能被当成 null 或不等式成功
+
+- **WHEN** `jsonPointer` 无法解析到值
+- **THEN** 解释器返回 `matched=false`、`reasonCode=PATH_MISSING`，且不得把缺失值视为 JSON null 或成功条件
 
 ### Requirement: 一次 Tool 调用不得自动重试业务调用
 

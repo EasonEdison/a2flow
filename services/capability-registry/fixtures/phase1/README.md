@@ -10,7 +10,10 @@
 - userId、PRT/ONLINE、授权、版本和 credential reference 位于可信上下文。
 - PRT current 与 ONLINE gray 都使用同环境 release。
 - 版本失配、授权拒绝和参数错误在 adapter 调用前关闭。
-- output schema 合法与 configured success 分开。
+- ability release 使用候选 `resultInterpretationPolicies[]` 与 `defaultSuccessPolicyRef`；仍不冻结 shared schema。
+- output schema validity、policy match、Action call 与 interaction completion 分开。
+- JSON Pointer `MISSING` 与 `FOUND(null)` 分开；缺失永不 match，null 可严格比较。
+- JSON primitive 比较不做字符串、数字、布尔值或 null 的隐式类型转换。
 - adapter 超时不触发 Runtime 业务自动重试。
 
 ## 合成与安全边界
@@ -29,4 +32,4 @@ python3 -m json.tool services/capability-registry/fixtures/phase1/execute-abilit
 python3 services/capability-registry/fixtures/phase1/validate_examples.py
 ```
 
-校验器只使用 Python 标准库，验证样例内部不变量；它不替代共享 contracts schema 校验。
+校验器只使用 Python 标准库，验证样例内部不变量；它不实现 Runtime 解释器，也不替代 approved shared contracts schema 校验。

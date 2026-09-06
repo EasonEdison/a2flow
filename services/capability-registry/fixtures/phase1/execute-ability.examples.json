@@ -55,6 +55,18 @@
           "items": {
             "type": "string"
           }
+        },
+        "optionalValue": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "comparisonValue": {
+          "type": [
+            "integer",
+            "string"
+          ]
         }
       }
     },
@@ -78,17 +90,58 @@
     ],
     "adapterOperationRef": "demo.catalog.lookup.read",
     "defaultSuccessPolicyRef": "okTrue",
-    "successPolicies": [
+    "resultInterpretationPolicies": [
       {
-        "policyId": "okTrue",
-        "rule": {
-          "kind": "JSON_POINTER_EQUALS",
-          "path": "/ok",
-          "expected": true
-        }
+        "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+        "policyRef": "okTrue",
+        "operator": "JSON_POINTER_EQUALS",
+        "jsonPointer": "/ok",
+        "expectedLiteral": true
+      },
+      {
+        "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+        "policyRef": "optionalNull",
+        "operator": "JSON_POINTER_EQUALS",
+        "jsonPointer": "/optionalValue",
+        "expectedLiteral": null
+      },
+      {
+        "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+        "policyRef": "numberOne",
+        "operator": "JSON_POINTER_EQUALS",
+        "jsonPointer": "/comparisonValue",
+        "expectedLiteral": 1
+      },
+      {
+        "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+        "policyRef": "schemaValid",
+        "operator": "SCHEMA_VALID"
       }
     ]
   },
+  "rejectedPolicyDefinitions": [
+    {
+      "caseId": "not_equals_operator_rejected",
+      "policy": {
+        "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+        "policyRef": "invalidNotEquals",
+        "operator": "NOT_EQUALS",
+        "jsonPointer": "/ok",
+        "expectedLiteral": false
+      },
+      "expectedErrorCode": "RESULT_POLICY_OPERATOR_UNSUPPORTED"
+    },
+    {
+      "caseId": "condition_ast_rejected",
+      "policy": {
+        "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+        "policyRef": "invalidAll",
+        "operator": "ALL",
+        "conditions": []
+      },
+      "expectedErrorCode": "RESULT_POLICY_OPERATOR_UNSUPPORTED"
+    }
+  ],
   "cases": [
     {
       "caseId": "prt_current_success",
@@ -133,6 +186,8 @@
         "adapterCalled": true,
         "runtimeRetryCount": 0,
         "resetRequired": false,
+        "outputSchemaValidated": true,
+        "policyMatched": true,
         "interpretation": {
           "policyRef": "okTrue",
           "matched": true,
@@ -181,6 +236,8 @@
         "adapterCalled": true,
         "runtimeRetryCount": 0,
         "resetRequired": false,
+        "outputSchemaValidated": true,
+        "policyMatched": true,
         "interpretation": {
           "policyRef": "okTrue",
           "matched": true,
@@ -272,6 +329,8 @@
         "adapterCalled": true,
         "runtimeRetryCount": 0,
         "resetRequired": false,
+        "outputSchemaValidated": true,
+        "policyMatched": false,
         "interpretation": {
           "policyRef": "okTrue",
           "matched": false,
@@ -307,6 +366,132 @@
         "adapterCalled": true,
         "runtimeRetryCount": 0,
         "resetRequired": false
+      }
+    },
+    {
+      "caseId": "missing_pointer_fails_closed",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-missing"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-missing",
+        "environment": "PRT",
+        "authorizationContext": "fixture-authorized",
+        "observedConfigVersions": {
+          "ability": "provisional-prt-v1"
+        },
+        "invocationId": "fixture-invocation-007"
+      },
+      "resolvedAbility": {
+        "releaseRef": "provisional-ability-prt-v1",
+        "environment": "PRT",
+        "servingTrack": "CURRENT"
+      },
+      "effectiveSuccessPolicyRef": "optionalNull",
+      "adapterOutput": {
+        "ok": true,
+        "items": []
+      },
+      "result": {
+        "status": "BUSINESS_NOT_SUCCESSFUL",
+        "adapterCalled": true,
+        "runtimeRetryCount": 0,
+        "resetRequired": false,
+        "outputSchemaValidated": true,
+        "policyMatched": false,
+        "interpretation": {
+          "policyRef": "optionalNull",
+          "matched": false,
+          "reasonCode": "PATH_MISSING"
+        }
+      }
+    },
+    {
+      "caseId": "found_null_matches_null",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-null"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-null",
+        "environment": "PRT",
+        "authorizationContext": "fixture-authorized",
+        "observedConfigVersions": {
+          "ability": "provisional-prt-v1"
+        },
+        "invocationId": "fixture-invocation-008"
+      },
+      "resolvedAbility": {
+        "releaseRef": "provisional-ability-prt-v1",
+        "environment": "PRT",
+        "servingTrack": "CURRENT"
+      },
+      "effectiveSuccessPolicyRef": "optionalNull",
+      "adapterOutput": {
+        "ok": true,
+        "items": [],
+        "optionalValue": null
+      },
+      "result": {
+        "status": "SUCCEEDED",
+        "adapterCalled": true,
+        "runtimeRetryCount": 0,
+        "resetRequired": false,
+        "outputSchemaValidated": true,
+        "policyMatched": true,
+        "interpretation": {
+          "policyRef": "optionalNull",
+          "matched": true,
+          "evidencePath": "/optionalValue"
+        }
+      }
+    },
+    {
+      "caseId": "strict_type_mismatch",
+      "modelToolInput": {
+        "abilityKey": "demo.catalog.lookup",
+        "arguments": {
+          "query": "synthetic-type"
+        }
+      },
+      "trustedContext": {
+        "userId": "fixture-user-type",
+        "environment": "PRT",
+        "authorizationContext": "fixture-authorized",
+        "observedConfigVersions": {
+          "ability": "provisional-prt-v1"
+        },
+        "invocationId": "fixture-invocation-009"
+      },
+      "resolvedAbility": {
+        "releaseRef": "provisional-ability-prt-v1",
+        "environment": "PRT",
+        "servingTrack": "CURRENT"
+      },
+      "effectiveSuccessPolicyRef": "numberOne",
+      "adapterOutput": {
+        "ok": true,
+        "items": [],
+        "comparisonValue": "1"
+      },
+      "result": {
+        "status": "BUSINESS_NOT_SUCCESSFUL",
+        "adapterCalled": true,
+        "runtimeRetryCount": 0,
+        "resetRequired": false,
+        "outputSchemaValidated": true,
+        "policyMatched": false,
+        "interpretation": {
+          "policyRef": "numberOne",
+          "matched": false,
+          "evidencePath": "/comparisonValue",
+          "reasonCode": "VALUE_MISMATCH"
+        }
       }
     }
   ]

@@ -13,8 +13,9 @@
 - 环境：服务器独立 worker worktree；现有 `Python 3.6.8`，未安装或升级任何依赖。
 - 命令：`python3 -m json.tool services/capability-registry/fixtures/phase1/execute-ability.examples.json >/dev/null`。
 - 命令：`python3 services/capability-registry/fixtures/phase1/validate_examples.py`。
-- 输出：`PASS baseline=SW-P1-20260907.2 cases=6`。
+- 输出：`PASS baseline=SW-P1-20260907.2 contract=SW-CONTRACTS-P1-CANDIDATE.1 cases=9 rejected_policies=2`。
 - 输出：`PASS trusted_fields_hidden pre_call_failures_closed runtime_business_retries=0`。
+- 输出：`PASS pointer_missing_closed found_null_distinct strict_json_types`。
 - 限制：`runtime_evidence=false`；未运行 Registry、Runtime、PostgreSQL、adapter 或真实外部请求。
 
 ## 计划矩阵
@@ -29,6 +30,10 @@
 | CA-06 | modelArguments 或 resolved input 不符合 schema | status=ARGUMENT_INVALID；adapterCalled=false；错误含稳定 path/code |
 | CA-07 | output schema 通过但 JSON_POINTER_EQUALS 未命中 | status=BUSINESS_NOT_SUCCESSFUL；interpretation.matched=false；不改写为成功 |
 | CA-08 | adapter 超时或业务失败 | 一次 Tool call 的 adapter 调用数=1；Runtime 自动重试数=0；业务幂等不由平台宣称 |
+| CA-09 | JSON Pointer 路径缺失 | output schema 仍合法；policyMatched=false；reasonCode=PATH_MISSING；不得当成 null |
+| CA-10 | JSON Pointer 找到真实 JSON null，expectedLiteral=null | policyMatched=true；与 MISSING 结果不同 |
+| CA-11 | observed string `"1"`、expected number `1` | policyMatched=false；不做隐式类型转换 |
+| CA-12 | 发布 NOT_EQUALS 或 ALL/conditions AST | 静态拒绝 RESULT_POLICY_OPERATOR_UNSUPPORTED；不进入 Runtime 解释 |
 
 ## 计划接口证据
 
@@ -36,7 +41,7 @@
 
 - model params：`abilityKey`、`arguments`。
 - trusted params：`userId`、`environment`、`authorizationContext`、observed versions、run/node context、`invocationId`。
-- success data：`invocationId`、`abilityReleaseRef`、`status=SUCCEEDED`、`output`、`interpretation.matched=true`、`adapterCalled=true`。
+- success data：`invocationId`、`abilityReleaseRef`、`status=SUCCEEDED`、`outputSchemaValidated=true`、`policyMatched=true`、`interpretation.matched=true`、`adapterCalled=true`。
 - pre-call failure data：稳定 status/errorCode、`resetRequired`、`adapterCalled=false`。
 - adapter failure data：`adapterCalled=true`、失败分类；无平台业务 retry/effect 推断。
 
@@ -46,10 +51,10 @@
 2. Registry 单元测试：schema/binding/success policy 静态验证。
 3. PostgreSQL 集成：PRT/ONLINE 分库、revision、发布竞争。
 4. Runtime contract：ToolRuntime 隐藏字段、resolver、授权、一次调用和唯一解释器。
-5. A2UI integration：Action 选择 successPolicyRef；configured success 与 completion 分离。
+5. A2UI integration：Action 对当前已解析且通过 version guard 的精确 release 选择 successPolicyRef；Action call 与 interaction completion 分离。
 
 ## 本批证据限制
 
 - OpenSpec CLI 与项目依赖未安装时，不进行重型安装。
-- 合成 fixture 不调用真实 endpoint、不证明授权系统、数据库或 Runtime 已实现。
+- 合成 fixture 不调用真实 endpoint、不证明授权系统、数据库或 Runtime 已实现；候选 revision 不是 approved shared contract。
 - 运行命令、环境、commit 和输出必须在实际执行后回填。

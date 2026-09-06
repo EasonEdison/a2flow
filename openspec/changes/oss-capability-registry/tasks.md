@@ -15,7 +15,7 @@
 - [ ] 1.1 main-brain 命名已审阅的 contracts revision。
 - [ ] 1.2 接入共享 TrustedContext、Environment、ReleaseRef、CredentialRef 和错误包络。
 - [ ] 1.3 接入共享 resolver/version guard 与 AuthorizationDecision。
-- [ ] 1.4 接入共享 ResultInterpretationPolicy，不新增领域私有 DSL。
+- [ ] 1.4 接入 approved shared ResultInterpretationPolicy；只使用 SCHEMA_VALID/JSON_POINTER_EQUALS，不新增 ResultCondition AST 或领域私有 DSL。
 
 ## 2. 领域与 PostgreSQL
 
@@ -42,7 +42,7 @@
 
 - [ ] 5.1 与 Runtime 验证 execute_ability 模型 schema 不暴露 userId/environment/credential/version。
 - [ ] 5.2 验证版本失配与授权失败发生在 adapter 调用前。
-- [ ] 5.3 验证 Runtime 唯一成功解释器及 A2UI successPolicyRef 选择。
+- [ ] 5.3 验证 Runtime 唯一成功解释器、严格 JSON Pointer 语义及 A2UI 对精确 release 的 successPolicyRef 选择。
 - [ ] 5.4 验证一次 Tool call 最多一次 adapter 调用，Runtime 不做业务自动重试。
 
 ## 6. 准出
