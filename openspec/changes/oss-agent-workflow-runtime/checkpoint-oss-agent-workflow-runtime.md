@@ -17,18 +17,18 @@
 - 基线提交：1bcc61a4137436f5c3811d555d2af8244c0fc971
 - 工程批准子集：`SW-P1-SUBSET-01`；release SHA256 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
 - 2026-09-07 已核对 linked worktree、branch、status、worktree list。
-- 2026-09-07 多次 fetch/merge origin/main；本里程碑已合入 `28dde023e323c4fa4f9f509b9f6e3954bc669b7a`。
+- 2026-09-07 多次 fetch/merge origin/main；修复前已消费 Skill registry 主干 `d60998e42b43805ae88bb10d2d1b1f2b3127a148`。
 - 所有未提交文件均在本任务 owned OpenSpec 与 `experiments/runtime-phase1/`；未触碰其他 owner 文件。
 
 ## 当前里程碑
 
-- 状态：PHASE1_PARALLEL_PROGRESSION_RED_RECORDED
+- 状态：PHASE1_TOOL_ADMISSION_FIXED_BRANCH_SUBGRAPH_CANDIDATE_RECORDED_PG_PLAN_PENDING
 - Runtime：NO READY
-- 已完成：PY-01 安装/健康复核；task venv；SDK resolver/import；59 项实验 lock；主干 `skillweave_contracts` 严格适配；真实 Skill fixture；Deep Agent Tool surface；离线 Anthropic wire；A2UI mode/interrupt。
-- TDD：首批 15/15 GREEN；有效 RED 包括默认隐式 Tool 暴露、provider schema 非 strict/非批准 pattern、newline key、非法 resolver result 与 Interaction 碰撞。
-- 已交付：worker/source commit `1aa1410ca6ca9537507da776cd8d394c526f13b4` 已 push，并由独占 integration worktree 快进合入 `origin/main`；独立 reviewer 已批准（Critical=0，Important=0）。
-- 新证据：显式 RED reproducer 在 LangGraph 1.2.11 观测到 A interrupt 时 trace 只有 `[B1]`，B2 未进入下一 superstep，join 未运行；未实现 fallback scheduler。
-- 未完成：独立并行 B1→B2 GREEN、PostgreSQL setup、双进程 resume、A2UI-only retry、stop/restart、生产 services/runtime。
+- 已完成：原始 model args 在 ToolRuntime 注入前同步/异步闭合准入；use_skill/render_application 保留 `runtime` 均 resolver 0 次；每个 Workflow 分支一个原生 compiled subgraph 的结构候选。
+- TDD：Runtime 21/21 GREEN；异步基类 `NotImplementedError` 为有效 RED，修复后恶意/合法 async 与 `Command` 透传均 GREEN。
+- 已交付：准入修复 `ad102ab14957df40c098feef61a2c3e396b4f189` 与分支子图候选 `7a8fd6ca48556df17f51b937fb66e37db9236af3` 均已 push 并由独占 integration worktree 快进合入 `origin/main`；修复复审 Critical=0、Important=0。
+- 新证据：平铺 RED 仍为 trace=`[B1]`；分支子图候选在 A interrupt 时 trace=`[B1,B2]` 且 join 未运行。后者只证明结构，不是 PG/durable 证据或已批准执行模型。
+- 未完成：执行模型裁决、PostgreSQL setup、双进程 resume、A2UI-only retry、stop/restart、生产 services/runtime。
 
 ## 移除的冲突
 
@@ -50,18 +50,22 @@
 - `pip check` 无 broken requirements；`requirements.lock` 59 项。
 - psycopg-binary metadata 为 LGPL-3.0-only；正式分发/notice 评审未完成。
 - `SW-P1-SUBSET-01` 共享相关 fixtures 15 个全部匹配主干共享严格适配；全 bundle focused validator 57/57。
-- Runtime suite 首批 15/15 GREEN。
-- 未启动 PostgreSQL/容器/公开服务，未触碰现有 MySQL 或真实 key。
+- Runtime suite 21/21 GREEN；contracts Python 16/16、focused validator 57/57。
+- PG 只读预检：Docker 26.1.3/x86_64/overlay2；无 postgres image/目标 container；available 782MiB、swap used 415MiB、磁盘可用 22GiB。
+- 现有 `yihaidao-mysql` 仅绑定 127.0.0.1:3306，未触碰；admin 无 Docker socket 权限，计划由当前任务 root 管容器、admin 跑测试，不改权限。
+- 未 pull/start PostgreSQL，未创建 volume/目录、公开服务或真实 key。
 
 ## Next Executable Action
 
-向 main-brain 回传已集成的 A 等待/B1→B2 显式 RED reproducer 与实际 assertion；等待其对并行执行模型裁决。不得自建第二 scheduler；PostgreSQL/双进程继续等待明确协调，不以其他 saver 替代。
+等待 main-brain 审查已回传的 PostgreSQL 17.11 immutable image、<=256MiB/0.5CPU、loopback 随机端口、临时凭据、task-owned volume 与停止/清理计划。未获明确确认前不得 pull/start；确认后由本任务作为唯一容器执行者，仍不得触碰现有 MySQL 或用其他 saver 替代 PG。
 
 ## 交付状态
 
-- 已交付源码：`1aa1410ca6ca9537507da776cd8d394c526f13b4`
+- 首批源码：`1aa1410ca6ca9537507da776cd8d394c526f13b4`
+- 原始参数准入修复：`ad102ab14957df40c098feef61a2c3e396b4f189`
 - 并行 RED reproducer：`730331d0b91fb3ec98db5bae6c578c777edc5fcd`；显式执行 exit=1，expected `[B1,B2]` / actual `[B1]`
-- Worker push：PASS，远端 worker=`730331d0b91fb3ec98db5bae6c578c777edc5fcd`
-- Integration：PASS，`origin/main` 包含 source commit `1aa1410ca6ca9537507da776cd8d394c526f13b4` 与 RED commit `730331d0b91fb3ec98db5bae6c578c777edc5fcd`
+- 原生分支子图候选：`7a8fd6ca48556df17f51b937fb66e37db9236af3`；A interrupt、B2 完成、join 未运行
+- Worker source push：PASS，源码 tip=`7a8fd6ca48556df17f51b937fb66e37db9236af3`
+- Integration：PASS，feature tip `7a8fd6ca48556df17f51b937fb66e37db9236af3` 已合入 `origin/main`；本 checkpoint 记录提交在其后
 - OpenSpec structure：PASS；CLI 在 PATH/仓库中均不可用，未在线安装替代
 - Runtime readiness：NO READY
