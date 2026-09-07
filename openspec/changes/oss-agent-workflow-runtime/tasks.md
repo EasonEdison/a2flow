@@ -4,13 +4,14 @@
 
 - Baseline：SW-P1-20260907.2
 - Runtime：NO READY
-- 当前批次：Tool/A2UI/原始参数准入与原生分支子图结构候选完成；PostgreSQL、执行模型裁决、retry/stop/restart 仍未完成
+- 当前批次：SW-P1-ENGINE-FIRST-01，仅继续 Python Deep Agent/Workflow 引擎；PG 固定镜像拉取受阻，其他六域暂停
 
 ## 1. ALIGN
 
 - [x] 核对专属 worker worktree、branch、status 与 worktree list。
 - [x] fetch origin 并持续 merge 最新 origin/main；当前已消费 `28dde023e323c4fa4f9f509b9f6e3954bc669b7a`。
 - [x] 阅读仓库 AGENTS.md、Phase 1 baseline.md 与 plan.md。
+- [x] 消费 `SW-P1-ENGINE-FIRST-01`；不等待 M/BFF/A2UI Host 或其他 registry UI，只用已集成契约/模块与引擎独占合成 fixture/port。
 - [x] 撤销 TypeScript、Runtime 业务幂等、通用 retry/recovery、旧版本冻结续跑和第二 scheduler 主张。
 - [x] 调研 Deep Agents/LangGraph/PostgreSQL checkpointer 当前官方 API、版本与 MIT 许可证。
 - [x] 核对服务器 Python 与现有镜像，确认默认解释器为 platform-python 3.6.8。
@@ -44,7 +45,7 @@
 - [x] 用离线 Anthropic MockTransport 证明 strict provider schema 且 artifact/evidenceRef 未序列化出站。
 - [x] 直接消费主干 `skillweave_contracts` 严格适配，对齐 `SW-P1-SUBSET-01` 的 use_skill/trusted-context 定义并复用 15 个共享 fixture；Pydantic 只承担 Tool argument/provider schema 边界。
 - [x] 隔离证明每个 Workflow 分支一个原生 compiled subgraph 的结构候选：A interrupt 时 B 子图完成 B1→B2，父 join 未运行；不拆 Skill 内部步骤、不实现第二 scheduler。
-- [ ] 将候选升级为产品并行映射前，等待 main-brain 裁决并补 PostgreSQL/恢复证据；平铺父图 RED 继续保留。
+- [ ] 每分支 compiled subgraph 候选已获准进入 PG 验证；任意 DAG/嵌套/恢复仍未验收，平铺父图 RED 继续保留。
 - [ ] 用 AsyncPostgresSaver 替代所有内存/SQLite checkpointer。
 - [ ] 只为 A2UI render/Action 配置 scoped retry。
 - [x] 当前 21 个 Tool/A2UI/SDK/参数准入/分支子图候选用例通过并保留 RED/GREEN 证据；其余行为未开始。
@@ -54,9 +55,10 @@
 - [x] 设计不替换默认解释器的并行 Python 3.11 方案：官方 RPM 事务仅新增 7 个 Python 相关包。
 - [x] main-brain 协调后安装并验证 Python 3.11.13；默认 platform-python 3.6.8、DNF 与 tuned 均保持正常。
 - [x] 创建 admin-owned task venv 并解析/import Deep Agents、LangGraph 与 AsyncPostgresSaver。
-- [ ] main-brain 协调临时 PostgreSQL；不得使用或修改现有 MySQL。
+- [x] PG-P1-01 socket-only/资源限额窗口已批准；无 TCP publish、无 trust auth；OpenSource 不使用 MySQL，yihaidao 专属资源由 main-brain 独占清理。
+- [ ] 固定官方 digest 初次加唯一重试均因镜像代理限流/EOF在 180 秒停止；禁止第三次或换源，等待新协调窗口。
 - [ ] 验证 process A interrupt 后 process B 查询并合法 resume。
-- [ ] 验证并发 invoke、process kill、pending writes 和 node replay 行为。
+- [ ] 本窗口只验证 setup、A退出、B读回/合法 resume 与并行 join；不扩 generic crash recovery、model replay、业务 kill/reconciliation。
 - [ ] 验证 A 等待时 B1→B2；若 SDK 原生不支持，提交最小 reproducer，不自建替代引擎。
 
 ## 5. 依赖与交付

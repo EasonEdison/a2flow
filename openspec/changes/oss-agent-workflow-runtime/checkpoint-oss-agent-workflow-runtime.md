@@ -18,17 +18,18 @@
 - 工程批准子集：`SW-P1-SUBSET-01`；release SHA256 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
 - 2026-09-07 已核对 linked worktree、branch、status、worktree list。
 - 2026-09-07 多次 fetch/merge origin/main；修复前已消费 Skill registry 主干 `d60998e42b43805ae88bb10d2d1b1f2b3127a148`。
+- Engine-first 主干：`f8ecc5bedc4804465f305a4dc8fcbe9d1523229f`；只继续 Python Deep Agent/Workflow Runtime，其他六域暂停。
 - 所有未提交文件均在本任务 owned OpenSpec 与 `experiments/runtime-phase1/`；未触碰其他 owner 文件。
 
 ## 当前里程碑
 
-- 状态：PHASE1_TOOL_ADMISSION_FIXED_BRANCH_SUBGRAPH_CANDIDATE_RECORDED_PG_PLAN_PENDING
+- 状态：ENGINE_FIRST_PG_P1_01_IMAGE_PULL_BLOCKED
 - Runtime：NO READY
 - 已完成：原始 model args 在 ToolRuntime 注入前同步/异步闭合准入；use_skill/render_application 保留 `runtime` 均 resolver 0 次；每个 Workflow 分支一个原生 compiled subgraph 的结构候选。
 - TDD：Runtime 21/21 GREEN；异步基类 `NotImplementedError` 为有效 RED，修复后恶意/合法 async 与 `Command` 透传均 GREEN。
 - 已交付：准入修复 `ad102ab14957df40c098feef61a2c3e396b4f189` 与分支子图候选 `7a8fd6ca48556df17f51b937fb66e37db9236af3` 均已 push 并由独占 integration worktree 快进合入 `origin/main`；修复复审 Critical=0、Important=0。
-- 新证据：平铺 RED 仍为 trace=`[B1]`；分支子图候选在 A interrupt 时 trace=`[B1,B2]` 且 join 未运行。后者只证明结构，不是 PG/durable 证据或已批准执行模型。
-- 未完成：执行模型裁决、PostgreSQL setup、双进程 resume、A2UI-only retry、stop/restart、生产 services/runtime。
+- 新证据：平铺 RED 仍为 trace=`[B1]`；分支子图候选在 A interrupt 时 trace=`[B1,B2]` 且 join 未运行，已获准进入 PG 验证但不代表任意 DAG/恢复验收。
+- 未完成：PG/durable 验证、双进程 resume、Deep Agent use_skill/execute_ability/render_application/Finalizer 最小接线、A2UI-only retry、stop/restart、生产 services/runtime。
 
 ## 移除的冲突
 
@@ -51,13 +52,14 @@
 - psycopg-binary metadata 为 LGPL-3.0-only；正式分发/notice 评审未完成。
 - `SW-P1-SUBSET-01` 共享相关 fixtures 15 个全部匹配主干共享严格适配；全 bundle focused validator 57/57。
 - Runtime suite 21/21 GREEN；contracts Python 16/16、focused validator 57/57。
-- PG 只读预检：Docker 26.1.3/x86_64/overlay2；无 postgres image/目标 container；available 782MiB、swap used 415MiB、磁盘可用 22GiB。
+- PG-P1-01 启动前：Docker 26.1.3/x86_64/overlay2；available 821MiB、swap used 425MiB、磁盘可用 22GiB，目标 image/container/volume/task-dir 均不存在。
 - 现有 `yihaidao-mysql` 仅绑定 127.0.0.1:3306，未触碰；admin 无 Docker socket 权限，计划由当前任务 root 管容器、admin 跑测试，不改权限。
-- 未 pull/start PostgreSQL，未创建 volume/目录、公开服务或真实 key。
+- 固定 `postgres:17.11-bookworm@sha256:051f...272e0` 两次 180 秒拉取均失败：镜像代理 `toomanyrequests`，随后 `unexpected EOF` / `context canceled`；未换源、未第三次重试。
+- 收口后 image/container/volume/task-dir/secret 均不存在；available 837MiB、swap used 440MiB、MySQL healthy/restart=0。未启动 PostgreSQL 或公开服务。
 
 ## Next Executable Action
 
-等待 main-brain 审查已回传的 PostgreSQL 17.11 immutable image、<=256MiB/0.5CPU、loopback 随机端口、临时凭据、task-owned volume 与停止/清理计划。未获明确确认前不得 pull/start；确认后由本任务作为唯一容器执行者，仍不得触碰现有 MySQL 或用其他 saver 替代 PG。
+PG 固定镜像因允许次数耗尽而阻塞，不得自行重试/换源。按 engine-first 优先级，下一步只在 `experiments/runtime-phase1/` 构造 Deep Agent 的 use_skill/execute_ability/render_application/Finalizer 最小接线，消费已集成模块/共享契约和显式 synthetic ports；不依赖未合主干 Action 候选，不恢复其他域或实现第二 scheduler。
 
 ## 交付状态
 

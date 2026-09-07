@@ -7,7 +7,7 @@
 - SDK 行为用例：21/21 GREEN（含每个 Workflow 分支一个原生 compiled subgraph 的结构候选）
 - 共享 contracts focused validator：57/57 GREEN；只代表 shape/fixture
 - 当前完成：Python 3.11 隔离环境、依赖解析/import、`SW-P1-SUBSET-01` 对齐、真实 Skill fixture、离线 Anthropic wire、A2UI mode/interrupt、原始模型参数准入与原生分支子图候选探针
-- 当前阻塞：临时 PostgreSQL 尚未协调；执行模型仍待 main-brain 裁决，双进程、scoped retry、stop/restart 与 live model 尚未验证
+- 当前阻塞：PG-P1-01 固定镜像初次加唯一重试均被镜像代理限流/EOF终止；未 provision，双进程、scoped retry、stop/restart 与 live model 尚未验证
 
 ## 已执行环境证据
 
@@ -70,7 +70,7 @@ SDK 场景必须最终使用 AsyncPostgresSaver 和真实 PostgreSQL：
 - 两个独立 Python 进程共享同一数据库；
 - process A 写 checkpoint/interrupt 后退出；
 - process B 查询并按合法 InteractionRef resume；
-- 并发 invoke、pending writes、node replay 和失败恢复均记录实际输出。
+- 结合获准的每分支 compiled subgraph 候选，验证 A resume 后父 join；首窗口不扩 generic crash recovery、model replay、业务 kill/reconciliation。
 
 InMemorySaver、MemorySaver、SQLite 或单进程 mock 不能作为通过证据。
 
@@ -86,6 +86,6 @@ InMemorySaver、MemorySaver、SQLite 或单进程 mock 不能作为通过证据�
 - Deep Agents 默认 middleware/Tool 暴露已审计并收口；Tool exception 与 A2UI-only retry 行为尚未完成。
 - scripted model 被预编程调用 use_skill，不能证明 live model 无法绕过；原始 args 闭合准入仅证明 probe 路径，不替代产品 Runtime guard。
 - 平铺父图的 LangGraph 1.2.11 反例仍为 RED（只到 B1）；每个 Workflow 分支一个 compiled subgraph 的结构候选为 1/1 GREEN（A interrupt、B2 完成、join 未运行），但尚未完成 PostgreSQL/恢复验证，也不是已批准执行模型。
-- PostgreSQL setup/persistence、双进程恢复、合法 Action resume、并发 invoke 尚未证明。
+- PostgreSQL setup/persistence、双进程恢复与合法 Action resume 尚未证明；本轮镜像拉取阻塞不是行为 RED。
 - stop/restart、Finalizer、完整 Workflow accumulator 与真实 Ability 调用尚未证明。
 - 真实模型、公共部署和业务系统均不在本次授权。
