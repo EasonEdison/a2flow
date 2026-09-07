@@ -1,5 +1,9 @@
 # Platform contributor instructions
 
+## Latest priority: Python engine first (2026-09-07)
+
+Read `openspec/changes/skillweave-phase1/priority-engine-first.md` (SW-P1-ENGINE-FIRST-01). Only the Python Agent/Workflow Runtime domain continues; all six other domains pause new work and preserve owned changes. This latest user instruction supersedes earlier start-all and candidate-extension approvals without changing established behavior or deployment boundaries.
+
 ## Current phase authorization (2026-09-07)
 
 - The user authorized phase 1 execution and main-brain-led coordination. Read `openspec/changes/skillweave-phase1/baseline.md` (SW-P1-20260907.2) and `plan.md` before working. These supersede conflicting old design-only instructions and proposed languages/semantics below.
