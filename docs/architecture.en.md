@@ -1,12 +1,12 @@
-# SkillWeave Platform Architecture
+# A2Flow Platform Architecture
 
 [中文](architecture.zh-CN.md) · [Documentation](README.md) · [Project home](../README.md)
 
-This guide explains SkillWeave's target architecture and confirmed product boundaries. Implementation status is a snapshot as of 2026-09-07 at source baseline `0e73d8b`: the Python Agent/Workflow engine is the current priority. The repository contains partial contracts, registry core modules, and framework experiments; the complete platform has not passed deployment acceptance. Target capabilities described below are not claims of shipped features.
+This guide explains A2Flow's target architecture and confirmed product boundaries. Implementation status is a snapshot as of 2026-09-07 at source baseline `0e73d8b`: the Python Agent/Workflow engine is the current priority. The repository contains partial contracts, registry core modules, and framework experiments; the complete platform has not passed deployment acceptance. Target capabilities described below are not claims of shipped features.
 
 ## 1. Purpose
 
-SkillWeave is a general-purpose platform for AI application developers. It manages reusable Skills, business abilities, and interactive interfaces, composes them into Workflows, and exposes conversation and task execution through a digital-employee product.
+A2Flow is a general-purpose platform for AI application developers. It manages reusable Skills, business abilities, and interactive interfaces, composes them into Workflows, and exposes conversation and task execution through a digital-employee product.
 
 The platform addresses three needs:
 
@@ -105,9 +105,9 @@ Transport, complete HTTP interfaces, streaming event formats, and product deploy
 
 ## 6. Python engine: Deep Agents and LangGraph
 
-SkillWeave uses the [Deep Agents Python SDK](https://docs.langchain.com/oss/python/deepagents/overview) as the foundation for generic Agent execution, integrating platform Tools, context, and storage adapters through public extension points. The SDK itself uses LangGraph; this architecture distinguishes Agent execution capabilities from platform-level multi-Skill flows.
+A2Flow uses the [Deep Agents Python SDK](https://docs.langchain.com/oss/python/deepagents/overview) as the foundation for generic Agent execution, integrating platform Tools, context, and storage adapters through public extension points. The SDK itself uses LangGraph; this architecture distinguishes Agent execution capabilities from platform-level multi-Skill flows.
 
-[LangGraph](https://docs.langchain.com/oss/python/langgraph/overview) provides actual graph execution and interruption. Its [persistence mechanisms](https://docs.langchain.com/oss/python/langgraph/persistence) support checkpoints. SkillWeave implements its confirmed authorization, version, interaction, join, and stop policies on top rather than adding a second replacement graph scheduler.
+[LangGraph](https://docs.langchain.com/oss/python/langgraph/overview) provides actual graph execution and interruption. Its [persistence mechanisms](https://docs.langchain.com/oss/python/langgraph/persistence) support checkpoints. A2Flow implements its confirmed authorization, version, interaction, join, and stop policies on top rather than adding a second replacement graph scheduler.
 
 The platform must control the actual available tool surface. SDK integration does not automatically enable shell, filesystem, subagents, or native Skill-directory discovery. In the first version, authorized Skill body and resource loading enters through `use_skill`.
 
@@ -161,7 +161,7 @@ Support for basic parallelism does not imply arbitrary cyclic graphs, complete n
 
 ## 10. PRT, ONLINE, publication, and version changes
 
-All asset types—Skills, abilities, components/Applications, and Workflows—use environment-separated database storage. In the first version, M and Runtime may each use one service deployment that distinguishes PRT/ONLINE through trusted request context; they need not be packaged together. B-side environments remain explicitly separate. PRT and ONLINE are SkillWeave's own logical environments.
+All asset types—Skills, abilities, components/Applications, and Workflows—use environment-separated database storage. In the first version, M and Runtime may each use one service deployment that distinguishes PRT/ONLINE through trusted request context; they need not be packaged together. B-side environments remain explicitly separate. PRT and ONLINE are A2Flow's own logical environments.
 
 | Request environment | Effective configuration | Rollout rule |
 | --- | --- | --- |

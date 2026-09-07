@@ -1,12 +1,12 @@
-# SkillWeave 平台架构
+# A2Flow 平台架构
 
 [English](architecture.en.md) · [文档目录](README.md) · [项目首页](../README.zh-CN.md)
 
-本文介绍 SkillWeave 的目标架构与已确认的产品边界。实现状态以 2026-09-07、源码基线 `0e73d8b` 为快照：当前优先建设 Python Agent/Workflow 引擎，仓库已有部分契约、注册核心模块和框架验证实验，完整平台尚未达到可部署验收状态。下文的目标能力不代表已经上线。
+本文介绍 A2Flow 的目标架构与已确认的产品边界。实现状态以 2026-09-07、源码基线 `0e73d8b` 为快照：当前优先建设 Python Agent/Workflow 引擎，仓库已有部分契约、注册核心模块和框架验证实验，完整平台尚未达到可部署验收状态。下文的目标能力不代表已经上线。
 
 ## 1. 项目定位
 
-SkillWeave 是一个面向 AI 应用开发者的通用平台：管理可复用的 Skill、业务能力和交互界面，将它们组合成 Workflow，再由数字员工产品提供对话与操作入口。
+A2Flow 是一个面向 AI 应用开发者的通用平台：管理可复用的 Skill、业务能力和交互界面，将它们组合成 Workflow，再由数字员工产品提供对话与操作入口。
 
 平台希望解决三个问题：
 
@@ -105,7 +105,7 @@ Workflow 把可复用 Skill 放在有依赖关系的图中，并加入判断、�
 
 ## 6. Python 引擎：Deep Agents 与 LangGraph
 
-SkillWeave 使用 [Deep Agents Python SDK](https://docs.langchain.com/oss/python/deepagents/overview) 作为通用 Agent 的基础，通过公开扩展点接入平台 Tools、上下文和存储适配。SDK 本身基于 LangGraph；这里的分工是“Agent 执行能力”与“平台多 Skill 流程”的不同层次。
+A2Flow 使用 [Deep Agents Python SDK](https://docs.langchain.com/oss/python/deepagents/overview) 作为通用 Agent 的基础，通过公开扩展点接入平台 Tools、上下文和存储适配。SDK 本身基于 LangGraph；这里的分工是“Agent 执行能力”与“平台多 Skill 流程”的不同层次。
 
 [LangGraph](https://docs.langchain.com/oss/python/langgraph/overview) 承担 Workflow 的真实图执行与中断基础，[持久化机制](https://docs.langchain.com/oss/python/langgraph/persistence)承载检查点。平台在其上实现已确认的权限、版本、交互、汇合和停止规则，不另外搭建一套替代图调度器。
 
@@ -161,7 +161,7 @@ LangGraph 的 `thread_id` 是持久化执行上下文的标识，不等于操作
 
 ## 10. PRT、ONLINE、发布与版本变化
 
-所有资产类型——Skill、业务能力、组件/Application、Workflow——都使用环境分离的数据库存储。M 端与 Runtime 首版可各使用一套服务，通过可信请求上下文区分 PRT/ONLINE；这不要求两者共同打包部署。B 端环境明确分离。这里的 PRT/ONLINE 是 SkillWeave 自己的逻辑环境。
+所有资产类型——Skill、业务能力、组件/Application、Workflow——都使用环境分离的数据库存储。M 端与 Runtime 首版可各使用一套服务，通过可信请求上下文区分 PRT/ONLINE；这不要求两者共同打包部署。B 端环境明确分离。这里的 PRT/ONLINE 是 A2Flow 自己的逻辑环境。
 
 | 请求所在环境 | 生效配置 | 灰度规则 |
 | --- | --- | --- |

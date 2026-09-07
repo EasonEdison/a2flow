@@ -1,8 +1,10 @@
-# SkillWeave
+# A2Flow
+
+**Agent Workflows with Interactive UI**
 
 [中文](README.zh-CN.md) | English
 
-SkillWeave is a general-purpose AI application platform that connects reusable Skills, business abilities, A2UI Applications, and multi-Skill Workflows with a digital-employee experience.
+A2Flow is a general-purpose AI application platform that connects reusable Skills, business abilities, A2UI Applications, and multi-Skill Workflows with a digital-employee experience.
 
 Its architecture separates four management platforms—Skill registration, business ability registration, A2UI composition, and Workflow composition—from the digital-employee frontend/backend and a business-independent Python Agent/Workflow Runtime.
 
