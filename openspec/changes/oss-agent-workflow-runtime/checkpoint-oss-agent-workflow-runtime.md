@@ -23,13 +23,13 @@
 
 ## 当前里程碑
 
-- 状态：ENGINE_FIRST_PG_P1_01_IMAGE_PULL_BLOCKED
+- 状态：ENGINE_FIRST_SOURCE_STABILIZATION
 - Runtime：NO READY
-- 已完成：原始 model args 在 ToolRuntime 注入前同步/异步闭合准入；use_skill/render_application 保留 `runtime` 均 resolver 0 次；每个 Workflow 分支一个原生 compiled subgraph 的结构候选。
-- TDD：Runtime 21/21 GREEN；异步基类 `NotImplementedError` 为有效 RED，修复后恶意/合法 async 与 `Command` 透传均 GREEN。
+- 已完成：三 Tool engine spine、同步/异步 Finalizer、原始 args 闭合准入；真实 Skill Registry/fixture、synthetic Ability port 与 DISPLAY_ONLY Application 已贯通；PG 双进程 native-branch interrupt/resume/join 有界探针通过。
+- TDD：Runtime 30/30 GREEN；engine 缺失 Finalizer 与 PG 最终 trace 串行顺序假设均先产生目标 RED，再以最小门禁/并行顺序断言修复。
 - 已交付：准入修复 `ad102ab14957df40c098feef61a2c3e396b4f189` 与分支子图候选 `7a8fd6ca48556df17f51b937fb66e37db9236af3` 均已 push 并由独占 integration worktree 快进合入 `origin/main`；修复复审 Critical=0、Important=0。
 - 新证据：平铺 RED 仍为 trace=`[B1]`；分支子图候选在 A interrupt 时 trace=`[B1,B2]` 且 join 未运行，已获准进入 PG 验证但不代表任意 DAG/恢复验收。
-- 未完成：PG/durable 验证、双进程 resume、Deep Agent use_skill/execute_ability/render_application/Finalizer 最小接线、A2UI-only retry、stop/restart、生产 services/runtime。
+- 未完成：同 thread 并发冲突、修复后 bootstrap 现场 PG 复跑、A2UI-only retry、stop/restart、真实 Ability、live model 与生产 services/runtime。
 
 ## 移除的冲突
 
@@ -51,15 +51,18 @@
 - `pip check` 无 broken requirements；`requirements.lock` 59 项。
 - psycopg-binary metadata 为 LGPL-3.0-only；正式分发/notice 评审未完成。
 - `SW-P1-SUBSET-01` 共享相关 fixtures 15 个全部匹配主干共享严格适配；全 bundle focused validator 57/57。
-- Runtime suite 21/21 GREEN；contracts Python 16/16、focused validator 57/57。
+- Runtime suite 30/30 GREEN；contracts Python 16/16、focused validator 57/57。
 - PG-P1-01 启动前：Docker 26.1.3/x86_64/overlay2；available 821MiB、swap used 425MiB、磁盘可用 22GiB，目标 image/container/volume/task-dir 均不存在。
-- 现有 `yihaidao-mysql` 仅绑定 127.0.0.1:3306，未触碰；admin 无 Docker socket 权限，计划由当前任务 root 管容器、admin 跑测试，不改权限。
-- 固定 `postgres:17.11-bookworm@sha256:051f...272e0` 两次 180 秒拉取均失败：镜像代理 `toomanyrequests`，随后 `unexpected EOF` / `context canceled`；未换源、未第三次重试。
-- 收口后 image/container/volume/task-dir/secret 均不存在；available 837MiB、swap used 440MiB、MySQL healthy/restart=0。未启动 PostgreSQL 或公开服务。
+- yihaidao 专属资源已由 main-brain 按用户授权清理；MySQL 不再是 OpenSource 健康基线，本任务未恢复或使用 MySQL。
+- 原 Docker Hub digest 两次因代理限流/EOF失败；用户批准 ECR mirror 的同一 linux/amd64 manifest digest 后首次 pull 成功，inspect 为 PostgreSQL 17.11。
+- PG-P1-01：network=none、Ports={}、SCRAM-only、256MiB/no-extra-swap、0.5CPU、pids128、shm32MiB；非 superuser role limit=2，第三连接刻意实测拒绝并在 finally 关闭前两连接。
+- process A 在 thread `pg-p1-native-parallel-20260907-02` 写入 trace=`[B1,B2]`、interrupt=1 后退出；独立 process B 读回 before=`[B1,B2]`，resume 后 trace=`[A_RESUMED,B1,B2,JOIN]`、interrupt=0。
+- 首次 ad-hoc bootstrap 因 SQL literal 缺失把一次性 probe 密码写入隔离 PG 日志；该值视为暴露，不复用、不记录。最终 exact container/volume/private dir/image 已删除，不宣称 secure erase。
+- 源码 bootstrap 已改为 libpq SCRAM verifier + NOLOGIN gate；失败确认 role disabled，否则 UNSAFE_UNKNOWN 并要求销毁隔离 PG，synthetic sentinel 3/3 GREEN；修复尚未现场 PG 重跑。
 
 ## Next Executable Action
 
-PG 固定镜像因允许次数耗尽而阻塞，不得自行重试/换源。按 engine-first 优先级，下一步只在 `experiments/runtime-phase1/` 构造 Deep Agent 的 use_skill/execute_ability/render_application/Finalizer 最小接线，消费已集成模块/共享契约和显式 synthetic ports；不依赖未合主干 Action 候选，不恢复其他域或实现第二 scheduler。
+停止扩展实现范围。下一步只对当前 engine-first 与 PG probe owned diff 执行 review/secret scan/完整验证，固定 worker source commit，随后从最新 origin/main 在独占 integration worktree 合入并 push；仍不实现第二 scheduler。
 
 ## 交付状态
 

@@ -4,7 +4,7 @@
 
 - Baseline：SW-P1-20260907.2
 - Runtime：NO READY
-- 当前批次：SW-P1-ENGINE-FIRST-01，仅继续 Python Deep Agent/Workflow 引擎；PG 固定镜像拉取受阻，其他六域暂停
+- 当前批次：SW-P1-ENGINE-FIRST-01，仅继续 Python Deep Agent/Workflow 引擎；PG-P1-01 有界功能探针已完成，其他六域暂停
 
 ## 1. ALIGN
 
@@ -45,10 +45,10 @@
 - [x] 用离线 Anthropic MockTransport 证明 strict provider schema 且 artifact/evidenceRef 未序列化出站。
 - [x] 直接消费主干 `skillweave_contracts` 严格适配，对齐 `SW-P1-SUBSET-01` 的 use_skill/trusted-context 定义并复用 15 个共享 fixture；Pydantic 只承担 Tool argument/provider schema 边界。
 - [x] 隔离证明每个 Workflow 分支一个原生 compiled subgraph 的结构候选：A interrupt 时 B 子图完成 B1→B2，父 join 未运行；不拆 Skill 内部步骤、不实现第二 scheduler。
-- [ ] 每分支 compiled subgraph 候选已获准进入 PG 验证；任意 DAG/嵌套/恢复仍未验收，平铺父图 RED 继续保留。
-- [ ] 用 AsyncPostgresSaver 替代所有内存/SQLite checkpointer。
+- [x] 每分支 compiled subgraph 候选已完成单一 synthetic PG 双进程 interrupt/resume/join 验证；任意 DAG/嵌套/冲突仍未验收，平铺父图 RED 继续保留。
+- [x] PG-P1-01 双进程探针使用 AsyncPostgresSaver；结构单测仍保留 MemorySaver，产品迁移未开始。
 - [ ] 只为 A2UI render/Action 配置 scoped retry。
-- [x] 当前 21 个 Tool/A2UI/SDK/参数准入/分支子图候选用例通过并保留 RED/GREEN 证据；其余行为未开始。
+- [x] 当前 30 个 Tool/A2UI/SDK/参数准入/engine spine/credential-safety/分支子图候选用例通过并保留 RED/GREEN 证据；其余行为未开始。
 
 ## 4. PostgreSQL 与双进程门禁
 
@@ -56,15 +56,17 @@
 - [x] main-brain 协调后安装并验证 Python 3.11.13；默认 platform-python 3.6.8、DNF 与 tuned 均保持正常。
 - [x] 创建 admin-owned task venv 并解析/import Deep Agents、LangGraph 与 AsyncPostgresSaver。
 - [x] PG-P1-01 socket-only/资源限额窗口已批准；无 TCP publish、无 trust auth；OpenSource 不使用 MySQL，yihaidao 专属资源由 main-brain 独占清理。
-- [ ] 固定官方 digest 初次加唯一重试均因镜像代理限流/EOF在 180 秒停止；禁止第三次或换源，等待新协调窗口。
-- [ ] 验证 process A interrupt 后 process B 查询并合法 resume。
-- [ ] 本窗口只验证 setup、A退出、B读回/合法 resume 与并行 join；不扩 generic crash recovery、model replay、业务 kill/reconciliation。
-- [ ] 验证 A 等待时 B1→B2；若 SDK 原生不支持，提交最小 reproducer，不自建替代引擎。
+- [x] 原 Docker Hub 固定 digest 两次受镜像代理阻塞；经用户批准改用同一 amd64 manifest digest 的 ECR mirror，首次 pull 成功。
+- [x] process A 持久化 interrupt 后退出；独立 process B 查询同一 thread 并合法 resume。
+- [x] 本窗口只验证 setup、A退出、B读回/合法 resume 与并行 join；未扩 generic crash recovery、model replay、业务 kill/reconciliation。
+- [x] 验证 A 等待时 B1→B2、resume 后 join；未实现替代引擎或第二 scheduler。
+- [x] 临时 container/volume/private socket+secret dir/image 均已精确清理；不宣称 secure erase。
+- [ ] 新 libpq SCRAM verifier + NOLOGIN bootstrap 与失败禁用/UNSAFE_UNKNOWN 逻辑仅通过 3 个 synthetic sentinel 单元负例，尚未现场 PG 重跑。
 
 ## 5. 依赖与交付
 
 - [x] 接入 main-brain 批准的 `SW-P1-SUBSET-01` use_skill/trusted-context 定义；未批准的 bundle 部分仍不使用。
-- [x] 对接真实 Skill package bytes 与 A2UI owner fixture；execute_ability fixture 待后续。
+- [x] 对接真实 Skill package bytes、A2UI owner fixture 与明确标记 provisional/synthetic 的 execute_ability fixture；未提升为共享 Capability 契约。
 - [x] 更新 regression.md 的 Python/SDK/Tool/provider-wire 真实命令、版本、输出和字段断言。
 - [x] 生成实验 `requirements.lock`；根依赖锁仍由 main-brain 单一所有。
 - [ ] 保持 readiness.md 为 NO READY，直到 PG、双进程和全部目标行为有证据。
