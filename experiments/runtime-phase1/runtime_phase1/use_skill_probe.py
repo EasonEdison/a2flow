@@ -4,11 +4,13 @@ This module exists only to test public LangChain and LangGraph boundaries. It
 does not own the shared Skill contract or production authorization policy.
 """
 
+from collections.abc import Sequence
 import json
 from typing import Annotated, Any, Callable
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
+from langgraph.prebuilt import ToolNode
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, WithJsonSchema
 from skillweave_contracts import (
     TrustedInvocationContext,
@@ -16,14 +18,22 @@ from skillweave_contracts import (
     UseSkillResult,
 )
 
+from runtime_phase1.tool_admission import build_closed_tool_node
+
 
 SKILL_KEY_PATTERN = r"^(?!.*[\r\n])[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)*$"
 
 
-def _validate_skill_key(value: str) -> str:
-    """Apply the integrated neutral contract to model-selected keys."""
+def validate_use_skill_model_args(value: object) -> UseSkillRequest:
+    """Validate the complete original model request against the shared contract."""
 
-    return UseSkillRequest.from_mapping({"skillKey": value}).skill_key
+    return UseSkillRequest.from_mapping(value)
+
+
+def _validate_skill_key(value: str) -> str:
+    """Apply the integrated neutral contract to one model-selected key."""
+
+    return validate_use_skill_model_args({"skillKey": value}).skill_key
 
 
 SkillKeyInput = Annotated[
@@ -53,6 +63,15 @@ class UseSkillArgs(BaseModel):
 
     skillKey: SkillKeyInput
     runtime: ToolRuntime[TrustedInvocationContext]
+
+
+def build_use_skill_tool_node(tools: Sequence[BaseTool]) -> ToolNode:
+    """Build a pre-injection-admitted ToolNode for use_skill."""
+
+    return build_closed_tool_node(
+        tools,
+        {"use_skill": validate_use_skill_model_args},
+    )
 
 
 def build_use_skill_tool(resolver: SkillResolver) -> BaseTool:

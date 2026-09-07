@@ -4,9 +4,9 @@
 
 - 回归状态：PARTIAL
 - Runtime：NO READY
-- SDK 行为用例：15/15 GREEN（首批 Tool/A2UI/contract/provider-wire 切片）
+- SDK 行为用例：20/20 GREEN（Tool/A2UI/contract/provider-wire 与同步/异步原始参数准入切片）
 - 共享 contracts focused validator：57/57 GREEN；只代表 shape/fixture
-- 当前完成：Python 3.11 隔离环境、依赖解析/import、`SW-P1-SUBSET-01` 对齐、真实 Skill fixture、离线 Anthropic wire、A2UI mode/interrupt 探针
+- 当前完成：Python 3.11 隔离环境、依赖解析/import、`SW-P1-SUBSET-01` 对齐、真实 Skill fixture、离线 Anthropic wire、A2UI mode/interrupt 探针、原始模型参数在 ToolRuntime 注入前闭合校验
 - 当前阻塞：LangGraph 1.2.11 单次 invoke 的 A interrupt 会在 B1 后返回，B2 不推进；临时 PostgreSQL 尚未协调，双进程、scoped retry、stop/restart 与 live model 尚未验证
 
 ## 已执行环境证据
@@ -27,7 +27,7 @@
 | Contracts Python adapter | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src ... -m unittest discover -s packages/contracts/tests/python -v` | `Ran 16 tests ... OK` | 共享薄包 strict parse/serialize 通过 |
 | Contracts fixture | `python3 packages/contracts/tests/validate_contracts.py` | `SUMMARY total=57 passed=57 failed=0` | 只证明 shared shape/fixture |
 | Skill fixture | `sha256sum .../evidence-first-brief/SKILL.md` | `1cc034c1d066b24771e9b0d91bc74abd89012268cf225802c25dd33316e06434` | Runtime 测试读取主干真实 package bytes |
-| Runtime suite | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src:experiments/runtime-phase1 ... -m unittest discover ... -v` | `Ran 15 tests ... OK` | 首批 SDK/Tool/A2UI/provider-wire 行为通过 |
+| Runtime suite | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src:experiments/runtime-phase1 ... -m unittest discover ... -v` | `Ran 20 tests ... OK` | SDK/Tool/A2UI/provider-wire 与同步/异步原始参数准入行为通过 |
 
 ## 计划行为场景
 
@@ -56,6 +56,8 @@
 | `render_application` DISPLAY_ONLY | integrated display fixture + Workflow context | `{rendered:true, interactionMode:DISPLAY_ONLY, interaction:null}` | 无 `__interrupt__` |
 | `render_application` INTERACTIVE | integrated interactive fixture + trusted run/node | `A2UI_INTERACTION_REQUIRED` interrupt | runId、nodeId、application/version、tool-call identity 均参与绑定；同 node 两次 render 不碰撞；ordinaryChatMayResume=false |
 | LangGraph parallel wait RED | A interrupt 与 B1→B2 平行，join 等待 A | assertion expected trace=`[B1,B2]`，actual=`[B1]` | interrupt 使单次 invoke 在当前 superstep 后返回；B2 未推进，join 未运行；未实现 fallback scheduler |
+| Tool 原始参数准入 | 模型原始 args 含保留 `runtime` 字段 | status=`error`；Skill/Application resolver 均 0 次 | 使用公开 `wrap_tool_call` / middleware 扩展点，在 ToolRuntime 注入剥离保留字段前按闭合模型契约拒绝；可信 context 未被模型覆盖 |
+| Deep Agent async 准入 | `ainvoke` 合法/保留 `runtime` 两类调用与异步 handler `Command` | 合法 resolver 1 次；恶意 resolver 0 次且 status=`error`；`Command` identity 保持 | `awrap_tool_call` 与同步路径复用同一原始 args 校验；基类 `NotImplementedError` RED 已修复 |
 
 上述 scripted 用例没有证明模型必然调用 use_skill；system prompt 不是授权机制。Anthropic MockTransport 证明的是实际 provider serializer 路径，但不是 live-model 行为。INTERACTIVE 尚未执行合法 Action resume。
 
@@ -81,7 +83,7 @@ InMemorySaver、MemorySaver、SQLite 或单进程 mock 不能作为通过证据�
 ## 未验证门禁
 
 - Deep Agents 默认 middleware/Tool 暴露已审计并收口；Tool exception 与 A2UI-only retry 行为尚未完成。
-- scripted model 被预编程调用 use_skill，不能证明 live model 无法绕过；mandatory admission 仍需 Runtime guard。
+- scripted model 被预编程调用 use_skill，不能证明 live model 无法绕过；原始 args 闭合准入仅证明 probe 路径，不替代产品 Runtime guard。
 - A wait 时 B1→B2 的原生 LangGraph 1.2.11 最小复现已明确 RED：只观测到 B1；B2 未进入下一 superstep。
 - PostgreSQL setup/persistence、双进程恢复、合法 Action resume、并发 invoke 尚未证明。
 - stop/restart、Finalizer、完整 Workflow accumulator 与真实 Ability 调用尚未证明。

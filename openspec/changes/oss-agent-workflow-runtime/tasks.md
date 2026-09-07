@@ -23,6 +23,7 @@
 - [x] 创建 experiments/runtime-phase1/ 的 Python 3.11+ 隔离元数据与 README。
 - [x] 先写 use_skill、真实 Skill fixture bytes 与 content/artifact 分离测试。
 - [x] 先写 Tool schema 不暴露 userId/environment/versionId 的失败测试，并经真实 ToolNode 验证 resolver 未被调用。
+- [x] 先写模型原始 args 携带保留 `runtime` 字段的失败测试，并证明 Skill/Application resolver 均未调用。
 - [x] 先写 DISPLAY_ONLY 不 interrupt、INTERACTIVE 必须 interrupt 的失败测试。
 - [x] 先写 runId/nodeId/application/version/tool-call identity 绑定且不碰撞的 interrupt payload 的失败测试；PostgreSQL resume 仍待后续。
 - [x] 先写 Deep Agents 默认隐式文件/子代理 Tool 暴露的失败测试。
@@ -37,13 +38,15 @@
 
 - [x] 用显式 scripted model 创建 Deep Agent，不使用真实 key 或默认模型。
 - [x] 用公开 Tool/ToolRuntime/context_schema/HarnessProfile extension point 实现首批最小适配。
+- [x] 用公开 `wrap_tool_call` / middleware 扩展点在 ToolRuntime 注入前校验闭合模型参数，不修改第三方源码。
+- [x] 同步/异步 Deep Agent 准入复用同一闭合校验；异步合法、恶意与 `Command` 透传行为均有回归。
 - [x] 关闭默认 `ls/read/write/edit/delete/glob/grep/task/execute` 模型可见入口，仅暴露 Runtime-owned Tool。
 - [x] 用离线 Anthropic MockTransport 证明 strict provider schema 且 artifact/evidenceRef 未序列化出站。
 - [x] 直接消费主干 `skillweave_contracts` 严格适配，对齐 `SW-P1-SUBSET-01` 的 use_skill/trusted-context 定义并复用 15 个共享 fixture；Pydantic 只承担 Tool argument/provider schema 边界。
 - [ ] 用 LangGraph StateGraph 表达 sequence/condition/parallel，不实现第二 scheduler；当前原生 interrupt 会阻断兄弟分支下一 superstep，等待 main-brain 裁决。
 - [ ] 用 AsyncPostgresSaver 替代所有内存/SQLite checkpointer。
 - [ ] 只为 A2UI render/Action 配置 scoped retry。
-- [x] 首批 15 个 Tool/A2UI/SDK 用例通过并保留 RED/GREEN 证据；其余行为未开始。
+- [x] 当前 20 个 Tool/A2UI/SDK/同步异步原始参数准入用例通过并保留 RED/GREEN 证据；其余行为未开始。
 
 ## 4. PostgreSQL 与双进程门禁
 

@@ -10,6 +10,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
+from runtime_phase1.tool_admission import ClosedModelArgsAdmission
+from runtime_phase1.use_skill_probe import validate_use_skill_model_args
+
 
 IMPLICIT_DEEP_AGENT_TOOLS = frozenset(
     {
@@ -46,4 +49,9 @@ def build_deep_agent_probe(
         model=model,
         tools=[use_skill_tool],
         system_prompt="Use authorized Skills only through the use_skill Tool.",
+        middleware=[
+            ClosedModelArgsAdmission(
+                {"use_skill": validate_use_skill_model_args},
+            )
+        ],
     )

@@ -1,28 +1,59 @@
 """Provisional render_application boundary for the Phase 1 probe."""
 
+from collections.abc import Sequence
 import hashlib
 import json
 from typing import Any, Callable
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
+from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 from pydantic import BaseModel, ConfigDict, Field
 
+from runtime_phase1.tool_admission import build_closed_tool_node
 from runtime_phase1.use_skill_probe import TrustedInvocationContext
 
 
 ApplicationResolver = Callable[[str, TrustedInvocationContext], dict[str, Any]]
 
 
-class RenderApplicationArgs(BaseModel):
-    """Validate render input and trusted ToolRuntime injection together."""
+class RenderApplicationModelArgs(BaseModel):
+    """Closed model-visible arguments for render_application."""
 
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+    model_config = ConfigDict(extra="forbid", strict=True)
 
-    applicationKey: str = Field(min_length=1)
+    applicationKey: str = Field(strict=True, min_length=1)
     data: dict[str, Any]
+
+
+class RenderApplicationArgs(RenderApplicationModelArgs):
+    """Add trusted ToolRuntime after original model-argument admission."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        arbitrary_types_allowed=True,
+    )
+
     runtime: ToolRuntime[TrustedInvocationContext]
+
+
+def validate_render_application_model_args(
+    value: object,
+) -> RenderApplicationModelArgs:
+    """Validate the complete original render request before injection."""
+
+    return RenderApplicationModelArgs.model_validate(value, strict=True)
+
+
+def build_render_application_tool_node(tools: Sequence[BaseTool]) -> ToolNode:
+    """Build a pre-injection-admitted ToolNode for render_application."""
+
+    return build_closed_tool_node(
+        tools,
+        {"render_application": validate_render_application_model_args},
+    )
 
 
 def build_render_application_tool(resolver: ApplicationResolver) -> BaseTool:

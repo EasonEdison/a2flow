@@ -9,12 +9,12 @@ from pathlib import Path
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.graph import END, START, MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode
 from skillweave_contracts import ContractValidationError
 
 from runtime_phase1.use_skill_probe import (
     TrustedInvocationContext,
     build_use_skill_tool,
+    build_use_skill_tool_node,
 )
 
 
@@ -153,7 +153,7 @@ class UseSkillProbeTest(unittest.TestCase):
 
         tool = build_use_skill_tool(resolve_fixture)
         builder = StateGraph(MessagesState, context_schema=TrustedInvocationContext)
-        builder.add_node("tools", ToolNode([tool]))
+        builder.add_node("tools", build_use_skill_tool_node([tool]))
         builder.add_edge(START, "tools")
         builder.add_edge("tools", END)
         graph = builder.compile()
@@ -190,7 +190,7 @@ class UseSkillProbeTest(unittest.TestCase):
         """Break caught: Runtime accepts a key rejected by the approved subset."""
 
         builder = StateGraph(MessagesState, context_schema=TrustedInvocationContext)
-        builder.add_node("tools", ToolNode([self.tool]))
+        builder.add_node("tools", build_use_skill_tool_node([self.tool]))
         builder.add_edge(START, "tools")
         builder.add_edge("tools", END)
         graph = builder.compile()
@@ -241,7 +241,7 @@ class UseSkillProbeTest(unittest.TestCase):
 
         tool = build_use_skill_tool(resolve_invalid)
         builder = StateGraph(MessagesState, context_schema=TrustedInvocationContext)
-        builder.add_node("tools", ToolNode([tool]))
+        builder.add_node("tools", build_use_skill_tool_node([tool]))
         builder.add_edge(START, "tools")
         builder.add_edge("tools", END)
         graph = builder.compile()
@@ -297,7 +297,7 @@ class UseSkillProbeTest(unittest.TestCase):
                     MessagesState,
                     context_schema=TrustedInvocationContext,
                 )
-                builder.add_node("tools", ToolNode([tool]))
+                builder.add_node("tools", build_use_skill_tool_node([tool]))
                 builder.add_edge(START, "tools")
                 builder.add_edge("tools", END)
                 graph = builder.compile()
@@ -335,7 +335,7 @@ class UseSkillProbeTest(unittest.TestCase):
         """Break caught: trusted/evidence fields leak into model-facing content."""
 
         builder = StateGraph(MessagesState, context_schema=TrustedInvocationContext)
-        builder.add_node("tools", ToolNode([self.tool]))
+        builder.add_node("tools", build_use_skill_tool_node([self.tool]))
         builder.add_edge(START, "tools")
         builder.add_edge("tools", END)
         graph = builder.compile()
@@ -376,7 +376,7 @@ class UseSkillProbeTest(unittest.TestCase):
         self.assertFalse(strict_parameters["additionalProperties"])
 
         builder = StateGraph(MessagesState, context_schema=TrustedInvocationContext)
-        builder.add_node("tools", ToolNode([self.tool]))
+        builder.add_node("tools", build_use_skill_tool_node([self.tool]))
         builder.add_edge(START, "tools")
         builder.add_edge("tools", END)
         graph = builder.compile()

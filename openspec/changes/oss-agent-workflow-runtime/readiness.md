@@ -6,7 +6,7 @@
 - Phase 1 基线：ALIGNED
 - `SW-P1-SUBSET-01`：APPROVED_AND_CONSUMED（仅 use_skill/trusted-context 命名闭包）
 - SDK 版本/API：RESOLVED_AND_IMPORTED
-- 实验代码：PARTIAL，15 个首批用例 GREEN
+- 实验代码：PARTIAL，20 个当前用例 GREEN
 - Provider wire：OFFLINE_VERIFIED；live model 未验证
 - PostgreSQL：NOT PROVISIONED
 - 双进程：NOT VERIFIED
@@ -23,7 +23,7 @@
 | Python 运行时 | PASS | Python 3.11.13 并行安装完成；默认 3.6.8、DNF 与 tuned 复核正常 |
 | 依赖锁定 | PARTIAL | resolver/import/pip-check/59 项实验 lock 已完成；`psycopg-binary` LGPL notice/分发评审未完成 |
 | 共享契约 | PARTIAL | `SW-P1-SUBSET-01` 已批准并消费；bundle 其余定义仍 provisional |
-| Tool-only Skill | PARTIAL | model schema/trusted context/provider wire 已通过；Workflow 入口和 mandatory admission 未证明 |
+| Tool-only Skill | PARTIAL | model schema/trusted context/provider wire 与注入前原始 args 闭合准入已通过；Workflow 入口和产品级 mandatory admission 未证明 |
 | Deep Agents Tool surface | PASS_FOR_PROBE | 模型只绑定 Runtime-owned Tool；默认文件/shell/subagent Tool 全部排除 |
 | A2UI | PARTIAL | DISPLAY_ONLY 与 INTERACTIVE interrupt payload 通过；Action resume/success/completion/Finalizer 未通过 |
 | 并行映射 | NO READY | LangGraph 1.2.11 最小复现实际只有 B1，A interrupt 后 B2 未推进；需架构裁决且不得补第二 scheduler |

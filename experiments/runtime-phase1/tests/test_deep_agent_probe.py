@@ -95,6 +95,81 @@ class DeepAgentProbeTest(unittest.TestCase):
             {tool.name for tool in model.boundTools},
         )
 
+    def test_deep_agent_rejects_model_supplied_runtime_before_resolver(self) -> None:
+        """Break caught: injected runtime hides a closed-request violation."""
+
+        resolver_calls: list[str] = []
+
+        def resolve_skill(
+            skill_key: str,
+            context: TrustedInvocationContext,
+        ) -> dict[str, object]:
+            del context
+            resolver_calls.append(skill_key)
+            return {
+                "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+                "content": EXPECTED_CONTENT,
+                "artifact": EXPECTED_ARTIFACT,
+            }
+
+        model = ScriptedToolModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "use_skill",
+                            "args": {
+                                "skillKey": SKILL_KEY,
+                                "runtime": {
+                                    "context": {
+                                        "trustedContext": {
+                                            "userId": "spoofed-user",
+                                            "environment": "ONLINE",
+                                        }
+                                    }
+                                },
+                            },
+                            "id": "call-spoof-runtime",
+                            "type": "tool_call",
+                        }
+                    ],
+                ),
+                AIMessage(content="Rejected."),
+            ]
+        )
+        agent = build_deep_agent_probe(
+            model,
+            build_use_skill_tool(resolve_skill),
+            harness_profile_key="scriptedtoolmodel",
+        )
+        state = agent.invoke(
+            {"messages": [{"role": "user", "content": "Create a brief."}]},
+            context=TrustedInvocationContext.from_mapping(
+                {
+                    "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+                    "trustedContext": {
+                        "userId": "synthetic-user",
+                        "environment": "PRT",
+                    },
+                    "invocationScope": {
+                        "kind": "CONVERSATION",
+                        "conversationId": "conversation-runtime-spoof-1",
+                    },
+                    "controlRequestId": "control-runtime-spoof-1",
+                }
+            ),
+        )
+
+        self.assertEqual([], resolver_calls)
+        tool_messages = [
+            message
+            for message in state["messages"]
+            if isinstance(message, ToolMessage) and message.name == "use_skill"
+        ]
+        self.assertEqual(1, len(tool_messages))
+        self.assertEqual("error", tool_messages[0].status)
+
     def test_deep_agent_calls_use_skill_and_projects_only_content(self) -> None:
         """Break caught: agent bypasses use_skill or exposes trusted evidence."""
 
