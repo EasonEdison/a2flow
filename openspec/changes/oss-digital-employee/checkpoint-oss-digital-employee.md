@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 任务：`oss-digital-employee`
-- 阶段：`SW-P1-SUBSET-01` 已同步；数字员工实现仍未放行
+- 阶段：`PAUSED_BY_PRIORITY`；用户当前优先推进 Python Workflow/DeepAgent 运行引擎，本域停止新增实现、设计、契约与发布工作
 - 设计状态：`PROPOSED`
 - Runtime 准备度：`NO READY`
 - 工作分支：`codex/oss-digital-employee/design`
@@ -45,9 +45,17 @@
 - [x] 公共契约 checker 的既定无安装入口是以 `admin` 运行 `/usr/bin/python3 packages/contracts/tests/validate_contracts.py`（当前 Python 3.6.8 / jsonschema 2.6.0）；协调方已提供独立 57/57 证据，本任务引用该公共证据，不重复运行。
 - [x] 此前使用 `python3.11` 触发的 `jsonschema` 缺失只是验证入口不匹配，不是数字员工 B 端阻塞；未安装依赖，也未把公共校验与 Python 3.11/Runtime 验证混为一谈。
 
+## 暂停交接
+
+- 暂停快照：worker `HEAD=bbd00344684dcf250d1512d747e7b72239a911d4`；`origin/main=f3e5a05398df58dfd4f5a5dfc1445e05604d0977`，前者已被后者包含。
+- 已合入 main 的本域内容：设计对齐 `809ebaafbfeabdf331e04a639e295bc4025b846c`、BFF 选项与职责路径 `c1050b83ddbb5e8b604e690a90b8349e1bdb0ce9`、评审修订 `7569c02e295cad0f65a6c74ede09f77aee039baa`、checker 证据口径修订 `bbd00344684dcf250d1512d747e7b72239a911d4`；没有数字员工应用源码。
+- 暂停前未提交文件：无。
+- 本任务活动命令或后台进程：无。
+- 保留 worktree `/home/admin/OpenSource/repos/.parallel/oss-digital-employee/platform` 和分支 `codex/oss-digital-employee/design`；不 reset、stash、clean、回滚或为暂停强行合并。
+
 ## 下一可执行动作
 
-等待 main-brain 下发数字员工产品的正式实施入口；不要求用户重复背景或开工确认，入口下发前不进入 `apps/digital-employee/` 或 `packages/a2ui-host/` 实现。
+保持暂停。只有 main-brain 在 Python Workflow/DeepAgent 运行引擎优先事项之后下发新的明确最小依赖或恢复指令时，才从保留的 worktree/分支继续；届时先核对 Git 真值，不自行补接口、不进入 `apps/digital-employee/` 或 `packages/a2ui-host/`、不向用户重复请示。
 
 ## 禁止与未决
 
