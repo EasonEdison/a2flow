@@ -1,8 +1,9 @@
 """Fail-closed Finalizer admission for the engine-first probe."""
 
+import secrets
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Annotated, Any
-from typing_extensions import NotRequired
+from typing_extensions import NotRequired, TypedDict
 
 from langchain.agents.middleware import (
     AgentMiddleware,
@@ -18,11 +19,42 @@ _RUNTIME_TOOL_EVIDENCE = "_runtime_tool_evidence"
 RuntimeToolEvidence = tuple[str, str]
 
 
+class RuntimeToolEvidenceState(TypedDict):
+    """Private provenance collected for one Runtime-owned invocation."""
+
+    invocation_id: str
+    facts: list[RuntimeToolEvidence]
+
+
+def _merge_runtime_tool_evidence(
+    current: RuntimeToolEvidenceState | None,
+    update: RuntimeToolEvidenceState,
+) -> RuntimeToolEvidenceState:
+    """Replace stale invocations and merge concurrent facts within one step."""
+
+    if (
+        not isinstance(current, Mapping)
+        or current.get("invocation_id") != update["invocation_id"]
+    ):
+        return {
+            "invocation_id": update["invocation_id"],
+            "facts": list(update["facts"]),
+        }
+    return {
+        "invocation_id": current["invocation_id"],
+        "facts": [*current["facts"], *update["facts"]],
+    }
+
+
 class FinalizerState(AgentState):
     """Agent state with Runtime-owned evidence hidden from input and output."""
 
     _runtime_tool_evidence: NotRequired[
-        Annotated[list[RuntimeToolEvidence], PrivateStateAttr]
+        Annotated[
+            RuntimeToolEvidenceState,
+            PrivateStateAttr,
+            _merge_runtime_tool_evidence,
+        ]
     ]
 
 
@@ -48,10 +80,15 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
         state: Mapping[str, Any],
         runtime: object,
     ) -> dict[str, Any]:
-        """Discard any caller-supplied or checkpoint-stale probe evidence."""
+        """Start a Runtime-owned evidence scope for this invocation."""
 
         del state, runtime
-        return {_RUNTIME_TOOL_EVIDENCE: []}
+        return {
+            _RUNTIME_TOOL_EVIDENCE: {
+                "invocation_id": secrets.token_hex(16),
+                "facts": [],
+            }
+        }
 
     async def abefore_agent(
         self,
@@ -80,12 +117,19 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
             or result.name != call_name
         ):
             return result
-        evidence = list(request.state.get(_RUNTIME_TOOL_EVIDENCE, ()))
-        evidence.append((call_id, call_name))
+        evidence_state = request.state.get(_RUNTIME_TOOL_EVIDENCE)
+        if not isinstance(evidence_state, Mapping):
+            return result
+        invocation_id = evidence_state.get("invocation_id")
+        if not isinstance(invocation_id, str) or not invocation_id:
+            return result
         return Command(
             update={
                 "messages": [result],
-                _RUNTIME_TOOL_EVIDENCE: evidence,
+                _RUNTIME_TOOL_EVIDENCE: {
+                    "invocation_id": invocation_id,
+                    "facts": [(call_id, call_name)],
+                },
             }
         )
 
@@ -120,9 +164,18 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
         if not isinstance(last_message, AIMessage) or last_message.tool_calls:
             return
 
+        evidence_state = state.get(_RUNTIME_TOOL_EVIDENCE)
+        facts = (
+            evidence_state.get("facts", ())
+            if isinstance(evidence_state, Mapping)
+            else ()
+        )
         successful_tools = {
-            tool_name
-            for _, tool_name in state.get(_RUNTIME_TOOL_EVIDENCE, ())
+            fact[1]
+            for fact in facts
+            if isinstance(fact, (list, tuple))
+            and len(fact) == 2
+            and isinstance(fact[1], str)
         }
         missing = [
             name

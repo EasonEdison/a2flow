@@ -4,7 +4,7 @@
 
 - 回归状态：PARTIAL
 - Runtime：NO READY
-- SDK 行为用例：30/30 GREEN（含 engine spine、credential-safety 与原生 compiled subgraph 候选）
+- SDK 行为用例：31/31 GREEN（含 engine spine、credential-safety 与原生 compiled subgraph 候选）
 - 共享 contracts focused validator：57/57 GREEN；只代表 shape/fixture
 - 当前完成：Python 3.11 隔离环境、依赖解析/import、`SW-P1-SUBSET-01` 对齐、真实 Skill fixture、离线 Anthropic wire、A2UI mode/interrupt、三 Tool engine spine、Finalizer、原始参数准入与 PG 双进程 native-branch 探针
 - 当前阻塞：产品 Runtime、A2UI-only retry、stop/restart、同 thread 并发冲突与 live model 尚未验证；修复后的 secret-safe bootstrap 未现场 PG 重跑
@@ -27,7 +27,7 @@
 | Contracts Python adapter | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src ... -m unittest discover -s packages/contracts/tests/python -v` | `Ran 16 tests ... OK` | 共享薄包 strict parse/serialize 通过 |
 | Contracts fixture | `python3 packages/contracts/tests/validate_contracts.py` | `SUMMARY total=57 passed=57 failed=0` | 只证明 shared shape/fixture |
 | Skill fixture | `sha256sum .../evidence-first-brief/SKILL.md` | `1cc034c1d066b24771e9b0d91bc74abd89012268cf225802c25dd33316e06434` | Runtime 测试读取主干真实 package bytes |
-| Runtime suite | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src:services/skill-registry/src:services/capability-registry/src:experiments/runtime-phase1 ... -m unittest discover ... -v` | `Ran 30 tests ... OK` | SDK/Tool/A2UI/provider-wire、engine spine、credential-safety、参数准入与原生分支子图候选通过 |
+| Runtime suite | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src:services/skill-registry/src:services/capability-registry/src:experiments/runtime-phase1 ... -m unittest discover ... -v` | `Ran 31 tests ... OK` | SDK/Tool/A2UI/provider-wire、engine spine、credential-safety、参数准入与原生分支子图候选通过 |
 | PG image/runtime | approved ECR mirror, exact amd64 digest | PostgreSQL 17.11；network=none；Ports={}；256MiB/no-extra-swap；0.5CPU；pids128；shm32MiB；HBA 全 SCRAM | 无 TCP publish/trust；非 superuser role connection limit=2，第三连接实际拒绝 |
 | PG process A | `postgres_parallel_probe A`，thread=`pg-p1-native-parallel-20260907-02` | `after=[B1,B2]`、interrupt=1、exit=0 | sibling branch 在 A wait 时完成 B2，join 未运行 |
 | PG process B | 独立 `postgres_parallel_probe B`，同 thread | `before=[B1,B2]`；`after=[A_RESUMED,B1,B2,JOIN]`；interrupt=0、exit=0 | 进程退出后读回、合法 resume、父 join 通过；并行 reducer 顺序不作串行保证 |

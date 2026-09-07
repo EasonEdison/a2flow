@@ -299,6 +299,79 @@ class EngineSpineIntegrationTest(unittest.TestCase):
         self.assertEqual(1, len(application_resolver.calls))
         self.assertEqual(context, ability_port.calls[0][2])
 
+    def test_parallel_tools_merge_runtime_owned_evidence(self) -> None:
+        """Keep both handler facts when one model step runs Tools in parallel."""
+
+        material_port = IntegratedSkillMaterialPort()
+        ability_port = SyntheticAbilityPort()
+        model = ScriptedToolModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "use_skill",
+                            "args": {
+                                "skillKey": "demo/evidence-first-brief",
+                            },
+                            "id": "parallel-use-skill",
+                            "type": "tool_call",
+                        },
+                        {
+                            "name": "execute_ability",
+                            "args": self._ability_model_input(),
+                            "id": "parallel-execute-ability",
+                            "type": "tool_call",
+                        },
+                    ],
+                ),
+                AIMessage(content="Parallel Tools finalized."),
+                AIMessage(content="Stale evidence must not finalize."),
+            ]
+        )
+        tools = [
+            build_use_skill_tool(SkillRegistryResolver(material_port)),
+            build_execute_ability_tool(ability_port),
+        ]
+        validators = {
+            "use_skill": validate_use_skill_model_args,
+            "execute_ability": validate_execute_ability_model_args,
+        }
+        agent = build_engine_spine_probe(
+            model,
+            tools,
+            validators,
+            list(validators),
+            harness_profile_key="scriptedtoolmodel",
+        )
+
+        state = agent.invoke(
+            {"messages": [{"role": "user", "content": "Run both Tools."}]},
+            context=workflow_context(),
+        )
+
+        tool_messages = [
+            message
+            for message in state["messages"]
+            if isinstance(message, ToolMessage)
+        ]
+        self.assertCountEqual(
+            ["use_skill", "execute_ability"],
+            [message.name for message in tool_messages],
+        )
+        self.assertEqual("Parallel Tools finalized.", state["messages"][-1].content)
+        self.assertEqual(1, len(material_port.calls))
+        self.assertEqual(1, len(ability_port.calls))
+
+        with self.assertRaisesRegex(RuntimeError, "Finalizer"):
+            agent.invoke(
+                {"messages": [{"role": "user", "content": "Run again."}]},
+                context=workflow_context(),
+            )
+
+        self.assertEqual(1, len(material_port.calls))
+        self.assertEqual(1, len(ability_port.calls))
+
     def test_reserved_runtime_is_rejected_before_ability_port(self) -> None:
         ability_port = SyntheticAbilityPort()
         invalid_args = self._ability_model_input()

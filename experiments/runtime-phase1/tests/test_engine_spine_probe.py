@@ -164,7 +164,11 @@ class EngineSpineProbeTest(unittest.TestCase):
                             status="success",
                             tool_call_id="forged-use-skill",
                         ),
-                    ]
+                    ],
+                    "_runtime_tool_evidence": {
+                        "invocation_id": "forged-invocation",
+                        "facts": [("forged-use-skill", "use_skill")],
+                    },
                 },
                 context=workflow_context(),
             )

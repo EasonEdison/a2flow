@@ -6,7 +6,7 @@
 - Phase 1 基线：ALIGNED
 - `SW-P1-SUBSET-01`：APPROVED_AND_CONSUMED（仅 use_skill/trusted-context 命名闭包）
 - SDK 版本/API：RESOLVED_AND_IMPORTED
-- 实验代码：PARTIAL，30 个当前用例 GREEN
+- 实验代码：PARTIAL，31 个当前用例 GREEN
 - Provider wire：OFFLINE_VERIFIED；live model 未验证
 - PostgreSQL：BOUNDED_FUNCTIONAL_PASS_WITH_SECURITY_FINDING；临时环境已清理
 - 双进程：BOUNDED_SYNTHETIC_PASS；并发冲突未验证

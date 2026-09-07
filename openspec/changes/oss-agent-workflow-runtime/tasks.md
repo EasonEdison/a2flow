@@ -48,7 +48,7 @@
 - [x] 每分支 compiled subgraph 候选已完成单一 synthetic PG 双进程 interrupt/resume/join 验证；任意 DAG/嵌套/冲突仍未验收，平铺父图 RED 继续保留。
 - [x] PG-P1-01 双进程探针使用 AsyncPostgresSaver；结构单测仍保留 MemorySaver，产品迁移未开始。
 - [ ] 只为 A2UI render/Action 配置 scoped retry。
-- [x] 当前 30 个 Tool/A2UI/SDK/参数准入/engine spine/credential-safety/分支子图候选用例通过并保留 RED/GREEN 证据；其余行为未开始。
+- [x] 当前 31 个 Tool/A2UI/SDK/参数准入/engine spine/credential-safety/分支子图候选用例通过并保留 RED/GREEN 证据；其余行为未开始。
 
 ## 4. PostgreSQL 与双进程门禁
 
