@@ -6,11 +6,11 @@
 - Phase 1 基线：ALIGNED
 - `SW-P1-SUBSET-01`：APPROVED_AND_CONSUMED（仅 use_skill/trusted-context 命名闭包）
 - SDK 版本/API：RESOLVED_AND_IMPORTED
-- 实验代码：PARTIAL，20 个当前用例 GREEN
+- 实验代码：PARTIAL，21 个当前用例 GREEN
 - Provider wire：OFFLINE_VERIFIED；live model 未验证
 - PostgreSQL：NOT PROVISIONED
 - 双进程：NOT VERIFIED
-- 独立并行/retry/stop/restart：NOT VERIFIED
+- 独立并行：STRUCTURAL_CANDIDATE_ONLY；retry/stop/restart：NOT VERIFIED
 - 产品 Runtime：NOT IMPLEMENTED
 - 部署：NOT AUTHORIZED
 
@@ -26,7 +26,7 @@
 | Tool-only Skill | PARTIAL | model schema/trusted context/provider wire 与注入前原始 args 闭合准入已通过；Workflow 入口和产品级 mandatory admission 未证明 |
 | Deep Agents Tool surface | PASS_FOR_PROBE | 模型只绑定 Runtime-owned Tool；默认文件/shell/subagent Tool 全部排除 |
 | A2UI | PARTIAL | DISPLAY_ONLY 与 INTERACTIVE interrupt payload 通过；Action resume/success/completion/Finalizer 未通过 |
-| 并行映射 | NO READY | LangGraph 1.2.11 最小复现实际只有 B1，A interrupt 后 B2 未推进；需架构裁决且不得补第二 scheduler |
+| 并行映射 | PARTIAL_CANDIDATE | 平铺图反例仍只到 B1；每分支一个原生 compiled subgraph 的结构候选可在 A interrupt 时完成 B2 且保持 join 关闭；仍需架构裁决、PG/恢复证据，且不得补第二 scheduler |
 | retry/stop/restart | NO READY | 仅 A2UI retry；stop 不可 resume；restart fresh |
 | PostgreSQL | NO READY | AsyncPostgresSaver + migration + process restart |
 | 多进程 | NO READY | 两个 stateless process 共享 PG 的查询/resume/冲突证据 |

@@ -4,10 +4,10 @@
 
 - 回归状态：PARTIAL
 - Runtime：NO READY
-- SDK 行为用例：20/20 GREEN（Tool/A2UI/contract/provider-wire 与同步/异步原始参数准入切片）
+- SDK 行为用例：21/21 GREEN（含每个 Workflow 分支一个原生 compiled subgraph 的结构候选）
 - 共享 contracts focused validator：57/57 GREEN；只代表 shape/fixture
-- 当前完成：Python 3.11 隔离环境、依赖解析/import、`SW-P1-SUBSET-01` 对齐、真实 Skill fixture、离线 Anthropic wire、A2UI mode/interrupt 探针、原始模型参数在 ToolRuntime 注入前闭合校验
-- 当前阻塞：LangGraph 1.2.11 单次 invoke 的 A interrupt 会在 B1 后返回，B2 不推进；临时 PostgreSQL 尚未协调，双进程、scoped retry、stop/restart 与 live model 尚未验证
+- 当前完成：Python 3.11 隔离环境、依赖解析/import、`SW-P1-SUBSET-01` 对齐、真实 Skill fixture、离线 Anthropic wire、A2UI mode/interrupt、原始模型参数准入与原生分支子图候选探针
+- 当前阻塞：临时 PostgreSQL 尚未协调；执行模型仍待 main-brain 裁决，双进程、scoped retry、stop/restart 与 live model 尚未验证
 
 ## 已执行环境证据
 
@@ -27,7 +27,7 @@
 | Contracts Python adapter | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src ... -m unittest discover -s packages/contracts/tests/python -v` | `Ran 16 tests ... OK` | 共享薄包 strict parse/serialize 通过 |
 | Contracts fixture | `python3 packages/contracts/tests/validate_contracts.py` | `SUMMARY total=57 passed=57 failed=0` | 只证明 shared shape/fixture |
 | Skill fixture | `sha256sum .../evidence-first-brief/SKILL.md` | `1cc034c1d066b24771e9b0d91bc74abd89012268cf225802c25dd33316e06434` | Runtime 测试读取主干真实 package bytes |
-| Runtime suite | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src:experiments/runtime-phase1 ... -m unittest discover ... -v` | `Ran 20 tests ... OK` | SDK/Tool/A2UI/provider-wire 与同步/异步原始参数准入行为通过 |
+| Runtime suite | `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=packages/contracts/src:experiments/runtime-phase1 ... -m unittest discover ... -v` | `Ran 21 tests ... OK` | SDK/Tool/A2UI/provider-wire、参数准入与原生分支子图结构候选通过 |
 
 ## 计划行为场景
 
@@ -58,6 +58,7 @@
 | LangGraph parallel wait RED | A interrupt 与 B1→B2 平行，join 等待 A | assertion expected trace=`[B1,B2]`，actual=`[B1]` | interrupt 使单次 invoke 在当前 superstep 后返回；B2 未推进，join 未运行；未实现 fallback scheduler |
 | Tool 原始参数准入 | 模型原始 args 含保留 `runtime` 字段 | status=`error`；Skill/Application resolver 均 0 次 | 使用公开 `wrap_tool_call` / middleware 扩展点，在 ToolRuntime 注入剥离保留字段前按闭合模型契约拒绝；可信 context 未被模型覆盖 |
 | Deep Agent async 准入 | `ainvoke` 合法/保留 `runtime` 两类调用与异步 handler `Command` | 合法 resolver 1 次；恶意 resolver 0 次且 status=`error`；`Command` identity 保持 | `awrap_tool_call` 与同步路径复用同一原始 args 校验；基类 `NotImplementedError` RED 已修复 |
+| LangGraph branch-subgraph candidate | 父图同轮并行 A/B 两个不同 compiled subgraph；B 内 B1→B2；父图 join | A interrupt；trace=`[B1,B2]`；无 `JOIN` | 按[官方 subgraph 公共接口](https://docs.langchain.com/oss/python/langgraph/use-subgraphs)将共享 state 的 compiled subgraph 直接作为父节点；默认 per-invocation，不使用 `checkpointer=True` 同一子图并发；MemorySaver 仅作结构探针，非 PG 门禁证据 |
 
 上述 scripted 用例没有证明模型必然调用 use_skill；system prompt 不是授权机制。Anthropic MockTransport 证明的是实际 provider serializer 路径，但不是 live-model 行为。INTERACTIVE 尚未执行合法 Action resume。
 
@@ -84,7 +85,7 @@ InMemorySaver、MemorySaver、SQLite 或单进程 mock 不能作为通过证据�
 
 - Deep Agents 默认 middleware/Tool 暴露已审计并收口；Tool exception 与 A2UI-only retry 行为尚未完成。
 - scripted model 被预编程调用 use_skill，不能证明 live model 无法绕过；原始 args 闭合准入仅证明 probe 路径，不替代产品 Runtime guard。
-- A wait 时 B1→B2 的原生 LangGraph 1.2.11 最小复现已明确 RED：只观测到 B1；B2 未进入下一 superstep。
+- 平铺父图的 LangGraph 1.2.11 反例仍为 RED（只到 B1）；每个 Workflow 分支一个 compiled subgraph 的结构候选为 1/1 GREEN（A interrupt、B2 完成、join 未运行），但尚未完成 PostgreSQL/恢复验证，也不是已批准执行模型。
 - PostgreSQL setup/persistence、双进程恢复、合法 Action resume、并发 invoke 尚未证明。
 - stop/restart、Finalizer、完整 Workflow accumulator 与真实 Ability 调用尚未证明。
 - 真实模型、公共部署和业务系统均不在本次授权。

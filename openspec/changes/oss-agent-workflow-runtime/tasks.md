@@ -4,7 +4,7 @@
 
 - Baseline：SW-P1-20260907.2
 - Runtime：NO READY
-- 当前批次：Python/SDK 隔离环境与首批 Tool/A2UI 探针完成；PostgreSQL、并行、retry/stop/restart 仍未协调或实现
+- 当前批次：Tool/A2UI/原始参数准入与原生分支子图结构候选完成；PostgreSQL、执行模型裁决、retry/stop/restart 仍未完成
 
 ## 1. ALIGN
 
@@ -43,10 +43,11 @@
 - [x] 关闭默认 `ls/read/write/edit/delete/glob/grep/task/execute` 模型可见入口，仅暴露 Runtime-owned Tool。
 - [x] 用离线 Anthropic MockTransport 证明 strict provider schema 且 artifact/evidenceRef 未序列化出站。
 - [x] 直接消费主干 `skillweave_contracts` 严格适配，对齐 `SW-P1-SUBSET-01` 的 use_skill/trusted-context 定义并复用 15 个共享 fixture；Pydantic 只承担 Tool argument/provider schema 边界。
-- [ ] 用 LangGraph StateGraph 表达 sequence/condition/parallel，不实现第二 scheduler；当前原生 interrupt 会阻断兄弟分支下一 superstep，等待 main-brain 裁决。
+- [x] 隔离证明每个 Workflow 分支一个原生 compiled subgraph 的结构候选：A interrupt 时 B 子图完成 B1→B2，父 join 未运行；不拆 Skill 内部步骤、不实现第二 scheduler。
+- [ ] 将候选升级为产品并行映射前，等待 main-brain 裁决并补 PostgreSQL/恢复证据；平铺父图 RED 继续保留。
 - [ ] 用 AsyncPostgresSaver 替代所有内存/SQLite checkpointer。
 - [ ] 只为 A2UI render/Action 配置 scoped retry。
-- [x] 当前 20 个 Tool/A2UI/SDK/同步异步原始参数准入用例通过并保留 RED/GREEN 证据；其余行为未开始。
+- [x] 当前 21 个 Tool/A2UI/SDK/参数准入/分支子图候选用例通过并保留 RED/GREEN 证据；其余行为未开始。
 
 ## 4. PostgreSQL 与双进程门禁
 
