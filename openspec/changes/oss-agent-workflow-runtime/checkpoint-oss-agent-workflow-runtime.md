@@ -175,3 +175,12 @@
 
 - PG 准备提交前：fetch/merge origin/main 无变化；git diff --check PASS；三 owned 目录 gitleaks no leaks；内部标识扫描无命中，所有文件 admin-owned。最终仅11个增量文件。
 - 本次固定提交只含脚本/测试/文档，services/agent-workflow-runtime/src/ 与已审6ee09e3无差异。
+
+### AF04 PG 准备固定回执
+
+- PG preparation source SHA: 85945fb717eb065918d0c3ab28d0158b296925ab。
+- 已 push server-local worker；HEAD/远端一致且 clean；只有授权11文件。运行时src与6ee09e3完全无差异。
+- entry SHA256: a7d392d516598e3db854c7aaad653d0ff6d1ca0bcaf2690003b919d63b3f5c0a；其余3个hash见pg-window-04.md。
+- 本条后续回执只改变own checkpoint，不改变脚本hash；窗口expected-source-sha应使用主控最终批准的完整worker tip。
+- Status: HANDOFF；Next: 直接向main-brain发送完整SHA/hash/预算/命令，等待增量复核及单独窗口令。
+- PG仍未运行，未创建资源/凭据，未集成main或操作GitHub。
