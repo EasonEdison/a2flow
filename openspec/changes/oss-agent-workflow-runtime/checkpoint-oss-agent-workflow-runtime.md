@@ -8,7 +8,7 @@
 - 集成目标：origin/main
 - 独占规格：openspec/changes/oss-agent-workflow-runtime/
 - 预留实验：experiments/runtime-phase1/
-- 本次授权实现：services/agent-workflow-runtime/（AF-RUNTIME-03）
+- 本次授权实现：services/agent-workflow-runtime/（AF-RUNTIME-04）
 - 禁止：其他任务 checkpoint、共享根文件/依赖/版本、部署、secret、现有服务/数据库/端口；Python 仅按 PY-01 单执行者边界变更
 
 ## 基线真值
@@ -23,8 +23,8 @@
 
 ## 当前里程碑
 
-- 状态：AF_RUNTIME_03_PG_W1_ACCEPTED_DOC_REVIEW
-- 当前基线：87e17e7322f3932e0e84e2caa501a92bfcf10465；AF-RUNTIME-03 release 已读取，保留 owned WIP 时 fast-forward merge，无 Git 冲突。
+- 状态：HANDOFF / AF_RUNTIME_04_OFFLINE_CANDIDATE
+- 当前基线：a38444e8006ecef51a67f92a6b06a7d80285277b；AF-RUNTIME-04 release 已消费，当前源码候选待主控固定 SHA 审查。
 - 前批源码：0e73d8b 已服务器集成；GitHub 同步由 main-brain 完成。
 - Runtime：NO READY
 - 已完成：三 Tool engine spine、同步/异步 Finalizer、原始 args 闭合准入；真实 Skill Registry/fixture、synthetic Ability port 与 DISPLAY_ONLY Application 已贯通；PG 双进程 native-branch interrupt/resume/join 有界探针通过。
@@ -64,7 +64,7 @@
 
 ## Next Executable Action
 
-AF-RUNTIME-03 固定660db6a已完成单次PG-W1，9/9真实用例通过且精确清理。提交own证据文档并交主控验收；未释放前不集成server main/GitHub，不再启动PG。
+固定 worker 提交并发送主控复核；源码 gate 通过后，准备独立 AF04 PG 脚本，仍不得执行窗口或集成。
 
 ## 交付状态
 
@@ -99,3 +99,40 @@ AF-RUNTIME-03 固定660db6a已完成单次PG-W1，9/9真实用例通过且精确
 - 凭据日志检查PASS；收尾runtime sessions0/advisorylocks0；exactcontainer/volume/private目录/新拉镜像均删除。
 - 独立复核目录不存在、筛选无container/volume、5432无监听；无关pause镜像保留；空.tmp父目录保留。
 - 9项实际断言与局限已写regression/readiness；主控已接受有界PG结果，等待文档review与独立集成令。
+
+## AF-RUNTIME-04 当前执行游标
+
+- Updated at: 2026-09-08
+- Status: ACTIVE
+- Current phase: IMPLEMENTING
+- 固定授权基线/worker HEAD: a38444e8006ecef51a67f92a6b06a7d80285277b；已 fetch/merge origin/main，仍同 SHA。
+- Scope: services/agent-workflow-runtime/、experiments/runtime-phase1/、本 OpenSpec。
+- Out of scope: PG 窗口、main 集成、GitHub push、HTTP/UI/共享契约/根配置/部署。
+- 已落盘：Run lifecycle/三类 PG 记录/短事务、stop 与 fresh restart、窄旧 Run 投影、原生 SDK callbacks/middleware、并行 fatal 观察器、Action 独立准入接线。
+- 前组离线验证：62 项，53 PASS + 9 PG skip（新受控图绑定改动之前）。
+- 最新验证：62 项，4 error + 9 PG skip；4 个旧测试未包 RunGraphBinding，被入口校验拒绝，正在修正。不将此前通过当作当前全绿。
+- Dirty: lifecycle.py、postgres_lifecycle.py、native_control.py、actions.py、langgraph_adapter.py；engine_spine_probe.py、finalizer_probe.py；lifecycle_support.py、test_lifecycle.py、test_native_stop.py；本 checkpoint。
+- Pending: 新模型 node_id 归属真实并行测试、受控交互/Finalizer 正链路及 old resume 拒绝、故障保存保留原 BaseException、相关离线回归、文档与固定 worker SHA。
+- Last External Progress: 已取消本任务遗留的空 stdin git-apply 进程并成功应用待处理补丁；测试输出证明 4 项装配适配遗漏。未修改 SDK、未开启 PG。
+
+### AF04 最新离线里程碑
+
+- Current phase: VERIFYING
+- Latest result: 服务 69 total = 60 PASS + 9 AF03 PG SKIP，3.228s；实验 38 PASS，0.879s。
+- 新增正链路与四种 continuation 错配 executor=0 通过；MODEL facts 两个真实并行 Workflow node 归属通过。
+- 上述源码 gate 已覆盖当前实现；不重复运行未改动测试。
+- Dirty 范围新增 test_controlled_interaction.py、README.md、regression/readiness/tasks 文档。
+- Next: 精确 owned diff scan/whitespace gate→worker fixed SHA→main-brain review。
+- Pending: AF04 PG 独立脚本及新窗口；跨进程证据；主控集成令。NO READY。
+
+### 固定候选提交前门禁
+
+- Status: HANDOFF（等待 main-brain 源码复核；不是整个 AF04 完成）
+- Current phase: VERIFYING
+- 受影响服务/实验离线测试已通过，详见 regression；后续只有文档变化。
+- git fetch/merge origin/main: already up to date，仍 a38444e；git diff --check PASS。
+- services/runtime、experiments/runtime-phase1、own OpenSpec 三处 gitleaks dir --redact: no leaks found。
+- 禁止来源/内部标识文件扫描无命中；所有 owned 文件均 admin-owned。
+- 待提交精确范围：当前16个 owned 文件；无共享契约、依赖、SDK、根配置变更。
+- Last External Progress: 2026-09-08 13:20 UTC，离线门禁/三处secret扫描/所有权核对完成。
+- 后续测试脚本只做准备与离线检查，不创建 PG/容器/凭据/端口；运行仍需主控新窗口令。

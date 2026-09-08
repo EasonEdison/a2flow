@@ -187,3 +187,58 @@ B1/B2 不重放。失连测试特意在真实图已完成 Tool、进入 finish_a
 临时 synthetic 数据与本次secret文件不可恢复地随隔离资源删除；不宣称 secure erase。
 空 .tmp 父目录保留。该窗口已关闭，不构成再次运行或生产部署授权。
 本次窗口失败安全检查套件为7个，实验 suite 当前38/38，普通Runtime38 PASS + 默认9 PG SKIP。
+
+## AF-RUNTIME-04 离线固定版本前证据 — 2026-09-08
+
+授权基线 a38444e8006ecef51a67f92a6b06a7d80285277b；
+受影响源码及本段记录由同一 worker 提交固定，最终 SHA 见 Git 提交和主控回执。
+所有命令在 admin-owned worker 根执行；显式关闭 tracing，没有配置 PG 凭据。
+
+服务实际命令：
+
+```sh
+LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH=packages/contracts/src:services/agent-workflow-runtime/src:services/skill-registry/src:experiments/runtime-phase1:experiments/runtime-phase1/tests \
+timeout 60 /home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python \
+  -m unittest discover -s services/agent-workflow-runtime/tests -q
+```
+
+实际输出：Ran 69 tests in 3.228s / OK (skipped=9)，exit=0；
+即 60 实际离线 PASS，9 个旧 AF03 PG 用例 SKIP。不得计为 69 PASS 或 AF04 PG PASS。
+
+实验实际命令：
+
+```sh
+LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH=packages/contracts/src:services/skill-registry/src:services/capability-registry/src:experiments/runtime-phase1:services/agent-workflow-runtime/src \
+timeout 45 /home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python \
+  -m unittest discover -s experiments/runtime-phase1/tests -q
+```
+
+实际输出：Ran 38 tests in 0.879s / OK，exit=0。
+
+| AF04 已执行离线证据 | 实际断言/边界 |
+| --- | --- |
+| 无卡片 stop/owner/env/条件 success | STOPPED 持久测试记录；错误身份拒绝；七种后续 admission 与成功转换拒绝 |
+| 在途 Action stop | executor 中已见 EXECUTING 与 Run IN_FLIGHT、Run fixture transaction 已退出；stop 不等待 admission 长锁；晚业务成功和 operation RETURNED 保留且不 resume |
+| 真实主模型/summary | 主模型晚 response 存 RETURNED；强制 summary 首次普通 ValueError 后 stop，SDK retry 的实际 callback 阻止第二次 generate，actual call=1 |
+| 并行 Tool/mixed-fatal | 两个已准入 Tool 结果均保存；无新模型；stop 先报错但晚 sibling KeyboardInterrupt/SystemExit/custom BaseException 仍向上传播 |
+| 并行 Workflow MODEL node | parent 两节点各调用真实 Deep Agent；MODEL facts 分别 branch-left/branch-right，内容各匹配，非入口或 SDK model 名 |
+| 节点/路由 | 节点实际结果保存后 stop；business router=0、successor=0 |
+| 受控交互正链路 | Skill once→native wait→Action executor once→指定 native resume→Finalizer RETURNED→Run SUCCEEDED |
+| AF04 组合 fail-closed | raw graph、legacy Action service、legacy continuation、raw continuation graph、不同 lifecycle 均拒绝；四种 continuation 错配 executor=0/无新 Attempt |
+| 旧入口关闭/fresh | 旧 card/Command/continuation 拒绝；新 run/thread/interaction 不同；旧 full Run/versions/input/facts/Action/node/checkpoint 读取 spy 禁止 |
+| canonical restart | 两个并发相同 control 只执行一次 factory/business；当前配置 v2/新输入/空旧状态；冲突输入拒绝；旧 UNCONFIRMED 不成为新门禁 |
+| 原 fatal/启动不确定 | fact/control receipt 保存失败不替换原 KeyboardInterrupt；factory 失败后相同 control 不再次启动 |
+| PostgreSQL窄投影/闭合记录 | mocked SQL 不 SELECT 旧 document/input/versions；损坏活动 Run 字段仍拒绝；不算真实 PG 存储验证 |
+
+真实 SDK 指安装的 Deep Agents 0.7.13/LangGraph 1.2.11 同步运行，
+模型和业务端口均 synthetic、存储为 MemorySaver 或显式离线协议 fixture。
+测试修复过两类装配错误：4 个旧测试漏 RunGraphBinding；并行测试错误使用
+单值状态/空状态，以及两个测试漏有效版本配置。最后输出已全绿，不保留此前失败为当前结果。
+
+AF04 live PG 完全未运行，独立脚本尚未准备。待单独评审的最小 PG 证据：
+独立连接同时看见 Run/Action 已提交准入后才 dispatch；Action 长 session 期间另一进程
+接受 stop；跨进程旧 card/native resume 禁止；stop/admission/success 竞争；
+真实同步 PostgresSaver fresh restart/new interaction 和同 control 竞争 invoke=1；
+晚真实结果保存、资源/secret/finally 精确清理。现有 AF03 窗口授权不可复用。

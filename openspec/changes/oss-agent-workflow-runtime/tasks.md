@@ -97,3 +97,17 @@
 - [ ] 主控审查稳定源码并放行 server main 集成；GitHub 同步由主控执行。
 
 - AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。
+
+## AF-RUNTIME-04 — 2026-09-08
+
+- [x] 消费 a38444e 的正式 stop/fresh restart 源码授权；仅本域三处目录。
+- [x] Run lifecycle/control receipts/operation facts；PG 独立短事务与旧 Run 窄投影。
+- [x] SDK node/router/model/Tool/summary retry/Finalizer/Action 每次准入；晚结果保存。
+- [x] 专用 stop signal 与 mixed-fatal 保护；其他 BaseException 不误判 STOPPED。
+- [x] 可信 Workflow node 归属与完整受控 service/continuation/graph/runner 绑定。
+- [x] Fresh run/thread/current input/config/interaction；旧业务和 checkpoint 不读；同 control 不再 invoke。
+- [x] 60 个服务离线 PASS + 9 AF03 PG SKIP；38 个实验 PASS。
+- [ ] 固定 worker SHA 经 main-brain 独立源码审查。
+- [ ] 准备 AF04 精确 PG 独立进程脚本并单独申请窗口；当前未运行。
+- [ ] AF04 PG 证据通过后的 source/main 集成放行；GitHub 归 main-brain。
+- [ ] 产品 Runtime READY（未通过，不因源码测试完成而勾选）。

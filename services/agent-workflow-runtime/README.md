@@ -1,4 +1,4 @@
-# A2Flow internal Action Runtime — AF-RUNTIME-03
+# A2Flow internal Agent/Workflow Runtime — AF-RUNTIME-04
 
 This is an importable internal Python library, not a published Action wire
 contract or HTTP service. Its PostgreSQL adapter is implemented; live PostgreSQL
@@ -77,7 +77,7 @@ PYTHONPATH=packages/contracts/src:services/agent-workflow-runtime/src:services/s
   -m unittest discover -s services/agent-workflow-runtime/tests -v
 ```
 
-38 deterministic tests cover admission, all asset-version mismatches, typed
+The AF03 baseline's 38 deterministic tests cover admission, all asset-version mismatches, typed
 policy evaluation, control deduplication, late stop/version changes, uncertain
 execution/delivery, actual Deep Agent interruption/resume/Finalizer, two pending
 same-name Tools and native A-waits/B1-to-B2 progression. The integration tests
@@ -160,3 +160,80 @@ The container, volume, private socket/secret directory and newly pulled image
 were removed. No secure-erase claim. Post-cleanup readback found no 5432 listener.
 These are bounded synthetic business/scripted-model results, not live-provider,
 production deployment, business exactly-once or automatic recovery evidence.
+
+## AF-RUNTIME-04 source candidate: synchronous stop and fresh restart
+
+This section supersedes earlier statements that stop/restart is entirely
+unimplemented. AF04 is source/offline-tested only: its three new PostgreSQL
+record types have NOT run in a live database window. AF03's nine PostgreSQL
+passes do not prove AF04. Runtime remains NO READY.
+
+Import RunLifecycle/RunStoppedControl from agent_workflow_runtime.lifecycle,
+PostgresRunRepository from agent_workflow_runtime.postgres_lifecycle, and
+ControlledRunRunner/RunGraphBinding/guarded_node/guarded_router from
+agent_workflow_runtime.native_control. Backend-owned configuration, graph
+factories and trusted identity are required; there is no HTTP handler or UI.
+
+AF04 assembly must bind the same RunLifecycle to the ActionService,
+LangGraphContinuation, RunGraphBinding and ControlledRunRunner. Call Actions
+through ControlledRunRunner.action, which validates this complete chain before
+a business executor can run. The old ActionService/adapter path without a
+lifecycle remains solely for the separate AF03 API/tests; it is not AF04 stop
+coverage. Raw compiled graphs are rejected at the AF04 runner entry.
+
+A binding is a trusted assembly contract, not an inspection or generic safety
+proof for arbitrary Python graphs. Factories must guard every owned business
+node and router; nested Skill calls do not grant later nodes blanket admission.
+Deep Agents require RunAdmissionMiddleware and inherited RunModelCallbacks
+(provided by the runner). The experiment build_engine_spine_probe accepts
+run_lifecycle and returns the explicit binding. Its Finalizer is also admitted.
+Keep public SDK summary behavior: model callbacks guard each actual main or
+summary attempt, including the gap before ordinary Exception retry.
+
+The runner and guarded Workflow nodes bind a trusted ContextVar, carried by
+public RunnableConfig/thread context propagation, for actual model/Tool fact
+node_id. Internal SDK "model" names and model-supplied args are not identity.
+run.context(node_id) constructs a backend-selected node scope. The two-parallel-
+Workflow-node/inner-agent test verifies each fact matches its actual node.
+
+STOP linearizes at its committed run-row transition against each individual
+admission. A successfully admitted call may start/finish after that instant;
+there is no atomicity claim between a database commit and a network/Python first
+instruction. Later nodes/routes/model rounds/Tools/Actions/retries/Finalizer and
+success admission reject. STOPPED closes progression, not physical cancellation:
+snapshot exposes still-pending admitted model/Tool/Action calls. Late actual
+outcomes are saved even after STOPPED, without undoing business writes.
+
+Run state exists without any card. Run/control/operation facts are separate
+Runtime-owned tables with closed schemaVersion=1 decoding. The operation ledger
+is audit only, not a scheduler or recovery queue. STOP uses an independent,
+short row-lock transaction; it never takes the long AF03 admission session lock.
+Actions take AF03 admission before the short Run lock, save EXECUTING on the
+independent AF03 connection, then commit the Run admission before dispatch.
+A partial/uncertain commit must not dispatch; no savepoint is called durable.
+Independent-connection visibility and multi-process races still require AF04 PG
+verification; in-memory fixtures are not that proof.
+
+Only ControlledRunRunner maps RunStoppedControl (BaseException) to a matching,
+already stored STOPPED run. Ordinary Exception retries do not catch this signal.
+An in-process observer retains other fatal BaseExceptions seen at owned
+boundaries because a synchronous native executor can otherwise suppress a late
+sibling fatal after an earlier stop. KeyboardInterrupt/SystemExit/custom fatal
+tests prove they are re-raised, not relabeled STOPPED. No cross-process fatal
+transport or full async execution guarantee is claimed.
+
+Restart in this slice accepts a STOPPED source, creates new run/thread/context
+and current configuration/input, and invokes a fresh graph factory. This does
+not permanently prohibit future support for other source states. Only the old
+lifecycle identity/status/definition association is projected; old input,
+versions, interactions, checkpoints and operation outcomes are not read.
+Same canonical control returns the assigned run without another factory/invoke;
+changed payload rejects. Startup uncertainty remains saved as UNCONFIRMED and
+is not replayed automatically. A run snapshot status is lifecycle state, not a
+claim that an uncertain startup completed.
+
+Latest offline discovery: 69 service cases = 60 PASS + 9 AF03 PG SKIP;
+38 experiment cases PASS. See the AF04 section of the owned regression/readiness
+documents for exact commands, evidence and pending gates. No AF04 PG window
+script has yet been prepared or executed; a new exact script needs main-brain
+review and a separate single-executor release.

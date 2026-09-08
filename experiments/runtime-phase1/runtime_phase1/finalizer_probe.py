@@ -69,7 +69,7 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
 
     def __init__(
         self, required_tool_names: Sequence[str],
-        terminal_guard: Callable[[Any], None] | None = None,
+        terminal_guard: Callable[[Any], None] | None = None, *, lifecycle=None,
     ) -> None:
         names = tuple(required_tool_names)
         if not names or any(not isinstance(name, str) or not name for name in names):
@@ -78,6 +78,7 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
             raise ValueError("Finalizer Tool names must be unique")
         self._required_tool_names = names
         self._terminal_guard = terminal_guard
+        self._lifecycle = lifecycle
 
     def before_agent(
         self,
@@ -86,7 +87,10 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
     ) -> dict[str, Any]:
         """Start a Runtime-owned evidence scope for this invocation."""
 
-        del state, runtime
+        del state
+        if self._lifecycle is not None:
+            ctx = runtime.context
+            self._lifecycle.assert_active(ctx.trusted_context, ctx.invocation_scope.run_id)
         return {
             _RUNTIME_TOOL_EVIDENCE: {
                 "invocation_id": secrets.token_hex(16),
@@ -200,12 +204,17 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
         """Apply Finalizer admission to synchronous model execution."""
 
         messages = state.get("messages", ())
-        if (
-            self._terminal_guard is not None and messages
-            and isinstance(messages[-1], AIMessage) and not messages[-1].tool_calls
-        ):
-            self._terminal_guard(runtime.context)
-        self._check_terminal_response(state)
+        terminal = messages and isinstance(messages[-1], AIMessage) and not messages[-1].tool_calls
+
+        def check():
+            if terminal and self._terminal_guard is not None:
+                self._terminal_guard(runtime.context)
+            self._check_terminal_response(state)
+
+        if terminal and self._lifecycle is not None:
+            self._lifecycle.execute(runtime.context, "FINALIZER", check)
+        else:
+            check()
 
     async def aafter_model(
         self,

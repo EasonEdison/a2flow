@@ -30,6 +30,7 @@ def build_engine_spine_probe(
     harness_profile_key: str,
     checkpointer: Any = None,
     terminal_guard: Callable[[Any], None] | None = None,
+    run_lifecycle: Any = None,
 ) -> CompiledStateGraph:
     """Build the engine-first probe using only Runtime-owned Tools."""
 
@@ -44,7 +45,11 @@ def build_engine_spine_probe(
             general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
         ),
     )
-    return create_deep_agent(
+    control_middleware = []
+    if run_lifecycle is not None:
+        from agent_workflow_runtime.native_control import RunAdmissionMiddleware
+        control_middleware = [RunAdmissionMiddleware(run_lifecycle)]
+    graph = create_deep_agent(
         model=model,
         checkpointer=checkpointer,
         tools=list(tools),
@@ -52,7 +57,13 @@ def build_engine_spine_probe(
             "Use authorized Skills and operations only through Runtime-owned Tools."
         ),
         middleware=[
+            *control_middleware,
             ClosedModelArgsAdmission(validators),
-            RequiredToolFinalizerAdmission(required_tool_names, terminal_guard),
+            RequiredToolFinalizerAdmission(required_tool_names, terminal_guard, lifecycle=run_lifecycle),
         ],
     )
+
+    if run_lifecycle is not None:
+        from agent_workflow_runtime.native_control import RunGraphBinding
+        return RunGraphBinding(graph, run_lifecycle)
+    return graph

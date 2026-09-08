@@ -1,5 +1,6 @@
 """Action admission, saved business outcomes and guarded interaction completion."""
 
+from contextlib import nullcontext
 from dataclasses import replace
 import json
 
@@ -15,12 +16,13 @@ class ActionService:
 
     def __init__(
         self, repository: InteractionRepository, configuration: ConfigurationPort,
-        executor: ExecutorPort, continuation: ContinuationPort,
+        executor: ExecutorPort, continuation: ContinuationPort, *, lifecycle=None,
     ) -> None:
         self.repository = repository
         self.configuration = configuration
         self.executor = executor
         self.continuation = continuation
+        self.lifecycle = lifecycle
 
     def register(self, interaction: Interaction) -> None:
         """Register a trusted wait once; replay never replaces history or bindings."""
@@ -28,6 +30,7 @@ class ActionService:
         if scope.kind != "WORKFLOW" or not interaction.graph_thread_id:
             raise ActionRejected("WORKFLOW_BINDING_REQUIRED")
         owner = interaction.context.trusted_context
+        self._run_active(owner, scope.run_id)
         with self.repository.scope(owner, scope.run_id):
             existing = self.repository.get(interaction.key, owner)
             if existing is not None:
@@ -50,8 +53,12 @@ class ActionService:
         ):
             raise ActionRejected("RESET_REQUIRED")
 
-    @staticmethod
-    def _active(interaction: Interaction, owner: TrustedContext) -> None:
+    def _run_active(self, owner, run_id):
+        if self.lifecycle is not None:
+            self.lifecycle.assert_active(owner, run_id)
+
+    def _active(self, interaction: Interaction, owner: TrustedContext) -> None:
+        self._run_active(owner, interaction.key[0])
         if interaction.context.trusted_context != owner:
             raise ActionRejected("NOT_AUTHORIZED")
         if not interaction.run_active:
@@ -99,9 +106,17 @@ class ActionService:
             # Last current-version check after all configuration/input validation.
             self._versions(interaction)
             pending = Attempt(request, "EXECUTING")
-            self.repository.save(replace(
-                interaction, phase="EXECUTING", attempts=(*interaction.attempts, pending),
-            ))
+            gate = (
+                self.lifecycle.admission(owner, request.run_id, request.node_id, "ACTION")
+                if self.lifecycle is not None else nullcontext(None)
+            )
+            with gate as run_operation:
+                # AF03 commits on its admission connection while the short run
+                # transaction is open on ANOTHER connection, not a savepoint.
+                self.repository.save(replace(
+                    interaction, phase="EXECUTING", attempts=(*interaction.attempts, pending),
+                ))
+            # Both independent commits finish before external dispatch.
             self.repository.check_scope()
             try:
                 result = json_copy(self.executor(config, inputs, owner))
@@ -115,6 +130,21 @@ class ActionService:
                 # An exception may occur after a business side effect. Preserve the
                 # reservation and never include arbitrary executor exception text.
                 outcome = Attempt(request, "EXECUTION_UNCONFIRMED")
+            except BaseException as error:
+                if self.lifecycle is not None:
+                    self.lifecycle.observe_fatal(owner, request.run_id, error)
+                    try:
+                        self.lifecycle.finish(owner, request.run_id, run_operation.operation_id,
+                                              {"errorType": type(error).__name__}, status="UNCONFIRMED")
+                    except Exception:
+                        error.add_note("RUN_OPERATION_FACT_SAVE_UNCONFIRMED")
+                raise
+            if self.lifecycle is not None:
+                self.lifecycle.finish(
+                    owner, request.run_id, run_operation.operation_id,
+                    json.loads(outcome.result_json) if outcome.result_json is not None else None,
+                    status="RETURNED" if outcome.status == "EXECUTED" else "UNCONFIRMED",
+                )
             latest = self._get(request.key, owner)
             self.repository.save(replace(
                 latest,
@@ -125,6 +155,7 @@ class ActionService:
                     request.control_request_id if outcome.interaction_completed else None
                 ),
             ))
+            self._run_active(owner, request.run_id)
             if not outcome.interaction_completed:
                 return outcome
             latest = self._get(request.key, owner)
@@ -148,8 +179,13 @@ class ActionService:
                 self._active(current, owner)
                 self._versions(current)
                 self.repository.check_scope()
+                self._run_active(owner, request.run_id)
                 self.continuation(current, request.control_request_id)
                 self.repository.check_scope()
+                if self.lifecycle is not None:
+                    from .lifecycle import RunStoppedControl
+                    if self.lifecycle.read(owner, request.run_id).status == "STOPPED":
+                        raise RunStoppedControl(request.run_id)
             except ActionRejected:
                 self._delivery_status(request, "UNCONFIRMED", owner)
                 raise
@@ -205,6 +241,7 @@ class ActionService:
         scope = context.invocation_scope
         if scope.kind != "WORKFLOW":
             return
+        self._run_active(context.trusted_context, scope.run_id)
         with self.repository.scope(context.trusted_context, scope.run_id):
             for item in self.repository.for_node(
                 context.trusted_context, scope.run_id, scope.node_id,

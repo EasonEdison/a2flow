@@ -87,3 +87,19 @@ Task-owned venv 已解析并导入 Deep Agents/LangGraph/PostgreSQL checkpointer
 - 无新窗口、生产Compose/HTTP/live model/自动恢复或server main/GitHub集成授权。
 
 - main-brain 已接受本次有界PG结果；当前仅待证据文档提交review和server main集成令，产品NO READY不变。
+
+## AF-RUNTIME-04 当前状态 — 2026-09-08
+
+本节是最新切片状态；上文 AF02/AF03 段落保留各时点历史，不把旧 NOT RUN
+或旧 accepted PG 结果误套到本次新表和新控制链路。
+
+- 源码：SOURCE_CANDIDATE_FOR_FIXED_SHA_REVIEW；stop/fresh restart 同步实现已落盘。
+- 当前离线：服务 60 PASS + 9 AF03 PG SKIP（69 total，3.228s）；实验 38 PASS（0.879s）。
+- 模型归属：真实双并行 Workflow 节点/内部 Deep Agent MODEL facts 绑定各自 node_id，已通过。
+- 控制组合：service/continuation/graph/runner 同 lifecycle 校验；错配在 executor 前拒绝，已通过。
+- 真实 SDK：强制 summary 的普通异常 retry 间隙 stop、并行 Tool 晚结果、mixed-fatal、
+  Skill wait→Action→Finalizer 及 fresh interaction/旧业务读取禁止通过离线测试。
+- PostgreSQL：AF04 NOT RUN；短事务、窄投影和独立连接实现不等于跨进程准出。
+- AF04 PG 脚本：NOT PREPARED；必须另行提供精确脚本、审查并释放一次性窗口。
+- Worker 固定 SHA 交主控审查；server main 集成和 GitHub 同步尚未授权执行。
+- Runtime：NO READY；无 HTTP/UI/live model/async 完整执行/生产部署或通用恢复。
