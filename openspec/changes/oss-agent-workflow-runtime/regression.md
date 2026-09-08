@@ -95,3 +95,26 @@ InMemorySaver、MemorySaver、SQLite 或单进程 mock 不能作为通过证据�
 - PostgreSQL setup/persistence 与串行双进程恢复已在单一 synthetic graph 证明；同 thread 并发冲突、产品 migration、修复后 bootstrap 现场复跑与合法 Action resume 尚未证明。
 - stop/restart、完整 Workflow accumulator 与真实 Ability 调用尚未证明；Finalizer 仅为 engine probe 的 required-successful-Tool 门禁。
 - 真实模型、公共部署和业务系统均不在本次授权。
+
+## AF-RUNTIME-02 实际源码切片证据 — 2026-09-08
+
+基线：605720f；范围记录 AF-RUNTIME-02。测试命令见 services/agent-workflow-runtime/README.md。
+新增 24/24 GREEN；既有 Runtime 31/31 GREEN。仅本机进程/MemorySaver 与显式测试端口，不代表 PG 持久化或多实例锁通过。
+
+| Method | Params | 实际 data / error | 字段级断言 |
+| --- | --- | --- | --- |
+| ActionService.submit | 仅 runId/nodeId/interactionId/actionName/controlRequestId/inputs；owner 由 backend 注入 | EXECUTED 或明确 ActionRejected code | userId/environment/businessSuccess/completed/runtime 顶层注入拒绝；错误 owner、node、run、interaction、action 或 input 时 executor=0 |
+| ActionService.submit | recorded/current Application/Ability/Skill 任一版本不匹配 | RESET_REQUIRED | executor=0，不执行旧配置、不自动 reset |
+| ActionService.submit | actual result accepted=false；或 accepted=true 但 save_choice 不完成 | business_success 与 interaction_completed 独立 | 前者 false/false；后者 true/false；无 Command，原生 wait 仍在 |
+| ActionService.submit + LangGraphContinuation | 合法 Action、配置允许完成 | true/true；resume_status=RETURNED | 按 snapshot 中匹配的 native interrupt ID 恢复，仅携带保存的 requestId 引用；原渲染 controlRequestId 保持 |
+| ActionService.completion | 原始 Command 注入 businessSuccess/completed | 保持原生 interrupt | executor=0、无模型完成；停止/版本错误仍明确抛出 |
+| DeepAgent.invoke / ainvoke | 模型在另一次同名 DISPLAY_ONLY Tool 成功后输出完成 | REQUIRED_INTERACTION_PENDING | 真实 Action 失败或成功但不完成均不能被同步/异步 Finalizer 推翻 |
+| DeepAgent.invoke + Command | use_skill → INTERACTIVE → 合法完成 → Finalizer | 完成正例通过 | 原 Skill 调用 1 次、executor 1 次；resume_consumed=true；新 invocation 不借用旧工具证据 |
+| 两个同 app/action Tool | 同模型步两张不同 interactionId 卡片 | 只完成指定卡 | 第一张完成后第二张 WAITING；两张实际完成后才允许 Finalizer |
+| 控制去重 | 同 requestId/相同 payload；或同 ID/变更 payload | 原记录 / CONTROL_REQUEST_CONFLICT | 相同控制 executor 1 次；resume 异常后重复请求仍返回 UNCONFIRMED，绝不重复业务 |
+| 运行中 stop/version change | executor 已返回真实成功 | RUN_STOPPED / RESET_REQUIRED | 保存真实结果，不 resume，不删除历史 |
+| Native branch graph | A 交互等待、B1→B2、join | A 未完成时 B1/B2 已完成；A 合法完成后 JOIN | B1/B2 各 1 次、JOIN 最后；不假定跨分支 reducer trace 为串行顺序 |
+
+开发中暴露并修复：持 admission lock 调用 graph 会阻塞 SDK 另一线程重放 Tool；
+改为独立 continuation_scope 串行化图调用并在 Tool 处重新核验保存记录。最初的 trace
+末尾串行顺序断言产生 RED，改为分支恰一次与 JOIN 最后断言。

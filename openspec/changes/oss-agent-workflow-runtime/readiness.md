@@ -51,3 +51,11 @@ Task-owned venv 已解析并导入 Deep Agents/LangGraph/PostgreSQL checkpointer
 ## READY 更新规则
 
 只有 main-brain 审查全部实验 diff、真实命令输出和 PostgreSQL/双进程证据后，才可调整本文件。完成 tasks 比例或 Git merge 不自动改变 NO READY。
+
+## AF-RUNTIME-02 更新 — 2026-09-08
+
+- 内部 Action 服务：SOURCE_CANDIDATE；24/24 新离线用例 GREEN，旧实验 31/31 GREEN。
+- 真实 Deep Agent assembly：节点绑定交互、可信完成引用、原 Skill 证据跨 resume 保留、同步/异步 Finalizer 拒绝待交互、双卡隔离通过。
+- 控制去重与 continuation 状态有记录；测试端口锁与 MemorySaver 不证明 PG 或多实例安全。
+- PG Action 存储、async continuation/executor、恢复重试、完整 stop/restart、HTTP/产品/部署仍未实现或验证。
+- 本切片仅 worker 交付；等待 main-brain 审查后释放 server main 集成。Runtime 仍 NO READY。

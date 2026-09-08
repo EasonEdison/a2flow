@@ -67,13 +67,17 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
 
     state_schema = FinalizerState
 
-    def __init__(self, required_tool_names: Sequence[str]) -> None:
+    def __init__(
+        self, required_tool_names: Sequence[str],
+        terminal_guard: Callable[[Any], None] | None = None,
+    ) -> None:
         names = tuple(required_tool_names)
         if not names or any(not isinstance(name, str) or not name for name in names):
             raise ValueError("Finalizer requires non-empty Tool names")
         if len(names) != len(set(names)):
             raise ValueError("Finalizer Tool names must be unique")
         self._required_tool_names = names
+        self._terminal_guard = terminal_guard
 
     def before_agent(
         self,
@@ -195,7 +199,12 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
     ) -> None:
         """Apply Finalizer admission to synchronous model execution."""
 
-        del runtime
+        messages = state.get("messages", ())
+        if (
+            self._terminal_guard is not None and messages
+            and isinstance(messages[-1], AIMessage) and not messages[-1].tool_calls
+        ):
+            self._terminal_guard(runtime.context)
         self._check_terminal_response(state)
 
     async def aafter_model(
@@ -205,5 +214,4 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
     ) -> None:
         """Apply identical Finalizer admission to asynchronous execution."""
 
-        del runtime
-        self._check_terminal_response(state)
+        self.after_model(state, runtime)

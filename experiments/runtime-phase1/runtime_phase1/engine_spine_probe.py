@@ -1,6 +1,7 @@
 """Engine-first Deep Agent assembly for bounded Phase 1 probes."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 from deepagents import (
     GeneralPurposeSubagentProfile,
@@ -27,9 +28,15 @@ def build_engine_spine_probe(
     required_tool_names: Sequence[str],
     *,
     harness_profile_key: str,
+    checkpointer: Any = None,
+    terminal_guard: Callable[[Any], None] | None = None,
 ) -> CompiledStateGraph:
     """Build the engine-first probe using only Runtime-owned Tools."""
 
+    if terminal_guard is None and any(
+        (item.metadata or {}).get("requires_action_guard") for item in tools
+    ):
+        raise ValueError("Interactive Action Tools require a terminal guard")
     register_harness_profile(
         harness_profile_key,
         HarnessProfile(
@@ -39,12 +46,13 @@ def build_engine_spine_probe(
     )
     return create_deep_agent(
         model=model,
+        checkpointer=checkpointer,
         tools=list(tools),
         system_prompt=(
             "Use authorized Skills and operations only through Runtime-owned Tools."
         ),
         middleware=[
             ClosedModelArgsAdmission(validators),
-            RequiredToolFinalizerAdmission(required_tool_names),
+            RequiredToolFinalizerAdmission(required_tool_names, terminal_guard),
         ],
     )

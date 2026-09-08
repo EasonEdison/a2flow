@@ -71,3 +71,12 @@
 - [x] 生成实验 `requirements.lock`；根依赖锁仍由 main-brain 单一所有。
 - [ ] 保持 readiness.md 为 NO READY，直到 PG、双进程和全部目标行为有证据。
 - [ ] push worker，并通过任务独占 integration worktree 合入 origin/main。
+
+## AF-RUNTIME-02 — 2026-09-08
+
+- [x] 读取 605720f 中的 runtime-action-release-02.md，独占新增 services/agent-workflow-runtime/。
+- [x] Action 服务：可信身份/完整版本闭包/待交互准入、真实 executor 结果与 reviewed Policy 判定、保存的完成引用。
+- [x] 原生 interrupt ID 映射与 Tool 恢复核验；同步/异步 Finalizer 使用交互门禁。
+- [x] 控制 requestId 历史与不确定恢复状态保留；无业务 exactly-once 或自动重试声明。
+- [x] 24 个新服务/真实 SDK 离线用例通过；原有 31 个实验回归通过。
+- [ ] 主控审查稳定 worker 提交后才释放 server main 集成；GitHub 同步归 main-brain。

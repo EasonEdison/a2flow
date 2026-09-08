@@ -8,7 +8,7 @@
 - 集成目标：origin/main
 - 独占规格：openspec/changes/oss-agent-workflow-runtime/
 - 预留实验：experiments/runtime-phase1/
-- 预留实现：services/runtime/
+- 本次授权实现：services/agent-workflow-runtime/（AF-RUNTIME-02）
 - 禁止：其他任务 checkpoint、共享根文件/依赖/版本、部署、secret、现有服务/数据库/端口；Python 仅按 PY-01 单执行者边界变更
 
 ## 基线真值
@@ -23,7 +23,9 @@
 
 ## 当前里程碑
 
-- 状态：ENGINE_FIRST_SOURCE_STABILIZATION
+- 状态：AF_RUNTIME_02_SOURCE_REVIEW
+- 当前基线：605720f；AF-RUNTIME-02 release 已读取，无 Git 冲突。
+- 前批源码：0e73d8b 已服务器集成；GitHub 同步由 main-brain 完成。
 - Runtime：NO READY
 - 已完成：三 Tool engine spine、同步/异步 Finalizer、原始 args 闭合准入；真实 Skill Registry/fixture、synthetic Ability port 与 DISPLAY_ONLY Application 已贯通；PG 双进程 native-branch interrupt/resume/join 有界探针通过。
 - TDD：Runtime 31/31 GREEN；engine 缺失 Finalizer 与 PG 最终 trace 串行顺序假设均先产生目标 RED，再以最小门禁/并行顺序断言修复。
@@ -62,7 +64,7 @@
 
 ## Next Executable Action
 
-停止扩展实现范围。下一步只对当前 engine-first 与 PG probe owned diff 执行 review/secret scan/完整验证，固定 worker source commit，随后从最新 origin/main 在独占 integration worktree 合入并 push；仍不实现第二 scheduler。
+AF-RUNTIME-02 源码与 24/24 新用例、31/31 旧回归已通过。提交当前 owned diff 并 push worker 后等待 main-brain review；未释放前不集成 server main。本轮未启动 PG，无 PG/多实例/async continuation 证据。
 
 ## 交付状态
 
@@ -74,3 +76,5 @@
 - Integration：PASS，feature tip `7a8fd6ca48556df17f51b937fb66e37db9236af3` 已合入 `origin/main`；本 checkpoint 记录提交在其后
 - OpenSpec structure：PASS；CLI 在 PATH/仓库中均不可用，未在线安装替代
 - Runtime readiness：NO READY
+
+- AF-RUNTIME-02 当前切片：内部 Action admission/executor/policy/completion + native LangGraph adapter + Finalizer guard；worker 提交 SHA 以本记录所在源码提交及回执为准。

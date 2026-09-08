@@ -56,7 +56,9 @@ def build_render_application_tool_node(tools: Sequence[BaseTool]) -> ToolNode:
     )
 
 
-def build_render_application_tool(resolver: ApplicationResolver) -> BaseTool:
+def build_render_application_tool(
+    resolver: ApplicationResolver, *, action_service: Any = None,
+) -> BaseTool:
     """Build a render Tool with configuration-owned wait semantics."""
 
     @tool(
@@ -129,9 +131,44 @@ def build_render_application_tool(resolver: ApplicationResolver) -> BaseTool:
             "runId": invocation_scope.run_id,
             "versionId": version_id,
         }
-        interrupt(interaction)
-        raise NotImplementedError(
-            "Action validation and resume require PostgreSQL-backed verification"
-        )
+        if action_service is None:
+            interrupt(interaction)
+            raise RuntimeError("Action service is required for interactive resume")
 
+        from agent_workflow_runtime import ActionRejected, Interaction
+
+        saved = Interaction(
+            context=runtime.context,
+            interaction_id=interaction_id,
+            application_key=applicationKey,
+            application_version=version_id,
+            graph_thread_id=runtime.config["configurable"]["thread_id"],
+            recorded_versions=tuple(resolved["recordedVersions"]),
+        )
+        action_service.register(saved)
+        while True:
+            reference = interrupt(interaction)
+            try:
+                outcome = action_service.completion(
+                    saved.key, reference, runtime.context.trusted_context,
+                )
+                break
+            except ActionRejected as error:
+                if error.code not in {"INVALID_RESUME_REFERENCE", "INTERACTION_NOT_COMPLETED"}:
+                    raise
+                # An unsupported direct Command cannot turn unverified input into
+                # Tool success. Keep the native wait and prevent successors.
+                continue
+        content = {
+            "applicationKey": applicationKey,
+            "interactionMode": interaction_mode,
+            "rendered": True,
+            "businessSuccess": outcome.business_success,
+            "interactionCompleted": outcome.interaction_completed,
+            "result": json.loads(outcome.result_json),
+        }
+        artifact["interactionId"] = interaction_id
+        return json.dumps(content, ensure_ascii=False, sort_keys=True), artifact
+
+    render_application.metadata = {"requires_action_guard": action_service is not None}
     return render_application
