@@ -8,7 +8,7 @@
 - 集成目标：origin/main
 - 独占规格：openspec/changes/oss-agent-workflow-runtime/
 - 预留实验：experiments/runtime-phase1/
-- 本次授权实现：services/agent-workflow-runtime/（AF-RUNTIME-05）
+- 本次授权实现：services/agent-workflow-runtime/（AF-MODEL-06）
 - 禁止：其他任务 checkpoint、共享根文件/依赖/版本、部署、secret、现有服务/数据库/端口；Python 仅按 PY-01 单执行者边界变更
 
 ## 基线真值
@@ -23,8 +23,8 @@
 
 ## 当前里程碑
 
-- 状态：HANDOFF / AF_RUNTIME_05_SOURCE_REVIEW
-- 当前基线：cee8149（AF05-E1）；AF04 已接受并集成，AF05 稳定源码候选待主控固定 SHA 审查。
+- 状态：ACTIVE / AF_MODEL_06_IMPLEMENTING
+- 当前基线：c3c8f46（AF-MODEL-06-D1，DeepSeek-only）；AF05 6cadc60 已由主控确认 server/GitHub 集成闭环。
 - 前批源码：0e73d8b 已服务器集成；GitHub 同步由 main-brain 完成。
 - Runtime：NO READY
 - 已完成：三 Tool engine spine、同步/异步 Finalizer、原始 args 闭合准入；真实 Skill Registry/fixture、synthetic Ability port 与 DISPLAY_ONLY Application 已贯通；PG 双进程 native-branch interrupt/resume/join 有界探针通过。
@@ -259,3 +259,60 @@
 - 定向gate：新test_control_ids4 PASS（0.367s）+原test_http/test_service15 PASS（0.752s）；128正例、129/slash拒绝且无resolver/receipt/dispatch/stop状态写入、其他字段规则未变。
 - 仅修复相关19项，没有重跑全套/实验/PG；修复及纠偏证据在regression-05.md。
 - Next: diff/secret/owned gate，worker-only小提交及远端SHA/clean读回后直接回交main-brain；仍不集成main/GitHub/部署。
+
+## AF-MODEL-06 当前执行游标
+
+- Status: ACTIVE / IMPLEMENTING；已clean入场/fetch/FF origin/main到b97e034，完整读取ADR-0003与model-adapter-release-06.md；主控已接受基线与owned计划。
+- Scope: services/agent-workflow-runtime/模型配置/工厂/typed view/必要assembly/针对性测试，own OpenSpec06；其他六域暂停。无真实provider/keys/paid/PG/listener/deployment权限。
+- 第一动作：使用已装Pydantic/BaseChatModel实现trusted配置/显式profile factory离线骨架；不是provider字段完整性证明或新SDK已安装。
+- 四环节gate：provider实际格式ingress、native chunks合并、message序列化、ToolMessage后SDK outgoing request；typed blocks仅派生view，不替换history或暴露到AF05 HTTP。
+- 最小候选：ChatDeepSeek(langchain-deepseek1.1.0) + 第三方ChatQwen(langchain-qwq0.3.5)，不选ChatQwQ的JSON repair；langchain-community0.4.2 PyPI已archived，仅静态评估，不加入安装候选。
+- 两个候选wheel内存只读下载SHA分别匹配14813cb413a97a5cce95118da253cfd64dce50537b7381b7c5d0ecf11d2a7032与3681e7a9c2b93ade2dfc5fcf0e5dbbc342a133f71b4217eb52354b31e4d4cada；MIT；未写入源码/venv。
+- 全现有64唯一包锁定的首次dry-run超过90s被subprocess超时终止，未产生完整delta，未安装；下一步只检查解析进展/精确增量，不放宽既有版本。
+- 最新public DeepSeek文档采用v4-pro/flash且tools-enabled要求所有历史reasoning_content（含no-tool轮）；LangChain介绍页含旧R1口径，不据此冻结能力。
+- Next: 完成配置骨架定向测试，最小依赖解析/hash/license回报main-brain审批，再做固定包mock HTTP四环节实测；公开hook不足则报反例，不覆写第三方私有方法/通用协议parser。
+- 未改AF05 safe HTTP、共享root/ADR/其他owner；不自动集成main/GitHub。
+
+### AF-MODEL-06-D1 当前有效收窄
+
+- 用户最新明确“这次简单点，就只接deepseek”；立即采用，已向main-brain确认。上段双provider计划是已停止的历史。
+- 安全fetch/FF到server main c3c8f46，已完整读更新ADR/release；没有stash/reset或覆盖WIP。
+- 没有Bailian在途操作或安装。先前双候选dry-run已超时终止；静态元数据/内存wheel读取均结束。未发送的双provider测试补丁已关闭空stdin会话而未写文件。
+- 本人新建model_config.py/model_factory.py已收窄为DeepSeek-only配置与ChatDeepSeek构造；无多provider registry、动态import配置或后备ChatOpenAI。
+- 当前单一路线chat-completions；model为当前官方v4-pro/v4-flash明确枚举；host credentialRef/允许endpoint/timeout/closed options，真实secret lookup仍未授权。
+- DeepSeek-only constrained dry-run在途：langchain-deepseek1.1.0、其兼容最新langchain-openai1.6.0，保持64个既有唯一版本不变；尚未安装。
+- Next: 运行DeepSeek配置定向测试，向main-brain回精确delta/hash/license；获批准固定包后再mock HTTP验证四环节及实际harness匹配。不得恢复Bailian工作。
+
+### AF06-D1 native source / dependency review point
+
+- Updated2026-09-08 10:02 UTC; StatusHANDOFF/VERIFYING for bounded partial source.
+- c3c8f469 adopted;5 config+7 native-content tests12PASS0.003s. Provider SDK notinstalled,
+  no actual SDK HTTP ingress/stream/nextrequest/harness evidence. No AF05 source change.
+- Official wheel read timeout10s established download failure rather than resolverconflict.
+  main-brain approved one TUNA mirror attempt180s/30MiB with all64 exactpins.
+- Mirror dryrun7.48s, downloads13.10s, officialchecks21.79s;5new candidates3883001bytes,
+  temporary observedwrites7067436bytes; officialfullhash/size/license allmatch.
+  Existing64 unchanged; no installation. Detaildependency-review-06.md.
+- Core derivedview has no replayhistory or publicHTTP exposure; opaqueextensions retained
+  only when already present in native message. Fourprovider gates explicitlyUNVERIFIED.
+- Self-improvement correction: wrong cachedpatch-helper signature produced75 one-newline
+  numeric files, each verified taskowned, removed by exactdeletepatch. Intended2files
+  then applied correctly;12testsPASS, finalstatusonlyowned. No userfilesremoved.
+- NextExecutableAction: submit/push owned partialsource+evidence for fixedSHA review and
+  exact dependencyapproval. Only then fixedSDK mockHTTP fourstage/harness tests.
+  No main/GitHub integration, liveprovider, credentials, PG, listener or deployment.
+
+### AF06-D2 dependency accepted; fixed SDK gaps reproduced
+
+- Main-brain approved exact5 wheels; pre-install fullhash/all64 checkPASS;
+  --no-index --no-deps install only local5.69unique, old64unchanged, pipcheck/importPASS.
+  Main-brain independently accepted installation gate. No new download/provider call.
+- FixedSDK actualhttpx2.MockTransport tests5PASS1.034s;2known_gap tests explicitlyprove
+  blockers: raw unknown HTTP/SSEfields lost; tools-enabled nextrequest loses reasoning
+  for prior no-tool AND tool-call assistants after native serialization retainedboth.
+- Publichttp_client/http_async_client injection works; tracing_context(enabled=False)
+  avoids externaltracing. No privateSDK override or fullSSEparser.
+- Main-brain requests fixedsourceSHA now; pending unsent harness-test patch closed
+  without sending it so existing testedfile unchanged. Harness can follow smallcommit.
+- NextExecutableAction: ownedreview/diff/secretgate, commit+push worker-only evidence,
+  return exactSHA/fixtures/command. Main owns publicseam review, no main/GitHub integration.
