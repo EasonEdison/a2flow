@@ -2,13 +2,15 @@
 
 Date: 2026-09-08. Status: ACCEPTED engineering direction for AF-MODEL-06; implementation and provider verification pending.
 
+Scope delta AF-MODEL-06-D1: the user explicitly narrowed this slice to DeepSeek only. Bailian and other providers are deferred, including their adapter research, dependency resolution and implementation. Keep a simple DeepSeek configuration entry, not a multi-provider/plugin platform. The alternatives below remain research history, not implementation requirements.
+
 ## Requirement and decision
 
-The user requests configuration-driven switching between DeepSeek and Alibaba Bailian, preserving provider-returned reasoning content, text, tool calls and other response fields. A thin adapter should expose typed blocks instead of distributing provider JSON parsing throughout the Runtime. This does not change Deep Agents as the Agent SDK or authorize live API calls, credential installation or deployment.
+The user requests configurable DeepSeek integration, preserving provider-returned reasoning content, text, tool calls and other response fields. A thin adapter should expose typed blocks instead of distributing provider JSON parsing throughout the Runtime. The original two-provider target is superseded by D1. This does not change Deep Agents as the Agent SDK or authorize live API calls, credential installation or deployment.
 
 Use LangChain provider integrations and its standard content blocks as the first-choice implementation. Deep Agents continues to consume BaseChatModel and native AIMessage/AIMessageChunk objects. Our module owns trusted configuration, explicit adapter selection, capability validation and non-destructive projection; it does not reimplement the Agent loop or a universal LLM wire protocol.
 
-Select by explicit provider + API protocol + model/profile, not model-name substring alone. The same model family can be hosted behind different protocols/providers. Unknown combinations fail explicitly, without provider fallback, speculative parameter dropping or implicit import from configuration.
+Use one explicitly supported DeepSeek API route and validated model/options, not model-name substring guessing. Unknown combinations fail explicitly, without provider fallback, speculative parameter dropping or implicit import from configuration. A registry of multiple providers is not required for this slice.
 
 ## Two representations, separate purposes
 
@@ -32,7 +34,7 @@ Retention, model-history replay and user display are distinct policies. Preserve
 
 Host configuration resolves a logical model reference to provider, protocol, model ID, reviewed endpoint, credential reference, timeouts and validated generation/provider options. Secrets remain in host secret resolution, never in source examples, model-controlled arguments or HTTP bodies. Shared mutable global environment settings are not a per-request routing mechanism.
 
-No automatic switch midway through an existing execution, cross-provider history conversion or fallback is introduced. Initial provider implementations target DeepSeek and Bailian; the precise Bailian model/route and package pins are engineering validation inputs, not guessed from the console URL. Lack of credentials does not block offline fixture tests, but does block a live compatibility claim.
+No automatic switch midway through an existing execution, cross-provider history conversion or fallback is introduced. Only DeepSeek is implemented in this slice, with one reviewed API route and package pins. Do not add Bailian dependencies or speculative multi-provider infrastructure. Lack of credentials does not block offline fixture tests, but does block a live compatibility claim.
 
 ## Alternatives assessed
 

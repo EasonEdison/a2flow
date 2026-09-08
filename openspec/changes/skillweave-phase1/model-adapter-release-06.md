@@ -1,12 +1,14 @@
-# AF-MODEL-06: Configurable providers and non-destructive content blocks
+# AF-MODEL-06: DeepSeek configuration and non-destructive content blocks
 
 Date: 2026-09-08. Coordinator: main-brain. Owner: oss-agent-workflow-runtime.
 Base: accepted AF05 source 6cadc6076f72f11137b5fb96bfeebdb7137afdcb.
 Status: user-authorized continuation; bounded source/fixture implementation released, not live-provider or deployment acceptance.
 
+Delta D1, 2026-09-08: latest user instruction is DeepSeek only. This supersedes the original DeepSeek+Bailian scope immediately. Stop Bailian/Tongyi/ChatQwen research, dependency resolution and implementation; no multi-provider acceptance gate or generic provider plugin platform is required. Other field-preservation and execution boundaries remain unchanged.
+
 ## Outcome
 
-Provide a thin host-configured model entry for Deep Agents, initially targeting DeepSeek and Alibaba Bailian. Reuse provider SDK integrations and LangChain standard content blocks while retaining provider-specific reasoning, tool calls, metadata and required history fields. Read docs/adr/0003-model-adapters-and-content-blocks.md before implementation.
+Provide a thin host-configured DeepSeek entry for Deep Agents. Reuse a mature SDK integration and LangChain standard content blocks while retaining reasoning, tool calls, metadata and required history fields. Read docs/adr/0003-model-adapters-and-content-blocks.md before implementation.
 
 ## Scope and exclusive ownership
 
@@ -17,16 +19,16 @@ Provide a thin host-configured model entry for Deep Agents, initially targeting 
 
 ## Required implementation boundaries
 
-1. Explicit trusted provider/protocol/model profile selection and injected secret resolver; no model-name-only guessing, client-selected arbitrary endpoints/classes or embedded credentials. Unsupported routes/options fail rather than silently drop fields/options or fall back.
+1. Simple trusted DeepSeek configuration with one supported API route, model/options and injected secret resolver; no model-name-only guessing, client-selected arbitrary endpoints/classes or embedded credentials. Unsupported routes/options fail rather than silently drop fields/options or fall back. Do not build a multi-provider registry for this slice.
 2. Reuse BaseChatModel/native AIMessage and AIMessageChunk plus content_blocks. Preserve execution messages separately from standard projections. Do not change AF05 safe HTTP output to expose raw provider messages.
 3. Standard types handle text/reasoning/tool calls; SDK-native extensions/metadata retain otherwise unmapped fields, including signed/opaque data, usage and finish reasons. Demonstrate actual ingress retention rather than assuming content_blocks can recover fields already discarded by an adapter.
 4. Support stream assembly and outbound history serialization through mature public SDK mechanisms. No hand-written universal JSON parser, framework fork, new Agent loop, provider fallback or silent option modification.
-5. Target both provider paths but report unsupported routes honestly. Keep runtime host injection compatible; do not require deployment keys or a specific live model just to run synthetic tests.
+5. Target only DeepSeek and report unsupported routes honestly. Keep runtime host injection compatible; do not require deployment keys or a specific live model just to run synthetic tests. Bailian and other providers are out of scope.
 6. Verify actual model/profile matching in the Deep Agents harness. Provider configuration must not re-enable implicit filesystem/execute/subagent Tools or bypass use_skill/tool admission/Finalizer/stop boundaries.
 
 ## Focused acceptance
 
-- Logical model configuration switches adapter without changes to a Skill or business code; invalid provider/protocol/options rejected before request execution, no secrets in representations/errors.
+- DeepSeek model/settings are host-configurable without changes to a Skill or business code; invalid provider/protocol/options rejected before request execution, no secrets in representations/errors. Switching between different suppliers is not a deliverable of D1.
 - Synthetic provider-format fixtures exercise text plus reasoning, simultaneous reasoning/tool calls, multiple fragmented tool calls, final usage-only chunks, finish/refusal/error behavior and unknown extension fields. Do not label self-authored fixtures as captured real responses.
 - Compare full and streamed message semantics; perform serialization round trip and inspect the next SDK-generated request after ToolMessage. Preserve required reasoning/signature fields, not only the display projection. Include prior no-tool assistant turns in a tools-enabled DeepSeek history according to the selected version's contract.
 - Unsupported/unknown fields have a visible coverage outcome, not silent loss or blind forwarding across providers. Document size/retention constraints; no silent truncation of protocol-required data.
