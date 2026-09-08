@@ -13,7 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import Command
 
 from agent_workflow_runtime import ActionRejected, ActionService, LangGraphContinuation
@@ -177,14 +177,32 @@ def graph_for(case, run, life, saver, service, config, *, resume=False):
                 "id": "af04-render", "type": "tool_call",
             }]), *replies,
         ]
-    graph = build_engine_spine_probe(
+    def terminal_guard(ctx):
+        event(case, "finalizer")
+        service.assert_finalizable(ctx)
+
+    agent = build_engine_spine_probe(
         ScriptedToolModel(responses=replies), tools,
         {"use_skill": validate_use_skill_model_args,
          "render_application": validate_render_application_model_args},
         ["use_skill", "render_application"], harness_profile_key="scriptedtoolmodel",
-        checkpointer=saver, terminal_guard=service.assert_finalizable, run_lifecycle=life,
+        terminal_guard=terminal_guard, run_lifecycle=life,
     )
-    service.continuation = LangGraphContinuation(graph, lifecycle=life)
+    def successor(state):
+        event(case, "successor")
+        return {}
+    parent = StateGraph(MessagesState, context_schema=type(run.context()))
+    parent.add_node("agent", agent.graph)
+    parent.add_node("successor", guarded_node(life, run.context("after-agent"), successor))
+    parent.add_edge(START, "agent")
+    parent.add_edge("agent", "successor")
+    parent.add_edge("successor", END)
+    graph = RunGraphBinding(parent.compile(checkpointer=saver), life)
+    class CountedContinuation(LangGraphContinuation):
+        def __call__(self, interaction, control_request_id):
+            event(case, "native_resume")
+            return super().__call__(interaction, control_request_id)
+    service.continuation = CountedContinuation(graph, lifecycle=life)
     return graph
 
 
@@ -206,6 +224,9 @@ def main(mode, case, options):
                     "messages": [{"role": "user", "content": "Fresh independent input."}],
                 }
             runner = ControlledRunRunner(life, factory, lambda *_: VERSIONS)
+            if options.get("restart_slot"):
+                event(case, "restart_ready_" + options["restart_slot"])
+                wait_event(case, "restart_release")
             return runner.start(OWNER, "restart-" + case, DEFINITION,
                                 {"fresh": options.get("input", "new")}, "node-test",
                                 stopped_run_id=options["source"])
@@ -248,7 +269,9 @@ def main(mode, case, options):
             cards = repo.for_run(OWNER, run_id)
         return {"status": run.status, "threadId": run.thread_id,
                 "cards": [{"interactionId": i.interaction_id, "phase": i.phase,
+                           "resumeConsumed": i.resume_consumed,
                            "attempts": [{"status": a.status, "businessSuccess": a.business_success,
+                                         "interactionCompleted": a.interaction_completed,
                                          "resumeStatus": a.resume_status} for a in i.attempts]} for i in cards],
                 "facts": [{"kind": f.kind, "status": f.status, "revision": f.admitted_revision,
                            "result": f.result_json} for f in facts]}

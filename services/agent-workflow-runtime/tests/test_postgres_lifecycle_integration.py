@@ -16,6 +16,39 @@ from agent_workflow_runtime.postgres_lifecycle import PostgresRunRepository
 from pg_lifecycle_worker import connection, conninfo, event, value
 
 
+def cleanup_children(children):
+    """Reap every exact owned Popen even if setUp or another cleanup failed."""
+    failures = []
+    for child in children:
+        try:
+            try:
+                if child.poll() is None:
+                    try:
+                        child.terminate()
+                    except ProcessLookupError:
+                        pass
+            finally:
+                try:
+                    child.communicate(timeout=5)
+                except BaseException as wait_error:
+                    # A timeout or failed wait still gets a bounded kill/reap
+                    # attempt. This Popen was created and registered by us.
+                    try:
+                        try:
+                            child.kill()
+                        except ProcessLookupError:
+                            pass
+                    finally:
+                        child.communicate(timeout=5)
+                    if not isinstance(wait_error, subprocess.TimeoutExpired):
+                        raise
+        except BaseException as error:
+            failures.append(error)
+    if failures:
+        failures[0].add_note("AF04_OWNED_CHILD_CLEANUP_FAILURE_COUNT=" + str(len(failures)))
+        raise failures[0]
+
+
 @unittest.skipUnless(os.environ.get("A2FLOW_RUNTIME04_SOCKET"), "requires separately authorized AF04 PG window")
 class PostgresLifecycleProcessTest(unittest.TestCase):
     @classmethod
@@ -51,14 +84,10 @@ class PostgresLifecycleProcessTest(unittest.TestCase):
                           "includesObserver": True, "claim": "observed peak, not exact transient maximum"}))
 
     def setUp(self):
-        self.case, self.children = "af04-" + uuid4().hex, []
+        self.children = []
+        self.addCleanup(cleanup_children, self.children)
+        self.case = "af04-" + uuid4().hex
         self.ids = self.call("allocate")
-
-    def tearDown(self):
-        for child in self.children:
-            if child.poll() is None:
-                child.terminate()
-            child.communicate(timeout=5)
 
     def start(self, mode, **options):
         if hasattr(self, "ids"):
@@ -101,7 +130,7 @@ class PostgresLifecycleProcessTest(unittest.TestCase):
 
     def test_long_action_stop_independent_commit_visibility_and_late_fact(self):
         self.call("graph_start")
-        child = self.start("action", slow=True)
+        child = self.start("action", slow=True, action="confirm_route_choice")
         self.wait_for("action_entered")
         self.assertEqual(1, value(self.case, "commits_visible"))
         stopped = self.call("stop")
@@ -115,7 +144,13 @@ class PostgresLifecycleProcessTest(unittest.TestCase):
         attempt = saved["cards"][0]["attempts"][0]
         self.assertEqual("EXECUTED", attempt["status"])
         self.assertTrue(attempt["businessSuccess"])
+        self.assertTrue(attempt["interactionCompleted"])
+        self.assertEqual("COMPLETED", saved["cards"][0]["phase"])
+        self.assertFalse(saved["cards"][0]["resumeConsumed"])
         self.assertEqual("NOT_REQUESTED", attempt["resumeStatus"])
+        for name in ("native_resume", "finalizer", "successor"):
+            self.assertEqual(0, value(self.case, name), name)
+        self.assertFalse(any(f["kind"] == "FINALIZER" for f in saved["facts"]))
         facts = [f for f in saved["facts"] if f["kind"] == "ACTION"]
         self.assertEqual(1, len(facts))
         self.assertEqual("RETURNED", facts[0]["status"])
@@ -172,7 +207,11 @@ class PostgresLifecycleProcessTest(unittest.TestCase):
         self.call("corrupt_old")
         before = self.call("history_digest")
         options = {"source": self.ids["runId"], "old_thread": self.ids["threadId"]}
-        first, second = self.start("restart", **options), self.start("restart", **options)
+        first = self.start("restart", restart_slot="one", **options)
+        second = self.start("restart", restart_slot="two", **options)
+        self.wait_for("restart_ready_one")
+        self.wait_for("restart_ready_two")
+        event(self.case, "restart_release")
         fresh, duplicate = self.finish(first), self.finish(second)
         self.assertEqual(fresh["runId"], duplicate["runId"])
         self.assertNotEqual(self.ids["runId"], fresh["runId"])
@@ -198,6 +237,8 @@ class PostgresLifecycleProcessTest(unittest.TestCase):
         self.assertTrue(any(f["kind"] == "FINALIZER" and f["status"] == "RETURNED" for f in saved["facts"]))
         self.assertEqual(1, value(self.case, "executor"))
         self.assertEqual(1, value(self.case, "skill"))
+        for name in ("native_resume", "finalizer", "successor"):
+            self.assertEqual(1, value(self.case, name), name)
 
     def test_already_admitted_native_node_saves_late_result_after_stop(self):
         node = self.start("node_race")

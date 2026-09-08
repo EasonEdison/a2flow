@@ -184,3 +184,13 @@
 - 本条后续回执只改变own checkpoint，不改变脚本hash；窗口expected-source-sha应使用主控最终批准的完整worker tip。
 - Status: HANDOFF；Next: 直接向main-brain发送完整SHA/hash/预算/命令，等待增量复核及单独窗口令。
 - PG仍未运行，未创建资源/凭据，未集成main或操作GitHub。
+
+### 主控增量审查三项修正
+
+- Status: ACTIVE / VERIFYING；尚未获得PG窗口令。
+- 慢Action改为完成型confirm_route_choice；断言真实business success+interactionCompleted/COMPLETED保存，resumeConsumed=false，native-resume/Finalizer/真实guarded successor计数均0。正链路计数各1经memory harness证明。
+- setUp在首次child前addCleanup；逐个owned child terminate→boundedwait→kill/reap，finally失败不跳过其余child，非timeout fatal保存。
+- restart两worker各ready后parent才释放PG barrier；采样竞争，不声称全部交错。
+- 6项focused通过（0.192s）；随后改动cleanup的fatal子例定向通过，8个PG用例skip。
+- Runtime src与6ee09e3无差异；entry/common safety hash不变，worker/test两个hash已更新pg-window-04.md。
+- Next: diff/secret/ownership gate后小提交，给main-brain新expected-source SHA与两个变化hash；不启动PG/集成。

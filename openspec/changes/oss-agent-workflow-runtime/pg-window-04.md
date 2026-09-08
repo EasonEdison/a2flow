@@ -52,9 +52,9 @@ shared finally cleanup. Merely supplying --authorized-window is not permission.
 - experiments/runtime-phase1/runtime_phase1/runtime03_pg_window.py
   SHA256: 0456a0b29ead9644d6ca6d3e5f2f0ba552286450d3f6b57a1365a276d7bc107e
 - services/agent-workflow-runtime/tests/pg_lifecycle_worker.py
-  SHA256: e11454c64292deb8b6ad9adf70bc10732515e449f6069132f91b84f3c1bf6670
+  SHA256: bf36fc8edf3e17e99ad981fb2e780c91b9cfe0625f164355bd784a229b3e7f42
 - services/agent-workflow-runtime/tests/test_postgres_lifecycle_integration.py
-  SHA256: ae912d19d9e37f6663a6139645300ddfe360f2244ae412101ee5fb91ce550e02
+  SHA256: 1f47e79da9e3b0bf8f39c598df2877fbce3bfb930af8f25228e8ce14a72bf331
 
 The entry hash alone is insufficient: review the shared safety module and both
 process-test files from the same fixed source commit.
@@ -75,10 +75,13 @@ authorized cleanup if needed; ordinary execution already performs cleanup in fin
 
 1. No-card run exists; wrong owner/environment stop rejects; two separate processes
    read the same canonical STOP result and durable STOPPED state.
-2. A long Action uses a third connection to see committed AF03 EXECUTING and AF04
+2. A long completing confirm_route_choice Action uses a third connection to see committed AF03 EXECUTING and AF04
    IN_FLIGHT before its executor event. Another process accepts STOP while that
    Action still holds its AF03 session. Release the old executor; save actual
-   business success/RETURNED fact, no resume or success transition.
+   business success and interactionCompleted=true, COMPLETED card/RETURNED fact,
+   resumeConsumed=false and resumeStatus=NOT_REQUESTED. Actual native-resume,
+   Finalizer and guarded successor counters must each stay zero. The positive
+   case proves all three counters reach one when there is no stop.
 3. Release independent stop/node processes at a PG event barrier. Either admission
    may win; any accepted node fact must have pre-STOP revision 0 and a saved late
    result. No post-STOP process gains a new dispatch. No forced claim that this
@@ -90,8 +93,10 @@ authorized cleanup if needed; ordinary execution already performs cleanup in fin
    read spy rejects old checkpoint access before graph progression. Old record
    digests remain unchanged and executor count remains zero.
 6. Keep both an old successful non-completing Action and an old UNCONFIRMED fact,
-   then STOP and corrupt the old Run input/versions. Two restart processes use
-   only narrow old identity projection, invoke one fresh factory, create new
+   then STOP and corrupt the old Run input/versions. Each restart child records
+   its own ready event before runner.start; the parent waits for both and then
+   releases the shared PG barrier. This is a sampled competition, not proof of
+   every interleaving. The two processes use only narrow old identity projection, invoke one fresh factory, create new
    run/thread/interaction and resolve current input/v2 config. Old Run/fact/
    interaction/node/checkpoint reads throw in this worker. Conflict payload
    rejects; the new run performs its normal Action even with the same control ID
@@ -131,3 +136,25 @@ before exact finally cleanup, followed by independent target/port readback.
 Only main-brain may approve the incremental code/hash and issue a new single-
 executor window. Failures within a real window stop and clean up; no automatic
 retry or in-window source modification is authorized by this proposal.
+
+## Incremental review corrections after 46a9f50
+
+- The long Action now exercises a completing Action, not save_choice. Saved
+  completion truth and zero actual continuation/Finalizer/successor counts are
+  asserted separately; NOT_REQUESTED alone is not accepted as stop evidence.
+- A real guarded native successor was added to the probe graph after the Deep
+  Agent. The actual continuation adapter and terminal guard record independent
+  PostgreSQL counters; the memory positive harness verifies each counter is 1.
+- setUp registers addCleanup before creating the first allocate child. Every
+  registered exact Popen gets terminate, bounded communicate, then kill/reap
+  on timeout/error. One failure is retained but cannot skip later children.
+  Non-timeout fatal wait errors are preserved after cleanup, not swallowed.
+  The existing outer owned-process-group finally remains unchanged.
+- Two restart children must each reach a distinct ready barrier before the
+  parent release. Different barrier slots do not enter the canonical control
+  payload. No business/recovery behavior or additional PG case was introduced.
+- Six focused SDK-harness/child-cleanup tests PASS (0.192s). After adding the
+  fatal-wait preservation subcase, the exact changed cleanup test PASS and all
+  eight opt-in PG tests SKIP. No shared window safety code or Runtime src changed.
+- Entry/shared safety hashes are unchanged; worker/integration-test hashes above
+  replace the prior two values. Expected source SHA must be the new approved tip.
