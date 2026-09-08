@@ -42,7 +42,19 @@ def docker(*args, **kwargs):
 
 def inspect(kind, name):
     result = docker(kind, "inspect", name, check=False)
-    return None if result.returncode else json.loads(result.stdout)[0]
+    if not result.returncode:
+        return json.loads(result.stdout)[0]
+    # Exact Docker 26.1.3 responses verified against these absent owned targets.
+    # Any daemon/permission/transport error is UNKNOWN, never absence evidence.
+    absent = {
+        "container": "Error response from daemon: No such container: " + name,
+        "volume": "Error response from daemon: get " + name + ": no such volume",
+        "image": "Error response from daemon: No such image: " + name,
+    }
+    if (result.returncode == 1 and result.stderr.strip() == absent.get(kind)
+            and result.stdout.strip() in {"", "[]"}):
+        return None
+    raise RuntimeError("RESOURCE_INSPECTION_UNKNOWN")
 
 
 def private_file(name, value):

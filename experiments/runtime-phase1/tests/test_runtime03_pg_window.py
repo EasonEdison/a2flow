@@ -109,3 +109,21 @@ class WindowCleanupTest(unittest.TestCase):
                         window.credential_log_check(["synthetic-secret-A", "synthetic-secret-B"])
             self.assertIn("PASS" if passed else "FAIL", output.getvalue())
             self.assertNotIn("synthetic-secret", output.getvalue())
+
+
+class InspectionFailureTest(unittest.TestCase):
+    def test_daemon_error_is_unknown_and_never_cleanup_verified(self):
+        output = io.StringIO()
+        unavailable = SimpleNamespace(returncode=1, stdout="", stderr="Cannot connect to the Docker daemon")
+        with patch.object(window, "docker", return_value=unavailable), redirect_stdout(output):
+            with self.assertRaisesRegex(RuntimeError, "RESOURCE_INSPECTION_UNKNOWN"):
+                window.cleanup()
+        self.assertNotIn("verified", output.getvalue())
+        absent = SimpleNamespace(returncode=1, stdout="[]",
+                                 stderr="Error response from daemon: No such container: " + window.CONTAINER)
+        with patch.object(window, "docker", return_value=absent):
+            self.assertIsNone(window.inspect("container", window.CONTAINER))
+        absent.stderr += "\npermission denied"
+        with patch.object(window, "docker", return_value=absent):
+            with self.assertRaisesRegex(RuntimeError, "RESOURCE_INSPECTION_UNKNOWN"):
+                window.inspect("container", window.CONTAINER)
