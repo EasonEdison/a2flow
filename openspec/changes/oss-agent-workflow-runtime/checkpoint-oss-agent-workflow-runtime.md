@@ -64,7 +64,7 @@
 
 ## Next Executable Action
 
-提交 AF04-PG-W1 实际证据文档给 main-brain 复核；不再运行PG，不修改已测源码，不集成main/GitHub。
+等待 main-brain 对固定证据提交9309a03的复核及独立集成令；不再运行PG，不修改已测源码，不自行集成main/GitHub。
 
 ## 交付状态
 
@@ -216,3 +216,10 @@
 - main-brain已独立复核并接受W1有界验收；现仅待evidence-only文档review与独立server-main集成令。
 - Next Executable Action: 提交own PG-W1实际证据文档给main-brain；不再运行PG，不集成main/GitHub。
 - Runtime仍NO READY；窗口完成不表示所有产品行为/交错/生产已可用。
+
+### AF04 W1 证据文档回执
+
+- Evidence SHA: 9309a03c4843beac9f7130e93cee8b16712c1c60；仅6份owned文档。
+- Worker push PASS，HEAD/远端一致且clean；源码/测试/窗口脚本与受测998b4d9无差异。
+- Status: HANDOFF；Current phase: VERIFYING（等待主控证据review）。
+- Next: 向main-brain报告证据SHA和最终回执tip；得到独立集成令前保持不动。
