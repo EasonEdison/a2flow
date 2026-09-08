@@ -4,6 +4,8 @@ Date: 2026-09-08. Status: ACCEPTED engineering direction for AF-MODEL-06; implem
 
 Scope delta AF-MODEL-06-D1: the user explicitly narrowed this slice to DeepSeek only. Bailian and other providers are deferred, including their adapter research, dependency resolution and implementation. Keep a simple DeepSeek configuration entry, not a multi-provider/plugin platform. The alternatives below remain research history, not implementation requirements.
 
+Engineering delta D3: fixed-SDK evidence triggered the re-evaluation condition below. Use a narrow project-owned DeepSeek BaseChatModel implementation, delegating HTTP, typed ChatCompletion/ChatCompletionChunk parsing and native SSE to the already installed OpenAI SDK. This supersedes direct ChatDeepSeek use as the target production factory, not the LangChain/Deep Agents foundation. It is not a new Agent framework or universal protocol implementation.
+
 ## Requirement and decision
 
 The user requests configurable DeepSeek integration, preserving provider-returned reasoning content, text, tool calls and other response fields. A thin adapter should expose typed blocks instead of distributing provider JSON parsing throughout the Runtime. The original two-provider target is superseded by D1. This does not change Deep Agents as the Agent SDK or authorize live API calls, credential installation or deployment.
@@ -52,6 +54,16 @@ Read-only inspection confirms accepted server source 6cadc6076f72f11137b5fb96bfe
 
 Re-evaluate only if selected public adapters demonstrably discard necessary fields, cannot preserve stream/history semantics through public hooks, or require incompatible dependency changes. Report the exact fixture/field/path before choosing another library or writing a provider shim. Runtime reports offline contract evidence separately from real-provider and PostgreSQL evidence.
 
+### D3 evidence and selected public extension
+
+On fixed candidate1647c318208ae3f717b72cdb48fecc7176f3d396, the coordinator independently ran five synthetic HTTP/SSE characterization checks (1.048s), reproducing unknown-field loss and missing reasoning_content in the actual third SDK-generated request. The two known-gap checks passing demonstrate a defect, not provider acceptance. Exact SDKs: langchain-deepseek1.1.0, langchain-openai1.6.0, openai3.8.0, core1.6.2. No real model was called.
+
+BaseChatModel explicitly documents _generate, _llm_type and optional _stream/_agenerate/_astream as custom-model implementation interfaces. Implementing these in our own adapter is permitted; overriding ChatDeepSeek's private serializer/converter or changing installed SDK code is not. Reuse public convert_to_openai_messages/convert_to_openai_tool for standard conversion and add only DeepSeek's required reasoning field. Guard conversion alignment rather than assuming arbitrary message lists always map one-to-one. Keep outbound fields allowlisted; retained opaque metadata is not a request payload.
+
+Preserve the SDK typed response/chunk's model_dump data, including model extras, before projecting to native LangChain messages. Keep stream payload records ordered and separate so SDK chunk addition cannot concatenate opaque identifiers/values into invented data. Use native SDK streaming and LangChain chunks, with complete tool arguments validated before dispatch. No custom HTTP body rewrite, SSE parser, global request correlation state or second Agent loop.
+
+A middleware alone sees the already-lossy model response; a transport workaround additionally needs message pairing, response correlation and reinjection. The model boundary is the smaller explicit location for this proven DeepSeek-only gap. All prior tests remain, with new positive retention/replay assertions for the project adapter; keep any upstream-loss characterization visibly separate. Async support may use documented BaseChatModel defaults if sufficient for the existing service, but its actual behavior must be tested and stated, not assumed native async.
+
 Official sources checked on 2026-09-08:
 
 - [LangChain messages and content blocks](https://docs.langchain.com/oss/python/langchain/messages): typed standard projection, native content, metadata and chunk accumulation.
@@ -60,3 +72,5 @@ Official sources checked on 2026-09-08:
 - [PydanticAI message parts](https://pydantic.dev/docs/ai/api/pydantic-ai/messages/): typed parts and provider_details for otherwise unmapped fields/replay.
 - [PydanticAI thinking](https://pydantic.dev/docs/ai/capabilities/thinking/): model/provider profiles and thinking handling.
 - [LiteLLM reasoning content](https://docs.litellm.ai/docs/reasoning_content): reasoning/thinking fields and downstream-client loss risks.
+- [BaseChatModel custom-model interface](https://reference.langchain.com/python/langchain-core/language_models/chat_models/BaseChatModel): documented implementation methods used by D3.
+- [OpenAI SDK v3.8.0](https://github.com/openai/openai-python/tree/v3.8.0): public typed response/native streaming and model_extra preservation; reused for the DeepSeek route, not an additional provider.

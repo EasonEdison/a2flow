@@ -6,6 +6,8 @@ Status: user-authorized continuation; bounded source/fixture implementation rele
 
 Delta D1, 2026-09-08: latest user instruction is DeepSeek only. This supersedes the original DeepSeek+Bailian scope immediately. Stop Bailian/Tongyi/ChatQwen research, dependency resolution and implementation; no multi-provider acceptance gate or generic provider plugin platform is required. Other field-preservation and execution boundaries remain unchanged.
 
+Delta D3: coordinator independently reproduced the two fixed-SDK field-loss/history gaps on worker1647c318208ae3f717b72cdb48fecc7176f3d396 (five characterization checks,1.048s). Release a narrow project-owned DeepSeek BaseChatModel adapter within the existing service ownership. Implement the documented custom-model extension points, reuse already installed OpenAI SDK typed responses/native SSE and core message/tool conversion helpers, explicitly preserve native payload/extension records and add required DeepSeek reasoning replay. Do not override private ChatDeepSeek serializers or implement a universal parser/Agent loop. See ADR-0003 D3 for rationale and stream/alignment boundaries. No new packages are required or released by D3.
+
 ## Outcome
 
 Provide a thin host-configured DeepSeek entry for Deep Agents. Reuse a mature SDK integration and LangChain standard content blocks while retaining reasoning, tool calls, metadata and required history fields. Read docs/adr/0003-model-adapters-and-content-blocks.md before implementation.
@@ -25,6 +27,8 @@ Provide a thin host-configured DeepSeek entry for Deep Agents. Reuse a mature SD
 4. Support stream assembly and outbound history serialization through mature public SDK mechanisms. No hand-written universal JSON parser, framework fork, new Agent loop, provider fallback or silent option modification.
 5. Target only DeepSeek and report unsupported routes honestly. Keep runtime host injection compatible; do not require deployment keys or a specific live model just to run synthetic tests. Bailian and other providers are out of scope.
 6. Verify actual model/profile matching in the Deep Agents harness. Provider configuration must not re-enable implicit filesystem/execute/subagent Tools or bypass use_skill/tool admission/Finalizer/stop boundaries.
+
+7. D3 acceptance adds positive HTTP/SSE unknown-field retention and actual next-request reasoning assertions through the new adapter, including native serialization and no-tool assistant history. Keep old upstream known-gap tests separately labeled; a passing defect characterization is never the positive gate. Validate stream argument completion, callback behavior, resource closure and supported sync/async paths using public SDK mechanisms. Preserve opaque payload records without corrupting them during chunk merge, do not blindly send retained extras back as request fields, and retain safe HTTP projections.
 
 ## Focused acceptance
 
