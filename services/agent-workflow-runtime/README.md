@@ -1,7 +1,7 @@
-# A2Flow internal Agent/Workflow Runtime — AF-RUNTIME-04
+# A2Flow internal Agent/Workflow Runtime — AF-RUNTIME-05
 
-This is an importable internal Python library, not a published Action wire
-contract or HTTP service. Its PostgreSQL adapter is implemented; live PostgreSQL
+This is an importable internal Python library with an AF05 Runtime-local ASGI
+adapter, not a published shared Action wire contract or deployed service. Its PostgreSQL adapter is implemented; live PostgreSQL
 acceptance passed the bounded AF-RUNTIME-03-PG-W1 window; product readiness
 and integration remain separately gated. It consumes the
 approved Skill/Policy subset and public LangGraph APIs.
@@ -83,7 +83,7 @@ execution/delivery, actual Deep Agent interruption/resume/Finalizer, two pending
 same-name Tools and native A-waits/B1-to-B2 progression. The integration tests
 reuse the existing project-authored Skill material test fixture.
 
-Current limits: PostgreSQL Action repository and control ledger are implemented,
+Historical AF03 limits (superseded below where AF04/AF05 add source): PostgreSQL Action repository and control ledger are implemented,
 and 9 actual PostgreSQL/multi-process tests passed AF-RUNTIME-03-PG-W1.
 Default offline discovery still skips these 9 tests without an authorized DB.
 No async continuation/executor adapter, automatic
@@ -173,7 +173,8 @@ Import RunLifecycle/RunStoppedControl from agent_workflow_runtime.lifecycle,
 PostgresRunRepository from agent_workflow_runtime.postgres_lifecycle, and
 ControlledRunRunner/RunGraphBinding/guarded_node/guarded_router from
 agent_workflow_runtime.native_control. Backend-owned configuration, graph
-factories and trusted identity are required; there is no HTTP handler or UI.
+factories and trusted identity are required. AF04 itself supplies no HTTP/UI;
+AF05 below adds a backend-callable HTTP adapter, not a digital employee UI.
 
 AF04 assembly must bind the same RunLifecycle to the ActionService,
 LangGraphContinuation, RunGraphBinding and ControlledRunRunner. Call Actions
@@ -259,3 +260,37 @@ Models and business ports remain synthetic. Source implementation, bounded
 runtime evidence and deployment are distinct: no deployment, complete product
 READY, full async execution, generic recovery or every-interleaving guarantee
 follows. See the owned regression/readiness records for exact cases.
+
+## AF-RUNTIME-05 formal service and in-process HTTP
+
+Import RuntimeService/ExecutionSession from agent_workflow_runtime.service,
+PostgresProjection from agent_workflow_runtime.postgres_projection,
+build_engine from agent_workflow_runtime.assembly, and create_app from
+agent_workflow_runtime.http. The host supplies the controlled execution session,
+trusted entry/version/configuration factories and an authenticated TrustedContext
+via ASGI scope a2flow.trusted_context. No identity header or default user is trusted.
+
+The service-local requirements-http.txt pins the three AF05-D1-approved new
+wheels and hashes. Add only to the recorded existing Runtime environment with
+--no-deps; this is not a standalone lock for every SDK dependency.
+
+The adapter has start, committed control lookup, progress, node Action, stop,
+fresh restart and bounded snapshot-event routes. It starts no listener. Execution,
+read and stop use independent bounded capacity; already-dispatched work retains
+its slot after a cancelled HTTP waiter. Snapshot queries do not acquire Action
+admission/continuation locks. Actual body bytes cap at64KiB; response bytes are
+checked before sending at256KiB. Unknown fields and errors cannot expose raw
+input, checkpoint, private results or exception text.
+
+RUNNING/IN_FLIGHT/historical INTERRUPTED are not native liveness; initialControl
+delivery explicitly retains UNCONFIRMED. Cards remain REVALIDATION_REQUIRED or
+NOT_OPERABLE, never a bypass of current Action/version checks. Native checkpoint
+state is deliberately not inspected by progress. Events are one current
+runtime.snapshot observation, not SSE/history/replay; truncated collections
+explicitly preserve unknown remainder.
+
+See [AF05 design](../../openspec/changes/oss-agent-workflow-runtime/service-entry-05.md),
+[AF05 regression](../../openspec/changes/oss-agent-workflow-runtime/regression-05.md)
+and [AF05 readiness](../../openspec/changes/oss-agent-workflow-runtime/readiness-05.md).
+AF03/AF04 evidence above remains historical at its original source SHA.
+AF05 does not authorize a PostgreSQL rerun, listening server, provider call or deployment.

@@ -8,7 +8,7 @@
 - 集成目标：origin/main
 - 独占规格：openspec/changes/oss-agent-workflow-runtime/
 - 预留实验：experiments/runtime-phase1/
-- 本次授权实现：services/agent-workflow-runtime/（AF-RUNTIME-04）
+- 本次授权实现：services/agent-workflow-runtime/（AF-RUNTIME-05）
 - 禁止：其他任务 checkpoint、共享根文件/依赖/版本、部署、secret、现有服务/数据库/端口；Python 仅按 PY-01 单执行者边界变更
 
 ## 基线真值
@@ -23,8 +23,8 @@
 
 ## 当前里程碑
 
-- 状态：HANDOFF / AF_RUNTIME_04_PG_W1_COMPLETE_PENDING_REVIEW
-- 当前基线：a38444e8006ecef51a67f92a6b06a7d80285277b；AF-RUNTIME-04 release 已消费，当前源码候选待主控固定 SHA 审查。
+- 状态：HANDOFF / AF_RUNTIME_05_SOURCE_REVIEW
+- 当前基线：cee8149（AF05-E1）；AF04 已接受并集成，AF05 稳定源码候选待主控固定 SHA 审查。
 - 前批源码：0e73d8b 已服务器集成；GitHub 同步由 main-brain 完成。
 - Runtime：NO READY
 - 已完成：三 Tool engine spine、同步/异步 Finalizer、原始 args 闭合准入；真实 Skill Registry/fixture、synthetic Ability port 与 DISPLAY_ONLY Application 已贯通；PG 双进程 native-branch interrupt/resume/join 有界探针通过。
@@ -64,7 +64,7 @@
 
 ## Next Executable Action
 
-等待 main-brain 对固定证据提交9309a03的复核及独立集成令；不再运行PG，不修改已测源码，不自行集成main/GitHub。
+完成 owned diff/secret/ownership 门禁并固定 worker-only 提交，主动发 main-brain 源码复核；不得自行集成或新增 PG/listener/provider 权限。历史 AF04 游标已关闭。
 
 ## 交付状态
 
@@ -223,3 +223,31 @@
 - Worker push PASS，HEAD/远端一致且clean；源码/测试/窗口脚本与受测998b4d9无差异。
 - Status: HANDOFF；Current phase: VERIFYING（等待主控证据review）。
 - Next: 向main-brain报告证据SHA和最终回执tip；得到独立集成令前保持不动。
+
+## AF-RUNTIME-05 当前执行游标
+
+- Updated: 2026-09-08; Status: ACTIVE / IMPLEMENTING.
+- AF04 已接受并由 main-brain 确认 server/GitHub main 同步 ba7c1d269e3096768cddd19e7ee9bd3aedfc0c14；旧待审/待集成字段仅历史。
+- 本轮已 fetch/merge，采用 ca5a3888f1f17e850d248c49368c0a8d69792e33，worker clean 后开始；正式 release 完整读取，无冲突。
+- AF05-E1: main-brain 已批准正式 facade/assembly、FastAPI 0.141.1 薄 HTTP 候选与六类路由、owner-scoped control lookup、有界 runtime.snapshot observation。
+- GET run 与 events 共用投影；无 SSE/历史重放/事件表/调度器；RUNNING/历史 INTERRUPTED/IN_FLIGHT 不证明当前执行或等待。
+- 实际 body 上限64KiB、发送前 response 上限256KiB；不回显原始输入/异常；集合限额必须显式 truncated/unavailable。
+- execution/read/stop 三类独立容量；disconnect 不提前释放仍运行槽，不自动恢复/重放。
+- PostgreSQL 投影必须独立 committed readonly 查询，短时限，无 admission/continuation/advisory/row lock；不读取整个 document/result_json。
+- 已获准对全部已装分发精确锁定做 pip dry-run；仍未允许安装。本轮没有 PG、监听端口、容器、provider 或部署权限。
+- 当前动作：把 Tool admission/Finalizer/engine assembly 从 experiments 移入正式包并保留兼容导入；编写 facade/投影/HTTP 与离线验证。
+- 稳定候选先 push worker 并主动发送固定 SHA/main-brain 复核；main 集成与 GitHub 仍由独立协调令控制。
+
+### AF05 稳定候选回交
+
+- Status: HANDOFF / VERIFYING；当前实现基于 AF05-E1 cee8149（提交前再次 fetch/merge 并核对）。
+- AF05-D1 已安装且仅新增 fastapi0.141.1、starlette1.6.0、annotated-doc0.0.5，实际wheel三hash全部匹配主控批准；合计213225 bytes，不进入源码。
+- 枚举122条/唯一61的重复源为 lib64 -> lib 同一metadata真实路径；安装后128条/64唯一，旧61逐项不变。pip check/import PASS，主控独立接受D1。原始便携名称/版本保留af05-installed-before.json。
+- 源码：正式assembly/Tool admission/Finalizer，service facade、独立PG readonly projection与FastAPI适配；实验旧入口仅兼容导入。没有第二套调度/背景恢复/业务逻辑。
+- 最终服务104 total=87 PASS+17 PG SKIP，3.460s；实验43 PASS，0.768s。最后测试后只改文档。无AF05真实PG或socket证明。
+- 进程内HTTP已覆盖长执行提前control lookup、独立read/stop、真实request task取消保留工作槽、长完成Action迟到保存不resume、64KiB/256KiB精确边界、owner/env/节点/版本/错误脱敏和不重放。
+- 查询的initialControl显式带UNCONFIRMED；RUNNING与历史INTERRUPTED不当作native活性。GET run/events共用安全有界投影，无SSE/重放承诺。
+- 新文档：service-entry-05.md、regression-05.md、readiness-05.md；完整事实以此AF05段为准，旧AF04段仅历史。
+- Next: 固定worker SHA、push同名worker branch并读回，直接发main-brain等待review；不操作main/GitHub集成或部署。
+
+- AF05 提交前：fetch/merge origin/main already up to date（cee8149）；git diff --check PASS；三个owned目录gitleaks no leaks；admin ownership无异常；内部来源标识扫描无命中。最终21个owned文件，无root/shared contract/其他owner修改。
