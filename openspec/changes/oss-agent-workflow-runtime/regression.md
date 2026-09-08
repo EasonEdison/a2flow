@@ -70,7 +70,7 @@
 
 ## PostgreSQL 门禁
 
-SDK 场景必须最终使用 AsyncPostgresSaver 和真实 PostgreSQL：
+历史 PG-P1-01 使用 AsyncPostgresSaver；AF-RUNTIME-03 的同步 Action/Continuation 链使用官方同步 PostgresSaver 和真实 PostgreSQL：
 
 - 调用 setup/migration；
 - 两个独立 Python 进程共享同一数据库；
@@ -118,3 +118,29 @@ InMemorySaver、MemorySaver、SQLite 或单进程 mock 不能作为通过证据�
 开发中暴露并修复：持 admission lock 调用 graph 会阻塞 SDK 另一线程重放 Tool；
 改为独立 continuation_scope 串行化图调用并在 Tool 处重新核验保存记录。最初的 trace
 末尾串行顺序断言产生 RED，改为分支恰一次与 JOIN 最后断言。
+
+## AF-RUNTIME-03 离线证据 — 2026-09-08
+
+采用基线 87e17e7322f3932e0e84e2caa501a92bfcf10465。新 suite 输出：
+Ran 47 tests ... OK (skipped=9)，即 38 个实际离线通过；9 个 PG 用例未运行。
+实验 suite：Ran 37 tests ... OK。git diff --check 通过。
+受控窗口脚本仅执行 --help，未创建容器/数据/密码文件。
+
+- owner/environment 条件进入所有库读取；错误 owner 不再先读取他人记录，统一 INTERACTION_NOT_FOUND。
+- 同一 scope 使用持锁连接，save 单独 transaction 提交；测试 executor 边界无活动 transaction。
+- 断连接/释放锁/commit 不确定均拒绝；scope 不创建替代连接，退出 close。
+- continuation session 丢失后不允许进入新的 admission scope 补写 RETURNED。
+- schemaVersion 类型、闭合字段、canonical request、Attempt owner/key、结果 JSON 和完成跨字段引用校验通过。
+- 主控独立复现的 COMPLETED + consumed + 无成功 Attempt 坏记录已拒绝；成功结果先存储、尚未 dispatch 的合法状态仍可往返。
+- 同 request 历史读回不派发；在途/未确认 run 新请求拒绝且不污染历史；正常同 run 多卡串行完成可继续。
+
+PG 计划（尚无运行态证据）：独立进程等待/完成读回、同请求一次 executor、不同卡不丢更新、
+owner/env/stale/stopped executor=0、payload conflict/UNCONFIRMED 跨进程保留、杀本探针进程、
+终止本探针持锁 backend、真实 Skill→交互→进程退出→Action→同步 native resume→Finalizer，
+B1/B2 不重放。失连测试特意在真实图已完成 Tool、进入 finish_a 后切断 continuation session，
+允许图继续 JOIN，但持久 DISPATCHING 不自动 RETURNED、不自动派发；这是限制验证而非恢复能力。
+
+连接峰值将由 5ms pg_stat_activity 观测报告（含 observer/checkpointer/scopes/worker），
+明确不是绝对瞬时峰值；role limit=8 为独立硬上限。
+
+- AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。

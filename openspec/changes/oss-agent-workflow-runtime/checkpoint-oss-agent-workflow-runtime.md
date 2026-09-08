@@ -8,7 +8,7 @@
 - 集成目标：origin/main
 - 独占规格：openspec/changes/oss-agent-workflow-runtime/
 - 预留实验：experiments/runtime-phase1/
-- 本次授权实现：services/agent-workflow-runtime/（AF-RUNTIME-02）
+- 本次授权实现：services/agent-workflow-runtime/（AF-RUNTIME-03）
 - 禁止：其他任务 checkpoint、共享根文件/依赖/版本、部署、secret、现有服务/数据库/端口；Python 仅按 PY-01 单执行者边界变更
 
 ## 基线真值
@@ -23,8 +23,8 @@
 
 ## 当前里程碑
 
-- 状态：AF_RUNTIME_02_SOURCE_REVIEW
-- 当前基线：605720f；AF-RUNTIME-02 release 已读取，无 Git 冲突。
+- 状态：AF_RUNTIME_03_OFFLINE_PASS_PG_WINDOW_REVIEW
+- 当前基线：87e17e7322f3932e0e84e2caa501a92bfcf10465；AF-RUNTIME-03 release 已读取，保留 owned WIP 时 fast-forward merge，无 Git 冲突。
 - 前批源码：0e73d8b 已服务器集成；GitHub 同步由 main-brain 完成。
 - Runtime：NO READY
 - 已完成：三 Tool engine spine、同步/异步 Finalizer、原始 args 闭合准入；真实 Skill Registry/fixture、synthetic Ability port 与 DISPLAY_ONLY Application 已贯通；PG 双进程 native-branch interrupt/resume/join 有界探针通过。
@@ -64,7 +64,7 @@
 
 ## Next Executable Action
 
-AF-RUNTIME-02 源码与 24/24 新用例、31/31 旧回归已通过。提交当前 owned diff 并 push worker 后等待 main-brain review；未释放前不集成 server main。本轮未启动 PG，无 PG/多实例/async continuation 证据。
+AF-RUNTIME-03 源码离线 38 PASS + 9 PG SKIPPED，实验 37 PASS（既有 31 + 窗口故障 6）。将稳定 owned diff 与受控 runtime03_pg_window.py 交主控审查，待单独 PG 窗口放行后执行；当前未启动任何 PG 资源/凭据，未释放前不集成 server main。
 
 ## 交付状态
 
@@ -78,3 +78,15 @@ AF-RUNTIME-02 源码与 24/24 新用例、31/31 旧回归已通过。提交当�
 - Runtime readiness：NO READY
 
 - AF-RUNTIME-02 当前切片：内部 Action admission/executor/policy/completion + native LangGraph adapter + Finalizer guard；worker 提交 SHA 以本记录所在源码提交及回执为准。
+
+## AF-RUNTIME-03 新进展
+
+- 两表持久化、schemaVersion=1 闭合序列化、owner 显式 get、独立 save commit 与两类 session 锁已落盘。
+- 主控批准最小 run 在途/未确认 gate；不新增恢复/接管/调度。
+- 主控 WIP finding：伪完成记录无成功 Attempt 可越过 Finalizer；已补一致性校验与负例。
+- PG 用例包括同步 PostgresSaver 和真实图在锁丢失后仍可完成的限制验证；尚未执行。
+- 受控脚本 exact targets：a2flow-runtime03-pg / a2flow-runtime03-pgdata / /home/admin/OpenSource/.tmp/af-runtime-03-pg。
+- 待审脚本提供 finally 清理、role limit8/server16、5ms 连接观测、15min/resource 限制；--help 只读通过。
+- 所有当前新增文件 admin-owned；无新包/HTTP/根 Compose/共享契约修改。
+
+- AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。

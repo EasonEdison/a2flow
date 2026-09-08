@@ -1,7 +1,8 @@
-# A2Flow internal Action Runtime — AF-RUNTIME-02
+# A2Flow internal Action Runtime — AF-RUNTIME-03
 
 This is an importable internal Python library, not a published Action wire
-contract, HTTP service or production persistence adapter. It consumes the
+contract or HTTP service. Its PostgreSQL adapter is implemented; live PostgreSQL
+acceptance remains separately gated. It consumes the
 approved Skill/Policy subset and public LangGraph APIs.
 
 The trusted backend supplies InteractionRepository, ConfigurationPort,
@@ -41,8 +42,11 @@ requiring reentrancy. save commits each record independently
 of later exceptions. continuation_scope is a separate run-scoped delivery lock;
 native graph execution happens outside the admission lock because Tool replay
 may run on an SDK worker thread. A real adapter must coordinate stop acceptance
-with the admission boundary. No production implementation of these ports is
-shipped; tests use explicit locks and in-memory repository/checkpointer fixtures.
+with the admission boundary. PostgresInteractionRepository implements these
+scopes with dedicated session advisory locks and independent short save transactions.
+All get/for_run/for_node/save calls require a matching trusted scope. The internal
+get(key, owner) signature prevents identity inference from an unscoped record.
+The in-memory ports remain explicit test fixtures, never an automatic fallback.
 
 Saved Attempt records distinguish business_success, interaction_completed
 (the configured completion decision), and resume_status. NOT_REQUESTED means
@@ -50,9 +54,15 @@ no continuation was attempted, DISPATCHING means a dispatch was reserved,
 RETURNED means the graph invocation returned (other branches may still wait),
 and UNCONFIRMED preserves an exception/unknown delivery. Duplicate identical
 control requests return the saved record, including UNCONFIRMED, without
-business or graph replay. Reusing an ID with changed payload is rejected.
+business or graph replay. Historical EXECUTING is conservatively returned as
+EXECUTION_UNCONFIRMED without altering or redispatching the durable reservation.
+Reusing an ID with changed payload is rejected.
 An executor exception remains EXECUTION_UNCONFIRMED because a side effect may
-already have occurred. Fresh request IDs are independent user controls; this
+already have occurred. Before reserving a new control, a same-owner/environment/run
+scan rejects while any EXECUTING, EXECUTION_UNCONFIRMED, DISPATCHING or UNCONFIRMED
+record exists. DISPATCHING can be healthy in-flight, not a confirmed failure.
+The rejection writes no new reservation. The current completion Tool is allowed;
+normal later cards proceed after RETURNED. Fresh request IDs are independent user controls; this
 does not claim business exactly-once, compensation or cross-run deduplication.
 
 ## Run focused tests
@@ -66,18 +76,71 @@ PYTHONPATH=packages/contracts/src:services/agent-workflow-runtime/src:services/s
   -m unittest discover -s services/agent-workflow-runtime/tests -v
 ```
 
-24 deterministic tests cover admission, all asset-version mismatches, typed
+38 deterministic tests cover admission, all asset-version mismatches, typed
 policy evaluation, control deduplication, late stop/version changes, uncertain
 execution/delivery, actual Deep Agent interruption/resume/Finalizer, two pending
 same-name Tools and native A-waits/B1-to-B2 progression. The integration tests
 reuse the existing project-authored Skill material test fixture.
 
-Current limits: no PostgreSQL Action repository, durable control ledger,
-multi-process locking proof, async continuation/executor adapter, automatic
+Current limits: PostgreSQL Action repository and control ledger are implemented,
+but 9 actual PostgreSQL/multi-process tests are not yet run (skipped offline).
+No async continuation/executor adapter, automatic
 delivery recovery, node retry orchestration, full stop/restart service, HTTP
 ingress, live model or real business API. Async Finalizer rejection is tested;
 that is not evidence for async Action execution. All tests are offline and
-memory-backed; Runtime remains NO READY.
+memory-backed or explicit protocol fakes; Runtime remains NO READY.
 
 References: [LangGraph interrupt replay and resume mapping](https://docs.langchain.com/oss/python/langgraph/interrupts),
 [jsonpointer resolver](https://python-json-pointer.readthedocs.io/en/latest/tutorial.html).
+
+## PostgreSQL storage and lock boundary
+
+Import PostgresInteractionRepository from agent_workflow_runtime.postgres.
+Call setup() explicitly during authorized schema setup, not on request ingress.
+Two Runtime-owned tables use (user_id, environment, run_id, node_id,
+interaction_id), adding control_request_id for control identity. Interaction JSON
+and control state save atomically; schemaVersion=1 and closed decoding preserve
+immutable canonical requests. Completion/dispatch/consumption must reference an
+actual successful completing Attempt; corrupt stored state fails closed.
+
+Every scope creates an autocommit connection, holds a session advisory lock and
+closes the connection on exit. Each save is a separate transaction, committed
+before the executor. Admission and continuation have separate SHA256-derived
+64-bit lock namespaces. Collisions only serialize unrelated work. No pool,
+auto-reconnect or long transaction around executor/graph exists. Connection
+and lock waits are 5 seconds; statements have a 10-second timeout. SDK Tool
+threads use new admission scopes, never the continuation connection.
+
+check_scope verifies all thread-local owning sessions still hold their locks,
+including the continuation session when delivery status takes admission.
+A detected loss poisons the scope; no replacement session continues it.
+RETURNED is written only while continuation is still held and checked. However,
+a lost connection CANNOT cancel/fence an already in-flight business operation or
+graph. There is a check-to-dispatch race, not a distributed atomicity guarantee.
+The graph may reach JOIN after lock loss while its Action remains DISPATCHING.
+New Actions are gated; no automatic takeover, reconciliation or recovery exists.
+
+The opt-in PG tests use independent subprocesses and durable executor/Skill/B1/B2
+counters, including loss of the exact owned lock backend and exact owned worker.
+The real native graph uses official synchronous PostgresSaver.from_conn_string
+(autocommit, dict_row, explicit context-managed lifecycle), not AsyncPostgresSaver.
+Connection observation includes saver/scopes/workers/observer at 5 ms intervals;
+it reports an observed peak, not a guaranteed transient maximum.
+
+## Isolated test window (NOT YET AUTHORIZED)
+
+The controlled script is experiments/runtime-phase1/runtime_phase1/runtime03_pg_window.py.
+Only main-brain may release its execution window. From this worker repository:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=experiments/runtime-phase1 \
+/home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python \
+  -m runtime_phase1.runtime03_pg_window --authorized-window
+```
+
+The same command with --cleanup performs ownership-validated exact cleanup.
+The flag is not authorization. Default unit discovery does not start PostgreSQL.
+The script bounds the window to 15 minutes, runs no public listener and creates
+only its named container/volume/private directory (plus .tmp parent if absent).
+It removes those resources in finally; a newly pulled image is removed only if
+Docker allows it without force. Existing/shared images and unrelated data stay.

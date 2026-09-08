@@ -29,7 +29,7 @@ class ActionService:
             raise ActionRejected("WORKFLOW_BINDING_REQUIRED")
         owner = interaction.context.trusted_context
         with self.repository.scope(owner, scope.run_id):
-            existing = self.repository.get(interaction.key)
+            existing = self.repository.get(interaction.key, owner)
             if existing is not None:
                 if replace(
                     existing, phase=interaction.phase, attempts=interaction.attempts,
@@ -59,8 +59,8 @@ class ActionService:
         if not interaction.node_waiting or interaction.phase == "INVALIDATED":
             raise ActionRejected("INTERACTION_NOT_WAITING")
 
-    def _get(self, key: tuple[str, str, str]) -> Interaction:
-        item = self.repository.get(key)
+    def _get(self, key: tuple[str, str, str], owner: TrustedContext) -> Interaction:
+        item = self.repository.get(key, owner)
         if item is None:
             raise ActionRejected("INTERACTION_NOT_FOUND")
         return item
@@ -69,14 +69,23 @@ class ActionService:
         """Execute once per saved control request; failed/uncertain delivery never reexecutes."""
         request = ActionRequest.from_mapping(payload)
         with self.repository.scope(owner, request.run_id):
-            interaction = self._get(request.key)
+            interaction = self._get(request.key, owner)
             self._active(interaction, owner)
             self._versions(interaction)
             for attempt in interaction.attempts:
                 if attempt.request.control_request_id == request.control_request_id:
                     if attempt.request != request:
                         raise ActionRejected("CONTROL_REQUEST_CONFLICT")
-                    return attempt
+                    return replace(attempt, status="EXECUTION_UNCONFIRMED") if attempt.status == "EXECUTING" else attempt
+            # DISPATCHING may be healthy in-flight, not a confirmed failure.
+            # Reject before writing any reservation for this new request.
+            for item in self.repository.for_run(owner, request.run_id):
+                if any(
+                    a.status in {"EXECUTING", "EXECUTION_UNCONFIRMED"}
+                    or a.resume_status in {"DISPATCHING", "UNCONFIRMED"}
+                    for a in item.attempts
+                ):
+                    raise ActionRejected("RUN_OPERATION_PENDING_OR_UNCONFIRMED")
             if interaction.phase != "WAITING":
                 raise ActionRejected("INTERACTION_NOT_WAITING")
             config = self.configuration.action(interaction, request.action_name)
@@ -93,6 +102,7 @@ class ActionService:
             self.repository.save(replace(
                 interaction, phase="EXECUTING", attempts=(*interaction.attempts, pending),
             ))
+            self.repository.check_scope()
             try:
                 result = json_copy(self.executor(config, inputs, owner))
                 success = business_succeeded(config, result)
@@ -105,7 +115,7 @@ class ActionService:
                 # An exception may occur after a business side effect. Preserve the
                 # reservation and never include arbitrary executor exception text.
                 outcome = Attempt(request, "EXECUTION_UNCONFIRMED")
-            latest = self._get(request.key)
+            latest = self._get(request.key, owner)
             self.repository.save(replace(
                 latest,
                 phase=("COMPLETED" if outcome.interaction_completed else "WAITING")
@@ -117,7 +127,7 @@ class ActionService:
             ))
             if not outcome.interaction_completed:
                 return outcome
-            latest = self._get(request.key)
+            latest = self._get(request.key, owner)
             # Retain late business success even when progression is now prohibited.
             self._active(latest, owner)
             self._versions(latest)
@@ -134,23 +144,25 @@ class ActionService:
         # saved claim, active state and versions before returning success.
         with self.repository.continuation_scope(owner, request.run_id):
             try:
-                current = self._get(request.key)
+                current = self._get(request.key, owner)
                 self._active(current, owner)
                 self._versions(current)
+                self.repository.check_scope()
                 self.continuation(current, request.control_request_id)
+                self.repository.check_scope()
             except ActionRejected:
-                self._delivery_status(request, "UNCONFIRMED")
+                self._delivery_status(request, "UNCONFIRMED", owner)
                 raise
             except Exception:
-                self._delivery_status(request, "UNCONFIRMED")
+                self._delivery_status(request, "UNCONFIRMED", owner)
                 raise ActionRejected("RESUME_UNCONFIRMED") from None
-        return self._delivery_status(request, "RETURNED")
+            return self._delivery_status(request, "RETURNED", owner)
 
-    def _delivery_status(self, request: ActionRequest, status: str) -> Attempt:
+    def _delivery_status(self, request: ActionRequest, status: str, owner: TrustedContext) -> Attempt:
         """Persist delivery facts separately from business and completion policy."""
-        owner = self._get(request.key).context.trusted_context
+        self.repository.check_scope()
         with self.repository.scope(owner, request.run_id):
-            item = self._get(request.key)
+            item = self._get(request.key, owner)
             attempts = tuple(
                 replace(attempt, resume_status=status)
                 if attempt.request.control_request_id == request.control_request_id
@@ -171,7 +183,7 @@ class ActionService:
         ):
             raise ActionRejected("INVALID_RESUME_REFERENCE")
         with self.repository.scope(owner, key[0]):
-            item = self._get(key)
+            item = self._get(key, owner)
             self._active(item, owner)
             self._versions(item)
             if (
@@ -193,10 +205,11 @@ class ActionService:
         scope = context.invocation_scope
         if scope.kind != "WORKFLOW":
             return
-        for item in self.repository.for_node(
-            context.trusted_context, scope.run_id, scope.node_id,
-        ):
-            self._active(item, context.trusted_context)
-            self._versions(item)
-            if item.phase != "COMPLETED" or not item.resume_consumed:
-                raise ActionRejected("REQUIRED_INTERACTION_PENDING")
+        with self.repository.scope(context.trusted_context, scope.run_id):
+            for item in self.repository.for_node(
+                context.trusted_context, scope.run_id, scope.node_id,
+            ):
+                self._active(item, context.trusted_context)
+                self._versions(item)
+                if item.phase != "COMPLETED" or not item.resume_consumed:
+                    raise ActionRejected("REQUIRED_INTERACTION_PENDING")

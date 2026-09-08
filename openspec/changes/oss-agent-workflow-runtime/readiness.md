@@ -59,3 +59,18 @@ Task-owned venv 已解析并导入 Deep Agents/LangGraph/PostgreSQL checkpointer
 - 控制去重与 continuation 状态有记录；测试端口锁与 MemorySaver 不证明 PG 或多实例安全。
 - PG Action 存储、async continuation/executor、恢复重试、完整 stop/restart、HTTP/产品/部署仍未实现或验证。
 - 本切片仅 worker 交付；等待 main-brain 审查后释放 server main 集成。Runtime 仍 NO READY。
+
+## AF-RUNTIME-03 当前状态 — 2026-09-08
+
+- 源码：IMPLEMENTED_PENDING_REVIEW；PostgreSQL Action repository/控制表、短独立提交、session 锁和显式 owner 查询已实现。
+- 离线：38 PASS；9 PG SKIPPED；实验 37 PASS（既有 31 + 窗口故障 6）。修复主控发现的完成引用跨字段校验漏洞。
+- PostgreSQL Action/多进程：NOT RUN；不得借用旧 PG-P1-01 异步探针证据宣布本切片通过。
+- 窗口：NOT AUTHORIZED；受控脚本已提供，尚未启动 PG 或创建一次性凭据。
+- 语义边界：EXECUTING/EXECUTION_UNCONFIRMED/DISPATCHING/UNCONFIRMED 阻止同 run 新控制，
+  相同控制只读历史；DISPATCHING 可能健康在途，不确定不等于失败；门禁不自动接管/恢复。
+- 锁限制：session 失连不能撤销在途 executor/graph，不保证在途图全生命周期排他。
+  活性检查与外部副作用非原子；失连后不补写 RETURNED，历史 DISPATCHING/EXECUTING 不重派发。
+- 无生产 Compose、HTTP、live model、async Action、完整 stop/restart、业务 exactly-once 或恢复调度器。
+- 当前源码尚未集成 server main；Runtime 仍 NO READY。
+
+- AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。

@@ -128,10 +128,12 @@ class PostgresBootstrapCredentialTest(unittest.TestCase):
                 admin_password_file,
                 probe_password_file,
                 connection_factory=factory,
+                connection_limit=8,
             )
 
         statement_text = _statement_text(cursor)
         self.assertIn("CREATE ROLE runtime_probe NOLOGIN", statement_text)
+        self.assertIn("CONNECTION LIMIT 8", statement_text)
         self.assertIn("SCRAM-SHA-256", statement_text)
         self.assertNotIn(sentinel, statement_text)
         self.assertEqual(

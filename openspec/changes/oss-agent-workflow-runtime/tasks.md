@@ -80,3 +80,20 @@
 - [x] 控制 requestId 历史与不确定恢复状态保留；无业务 exactly-once 或自动重试声明。
 - [x] 24 个新服务/真实 SDK 离线用例通过；原有 31 个实验回归通过。
 - [ ] 主控审查稳定 worker 提交后才释放 server main 集成；GitHub 同步归 main-brain。
+
+## AF-RUNTIME-03 — 2026-09-08
+
+- [x] 采用 87e17e7 的 runtime-postgres-release-03.md；源码放行与 PG 窗口分离。
+- [x] PostgreSQL 两表 owner/environment/run/node/card/request 唯一键、schemaVersion=1 JSON 严格序列化。
+- [x] 独立短事务 save；admission/continuation 专属 session advisory lock；失连不重连续写。
+- [x] 所有 get 显式 owner；run 新控制在途/未确认门禁经主控增量批准。
+- [x] 修复主控 WIP 审查发现的伪 COMPLETED 缺少成功 Action 引用漏洞；保留正常中间保存态。
+- [x] 38 个离线服务/SDK/存储协议与损坏记录测试 GREEN；实验 37 个用例 GREEN（既有 31 + 窗口故障 6）。
+- [x] 准备 9 个 opt-in PG 独立进程用例；离线全部 SKIPPED，不计运行态通过。
+- [x] bootstrap 显式支持 connection_limit=8，保留 SCRAM/NOLOGIN 安全测试。
+- [x] 提供受控 PG 启动/资源监控/精确清理脚本；仅 --help 已执行。
+- [ ] 主控审查脚本并单独释放 PG 窗口。
+- [ ] 运行 PG/跨进程/失连/真实同步 PostgresSaver 验证并记录连接观测峰值。
+- [ ] 主控审查稳定源码并放行 server main 集成；GitHub 同步由主控执行。
+
+- AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。

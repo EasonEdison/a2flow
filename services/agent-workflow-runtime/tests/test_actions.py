@@ -49,9 +49,9 @@ class ActionServiceTest(unittest.TestCase):
         self.assertEqual([], self.executor.calls)
 
     def test_ownership_node_run_interaction_and_action_rejected_before_execution(self):
-        with self.assertRaisesRegex(ActionRejected, "NOT_AUTHORIZED"):
+        with self.assertRaisesRegex(ActionRejected, "INTERACTION_NOT_FOUND"):
             self.service.submit(request(self.item), TrustedContext("other-user", "PRT"))
-        with self.assertRaisesRegex(ActionRejected, "NOT_AUTHORIZED"):
+        with self.assertRaisesRegex(ActionRejected, "INTERACTION_NOT_FOUND"):
             self.service.submit(request(self.item), TrustedContext("test-user", "ONLINE"))
         for field in ("runId", "nodeId", "interactionId", "actionName"):
             with self.subTest(field=field), self.assertRaises(ActionRejected):

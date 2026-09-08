@@ -139,19 +139,21 @@ def _scram_verifier(connection: Any, probe_password: str) -> str:
     return verifier
 
 
-def _apply_probe_bootstrap(connection: Any, probe_password: str) -> None:
+def _apply_probe_bootstrap(connection: Any, probe_password: str, connection_limit: int = 2) -> None:
     """Keep the role NOLOGIN until fixed DDL and SCRAM setup both succeed."""
 
+    if type(connection_limit) is not int or not 1 <= connection_limit <= 8:
+        raise ValueError("probe connection limit must be between 1 and 8")
     with connection.cursor() as cursor:
         if _role_exists(cursor):
             cursor.execute(
                 "ALTER ROLE runtime_probe NOLOGIN NOSUPERUSER NOCREATEDB "
-                "NOCREATEROLE NOREPLICATION CONNECTION LIMIT 2",
+                f"NOCREATEROLE NOREPLICATION CONNECTION LIMIT {connection_limit}",
             )
         else:
             cursor.execute(
                 "CREATE ROLE runtime_probe NOLOGIN NOSUPERUSER NOCREATEDB "
-                "NOCREATEROLE NOREPLICATION CONNECTION LIMIT 2",
+                f"NOCREATEROLE NOREPLICATION CONNECTION LIMIT {connection_limit}",
             )
         cursor.execute(
             "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = %s)",
@@ -198,6 +200,7 @@ def bootstrap_probe_database(
     probe_password_file: Path,
     *,
     connection_factory: ConnectionFactory = connect,
+    connection_limit: int = 2,
 ) -> None:
     """Bootstrap through NOLOGIN and never send a plaintext password in DDL."""
 
@@ -213,7 +216,7 @@ def bootstrap_probe_database(
             admin_connection_string,
             autocommit=True,
         ) as connection:
-            _apply_probe_bootstrap(connection, probe_password)
+            _apply_probe_bootstrap(connection, probe_password, connection_limit)
     except Exception as error:
         credential_state = _disable_probe_role(
             admin_connection_string,

@@ -40,8 +40,16 @@ class Repository:
         with self.delivery_lock:
             yield
 
-    def get(self, key):
-        return self.items.get(key)
+    def check_scope(self):
+        pass
+
+    def get(self, key, owner=None):
+        item = self.items.get(key)
+        return item if owner is None or item is None or item.context.trusted_context == owner else None
+
+    def for_run(self, owner, run_id):
+        return tuple(item for item in self.items.values()
+                     if item.context.trusted_context == owner and item.key[0] == run_id)
 
     def save(self, interaction):
         self.items[interaction.key] = interaction
