@@ -74,3 +74,16 @@ Task-owned venv 已解析并导入 Deep Agents/LangGraph/PostgreSQL checkpointer
 - 当前源码尚未集成 server main；Runtime 仍 NO READY。
 
 - AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。
+
+## AF-RUNTIME-03-PG-W1 窗口后更新 — 2026-09-08
+
+- PG Action/跨进程：BOUNDED_SYNTHETIC_PASS_ACCEPTED_BY_MAIN，9/9，固定660db6a；完整Runtime仍NO READY。
+- 真实同步PostgresSaver跨进程Skill/交互/Action/native resume/Finalizer及已完成B不重放已通过。
+- EXECUTING/未确认不重派发、独立连接可见已提交reservation、同请求竞争和多卡更新均有PG证据。
+- 在途图失去continuation session后仍可JOIN，证明其不可撤回限制；未将其宣称全生命周期排他。
+- 本轮SCRAM verifier bootstrap现场执行；两枚本轮明文secret对exact容器日志检查PASS，闭合该修复的本窗口有界证据。
+- 连接观测峰值4，minAvailable1039332KiB，swap增长0，data49792KiB；收尾sessions0/locks0。
+- 窗口已关闭：container/volume/private dir/本次新拉镜像已删除，5432无监听；不宣称secure erase。
+- 无新窗口、生产Compose/HTTP/live model/自动恢复或server main/GitHub集成授权。
+
+- main-brain 已接受本次有界PG结果；当前仅待证据文档提交review和server main集成令，产品NO READY不变。

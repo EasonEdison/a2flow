@@ -144,3 +144,46 @@ B1/B2 不重放。失连测试特意在真实图已完成 Tool、进入 finish_a
 明确不是绝对瞬时峰值；role limit=8 为独立硬上限。
 
 - AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。
+
+## AF-RUNTIME-03-PG-W1 实际证据 — 2026-09-08
+
+- 单执行者窗口已获 main-brain 明确授权，仅运行一次，无重跑。
+- 固定源码：660db6a7dffe0c6f270f3e0c84767aab36d87f70；运行期间 HEAD/hash/dirty 不变。
+- 脚本 SHA256：103e9dcd2b36767bbf1483d84d57605928cc9ade2a5f6870080d284b2cdcfc1b。
+- 命令：admin 在 worker 根执行 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=experiments/runtime-phase1
+  /home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python -m runtime_phase1.runtime03_pg_window --authorized-window。
+- PostgreSQL：17.11 (Debian 17.11-1.pgdg12+2)，固定已审 ECR digest。
+- 实际输出：Ran 9 tests in 87.651s / OK；exit=0；总窗口 105.14 秒（含 pull）。
+
+| 实際用例 | 断言结果 |
+| --- | --- |
+| 新独立进程读等待与完成 | WAITING/COMPLETED 持久读回；resume_consumed=true，executor 计数1 |
+| 两进程同请求及 payload 冲突 | 两次返回 EXECUTED；数据库 executor 计数1；变更 payload CONTROL_REQUEST_CONFLICT |
+| 两张卡并发更新 | 两卡历史各1；executor 计数2；没有覆盖另一张卡 |
+| owner/env/版本/stop 负例 | 错误 owner、环境、Application/Ability/Skill 任一版本、stopped 均在 executor 前拒绝，计数0 |
+| executor 未确认跨进程 | EXECUTION_UNCONFIRMED 保留；相同请求不重派发；另一张卡拒绝且不新增占位 |
+| 精确杀本次 worker | 已提交 EXECUTING 保留；新进程投影 EXECUTION_UNCONFIRMED；executor 不重派发 |
+| 精确终止 admission backend | 外部 executor 独立连接先看见已提交 EXECUTING；在途动作返回后 LOCK_CONNECTION_LOST；不换连接续写 |
+| 同步 PostgresSaver 真实链路 | Skill→交互→进程退出→新进程 Action→指定 native interrupt resume→Finalizer/JOIN；Skill/B1/B2/A/executor 各1 |
+| 在途图失锁限制 | completion Tool 后终止 continuation backend；真实图仍可继续 JOIN；持久 DISPATCHING 不改 RETURNED，重复请求不派发，新 Action gate 拒绝 |
+
+以上 executor/Skill/B1/B2/A 计数均保存在 PostgreSQL，不是跨进程失效的内存计数。
+图的 continuation 使用官方同步 PostgresSaver；测试没有替换为 AsyncPostgresSaver。
+最后一项明确证明锁丢失不能撤回在途图，而非宣称恢复/全生命周期排他。
+
+| 资源/安全观测 | 实际值 |
+| --- | --- |
+| 连接观测峰值 | 4；每5ms采样，包含 observer；不是绝对瞬时最大值，role硬上限8 |
+| 最低可用主机内存 | 1039332 KiB |
+| swap 最大增长 | 0 KiB |
+| 数据高水位观测 | 49792 KiB |
+| 清理前 Runtime sessions / advisory locks | 0 / 0 |
+| 公开端口 | {}，network=none |
+| 本轮明文 secret 日志检查 | PASS；只输出结论，未回显容器日志或 secret |
+| 精确清理 | a2flow-runtime03-pg、a2flow-runtime03-pgdata、/home/admin/OpenSource/.tmp/af-runtime-03-pg 均删除 |
+| 镜像 | 本次新拉镜像删除；原有无关 pause 镜像保留 |
+| 独立复核 | 容器/volume筛选无结果，private dir不存在，5432无监听，源码660db6a/hash不变且clean |
+
+临时 synthetic 数据与本次secret文件不可恢复地随隔离资源删除；不宣称 secure erase。
+空 .tmp 父目录保留。该窗口已关闭，不构成再次运行或生产部署授权。
+本次窗口失败安全检查套件为7个，实验 suite 当前38/38，普通Runtime38 PASS + 默认9 PG SKIP。

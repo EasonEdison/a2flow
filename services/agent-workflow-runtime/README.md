@@ -2,7 +2,8 @@
 
 This is an importable internal Python library, not a published Action wire
 contract or HTTP service. Its PostgreSQL adapter is implemented; live PostgreSQL
-acceptance remains separately gated. It consumes the
+acceptance passed the bounded AF-RUNTIME-03-PG-W1 window; product readiness
+and integration remain separately gated. It consumes the
 approved Skill/Policy subset and public LangGraph APIs.
 
 The trusted backend supplies InteractionRepository, ConfigurationPort,
@@ -83,12 +84,13 @@ same-name Tools and native A-waits/B1-to-B2 progression. The integration tests
 reuse the existing project-authored Skill material test fixture.
 
 Current limits: PostgreSQL Action repository and control ledger are implemented,
-but 9 actual PostgreSQL/multi-process tests are not yet run (skipped offline).
+and 9 actual PostgreSQL/multi-process tests passed AF-RUNTIME-03-PG-W1.
+Default offline discovery still skips these 9 tests without an authorized DB.
 No async continuation/executor adapter, automatic
 delivery recovery, node retry orchestration, full stop/restart service, HTTP
 ingress, live model or real business API. Async Finalizer rejection is tested;
-that is not evidence for async Action execution. All tests are offline and
-memory-backed or explicit protocol fakes; Runtime remains NO READY.
+that is not evidence for async Action execution. The 38 ordinary tests are offline, memory-backed or explicit protocol fakes;
+the separate 9-case window used real PostgreSQL. Runtime remains NO READY.
 
 References: [LangGraph interrupt replay and resume mapping](https://docs.langchain.com/oss/python/langgraph/interrupts),
 [jsonpointer resolver](https://python-json-pointer.readthedocs.io/en/latest/tutorial.html).
@@ -127,10 +129,10 @@ The real native graph uses official synchronous PostgresSaver.from_conn_string
 Connection observation includes saver/scopes/workers/observer at 5 ms intervals;
 it reports an observed peak, not a guaranteed transient maximum.
 
-## Isolated test window (NOT YET AUTHORIZED)
+## Isolated test window (single W1 completed; no standing authorization)
 
 The controlled script is experiments/runtime-phase1/runtime_phase1/runtime03_pg_window.py.
-Only main-brain may release its execution window. From this worker repository:
+Only main-brain may release a new execution window; W1 does not authorize reruns. From this worker repository:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=experiments/runtime-phase1 \
@@ -144,3 +146,17 @@ The script bounds the window to 15 minutes, runs no public listener and creates
 only its named container/volume/private directory (plus .tmp parent if absent).
 It removes those resources in finally; a newly pulled image is removed only if
 Docker allows it without force. Existing/shared images and unrelated data stay.
+
+### AF-RUNTIME-03-PG-W1 observed evidence
+
+On fixed source 660db6a7dffe0c6f270f3e0c84767aab36d87f70, the single authorized
+PG 17.11 window passed all 9 independent-process tests in 87.651 seconds.
+Overall window: 105.14 seconds including pull. Observed connection peak: 4
+(5 ms samples including observer; role hard limit 8). Minimum available host
+memory: 1,039,332 KiB; swap growth: 0 KiB; data high-water sample: 49,792 KiB.
+At teardown, runtime sessions=0 and advisory locks=0. The exact container logs
+contained neither of this window's two plaintext secrets (PASS; logs not echoed).
+The container, volume, private socket/secret directory and newly pulled image
+were removed. No secure-erase claim. Post-cleanup readback found no 5432 listener.
+These are bounded synthetic business/scripted-model results, not live-provider,
+production deployment, business exactly-once or automatic recovery evidence.

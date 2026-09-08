@@ -92,8 +92,8 @@
 - [x] 准备 9 个 opt-in PG 独立进程用例；离线全部 SKIPPED，不计运行态通过。
 - [x] bootstrap 显式支持 connection_limit=8，保留 SCRAM/NOLOGIN 安全测试。
 - [x] 提供受控 PG 启动/资源监控/精确清理脚本；仅 --help 已执行。
-- [ ] 主控审查脚本并单独释放 PG 窗口。
-- [ ] 运行 PG/跨进程/失连/真实同步 PostgresSaver 验证并记录连接观测峰值。
+- [x] 主控审查固定660db6a/hash并单独释放 AF-RUNTIME-03-PG-W1；仅一次运行。
+- [x] PG-W1 9/9通过；观测连接峰值4、swap增长0；明文secret日志检查PASS；精确资源清理完成。
 - [ ] 主控审查稳定源码并放行 server main 集成；GitHub 同步由主控执行。
 
 - AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。

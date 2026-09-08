@@ -23,7 +23,7 @@
 
 ## 当前里程碑
 
-- 状态：AF_RUNTIME_03_OFFLINE_PASS_PG_WINDOW_REVIEW
+- 状态：AF_RUNTIME_03_PG_W1_ACCEPTED_DOC_REVIEW
 - 当前基线：87e17e7322f3932e0e84e2caa501a92bfcf10465；AF-RUNTIME-03 release 已读取，保留 owned WIP 时 fast-forward merge，无 Git 冲突。
 - 前批源码：0e73d8b 已服务器集成；GitHub 同步由 main-brain 完成。
 - Runtime：NO READY
@@ -64,7 +64,7 @@
 
 ## Next Executable Action
 
-AF-RUNTIME-03 源码离线 38 PASS + 9 PG SKIPPED，实验 37 PASS（既有 31 + 窗口故障 6）。将稳定 owned diff 与受控 runtime03_pg_window.py 交主控审查，待单独 PG 窗口放行后执行；当前未启动任何 PG 资源/凭据，未释放前不集成 server main。
+AF-RUNTIME-03 固定660db6a已完成单次PG-W1，9/9真实用例通过且精确清理。提交own证据文档并交主控验收；未释放前不集成server main/GitHub，不再启动PG。
 
 ## 交付状态
 
@@ -90,3 +90,12 @@ AF-RUNTIME-03 源码离线 38 PASS + 9 PG SKIPPED，实验 37 PASS（既有 31 +
 - 所有当前新增文件 admin-owned；无新包/HTTP/根 Compose/共享契约修改。
 
 - AF-RUNTIME-03 窗口审查补充：显式禁用 LangSmith/LangChain tracing；独有 window marker + UID/group/session 验证后仅清理本脚本进程组；无论 parent 退出、killpg 竞态或双超时，finally 都执行日志检查和精确资源清理。模拟 PG-owned socket 权限失败已验证仅针对 PRIVATE/socket 的 sudo 删除，以及残留显式失败。docker logs 在清理前仅做本次两个 secret 的内存 substring 检查，只输出 PASS/FAIL。6 个离线故障测试通过，PG 仍未运行。
+
+## PG-W1 单次完成回执
+
+- 固定源码660db6a7dffe0c6f270f3e0c84767aab36d87f70；hash103e9dcd2b36767bbf1483d84d57605928cc9ade2a5f6870080d284b2cdcfc1b。
+- 9/9 PASS，87.651s；window105.14s含pull；无窗口中源码修改、无重跑。
+- peakConnections4（5ms含observer）、minAvailable1039332KiB、swapGrowth0、data49792KiB。
+- 凭据日志检查PASS；收尾runtime sessions0/advisorylocks0；exactcontainer/volume/private目录/新拉镜像均删除。
+- 独立复核目录不存在、筛选无container/volume、5432无监听；无关pause镜像保留；空.tmp父目录保留。
+- 9项实际断言与局限已写regression/readiness；主控已接受有界PG结果，等待文档review与独立集成令。
