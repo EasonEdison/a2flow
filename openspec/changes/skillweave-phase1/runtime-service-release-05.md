@@ -2,7 +2,7 @@
 
 Coordinator: main-brain. Implementation owner: oss-agent-workflow-runtime.
 Date: 2026-09-08. Baseline: AF-RUNTIME-04, ba7c1d269e3096768cddd19e7ee9bd3aedfc0c14.
-Status: user-authorized scope; source work starts with the service facade. Concrete HTTP/dependency/event design is subject to coordinator review before being frozen.
+Status: user-authorized scope; AF05-E1 transport/source implementation approved below. Dependency installation remains separately reviewed after the constrained resolver report.
 
 ## Outcome
 
@@ -50,3 +50,18 @@ The user approved this as the immediate next slice. Other six domains remain pau
 ## Deferred
 
 Real model/provider and real business API integration; public authentication product; digital employee UI/card layouts; complete Workflow compiler/AI routing/skip/retry/context retrieval; M platforms; durable event bus and distributed job scheduling; async engine conversion solely for HTTP; Docker Compose deployment. These remain later slices rather than being silently bundled here.
+
+## AF05-E1 coordinator review — 2026-09-08
+
+The owner acknowledged ca5a388 with no conflicts and an unchanged clean worker. The following Runtime-local implementation is approved, without changing shared platform contracts:
+
+- Formal service/assembly/projection modules plus a FastAPI 0.141.1 HTTP adapter. Official release notes confirm this version. Do not add standard extras, Uvicorn or SSE packages for this in-process slice.
+- POST /runtime/runs accepts controlRequestId, definitionKey and inputs. GET /runtime/controls/{controlRequestId} provides the owner-scoped committed receipt/runId during long start. GET /runtime/runs/{runId} returns a safe current observation. POST /runtime/runs/{runId}/nodes/{nodeId}/actions accepts interactionId, actionName, controlRequestId and inputs. POST stop accepts controlRequestId; POST restart accepts controlRequestId and fresh inputs under the run route. Entry node and all execution bindings remain trusted-backend supplied.
+- GET /runtime/runs/{runId}/events returns one bounded runtime.snapshot observation with observedAt, delivery=snapshot and replay=false, reusing the same safe projection as GET run. It is not SSE, token streaming or historical replay, and cannot guarantee observing intermediate transitions. This slice does not prescribe the eventual digital employee transport.
+- Request-bound synchronous execution is offloaded using public AnyIO thread APIs. Keep execution, read and stop capacity independent and bounded; reject excess execution before durable allocation/admission. Client disconnect does not stop accepted work or release its capacity while it is still running. No background job queue or automatic redispatch.
+- Actual received request bytes are capped at 64 KiB, response bytes at 256 KiB, identifiers at 256 characters. Unknown fields fail. Validation errors must not echo default framework input/context. Collection limits are explicit; truncation or unavailable data must never imply no waiting or success. Do not silently trim a card/result.
+- Projection uses independent short committed reads, no admission/continuation/advisory/update locks, raw results or checkpoints. Keep lifecycle and observed wait/delivery states separate; stopped interactions are historical and non-operable. State any non-atomic multi-query observation limit explicitly. Unknown/unowned resources do not leak existence.
+- Runtime may author service-local requirements and tests. Dependency resolver dry-run is authorized against the existing project venv while constraining every already installed distribution to its current version. Report exact new packages, sources, versions, size and any replacements before installation; no system or root dependency mutations.
+- Tests cover actual in-process ASGI requests, concurrent long-call/control/read barriers, actual disconnect/cancellation, identity/size/error redaction and no duplicate dispatch. HTTPX ASGITransport alone does not run ASGI lifespan; explicitly exercise lifespan if the adapter relies on it. No socket/proxy/real PostgreSQL/provider claim from these tests.
+
+Public references reviewed by the coordinator: [FastAPI releases](https://fastapi.tiangolo.com/release-notes/), [AnyIO thread and cancellation semantics](https://anyio.readthedocs.io/en/stable/threads.html), [HTTPX in-process transports and lifespan boundary](https://www.python-httpx.org/advanced/transports/).
