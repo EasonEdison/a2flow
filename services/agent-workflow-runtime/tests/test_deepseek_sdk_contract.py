@@ -13,9 +13,8 @@ from langchain_core.messages import HumanMessage, ToolMessage, message_to_dict, 
 from langsmith import tracing_context
 from pydantic import SecretStr
 
-from agent_workflow_runtime.model_factory import DeepSeekModelFactory
+from langchain_deepseek import ChatDeepSeek
 from agent_workflow_runtime.model_content import model_content_view
-from support import context
 
 
 TOOL_SCHEMA = {
@@ -55,12 +54,11 @@ class DeepSeekSdkContractTest(unittest.TestCase):
         async_client = httpx2.AsyncClient(transport=httpx2.MockTransport(transport))
         self.addCleanup(client.close)
         self.addCleanup(lambda: asyncio.run(async_client.aclose()))
-        factory = DeepSeekModelFactory(
-            lambda *args: {"model_id": "deepseek-v4-pro", "credential_ref": "synthetic-ref"},
-            lambda *args: SecretStr("synthetic-offline-key"),
-            http_client=client, http_async_client=async_client,
+        return ChatDeepSeek(
+            model="deepseek-v4-pro", base_url="https://api.deepseek.com", api_key=SecretStr("synthetic-offline-key"),
+            http_client=client, http_async_client=async_client, max_retries=0,
+            extra_body={"thinking": {"type": "enabled"}},
         )
-        return factory.create("synthetic-model", context().trusted_context)
 
     def test_http_ingress_native_reasoning_text_tool_usage_and_serialization(self):
         calls = [{"id": "call-1", "type": "function",

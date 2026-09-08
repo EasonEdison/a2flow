@@ -1,4 +1,4 @@
-"""One DeepSeek SDK factory; no provider registry, fallback or protocol parser."""
+"""One DeepSeek SDK-backed factory; no registry, fallback or protocol parser."""
 
 from pydantic import SecretStr
 
@@ -9,7 +9,7 @@ from .service import require_owner
 class DeepSeekModelFactory:
     """Host-only configuration/secret resolution; fixtures inject mock HTTP clients.
 
-    A returned ChatDeepSeek remains the native execution/history model. This
+    A returned DeepSeekChat remains the native execution/history model. This
     construction boundary alone does not prove provider-field or replay coverage.
     No environment mutation, package installation or automatic provider selection.
     """
@@ -30,17 +30,21 @@ class DeepSeekModelFactory:
                 self._resolve_configuration(logical_reference, owner),
             )
             try:
-                from langchain_deepseek import ChatDeepSeek
+                from openai import OpenAI, AsyncOpenAI
+                from .deepseek_model import DeepSeekChat
             except ImportError:
                 raise ModelConfigurationError("DEEPSEEK_ADAPTER_UNAVAILABLE") from None
             secret = self._resolve_secret(configuration.credential_ref, owner)
             if not isinstance(secret, SecretStr) or not secret.get_secret_value():
                 raise ModelConfigurationError("MODEL_CREDENTIAL_UNAVAILABLE")
-            return ChatDeepSeek(
-                model=configuration.model_id, base_url=configuration.endpoint,
-                api_key=secret, timeout=configuration.timeout_seconds, max_retries=0,
-                http_client=self._http_client, http_async_client=self._http_async_client,
-                **configuration.options.sdk_options(),
+            client_options = {
+                "base_url": configuration.endpoint, "api_key": secret.get_secret_value(),
+                "timeout": configuration.timeout_seconds, "max_retries": 0,
+            }
+            return DeepSeekChat(
+                model_name=configuration.model_id, configuration=configuration,
+                client=OpenAI(http_client=self._http_client, **client_options),
+                async_client=AsyncOpenAI(http_client=self._http_async_client, **client_options),
             )
         except ModelConfigurationError:
             raise

@@ -1,21 +1,23 @@
-# AF06-D1/D2 readiness
+# AF06-D3 readiness
 
-Status: NO READY. Partial DeepSeek source plus reproducible fixed SDK blockers.
+Status: SOURCE REVIEW / Runtime NO READY.
 
-- Closed trusted configuration, lazy SDK factory, native content view:12 core/config
-  tests PASS0.003s (before installation, no source change since those tests).
-- AF06-D2 exact dependency install:69 unique, only approved5 added, original64
-  unchanged; full wheel hashes, pip check and import paths PASS. main-brain accepted.
-- Actual SDK synthetic HTTP ingress/SSE/native serialization:5 characterization
-  tests PASS1.034s, including2 known-gap tests that reproduce blocking loss.
-- BLOCKER: unknown HTTP message/choice/response fields and SSE delta extension lost
-  before native messages. No verified raw-payload retention seam implemented.
-- BLOCKER: tools-enabled next SDK request omits reasoning_content from BOTH prior
-  assistant turns (one no-tool, one tool-call), despite successful native round trip.
-- Actual DeepSeek harness matching/admission/Finalizer/stop: next bounded test;
-  existing production assembly unchanged.
-- Public seam fix: requires main-brain review, not implemented.
-- Real provider/credentials, PG, UI, listeners and deployment: NOT RUN / out of scope.
+- D2 dependency gate accepted:69 unique, only approved5 added, original64 unchanged;
+  full wheel hashes, pip check/import PASS. D3 adds no dependency or upgrade.
+- D3 project DeepSeekChat source closes the two demonstrated upstream gaps in
+  synthetic HTTP/SSE/native serialization/next-request fixtures.
+-28 focused tests PASS1.594s:12 config/core,5 separately labeled upstream
+  characterization,11 positive project-adapter gates.
+- Actual new model/harness controlled Tool admission, Finalizer and stop: PASS.
+  Partial/malformed Tool stream cannot dispatch; sync/async stream resource closure,
+  cancellation and once-per-chunk callbacks evidenced.
+- Raw typed payload extensions/order/IDs/numbers/signatures retained through native
+  merge/serialization. Required reasoning alone replayed; no raw outbound/HTTP leak.
+- Supported/unsupported scope and unbounded retained-payload memory caveat are in
+  model-adapter-06.md. Config includes pro/flash; actual harness fixture uses pro.
+- Live provider compatibility/credentials, PG, public UI, listener and deployment:
+  NOT RUN / outside this release.
+- main-brain independent source review and exact main/GitHub integration: PENDING.
 
-Characterization PASS is not compatibility acceptance. Worker-only fixed source is
-for main-brain review; no main/GitHub integration or automatic provider fallback.
+A passing upstream defect characterization is not a positive compatibility gate.
+Synthetic proof is not live DeepSeek availability or production readiness.

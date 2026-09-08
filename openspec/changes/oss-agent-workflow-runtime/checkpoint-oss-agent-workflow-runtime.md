@@ -23,7 +23,7 @@
 
 ## 当前里程碑
 
-- 状态：ACTIVE / AF_MODEL_06_IMPLEMENTING
+- 状态：HANDOFF / AF_MODEL_06_D3_SOURCE_REVIEW
 - 当前基线：c3c8f46（AF-MODEL-06-D1，DeepSeek-only）；AF05 6cadc60 已由主控确认 server/GitHub 集成闭环。
 - 前批源码：0e73d8b 已服务器集成；GitHub 同步由 main-brain 完成。
 - Runtime：NO READY
@@ -316,3 +316,29 @@
   without sending it so existing testedfile unchanged. Harness can follow smallcommit.
 - NextExecutableAction: ownedreview/diff/secretgate, commit+push worker-only evidence,
   return exactSHA/fixtures/command. Main owns publicseam review, no main/GitHub integration.
+
+### AF06-D3 active implementation
+
+- D3 formalADR/release complete read; fetch/merge servermaina42d23a preserving WIP.
+- 1647c318 fixed gapreproducer accepted by root independent5tests; nowapproved
+  project-owned BaseChatModel documentedcustom interfaces over typedOpenAI/nativeSSE.
+- OldChatDeepSeek harnessprobe brieflypassed1test2.248s after adding fixture-only
+  MemorySaver; mainaskednottofreezeoldharness, removing thatownuncommittedmethod.
+- Implement newDeepSeekChat, stricttext/tooloutbound+reasoning replay, raw typed
+  records in nativeadditional_kwargs, sync/async/nativeSSE. No privateprovideroverride.
+- Next: newadapterpositivefourstage, resource/callback/strictfragment/harness tests.
+  No newdependency/modelcredentials/PG/listener or main/GitHub integration.
+
+### AF06-D3 fixed-source review gate
+
+- Latest2026-09-08 10:26 UTC; final28PASS1.594s:12config/core+5upstreamcharacterization
+  +11newadapterpositive. No sourcechange afterfinalrun exceptevidence docs.
+- New DeepSeekChat uses publicBaseChatModel extension and typedOpenAI/nativeSSE;
+  rawrecords retainedordered, reasoningreplayedincludingno-tool assistants.
+- StrictfullToolJSON/terminalstream validation; graphstream partialargumentsnever
+  dispatched. Nativeasync invoke/stream cancellation+normal/early/errorclosePASS.
+- Actualpro harness wireonlylookup; currentrunTool/Finalizer facts andSTOP gatePASS.
+- ProviderIDs separatedfromcorenativeIDs after repeatedfixtureID exposedhistory
+  replacement; rawproviderIDs remainunchanged. Supportedmatrix/no-live inmodel-adapter-06.
+- Next: fetch/merge/diff/secret/ownedgate; commit+pushworker fixedD3SHA to main-brain
+  review. No main/GitHub integration until exactrelease;69depsunchanged/PGnotrun.

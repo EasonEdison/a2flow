@@ -105,3 +105,59 @@ No fix/public seam has been released yet. Do not override adapter private method
 reparse all SSE, duplicate the Agent loop or expose raw payload through AF05 HTTP.
 Actual harness-specific verification is next and can be a separate small commit;
 existing assembly is unchanged in this fixed gap-evidence source slice.
+
+## D3 latest positive gate (supersedes earlier project-adapter blockers)
+
+Date2026-09-08 10:26 UTC. Main-brain approved D3 custom model and servermaina42d23a
+was fetched/merged before implementation. No new dependencies since accepted D2.
+
+Final command from assigned worker:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH=packages/contracts/src:services/agent-workflow-runtime/src:services/agent-workflow-runtime/tests \
+/home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python \
+-m unittest test_model_config test_model_content test_deepseek_sdk_contract test_deepseek_model -v
+```
+
+28 PASS / 1.594s.12 config/core +5 old SDK characterization +11 project-adapter
+positive gates. The2 known_gap tests still describe upstream behavior, not the new
+factory. test_deepseek_sdk_contract now explicitly constructs upstream ChatDeepSeek;
+test_deepseek_model constructs the project DeepSeekChat through trusted factory.
+
+New positive test_deepseek_model evidence:
+
+- Actual SDK mock HTTP retains reasoning, text, parsed calls, usage and unknown root/
+  choice/message fields inside ordered typed payload records.
+- Native serialization after both no-tool and Tool assistant responses retains
+  reasoning; next actual tools-enabled SDK request includes both reasoning strings.
+  Raw markers/deepseek_payloads never leak into outbound requests.
+- Actual SDK SSE retains interleaved2 tool calls, repeated identical IDs/names,
+  reasoning/text, usage-only tail and each original raw typed record. Native merged
+  raw IDs/numbers/signature fields are not concatenated/added/corrupted.
+- Stream -> native complete message -> serialization -> next actual Tool-result
+  request preserves reasoning and both call IDs, without replaying raw payloads.
+- Core callbacks invoked once per emitted chunk; adapter never invokes token
+  callbacks itself. SDK sync and native async normal/early close verified.
+- Async task cancellation while blocked in SSE and sync ReadError close response
+  resources. Truncated args, length and missing finish reject rather than succeed.
+- Strict full Tool JSON rejects truncated objects, duplicate keys, NaN/infinite
+  numeric results and non-object roots.
+- Actual graph.stream(messages/updates) cannot dispatch partial Tool arguments or
+  a stream missing valid termination; no synthetic executor call occurs.
+- Actual Deep Agents model identity/harness key limits outgoing tools to lookup;
+  lifecycle-bound successful Tool fact/Finalizer retained. Extra args cause no
+  executor call and Finalizer rejects. STOPPED prevents SDK invocation.
+- Unsupported input blocks/missing reasoning/options and deliberately misaligned
+  public conversion reject before transport. Model representations exclude clients
+  and synthetic secret. SDK clients both max_retries0; HTTP400 no fallback.
+
+D3 fixture correction: directly assigning repeated provider response IDs as native
+message IDs initially caused reducer replacement and absent Finalizer facts.
+Production adapter now lets core allocate native IDs; original provider IDs remain
+in metadata/raw records. The successful harness test includes repeated provider IDs.
+Earlier old-SDK fixture replacement omitted explicit base_url, causing mock path
+assertions (no network); explicit original endpoint restored before final28PASS.
+
+No AF05/PG/experiments broad rerun. Source unchanged after the final28PASS except
+evidence docs. No private SDK override, global settings, extra packages or live calls.
