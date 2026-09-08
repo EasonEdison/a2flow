@@ -1,6 +1,7 @@
 """Runtime-local ASGI adapter. No listener, authentication scheme or job queue."""
 
 from functools import partial
+from typing import Annotated
 import threading
 import math
 
@@ -8,10 +9,10 @@ import anyio
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, JsonValue
 
 from .models import ActionRejected
-from .service import require_owner
+from .service import control_identifier, require_owner
 
 BODY_LIMIT = 64 * 1024
 RESPONSE_LIMIT = 256 * 1024
@@ -136,14 +137,17 @@ class _Closed(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
+ControlId = Annotated[str, BeforeValidator(control_identifier)]
+
+
 class Start(_Closed):
-    controlRequestId: str = Field(min_length=1, max_length=256)
+    controlRequestId: ControlId
     definitionKey: str = Field(min_length=1, max_length=256)
     inputs: dict[str, JsonValue]
 
 
 class Control(_Closed):
-    controlRequestId: str = Field(min_length=1, max_length=256)
+    controlRequestId: ControlId
 
 
 class Restart(Control):
@@ -193,7 +197,7 @@ def create_app(service, *, execution_capacity=2, read_capacity=2, stop_capacity=
             service.start, who, body.controlRequestId, body.definitionKey, body.inputs,
         ))
 
-    @app.get("/runtime/controls/{control_id}")
+    @app.get("/runtime/controls/{control_id:path}")
     async def control(request: Request, control_id: str):
         who = owner(request)
         return await reads.call(partial(service.control, who, control_id), timeout=read_timeout)

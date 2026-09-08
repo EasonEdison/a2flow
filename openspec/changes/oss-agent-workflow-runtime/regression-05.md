@@ -61,3 +61,15 @@ PYTHONPATH=packages/contracts/src:services/agent-workflow-runtime/src:services/s
 The final source tests preceded documentation-only edits. No AF05 PG window was run.
 
 Submission checks: fetch/merge origin/main already up to date at cee8149; git diff --check PASS; gitleaks --redact on the three owned directories reported no leaks; all owned files admin-owned; internal-source marker scan returned no matches. Exact21-file owned candidate; no root/shared-contract/other-domain edits or tracked wheels.
+
+## Review correction: control ID ingress parity
+
+Main-brain found P2 on41b731b: start accepted129-character/slash controls at HTTP before the narrower shared TrustedInvocationContext rejected them; stop could persist a slash ID that the old lookup route could not retrieve. Correction reuses the existing shared parse_identifier function only for controlRequestId, in both Pydantic BeforeValidator and service ingress. No shared contract, generic definition/input rule or stored record is changed. URL-decoded invalid lookup paths reach the same validation and return400 INVALID_INPUT.
+
+Focused tests after this correction:
+- test_control_ids.py:4 PASS in0.367s. Actual HTTP128-character start/stop/restart/action controls and committed receipt lookup succeed. 129-character and slash IDs return400 before resolver/factory/executor/receipt or stop state mutation. Direct service rejects the same cases before even a lookup projection; extra malformed cases reject. A trusted definition key longer than128 containing slash and slash/long business inputs still succeed.
+- test_http + test_service:15 PASS in0.752s, including all prior ingress/concurrency/error/lifetime checks.
+- Commands use the same existing interpreter/PYTHONDONTWRITEBYTECODE and previous PYTHONPATH; new discovery adds -p test_control_ids.py. The second command adds services/agent-workflow-runtime/tests to PYTHONPATH and runs -m unittest test_http test_service -q.
+- Only these19 directly related cases ran after the correction; no new full-suite, experiment, PG or socket run is claimed. Previous fixed41b731b evidence above remains historical at that source.
+
+Correction lesson (scoped here, not promoted to shared rules or permanent memory): transport limits must reuse an existing field-specific contract parser at every service ingress. A broad generic string cap can accept an unusable durable control identity; asset keys and business input do not inherit the control-ID pattern.

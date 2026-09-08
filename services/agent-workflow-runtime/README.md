@@ -269,6 +269,9 @@ build_engine from agent_workflow_runtime.assembly, and create_app from
 agent_workflow_runtime.http. The host supplies the controlled execution session,
 trusted entry/version/configuration factories and an authenticated TrustedContext
 via ASGI scope a2flow.trusted_context. No identity header or default user is trusted.
+Control IDs reuse the shared 1..128-character identifier parser at HTTP and direct
+service ingress, including lookup; invalid controls fail before backend effects.
+Definition keys and business inputs retain their separate validation rules.
 
 The service-local requirements-http.txt pins the three AF05-D1-approved new
 wheels and hashes. Add only to the recorded existing Runtime environment with

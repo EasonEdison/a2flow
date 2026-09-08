@@ -20,6 +20,7 @@ The host injects the lifecycle/repositories, version and entry resolvers and a c
 ## Runtime-local HTTP
 
 All objects reject unknown fields. Identity/environment cannot be sent in these bodies or query parameters.
+Control IDs reuse the existing shared parse_identifier contract: 1..128 characters matching [A-Za-z0-9][A-Za-z0-9._:-]{0,127}. HTTP and direct service calls validate this before resolver/receipt/execution/stop changes. GET control lookup applies the same validation, including URL-decoded slash paths. This rule does not replace the separate definitionKey or business input rules.
 
 | Method and path | Closed body / response |
 | --- | --- |

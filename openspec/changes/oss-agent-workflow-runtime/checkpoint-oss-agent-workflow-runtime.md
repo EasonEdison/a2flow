@@ -251,3 +251,11 @@
 - Next: 固定worker SHA、push同名worker branch并读回，直接发main-brain等待review；不操作main/GitHub集成或部署。
 
 - AF05 提交前：fetch/merge origin/main already up to date（cee8149）；git diff --check PASS；三个owned目录gitleaks no leaks；admin ownership无异常；内部来源标识扫描无命中。最终21个owned文件，无root/shared contract/其他owner修改。
+
+### AF05 P2 review fix
+
+- main-brain fixed41b731b review: controlRequestId HTTP/service1..256 string admission drifted from shared1..128 identifier parser; slash stop IDs could be persisted but not routed for lookup.
+- 已复用共享parse_identifier，只约束controlRequestId；HTTP BeforeValidator与service入口一致，GET含编码slash交同一校验返回400。未改共享契约/definitionKey/业务inputs/数据。
+- 定向gate：新test_control_ids4 PASS（0.367s）+原test_http/test_service15 PASS（0.752s）；128正例、129/slash拒绝且无resolver/receipt/dispatch/stop状态写入、其他字段规则未变。
+- 仅修复相关19项，没有重跑全套/实验/PG；修复及纠偏证据在regression-05.md。
+- Next: diff/secret/owned gate，worker-only小提交及远端SHA/clean读回后直接回交main-brain；仍不集成main/GitHub/部署。

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from skillweave_contracts import TrustedContext
+from skillweave_contracts.models import parse_identifier
+from skillweave_contracts.validation import ContractValidationError
 
 from .models import ActionRejected, ActionRequest, json_copy
 from .native_control import ControlledRunRunner
@@ -19,6 +21,14 @@ def identifier(value):
     if type(value) is not str or not value or len(value) > 256:
         raise ActionRejected("INVALID_SERVICE_INPUT")
     return value
+
+
+def control_identifier(value):
+    """Reuse the existing shared control ID contract, not generic asset/input rules."""
+    try:
+        return parse_identifier(value, path="$.controlRequestId")
+    except ContractValidationError:
+        raise ActionRejected("INVALID_SERVICE_INPUT") from None
 
 
 class ProjectionPort(Protocol):
@@ -59,11 +69,11 @@ class RuntimeService:
 
     def control(self, owner, control_id):
         # No execution session, definition resolver, graph, or control lock.
-        return self.projection.control(require_owner(owner), identifier(control_id))
+        return self.projection.control(require_owner(owner), control_identifier(control_id))
 
     def start(self, owner, control_id, definition_key, inputs):
         require_owner(owner)
-        identifier(control_id)
+        control_identifier(control_id)
         identifier(definition_key)
         if type(inputs) is not dict:
             raise ActionRejected("INVALID_SERVICE_INPUT")
@@ -79,7 +89,7 @@ class RuntimeService:
     def stop(self, owner, run_id, control_id):
         require_owner(owner)
         identifier(run_id)
-        identifier(control_id)
+        control_identifier(control_id)
         response = self.lifecycle.stop(owner, run_id, control_id)
         # Stop does not depend on the potentially busy interaction projection.
         return {"runId": response["runId"], "lifecycle": response["status"],
@@ -88,7 +98,7 @@ class RuntimeService:
     def restart(self, owner, run_id, control_id, inputs):
         require_owner(owner)
         identifier(run_id)
-        identifier(control_id)
+        control_identifier(control_id)
         if type(inputs) is not dict:
             raise ActionRejected("INVALID_SERVICE_INPUT")
         inputs = json_copy(inputs)
@@ -111,6 +121,7 @@ class RuntimeService:
         }:
             raise ActionRejected("INVALID_SERVICE_INPUT")
         bound = {**payload, "runId": run_id, "nodeId": node_id}
+        control_identifier(bound["controlRequestId"])
         ActionRequest.from_mapping(bound)
         run = self.lifecycle.read(owner, run_id)
         if run.status != "RUNNING":
