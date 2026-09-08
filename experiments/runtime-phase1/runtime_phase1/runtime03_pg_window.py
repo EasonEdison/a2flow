@@ -5,6 +5,7 @@ only verified task-owned cleanup. --help is read-only. No credential CLI values.
 """
 
 import argparse
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,24 @@ LABEL = "a2flow.owner=oss-agent-workflow-runtime-af03"
 REPO = Path("/home/admin/OpenSource/repos/.parallel/oss-agent-workflow-runtime/platform")
 OWNER = "oss-agent-workflow-runtime-af03"
 PYTHON = "/home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python"
+
+
+@dataclass(frozen=True)
+class WindowSpec:
+    """Explicit task-owned targets; shared safety implementation, no global mutation."""
+    container: str
+    volume: str
+    private: Path
+    owner: str
+    env_prefix: str
+    test_pattern: str
+
+
+def window_spec(window=None):
+    # Resolve defaults at call time to preserve AF03 injected-fault fixtures.
+    return window if window is not None else WindowSpec(
+        CONTAINER, VOLUME, PRIVATE, OWNER, "A2FLOW_RUNTIME03", "test_postgres_integration.py",
+    )
 
 
 def command(args, *, timeout=30, check=True):
@@ -57,8 +76,8 @@ def inspect(kind, name):
     raise RuntimeError("RESOURCE_INSPECTION_UNKNOWN")
 
 
-def private_file(name, value):
-    path = PRIVATE / name
+def private_file(name, value, *, window=None):
+    path = window_spec(window).private / name
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as stream:
         stream.write(value)
@@ -73,19 +92,23 @@ def memory():
     return values["MemAvailable"], values["SwapTotal"] - values["SwapFree"]
 
 
-def owned_private():
+def owned_private(*, window=None):
+    spec = window_spec(window)
+    PRIVATE, OWNER = spec.private, spec.owner
     return (not PRIVATE.is_symlink() and PRIVATE.resolve() == PRIVATE
             and (PRIVATE / ".owner").read_text() == OWNER)
 
 
-def cleanup():
+def cleanup(*, window=None):
+    spec = window_spec(window)
+    CONTAINER, VOLUME, PRIVATE, OWNER = spec.container, spec.volume, spec.private, spec.owner
     # Validate all resources BEFORE removing any. Missing targets are idempotent.
     container, volume = inspect("container", CONTAINER), inspect("volume", VOLUME)
     if container and container["Config"]["Labels"].get("a2flow.owner") != OWNER:
         raise RuntimeError("container ownership mismatch")
     if volume and volume["Labels"].get("a2flow.owner") != OWNER:
         raise RuntimeError("volume ownership mismatch")
-    if PRIVATE.exists() and not owned_private():
+    if PRIVATE.exists() and not owned_private(window=window):
         raise RuntimeError("private directory ownership mismatch")
     image_owned = PRIVATE.exists() and (PRIVATE / ".image-owned").exists()
     if container:
@@ -129,10 +152,10 @@ def check_budget(started, initial_swap, volume_path):
     return available, swap, int(size)
 
 
-def group_members(group_id, marker):
+def group_members(group_id, marker, *, window=None):
     """Validate every live group member using the unique inherited window marker."""
     members = []
-    expected = ("A2FLOW_RUNTIME03_WINDOW_ID=" + marker).encode()
+    expected = (window_spec(window).env_prefix + "_WINDOW_ID=" + marker).encode()
     for path in Path("/proc").glob("[0-9]*/stat"):
         try:
             fields = path.read_text().rsplit(")", 1)[1].split()
@@ -147,13 +170,13 @@ def group_members(group_id, marker):
     return members
 
 
-def stop_owned_group(child, marker):
+def stop_owned_group(child, marker, *, window=None):
     if child is None:
         return
     # start_new_session=True made pid both the group and session ID. The unique
     # inherited marker protects against PID/group reuse after the parent exits.
     for signum in (signal.SIGTERM, signal.SIGKILL):
-        if group_members(child.pid, marker):
+        if group_members(child.pid, marker, window=window):
             try:
                 os.killpg(child.pid, signum)
             except ProcessLookupError:
@@ -162,13 +185,15 @@ def stop_owned_group(child, marker):
             child.communicate(timeout=5)
         except subprocess.TimeoutExpired:
             continue
-        if not group_members(child.pid, marker):
+        if not group_members(child.pid, marker, window=window):
             return
-    if group_members(child.pid, marker) or child.poll() is None:
+    if group_members(child.pid, marker, window=window) or child.poll() is None:
         raise RuntimeError("OWNED_TEST_PROCESS_RESIDUAL")
 
 
-def credential_log_check(passwords):
+def credential_log_check(passwords, *, window=None):
+    spec = window_spec(window)
+    CONTAINER, OWNER = spec.container, spec.owner
     container = inspect("container", CONTAINER)
     if container is None:
         print(json.dumps({"credentialLogCheck": "NOT_RUN", "reason": "container absent"}), flush=True)
@@ -184,18 +209,21 @@ def credential_log_check(passwords):
         raise RuntimeError("CREDENTIAL_LOG_CHECK_FAILED")
 
 
-def finish_window(child, marker, passwords):
+def finish_window(child, marker, passwords, *, window=None):
     try:
-        stop_owned_group(child, marker)
+        stop_owned_group(child, marker, window=window)
     finally:
         try:
-            credential_log_check(passwords)
+            credential_log_check(passwords, window=window)
         finally:
             # Even process/log checks failing must attempt resource cleanup.
-            cleanup()
+            cleanup(window=window)
 
 
-def run_window():
+def run_window(*, window=None):
+    spec = window_spec(window)
+    CONTAINER, VOLUME, PRIVATE, OWNER = spec.container, spec.volume, spec.private, spec.owner
+    LABEL = "a2flow.owner=" + OWNER
     if os.getuid() == 0 or command(["id", "-un"]).stdout.strip() != "admin":
         raise RuntimeError("run as project owner admin")
     if inspect("container", CONTAINER) or inspect("volume", VOLUME) or PRIVATE.exists() or PRIVATE.is_symlink():
@@ -210,23 +238,23 @@ def run_window():
         raise RuntimeError("private parent path mismatch")
     PRIVATE.parent.mkdir(mode=0o700, exist_ok=True)
     PRIVATE.mkdir(mode=0o700, parents=False)
-    private_file(".owner", OWNER)
+    private_file(".owner", OWNER, window=window)
     child = None
     window_marker = secrets.token_hex(16)
     passwords = []
     minimum_memory, maximum_swap, maximum_data = available, initial_swap, 0
     try:
         if not image_existed:
-            private_file(".image-owned", "true")
+            private_file(".image-owned", "true", window=window)
             docker("pull", IMAGE, timeout=120)
         image = inspect("image", IMAGE)
         if image["Architecture"] != "amd64":
             raise RuntimeError("image architecture mismatch")
         admin_password, probe_password = secrets.token_urlsafe(36), secrets.token_urlsafe(36)
         passwords = [admin_password, probe_password]
-        admin_file = private_file("admin_password", admin_password)
-        probe_file = private_file("probe_password", probe_password)
-        container_file = private_file("container_password", admin_password)
+        admin_file = private_file("admin_password", admin_password, window=window)
+        probe_file = private_file("probe_password", probe_password, window=window)
+        container_file = private_file("container_password", admin_password, window=window)
         # Fixed Debian PostgreSQL image uses postgres UID/GID 999; no host account change.
         command(["sudo", "-n", "chown", "999:999", str(container_file)])
         socket = PRIVATE / "socket"
@@ -275,15 +303,17 @@ def run_window():
                 raise RuntimeError("runtime role safety readback mismatch")
         environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
             LANGSMITH_TRACING="false", LANGCHAIN_TRACING_V2="false", LANGCHAIN_TRACING="false",
-            A2FLOW_RUNTIME03_WINDOW_ID=window_marker,
-            A2FLOW_RUNTIME03_SOCKET=str(socket),
-            A2FLOW_RUNTIME03_PASSWORD_FILE=str(probe_file),
             PYTHONPATH="packages/contracts/src:services/agent-workflow-runtime/src:"
                        "services/agent-workflow-runtime/tests:services/skill-registry/src:"
                        "experiments/runtime-phase1:experiments/runtime-phase1/tests")
+        environment.update({
+            spec.env_prefix + "_WINDOW_ID": window_marker,
+            spec.env_prefix + "_SOCKET": str(socket),
+            spec.env_prefix + "_PASSWORD_FILE": str(probe_file),
+        })
         child = subprocess.Popen([PYTHON, "-m", "unittest", "discover",
                                   "-s", "services/agent-workflow-runtime/tests",
-                                  "-p", "test_postgres_integration.py", "-v"],
+                                  "-p", spec.test_pattern, "-v"],
                                  cwd=REPO, env=environment, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, text=True, start_new_session=True)
         while True:
@@ -312,7 +342,7 @@ def run_window():
         if child.returncode or sessions or locks:
             raise RuntimeError("PG acceptance or connection cleanup failed")
     finally:
-        finish_window(child, window_marker, passwords)
+        finish_window(child, window_marker, passwords, window=window)
 
 
 def main():

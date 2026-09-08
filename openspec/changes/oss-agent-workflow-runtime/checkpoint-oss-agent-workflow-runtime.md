@@ -146,3 +146,32 @@
 - GitHub: 未操作。AF04 PG: 未运行，独立脚本未准备。
 - Next Executable Action: 将固定源码与离线证据交 main-brain 复核；收到 finding 后只修确切 owned 范围。
 - 本回执是后续文档提交，不改变已验证的 6ee09e3 源码。
+
+## AF04 PG 脚本准备增量
+
+- Status: ACTIVE
+- Current phase: IMPLEMENTING
+- main-brain 已接受固定 6ee09e3 的独立源码/离线 gate；最新授权仅准备 PG 脚本与跨进程用例，不执行。
+- 在已审 AF03 窗口中增加 immutable WindowSpec 参数复用安全机制；AF03 默认资源与行为保留。
+- AF04 exact targets: a2flow-runtime04-pg / a2flow-runtime04-pgdata / /home/admin/OpenSource/.tmp/af-runtime-04-pg。
+- 7 个 opt-in PG process 用例已落盘；尚未运行。新增脚本 --help 只读 PASS。
+- 安全 focused：AF03 7 + AF04 5 故障/参数测试通过；实际 PG 图 memory harness 首项通过。
+- fresh factory memory harness 曾漏掉 conninfo stub（已补），随后 definition fixture 与 PG fixture 名不一致被正常拒绝；正修测试绑定，不改业务规则。
+- Dirty: runtime03_pg_window.py、runtime04_pg_window.py、test_runtime04_pg_window.py；
+  pg_lifecycle_worker.py、test_postgres_lifecycle_integration.py、test_pg_lifecycle_harness.py、本 checkpoint。
+- Next Executable Action: 修正 memory harness 的 definition fixture 绑定并仅重跑该受影响测试，再固定增量/hash提交主控。
+- 没有 PG/container/volume/secret/SDK 修改；main/GitHub 未操作。
+
+### AF04 PG 准备完成，待增量复核
+
+- Status: HANDOFF
+- Current phase: VERIFYING
+- Runtime 实现仍 6ee09e3，不改源码 gate。PG 脚本/8 个 process 用例仅已准备，全部 NOT RUN。
+- 共享安全机制复用而非复制；AF03 7 + AF04 5 安全检查通过，实验 43 PASS。
+- 完整服务扫描曾 78 total/61 PASS/1 fixture error/16 skip；fixture binding 修正后精确失败用例 1 PASS（0.101s）。
+- 另外旧读取 spy 1 PASS，AF04 opt-in discovery 8 skip；三个新增harness分别通过，不宣称最终全套重复执行。
+- 新设计/预算/hash/8项预期断言：pg-window-04.md。之后只做secret/owned scope/whitespace gate与固定提交。
+- Next Executable Action: 固定增量并直接唤醒 main-brain 审查 SHA/hash；没有新窗口令不得执行PG或集成。
+
+- PG 准备提交前：fetch/merge origin/main 无变化；git diff --check PASS；三 owned 目录 gitleaks no leaks；内部标识扫描无命中，所有文件 admin-owned。最终仅11个增量文件。
+- 本次固定提交只含脚本/测试/文档，services/agent-workflow-runtime/src/ 与已审6ee09e3无差异。

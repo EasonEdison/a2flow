@@ -100,6 +100,9 @@ Task-owned venv 已解析并导入 Deep Agents/LangGraph/PostgreSQL checkpointer
 - 真实 SDK：强制 summary 的普通异常 retry 间隙 stop、并行 Tool 晚结果、mixed-fatal、
   Skill wait→Action→Finalizer 及 fresh interaction/旧业务读取禁止通过离线测试。
 - PostgreSQL：AF04 NOT RUN；短事务、窄投影和独立连接实现不等于跨进程准出。
-- AF04 PG 脚本：NOT PREPARED；必须另行提供精确脚本、审查并释放一次性窗口。
+- AF04 PG 脚本：PREPARED_PENDING_INCREMENTAL_REVIEW；8 个跨进程用例 NOT RUN，预算/hash 见 pg-window-04.md；仍需单独窗口令。
 - Worker 固定 SHA 交主控审查；server main 集成和 GitHub 同步尚未授权执行。
 - Runtime：NO READY；无 HTTP/UI/live model/async 完整执行/生产部署或通用恢复。
+
+- 主控已独立接受固定 6ee09e3 源码/离线 gate；PG 准备增量未改变运行时实现。
+- 共享窗口安全机制参数化复用；实验 43 PASS。三个新增 memory/protocol harness 经定向检查通过；不是 PG 证据。

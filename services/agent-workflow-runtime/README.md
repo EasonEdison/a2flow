@@ -234,6 +234,9 @@ claim that an uncertain startup completed.
 
 Latest offline discovery: 69 service cases = 60 PASS + 9 AF03 PG SKIP;
 38 experiment cases PASS. See the AF04 section of the owned regression/readiness
-documents for exact commands, evidence and pending gates. No AF04 PG window
-script has yet been prepared or executed; a new exact script needs main-brain
-review and a separate single-executor release.
+documents for exact commands, evidence and pending gates. The AF04 window script
+runtime_phase1.runtime04_pg_window and eight opt-in process cases are prepared,
+not executed. They reuse the reviewed AF03 safety implementation through an
+immutable WindowSpec. The owned pg-window-04.md records exact targets, hashes,
+budget and offline preparation evidence. A new exact-script review and separate
+single-executor release are mandatory.

@@ -107,7 +107,8 @@
 - [x] 可信 Workflow node 归属与完整受控 service/continuation/graph/runner 绑定。
 - [x] Fresh run/thread/current input/config/interaction；旧业务和 checkpoint 不读；同 control 不再 invoke。
 - [x] 60 个服务离线 PASS + 9 AF03 PG SKIP；38 个实验 PASS。
-- [ ] 固定 worker SHA 经 main-brain 独立源码审查。
-- [ ] 准备 AF04 精确 PG 独立进程脚本并单独申请窗口；当前未运行。
+- [x] 固定 6ee09e3 经 main-brain 独立源码/离线审查。
+- [x] 准备 AF04 精确 PG 脚本和 8 个独立进程用例；复用已审安全机制，离线验证，当前全部 PG NOT RUN。
+- [ ] 主控审增量固定 SHA/hash 并单独释放 AF04 窗口。
 - [ ] AF04 PG 证据通过后的 source/main 集成放行；GitHub 归 main-brain。
 - [ ] 产品 Runtime READY（未通过，不因源码测试完成而勾选）。
