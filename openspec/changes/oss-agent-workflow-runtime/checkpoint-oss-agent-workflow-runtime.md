@@ -136,3 +136,13 @@
 - 待提交精确范围：当前16个 owned 文件；无共享契约、依赖、SDK、根配置变更。
 - Last External Progress: 2026-09-08 13:20 UTC，离线门禁/三处secret扫描/所有权核对完成。
 - 后续测试脚本只做准备与离线检查，不创建 PG/容器/凭据/端口；运行仍需主控新窗口令。
+
+### AF04 worker 固定源码回执
+
+- Source SHA: 6ee09e3d67118048489c515b03741723dd552ef5
+- Worker branch: codex/oss-agent-workflow-runtime/design
+- Worker push: PASS，仅 server-local origin；本地 HEAD 与远端 worker SHA 一致且 clean。
+- origin/main: a38444e8006ecef51a67f92a6b06a7d80285277b，未集成。
+- GitHub: 未操作。AF04 PG: 未运行，独立脚本未准备。
+- Next Executable Action: 将固定源码与离线证据交 main-brain 复核；收到 finding 后只修确切 owned 范围。
+- 本回执是后续文档提交，不改变已验证的 6ee09e3 源码。
