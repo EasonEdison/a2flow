@@ -194,3 +194,8 @@
 - 6项focused通过（0.192s）；随后改动cleanup的fatal子例定向通过，8个PG用例skip。
 - Runtime src与6ee09e3无差异；entry/common safety hash不变，worker/test两个hash已更新pg-window-04.md。
 - Next: diff/secret/ownership gate后小提交，给main-brain新expected-source SHA与两个变化hash；不启动PG/集成。
+
+- 三项修正固定源码：963225026a1f794cf890934d4c3d4ce45e229792；worker push PASS，HEAD/远端一致且clean。
+- Status: HANDOFF；本后续checkpoint回执不改变脚本hash，主控expected-source使用最终回执tip。
+- 提交前diffcheck、两个owned目录gitleaks、admin ownership均PASS；无Runtime src/shared window改动。
+- Next: 发main-brain新tip及worker/test变化hash等待复核；PG仍未运行/未获窗口令。
