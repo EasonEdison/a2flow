@@ -242,3 +242,55 @@ AF04 live PG 完全未运行，独立脚本尚未准备。待单独评审的最�
 接受 stop；跨进程旧 card/native resume 禁止；stop/admission/success 竞争；
 真实同步 PostgresSaver fresh restart/new interaction 和同 control 竞争 invoke=1；
 晚真实结果保存、资源/secret/finally 精确清理。现有 AF03 窗口授权不可复用。
+
+## AF-RUNTIME-04-PG-W1 单次实际证据 — 2026-09-08
+
+本节是 AF04 PostgreSQL 的最新证据；此前 NOT RUN/窗口待审段落保留为历史，
+不得将本窗口解读为再次运行授权或产品 READY。
+
+- 主控单独释放 W1；唯一 executor 为本任务，admin 在 owned worker 执行一次。
+- 固定源码：998b4d9f8411a8e09b88abfb665adb330db15e9f。
+- Runtime 实现仍为已审 6ee09e3；窗口修订来自 9632250，998b4d9 只追加 checkpoint。
+- 命令：PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=experiments/runtime-phase1
+  /home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python
+  -m runtime_phase1.runtime04_pg_window --authorized-window
+  --expected-source-sha 998b4d9f8411a8e09b88abfb665adb330db15e9f。
+- 入场与清理后 HEAD/clean/四文件 SHA256 完全一致；窗口期间未改任何 tracked 文件，包括 checkpoint。
+- 真实输出：Ran 8 tests in 111.491s / OK；exit=0；无 skip、无重跑。
+- PostgreSQL 17.11 (Debian 17.11-1.pgdg12+2)，已审 ECR linux/amd64 digest。
+- 脚本清理前累计 elapsedSeconds=130.26（含 pull/准备/测试，不冒充整个 finally 完成耗时）。
+
+| 已执行 PG 用例 | 固定源码中的实际断言通过 |
+| --- | --- |
+| 已准入原生 node 晚结果 | handler 在 PG event 屏障中等待；另一进程 stop 返回后旧 child 仍在运行；释放后 node fact RETURNED 含实际结果，Run STOPPED |
+| fresh restart 并发控制 | 两 child 分别 ready 后 parent 释放；factory=1、同 runId、新 run/thread/card、current v2/新输入；旧成功 Action 与 UNCONFIRMED 均未抑制新 Action；旧新 executor 总计2，Skill总计2；冲突payload拒绝，旧历史digest不变 |
+| 完成型长 Action stop | executor 第三连接看见 AF03 EXECUTING 和 AF04 IN_FLIGHT 都已提交；stop 不等长 Action session；晚 success+interactionCompleted=true/COMPLETED/RETURNED 保存；resumeConsumed=false、NOT_REQUESTED；native_resume/Finalizer/真实successor计数各0 |
+| 无卡 stop/身份/去重 | 错owner/env均RUN_NOT_FOUND；无卡Run可stop；独立进程重复同control读回相同STOPPED快照 |
+| 正链路跨进程同步 saver | Skill→native wait→进程退出→Action→native resume→Finalizer→真实successor→SUCCEEDED；Skill/executor/native_resume/Finalizer/successor各1 |
+| stop vs conditional success | 两进程PG屏障竞争；只允许一个合法提交终态，败方拒绝；输出未记录本次哪方获胜，不宣称覆盖所有交错 |
+| stop vs node admission | 屏障采样竞争；已有node fact只能revision0并保存RETURNED；STOPPED后新进程dispatch不增加；不宣称每种race分支均被本次采样覆盖 |
+| 旧卡/native Command关闭 | 从独立进程提交旧完成型Action和raw native Command均STOPPED；executor=0，old checkpoint读取spy不触发，旧历史digest不变 |
+
+fresh restart 进程对旧 full Run/input/versions/Action/node/facts/checkpoint 读取设置拒绝 spy，
+且旧 input/versions 刻意损坏。只允许窄旧身份/status/definition投影；新图正常等待和完成。
+上述 counters/barriers 全部存在本次隔离 PG 中，非进程内计数。
+模型/业务仍是 synthetic；强制 summary、并行 model-node 归属、mixed-fatal 的较广覆盖
+来自独立离线用例，不借本次8项扩大为任意 DAG/live provider/async/恢复验证。
+
+| 资源与安全 | 实测值 |
+| --- | --- |
+| 连接观测峰值 | 5；5ms、含observer；不是绝对瞬时最大，role硬限8 |
+| 最低 available | 1036340 KiB |
+| 最大 swap 增长 | 0 KiB |
+| 数据高水位采样 | 50112 KiB |
+| 清理前 runtime sessions / advisory locks | 0 / 0 |
+| 公开端口 | {}；network=none |
+| 明文凭据日志检查 | PASS；没有回显容器日志或凭据 |
+| finally精确清理 | a2flow-runtime04-pg / a2flow-runtime04-pgdata / /home/admin/OpenSource/.tmp/af-runtime-04-pg |
+| 新拉镜像 | ownedImageRemoved=true；独立精确inspect也确认不存在 |
+| 独立收尾读回 | container/volume exact筛选均空；private目录不存在且非symlink；5432无监听；HEAD仍998b4d9且clean |
+
+独立收尾核验时间：2026-09-08 06:01:57 UTC（14:01:57 Asia/Shanghai）。
+隔离 synthetic 数据及本轮凭据随精确资源清理移除，不可从这些已删资源恢复；
+不宣称 secure erase。未删除 .tmp 父目录，未操作其他数据/服务。
+W1 已关闭，不再运行 PG，不集成 main，不操作 GitHub；证据文档交主控验收。

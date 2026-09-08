@@ -23,7 +23,7 @@
 
 ## 当前里程碑
 
-- 状态：HANDOFF / AF_RUNTIME_04_OFFLINE_CANDIDATE
+- 状态：HANDOFF / AF_RUNTIME_04_PG_W1_COMPLETE_PENDING_REVIEW
 - 当前基线：a38444e8006ecef51a67f92a6b06a7d80285277b；AF-RUNTIME-04 release 已消费，当前源码候选待主控固定 SHA 审查。
 - 前批源码：0e73d8b 已服务器集成；GitHub 同步由 main-brain 完成。
 - Runtime：NO READY
@@ -64,7 +64,7 @@
 
 ## Next Executable Action
 
-固定 worker 提交并发送主控复核；源码 gate 通过后，准备独立 AF04 PG 脚本，仍不得执行窗口或集成。
+提交 AF04-PG-W1 实际证据文档给 main-brain 复核；不再运行PG，不修改已测源码，不集成main/GitHub。
 
 ## 交付状态
 
@@ -134,7 +134,7 @@
 - services/runtime、experiments/runtime-phase1、own OpenSpec 三处 gitleaks dir --redact: no leaks found。
 - 禁止来源/内部标识文件扫描无命中；所有 owned 文件均 admin-owned。
 - 待提交精确范围：当前16个 owned 文件；无共享契约、依赖、SDK、根配置变更。
-- Last External Progress: 2026-09-08 13:20 UTC，离线门禁/三处secret扫描/所有权核对完成。
+- Last External Progress: 2026-09-08 13:20 Asia/Shanghai，离线门禁/三处secret扫描/所有权核对完成。
 - 后续测试脚本只做准备与离线检查，不创建 PG/容器/凭据/端口；运行仍需主控新窗口令。
 
 ### AF04 worker 固定源码回执
@@ -199,3 +199,20 @@
 - Status: HANDOFF；本后续checkpoint回执不改变脚本hash，主控expected-source使用最终回执tip。
 - 提交前diffcheck、两个owned目录gitleaks、admin ownership均PASS；无Runtime src/shared window改动。
 - Next: 发main-brain新tip及worker/test变化hash等待复核；PG仍未运行/未获窗口令。
+
+- main-brain已独立复核清理/SHA/hash/clean并接受W1有界验收；现仅待evidence-only文档review与独立server-main集成令。
+
+## AF-RUNTIME-04-PG-W1 已完成
+
+- Status: HANDOFF
+- Current phase: REGRESSING（单次窗口结束，整理证据）
+- 固定source998b4d9；四hash入场/清理后匹配；窗口未改tracked文件或checkpoint。
+- 实际8/8PASS，111.491s；脚本清理前elapsed130.26s含pull；PG17.11。
+- peakConnections5（5ms含observer，非绝对瞬时最大）；minAvailable1036340KiB，swapGrowth0，data50112KiB。
+- sessions0/locks0，ports{}，credentialLogCheckPASS；未回显凭据/任意容器日志。
+- exact container a2flow-runtime04-pg、volume a2flow-runtime04-pgdata、private af-runtime-04-pg与本次新拉image已删除；不宣称secureerase。
+- 独立收尾：容器/卷筛选空，目录不存在，5432无监听，image精确inspect absent，HEAD998b4d9且clean。
+- 收尾核验2026-09-08 06:01:57 UTC。之后才编辑own证据文档。
+- main-brain已独立复核并接受W1有界验收；现仅待evidence-only文档review与独立server-main集成令。
+- Next Executable Action: 提交own PG-W1实际证据文档给main-brain；不再运行PG，不集成main/GitHub。
+- Runtime仍NO READY；窗口完成不表示所有产品行为/交错/生产已可用。

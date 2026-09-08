@@ -1,6 +1,7 @@
 # AF-RUNTIME-04 PG window candidate
 
-Status: PREPARED_FOR_INCREMENTAL_REVIEW; NOT AUTHORIZED; NOT RUN.
+Status: W1_COMPLETED_ONCE_ACCEPTED_BY_MAIN; DOCUMENT_REVIEW_PENDING; window closed, no rerun authority.
+Actual W1 source: 998b4d9f8411a8e09b88abfb665adb330db15e9f.
 Runtime source 6ee09e3d67118048489c515b03741723dd552ef5 has passed main-brain's
 independent source/offline review. This document and its scripts are an additional
 worker commit; use the exact final worker SHA in the coordinator receipt.
@@ -59,19 +60,19 @@ shared finally cleanup. Merely supplying --authorized-window is not permission.
 The entry hash alone is insufficient: review the shared safety module and both
 process-test files from the same fixed source commit.
 
-## Proposed execution command — only after a separate release
+## Historical W1 command — the released window is now closed
 
 As admin, from /home/admin/OpenSource/repos/.parallel/oss-agent-workflow-runtime/platform:
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=experiments/runtime-phase1 /home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python -m runtime_phase1.runtime04_pg_window --authorized-window --expected-source-sha FIXED_WORKER_SHA_FROM_MAIN_BRAIN_RELEASE
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=experiments/runtime-phase1 /home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python -m runtime_phase1.runtime04_pg_window --authorized-window --expected-source-sha 998b4d9f8411a8e09b88abfb665adb330db15e9f
 ```
 
-The placeholder must be replaced by the exact reviewed commit, not a branch.
+This exact command ran once under the W1 release. It is not standing permission to run it again.
 The --cleanup variant selects only AF04 exact targets and is for a separately
 authorized cleanup if needed; ordinary execution already performs cleanup in finally.
 
-## Eight intended PostgreSQL cases (all NOT RUN)
+## Eight reviewed PostgreSQL cases (all passed the single W1)
 
 1. No-card run exists; wrong owner/environment stop rejects; two separate processes
    read the same canonical STOP result and durable STOPPED state.
@@ -158,3 +159,25 @@ retry or in-window source modification is authorized by this proposal.
   eight opt-in PG tests SKIP. No shared window safety code or Runtime src changed.
 - Entry/shared safety hashes are unchanged; worker/integration-test hashes above
   replace the prior two values. Expected source SHA must be the new approved tip.
+
+Main-brain independently verified exact resource absence, original pause image
+retention, unchanged source hashes and clean HEAD, and accepted W1's bounded
+result. Evidence documentation review and source integration remain separate.
+
+## Actual W1 result
+
+8/8 PASS in 111.491s, exit=0, on fixed source
+998b4d9f8411a8e09b88abfb665adb330db15e9f. Script elapsed before finally cleanup
+was 130.26s including pull/preparation. PG 17.11; observed peak connections 5
+(5ms, includes observer), min available 1036340 KiB, swap growth 0,
+data high-water 50112 KiB. Runtime sessions 0/advisory locks 0; published ports {}.
+Credential log check PASS. Exact container/volume/private directory and the
+newly pulled image were removed; independent readback confirmed absence and
+no 5432 listener. Four source hashes and clean HEAD remained unchanged until
+after cleanup/readback. Full assertion evidence is in regression.md.
+
+Main-brain independently verified exact resource absence, original pause image
+retention, unchanged source hashes and clean HEAD, and accepted W1's bounded
+result. Evidence documentation review and source integration remain separate.
+W1 is closed; no automatic rerun, main integration, GitHub sync or product READY
+is authorized by this result.

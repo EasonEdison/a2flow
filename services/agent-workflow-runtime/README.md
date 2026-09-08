@@ -164,9 +164,10 @@ production deployment, business exactly-once or automatic recovery evidence.
 ## AF-RUNTIME-04 source candidate: synchronous stop and fresh restart
 
 This section supersedes earlier statements that stop/restart is entirely
-unimplemented. AF04 is source/offline-tested only: its three new PostgreSQL
-record types have NOT run in a live database window. AF03's nine PostgreSQL
-passes do not prove AF04. Runtime remains NO READY.
+unimplemented. AF04 now has source/offline verification and one separately
+released eight-case
+PostgreSQL window on source 998b4d9. AF03's nine PostgreSQL passes are separate
+historical evidence and are not substituted for AF04. Runtime remains NO READY.
 
 Import RunLifecycle/RunStoppedControl from agent_workflow_runtime.lifecycle,
 PostgresRunRepository from agent_workflow_runtime.postgres_lifecycle, and
@@ -211,8 +212,9 @@ short row-lock transaction; it never takes the long AF03 admission session lock.
 Actions take AF03 admission before the short Run lock, save EXECUTING on the
 independent AF03 connection, then commit the Run admission before dispatch.
 A partial/uncertain commit must not dispatch; no savepoint is called durable.
-Independent-connection visibility and multi-process races still require AF04 PG
-verification; in-memory fixtures are not that proof.
+Independent-connection visibility and bounded multi-process races passed the
+single AF04 PG-W1; in-memory fixtures are not that proof. This does not establish
+every possible interleaving or generic distributed recovery.
 
 Only ControlledRunRunner maps RunStoppedControl (BaseException) to a matching,
 already stored STOPPED run. Ordinary Exception retries do not catch this signal.
@@ -235,8 +237,25 @@ claim that an uncertain startup completed.
 Latest offline discovery: 69 service cases = 60 PASS + 9 AF03 PG SKIP;
 38 experiment cases PASS. See the AF04 section of the owned regression/readiness
 documents for exact commands, evidence and pending gates. The AF04 window script
-runtime_phase1.runtime04_pg_window and eight opt-in process cases are prepared,
-not executed. They reuse the reviewed AF03 safety implementation through an
+runtime_phase1.runtime04_pg_window and eight opt-in process cases ran once under
+the AF04-PG-W1 release; the window is closed with no standing rerun authority.
+They reuse the reviewed AF03 safety implementation through an
 immutable WindowSpec. The owned pg-window-04.md records exact targets, hashes,
-budget and offline preparation evidence. A new exact-script review and separate
-single-executor release are mandatory.
+budget and offline preparation evidence. Any future execution requires a new
+exact-script review and separate
+single-executor release.
+
+### AF-RUNTIME-04-PG-W1 observed result
+
+Fixed source 998b4d9f8411a8e09b88abfb665adb330db15e9f: 8/8 actual independent-
+process PG tests PASS in 111.491s; PG 17.11. Observed connection peak 5 at 5ms
+(includes observer; not exact transient maximum), minAvailable 1036340 KiB,
+swap growth 0, data high-water 50112 KiB. Teardown runtime sessions 0/locks 0,
+credential-log check PASS; exact AF04 container/volume/private directory and
+newly pulled image removed. Independent readback confirmed no 5432 listener and
+unchanged clean source/hash. Main-brain accepted the bounded result.
+
+Models and business ports remain synthetic. Source implementation, bounded
+runtime evidence and deployment are distinct: no deployment, complete product
+READY, full async execution, generic recovery or every-interleaving guarantee
+follows. See the owned regression/readiness records for exact cases.

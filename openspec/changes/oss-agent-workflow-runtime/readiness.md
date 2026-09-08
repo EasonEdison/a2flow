@@ -1,6 +1,6 @@
 # Agent/Workflow Runtime Phase 1 Readiness
 
-## 总结
+## 早期总结（历史快照，最新结论见 AF-RUNTIME-04-PG-W1）
 
 - 当前结论：NO READY
 - Phase 1 基线：ALIGNED
@@ -93,16 +93,26 @@ Task-owned venv 已解析并导入 Deep Agents/LangGraph/PostgreSQL checkpointer
 本节是最新切片状态；上文 AF02/AF03 段落保留各时点历史，不把旧 NOT RUN
 或旧 accepted PG 结果误套到本次新表和新控制链路。
 
-- 源码：SOURCE_CANDIDATE_FOR_FIXED_SHA_REVIEW；stop/fresh restart 同步实现已落盘。
+- 源码：SOURCE_REVIEW_ACCEPTED_PENDING_INTEGRATION；stop/fresh restart 同步实现已落盘。
 - 当前离线：服务 60 PASS + 9 AF03 PG SKIP（69 total，3.228s）；实验 38 PASS（0.879s）。
 - 模型归属：真实双并行 Workflow 节点/内部 Deep Agent MODEL facts 绑定各自 node_id，已通过。
 - 控制组合：service/continuation/graph/runner 同 lifecycle 校验；错配在 executor 前拒绝，已通过。
 - 真实 SDK：强制 summary 的普通异常 retry 间隙 stop、并行 Tool 晚结果、mixed-fatal、
   Skill wait→Action→Finalizer 及 fresh interaction/旧业务读取禁止通过离线测试。
-- PostgreSQL：AF04 NOT RUN；短事务、窄投影和独立连接实现不等于跨进程准出。
-- AF04 PG 脚本：PREPARED_PENDING_INCREMENTAL_REVIEW；8 个跨进程用例 NOT RUN，预算/hash 见 pg-window-04.md；仍需单独窗口令。
-- Worker 固定 SHA 交主控审查；server main 集成和 GitHub 同步尚未授权执行。
+- PostgreSQL：AF04-PG-W1 BOUNDED_SYNTHETIC_PASS，8/8；完整产品准出仍另行评估。
+- AF04 PG 窗口：W1_COMPLETED_CLOSED；固定998b4d9单次8/8，精确清理完成；没有再次运行授权。
+- 源码与W1有界结果已获主控接受；本次仅提交证据文档，server main/GitHub仍待各自放行。
 - Runtime：NO READY；无 HTTP/UI/live model/async 完整执行/生产部署或通用恢复。
 
 - 主控已独立接受固定 6ee09e3 源码/离线 gate；PG 准备增量未改变运行时实现。
 - 共享窗口安全机制参数化复用；实验 43 PASS。三个新增 memory/protocol harness 经定向检查通过；不是 PG 证据。
+
+## AF-RUNTIME-04-PG-W1 窗口后结论
+
+- 固定998b4d9单次8/8真实PG进程用例通过，111.491s；未修改源码、未重跑。
+- no-card/在途完成型Action/原生node/终态竞争/旧入口拒绝/fresh并发去重与正链路均有本窗口有界证据。
+- 连接观测峰值5、minAvailable1036340KiB、swap增长0、data50112KiB；收尾sessions0/locks0，secret日志检查PASS。
+- exact container/volume/private目录/本次新拉image已清理；独立读回无5432监听，源码SHA/hash/clean不变。
+- 当前：BOUNDED_SYNTHETIC_PASS_ACCEPTED_BY_MAIN；证据文档待审，Runtime依旧NO READY。
+- 不包含所有交错、任意DAG、真实模型/业务API、async完整执行、恢复/补偿或生产部署。
+- 未集成server main、未操作GitHub。等待主控文档验收及独立集成令。
