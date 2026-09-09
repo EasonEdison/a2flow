@@ -190,7 +190,12 @@ class RunLifecycle:
             raise ActionRejected("WORKFLOW_BINDING_REQUIRED")
         fact = self.admit(owner, scope.run_id, scope.node_id, kind)
         try:
-            result = handler()
+            if kind == "NODE":
+                from .progress_observer import observe_node
+                with observe_node(context, fact.operation_id):
+                    result = handler()
+            else:
+                result = handler()
         except BaseException as error:
             from langgraph.errors import GraphInterrupt
             self.observe_fatal(owner, scope.run_id, error)

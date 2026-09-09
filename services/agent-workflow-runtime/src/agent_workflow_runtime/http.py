@@ -18,6 +18,13 @@ BODY_LIMIT = 64 * 1024
 RESPONSE_LIMIT = 256 * 1024
 
 ERRORS = {
+    "PROGRESS_NOT_FOUND": (404, "NOT_FOUND"),
+    "PROGRESS_UNAVAILABLE": (503, "PROGRESS_UNAVAILABLE"),
+    "PROGRESS_INTEGRITY_ERROR": (503, "PROGRESS_UNAVAILABLE"),
+    "INVALID_EXECUTION_ID": (400, "INVALID_INPUT"),
+    "INVALID_PROGRESS_LIMIT": (400, "INVALID_INPUT"),
+    "INVALID_PROGRESS_CURSOR": (400, "INVALID_PROGRESS_CURSOR"),
+    "FUTURE_PROGRESS_CURSOR": (400, "FUTURE_PROGRESS_CURSOR"),
     "TRUSTED_CONTEXT_REQUIRED": (401, "TRUSTED_CONTEXT_REQUIRED"),
     "RUN_NOT_FOUND": (404, "NOT_FOUND"),
     "CONTROL_NOT_FOUND": (404, "NOT_FOUND"),
@@ -233,4 +240,6 @@ def create_app(service, *, execution_capacity=2, read_capacity=2, stop_capacity=
         who = owner(request)
         return await execution.call(partial(service.action, who, run_id, node_id, body.model_dump()))
 
+    from .progress_http import add_progress_routes
+    add_progress_routes(app, service, read_capacity=read_capacity, read_timeout=read_timeout)
     return app

@@ -342,3 +342,29 @@
   replacement; rawproviderIDs remainunchanged. Supportedmatrix/no-live inmodel-adapter-06.
 - Next: fetch/merge/diff/secret/ownedgate; commit+pushworker fixedD3SHA to main-brain
   review. No main/GitHub integration until exactrelease;69depsunchanged/PGnotrun.
+
+## AF-RUNTIME-07 D1 active source/fixture implementation
+
+- 2026-09-09 main-brain released D1; full localrelease read, worker cleanfetch/FF
+  e551afc todb6f52c (formalrelease only). Existing source stillacceptedAF06.
+- Scope nodeprocess display/history only; steeringnextslice, sixdomains paused.
+  No dependencies/PG/provider/listener/credentials. Modelselectionflash.
+- Firstboundedaction: publicProgressMiddleware model_settings stream=True plus
+  ProgressCallbacks, DeepSeek transport-control consumption, actualmockSSE nested
+  synchronousAgent invoke fixture. No fakecallback-only proof.
+- Queue/PG/headsequence/catalog/history/SSE implementation stillpending; noREADY.
+- Next: run actualSDK increment-before-return test; then bounded writer/storage/
+  runner binding and readonlytransport perD1. Worker-only stableSHA reviewbeforemain.
+
+### AF07-D1 bounded source review candidate
+
+- Recovered pending HTTP patch after compaction; only exact task-owned empty git-apply process
+  terminated, no files/data removed. Worker remains based on db6f52c; latest fetch/merge no change.
+- Implemented public SDK progress, bounded writer, PG heads/records, read-only catalog/history/SSE,
+  controlled runner/NODE segments. No steering/dependencies/provider/PG/listener/deployment.
+- Tests found and fixed writer startup lock race, streamed bind_tools transport-control gap,
+  and Starlette ClientDisconnect translation; no change to business policy or native history.
+- Final related suite 105 PASS3.972s, diffcheckPASS. Runtime-progress-07 contains exact modules,
+  caps, host composition and explicit non-live PG/readiness boundaries.
+- NextExecutableAction: owned file/provenance/secret gate, worker-only commit+push fixedSHA to
+  main-brain review. No main/GitHub integration until exact release. PG/runtime remainsUNVERIFIED.

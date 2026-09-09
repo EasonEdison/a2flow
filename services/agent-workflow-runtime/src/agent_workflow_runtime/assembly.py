@@ -36,6 +36,7 @@ def build_engine(
     checkpointer: Any = None,
     terminal_guard: Callable[[Any], None] | None = None,
     run_lifecycle: Any = None,
+    progress: Any = None,
 ) -> CompiledStateGraph:
     """Build from trusted backend inputs, never request-selected Python internals.
 
@@ -58,6 +59,10 @@ def build_engine(
     if run_lifecycle is not None:
         from agent_workflow_runtime.native_control import RunAdmissionMiddleware
         control_middleware = [RunAdmissionMiddleware(run_lifecycle)]
+    observation_middleware = []
+    if progress is not None:
+        from .progress_observer import ProgressMiddleware
+        observation_middleware = [ProgressMiddleware()]
     graph = create_deep_agent(
         model=model,
         checkpointer=checkpointer,
@@ -68,11 +73,12 @@ def build_engine(
         middleware=[
             *control_middleware,
             ClosedModelArgsAdmission(validators),
+            *observation_middleware,
             RequiredToolFinalizerAdmission(required_tool_names, terminal_guard, lifecycle=run_lifecycle),
         ],
     )
 
     if run_lifecycle is not None:
         from agent_workflow_runtime.native_control import RunGraphBinding
-        return RunGraphBinding(graph, run_lifecycle)
+        return RunGraphBinding(graph, run_lifecycle, progress)
     return graph

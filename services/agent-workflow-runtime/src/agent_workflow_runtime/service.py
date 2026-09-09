@@ -52,11 +52,12 @@ class ExecutionSession:
 
 
 class RuntimeService:
-    def __init__(self, lifecycle, projection: ProjectionPort, execution_session, resolve_entry):
+    def __init__(self, lifecycle, projection: ProjectionPort, execution_session, resolve_entry, *, progress=None):
         self.lifecycle = lifecycle
         self.projection = projection
         self.execution_session = execution_session
         self.resolve_entry = resolve_entry
+        self.progress = progress
 
     def _runner(self, session):
         runner = session.runner
@@ -130,3 +131,16 @@ class RuntimeService:
             runner = self._runner(session)
             runner.action(run, session.action_service(run), bound)
         return self.inspect(owner, run_id)
+
+    def progress_catalog(self, owner, run_id, *, after=None, limit=100):
+        require_owner(owner)
+        if self.progress is None:
+            raise ActionRejected("PROGRESS_UNAVAILABLE")
+        return self.progress.catalog(owner, identifier(run_id), after=after, limit=limit)
+
+    def progress_history(self, owner, run_id, node_id, execution_id, *, after=None, limit=100):
+        require_owner(owner)
+        if self.progress is None:
+            raise ActionRejected("PROGRESS_UNAVAILABLE")
+        return self.progress.history(owner, identifier(run_id), identifier(node_id), execution_id,
+                                     after=after, limit=limit)

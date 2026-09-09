@@ -122,6 +122,7 @@ class RunGraphBinding:
 
     graph: object
     lifecycle: object
+    progress: object = None
 
     def get_state(self, *args, **kwargs):
         return self.graph.get_state(*args, **kwargs)
@@ -166,15 +167,25 @@ class ControlledRunRunner:
         return self.lifecycle.snapshot(owner, run.run_id)
 
     def invoke(self, run, graph, value):
+        if isinstance(graph, RunGraphBinding) and graph.progress is not None:
+            with graph.progress.capture(run.context()):
+                return self._invoke_controlled(run, graph, value)
+        return self._invoke_controlled(run, graph, value)
+
+    def _invoke_controlled(self, run, graph, value):
         """Fresh state or an authorized native reference; STOPPED always rejects."""
         token = _CURRENT_WORKFLOW_NODE.set(run.context())
         try:
             self.lifecycle.assert_active(run.owner, run.run_id)
             if not isinstance(graph, RunGraphBinding) or graph.lifecycle is not self.lifecycle:
                 raise ActionRejected("CONTROLLED_GRAPH_BINDING_REQUIRED")
+            callbacks = [RunModelCallbacks(self.lifecycle, run)]
+            if graph.progress is not None:
+                from .progress_observer import ProgressCallbacks
+                callbacks.append(ProgressCallbacks())
             result = graph.invoke(
                 value, {"configurable": {"thread_id": run.thread_id},
-                        "callbacks": [RunModelCallbacks(self.lifecycle, run)]},
+                        "callbacks": callbacks},
                 context=run.context(),
             )
             # interrupt means waiting, not a successful completed run.
