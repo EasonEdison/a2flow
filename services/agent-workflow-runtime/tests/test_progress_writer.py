@@ -1,6 +1,6 @@
 """Bounded observer failure tests; in-memory test port is not PostgreSQL proof."""
 
-from threading import Event
+from threading import Event, Thread
 from time import monotonic
 import unittest
 
@@ -147,3 +147,63 @@ class ProgressWriterTest(unittest.TestCase):
             pass
         self.assertTrue(writer.shutdown())
         self.assertEqual([], store.calls)
+
+    def test_failed_segment_cannot_be_recreated_by_already_admitted_emitter(self):
+        entered, resume, removed, idle = Event(), Event(), Event(), Event()
+        class FailOnceStore(Store):
+            attempts = 0
+            def append(self, *args, **kwargs):
+                self.attempts += 1
+                return super().append(*args, **kwargs)
+        store = FailOnceStore(blocked=True, fail=True)
+        writer = ProgressWriter(store).start()
+        release_segment = writer._release
+        def release_and_signal(segment):
+            release_segment(segment)
+            removed.set()
+        writer._release = release_and_signal
+        condition_wait = writer._condition.wait
+        def wait_until_notified(timeout=None):
+            if store.attempts and not writer._segments and writer._entries == 0:
+                idle.set()
+                return condition_wait()  # No timer wakeup competing with resumed offer.
+            return condition_wait(timeout)
+        writer._condition.wait = wait_until_notified
+        class DelayedSink:
+            def offer(self, scope, kind, payload):
+                entered.set()  # ProgressScope.emit has already checked unavailable.
+                if not resume.wait(2):
+                    raise AssertionError("test emitter was not resumed")
+                writer.offer(scope, kind, payload)
+        emitter = None
+        try:
+            with writer.capture(context()) as scope:
+                scope.emit("MODEL_STARTED", {"modelCallId": "m"})
+                self.assertTrue(store.entered.wait(1))
+                scope.sink = DelayedSink()
+                emitter = Thread(target=scope.emit, args=(
+                    "MODEL_RETURNED", {"modelCallId": "m"}))
+                emitter.start()
+                self.assertTrue(entered.wait(1))
+                store.release.set()  # First append fails; health update has no head.
+                self.assertTrue(removed.wait(1))
+                self.assertTrue(idle.wait(1))
+                with writer._condition:
+                    pass  # Worker has entered its wait and released the queue lock.
+                self.assertTrue(scope.unavailable)
+                self.assertNotIn(scope.execution_id, writer._segments)
+                store.fail = False  # A wrongly reopened segment would now persist.
+                resume.set()
+                emitter.join(1)
+                self.assertFalse(emitter.is_alive())
+            self.assertTrue(writer.shutdown())
+            self.assertEqual(1, store.attempts)
+            self.assertEqual([], store.calls)  # No new append or seal after failed capture.
+            self.assertEqual(1, len(store.health))
+            self.assertEqual((0, 0, {}), (writer._bytes, writer._entries, writer._segments))
+        finally:
+            resume.set()
+            store.release.set()
+            if emitter is not None:
+                emitter.join(1)
+            writer.shutdown()

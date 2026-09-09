@@ -368,3 +368,16 @@
   caps, host composition and explicit non-live PG/readiness boundaries.
 - NextExecutableAction: owned file/provenance/secret gate, worker-only commit+push fixedSHA to
   main-brain review. No main/GitHub integration until exact release. PG/runtime remainsUNVERIFIED.
+
+### AF07 review P2: failed capture cannot reopen
+
+- Main independent review reproduced a delayed emitter passing ProgressScope.emit before
+  append failure; worker removed the segment, but offer recreated the same execution.
+- Correction: recheck scope.unavailable inside the queue lock before segment lookup/creation.
+  The outer fast check is not an atomic admission check; a failed capture stays terminal.
+- Deterministic test pauses after the outer check, fails the first append/health-without-head,
+  waits for worker segment removal and idle lock release, then resumes the delayed emitter.
+  Old e3be4cf implementation loaded in memory: FAIL1!=3 append attempts; no disk rollback.
+  Fixed final related suite:106PASS4.420s; no append/seal after the initial failure.
+- Only writer guard, focused regression and own evidence changed. No new authority used.
+- NextExecutableAction: worker-only fixedSHA commit/push and main-brain re-review; no main integration.

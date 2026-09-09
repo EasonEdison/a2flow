@@ -92,3 +92,17 @@ server-main integration or GitHub push performed by this slice.
 
 Main-brain reviews the worker fixed SHA before any exact integration release. D2 steering is
 a later slice. Do not label source tests or sealed display records as business/runtime READY.
+
+## P2 review correction after e3be4cf
+
+Independent main review found a delayed-emitter race after append failure and segment removal.
+The writer now rechecks scope.unavailable while holding the queue lock, before lookup/_new.
+Failure remains terminal for that execution even if an emitter passed its outer check earlier.
+
+test_failed_segment_cannot_be_recreated_by_already_admitted_emitter pauses exactly after the
+outer check, waits for first append failure, no-head health update, segment removal and worker
+idle/lock release, then resumes. The former e3be4cf implementation loaded in memory fails
+deterministically (expected1 append, observed3); no worktree rollback was used.
+The fixed code makes only the first failed append, no subsequent append/seal, and releases all
+segment/queue accounting. Final same bounded suite plus this regression:106PASS4.420s.
+Live PG/provider/deployment and main integration remain outside this correction.

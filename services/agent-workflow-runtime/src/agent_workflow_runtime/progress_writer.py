@@ -171,6 +171,10 @@ class ProgressWriter:
             scope.unavailable = True
             return
         try:
+            # An emitter may have passed its outer check before a failed batch
+            # removed this segment. Failure is terminal for the same capture.
+            if scope.unavailable:
+                return
             if self._closing or self._thread is None or not self._thread.is_alive():
                 scope.unavailable = True
                 return
