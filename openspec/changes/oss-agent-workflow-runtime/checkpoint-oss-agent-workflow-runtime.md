@@ -381,3 +381,43 @@
   Fixed final related suite:106PASS4.420s; no append/seal after the initial failure.
 - Only writer guard, focused regression and own evidence changed. No new authority used.
 - NextExecutableAction: worker-only fixedSHA commit/push and main-brain re-review; no main integration.
+
+## AF-MVP-08 resumed: seeded assets and browser-visible Runtime
+
+- 2026-09-11 main-brain resumed bounded MVP: four asset categories go directly into PG,
+  no four M authoring platforms. Read full mvp-seeded-assets-release-08; existing paused
+  domain/AF07 idle descriptions are superseded only for this scoped work.
+- Actual exclusive worker clean at b50d5a274be699fef7e0e569b6cdfeee6dd87f40; fetch/merge
+  origin/main unchanged. No other task worktree/checkpoint edited or read.
+- Read actual Runtime/Skill/Ability ports, Action/progress projection and graph fixtures.
+  Confirmed missing host, real Ability adapter, seeded Workflow compiler, owner discovery/
+  auth bootstrap and saved card/final/node view; render probe currently discards data.
+- Sent minimum Python/HTTP contracts and independent owned paths directly to asset/UI/main.
+  Own mvp08-plan and mvp08-http-examples distinguish existing APIs from proposed additions.
+- NextExecutableAction: consume concrete asset/UI/main interface replies, implement released
+  Runtime-local seams; no repeated proposal-only round and no wait for four M platforms.
+  Live PG/model/listener/Compose execution remains separately bounded. No SQLite/steering/fallback.
+
+### AF-MVP-08 Runtime source candidate
+
+- Updated: 2026-09-11; Status: VERIFYING.
+- Accepted asset owner source 6ac3f56f59baf24c204cd5c52436089b633abff8 is consumed directly;
+  actual selection component/button/schema caps and per-Skill requiredToolNames replace drafts.
+- Implemented Runtime-local Asset/Skill/Ability/Application adapters, strict two-node native graph
+  compiler, node-bound model/Tool/Finalizer/progress facts, persisted A2UI Interaction display,
+  committed Run/view list projections, trusted same-origin host and source-only deploy/mvp wiring.
+- Deterministic NODE admission preserves one boundary across native interrupt/resume; real seeded
+  scripted flow reaches plan wait, saves Action success, resumes without rerunning prior Tool work,
+  then completes copy and the Run.
+- View reads are non-executing and owner-scoped; duplicate interaction identities fail closed,
+  card ordering is deterministic, and card eligibility comes from committed interaction/lifecycle.
+- Final affected suite 94 PASS/4.711s. compileall, canonical wire JSON and source-only deployment
+  import PASS. Tests use MemorySaver/scripted models and offline repository substitutes where noted.
+- Fixed during verification: SkillKey slash parsing, bound node attribution through Finalizer and
+  progress, legacy Interaction schemaVersion=1 compatibility, input validation before allocation,
+  stable view read error mapping and progress-writer shutdown uncertainty reporting.
+- No live PG/schema/setup, credential read, provider request, listener/socket, asset seeding,
+  Compose apply, deployment or browser regression was run. Runtime remains NO READY.
+- NextExecutableAction: final owned diff/secret/ownership gate, synchronize latest origin/main if
+  advanced, commit and push worker branch, then send fixed SHA and evidence to main-brain.
+  Main/GitHub integration and every live action remain main-owned.

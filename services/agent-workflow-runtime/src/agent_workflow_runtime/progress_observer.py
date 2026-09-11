@@ -87,48 +87,63 @@ class ProgressCallbacks(BaseCallbackHandler):
 class ProgressMiddleware(AgentMiddleware):
     """Keep the original handler and final native response; observe permitted calls."""
 
+    def __init__(self, node_context=None):
+        self.node_context = node_context
+
+    @contextmanager
+    def _capture(self):
+        parent = _SCOPE.get()
+        if parent is None or self.node_context is None:
+            yield
+            return
+        with parent.sink.capture(self.node_context):
+            yield
+
     def wrap_model_call(self, request, handler):
-        if _SCOPE.get() is None:
-            return handler(request)
-        if not isinstance(request.model, DeepSeekChat):
-            _SCOPE.get().unavailable = True
-            return handler(request)
-        token = _VISIBLE_MODEL.set(True)
-        try:
-            settings = {**request.model_settings, "stream": True}
-            return handler(request.override(model_settings=settings))
-        finally:
-            _VISIBLE_MODEL.reset(token)
+        with self._capture():
+            if _SCOPE.get() is None:
+                return handler(request)
+            if not isinstance(request.model, DeepSeekChat):
+                _SCOPE.get().unavailable = True
+                return handler(request)
+            token = _VISIBLE_MODEL.set(True)
+            try:
+                settings = {**request.model_settings, "stream": True}
+                return handler(request.override(model_settings=settings))
+            finally:
+                _VISIBLE_MODEL.reset(token)
 
     async def awrap_model_call(self, request, handler):
-        if _SCOPE.get() is None:
-            return await handler(request)
-        if not isinstance(request.model, DeepSeekChat):
-            _SCOPE.get().unavailable = True
-            return await handler(request)
-        token = _VISIBLE_MODEL.set(True)
-        try:
-            return await handler(request.override(
-                model_settings={**request.model_settings, "stream": True}))
-        finally:
-            _VISIBLE_MODEL.reset(token)
+        with self._capture():
+            if _SCOPE.get() is None:
+                return await handler(request)
+            if not isinstance(request.model, DeepSeekChat):
+                _SCOPE.get().unavailable = True
+                return await handler(request)
+            token = _VISIBLE_MODEL.set(True)
+            try:
+                return await handler(request.override(
+                    model_settings={**request.model_settings, "stream": True}))
+            finally:
+                _VISIBLE_MODEL.reset(token)
 
     def wrap_tool_call(self, request, handler):
-        scope = _SCOPE.get()
-        if scope is None:
-            return handler(request)
-        operation = uuid4().hex
-        payload = {"toolOperationId": operation, "toolName": request.tool_call["name"]}
-        scope.emit("TOOL_STARTED", payload)
-        try:
-            result = handler(request)
-        except BaseException as error:
-            from langgraph.errors import GraphInterrupt
-            scope.emit("TOOL_INTERRUPTED" if isinstance(error, GraphInterrupt)
-                       else "TOOL_UNCONFIRMED", payload)
-            raise
-        scope.emit("TOOL_RETURNED", payload)
-        return result
+        with self._capture():
+            scope = _SCOPE.get()
+            if scope is None:
+                return handler(request)
+            operation = uuid4().hex
+            payload = {"toolOperationId": operation, "toolName": request.tool_call["name"]}
+            scope.emit("TOOL_STARTED", payload)
+            try:
+                result = handler(request)
+            except BaseException as error:
+                from langgraph.errors import GraphInterrupt
+                scope.emit("TOOL_INTERRUPTED" if isinstance(error, GraphInterrupt)
+                           else "TOOL_UNCONFIRMED", payload)
+                raise
+            scope.emit("TOOL_RETURNED", payload)
+            return result
 
 
 @contextmanager

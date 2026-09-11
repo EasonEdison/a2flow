@@ -42,3 +42,18 @@ class ServiceTest(unittest.TestCase):
         value = fixture.service.control(fixture.owner, run.initial_control_id)
         self.assertEqual(run.run_id, value["runId"])
         self.assertEqual(0, fixture.factory_calls)
+
+    def test_invalid_inputs_reject_before_entry_or_execution_session(self):
+        fixture = ServiceFixture()
+
+        def reject(owner, definition, inputs):
+            raise ActionRejected("INVALID_SERVICE_INPUT")
+
+        fixture.service.validate_inputs = reject
+        with self.assertRaisesRegex(ActionRejected, "INVALID_SERVICE_INPUT"):
+            fixture.service.start(
+                fixture.owner, "request-one", "sample.definition",
+                {"unexpected": True},
+            )
+        self.assertEqual(0, fixture.entry_calls)
+        self.assertEqual(0, fixture.factory_calls)

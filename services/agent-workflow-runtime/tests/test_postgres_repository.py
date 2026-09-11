@@ -93,9 +93,28 @@ class SerializationTest(unittest.TestCase):
         self.assertEqual(self.item, decode(encode(self.item)))
         self.assertEqual(interaction(Configuration()), decode(encode(interaction(Configuration()))))
 
+    def test_display_snapshot_v2_and_legacy_v1_are_both_readable(self):
+        empty = interaction(Configuration())
+        displayed = replace(empty, display_json='{"cardId":"card"}')
+        document = encode(displayed)
+        self.assertEqual(2, document["schemaVersion"])
+        self.assertEqual(displayed, decode(document))
+        legacy = encode(empty)
+        legacy["schemaVersion"] = 1
+        del legacy["display_json"]
+        self.assertEqual(empty, decode(legacy))
+
+    def test_display_snapshot_must_be_a_json_object(self):
+        empty = interaction(Configuration())
+        for value in ("[]", "NaN", "{"):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                ActionRejected, "INVALID_STORED_RECORD",
+            ):
+                encode(replace(empty, display_json=value))
+
     def test_closed_schema_and_scalar_types_reject(self):
         for change in (
-            {"schemaVersion": True}, {"schemaVersion": 2}, {"extra": "field"},
+            {"schemaVersion": True}, {"schemaVersion": 3}, {"extra": "field"},
             {"run_active": 1}, {"phase": "UNKNOWN"}, {"recorded_versions": []},
             {"completion_request_id": "unknown"},
         ):

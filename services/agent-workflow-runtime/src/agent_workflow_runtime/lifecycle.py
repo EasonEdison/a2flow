@@ -169,6 +169,20 @@ class RunLifecycle:
             pass
         return fact
 
+    def admit_idempotent(self, owner, run_id, node_id, kind, operation_id):
+        """Reserve one deterministic graph boundary across checkpoint resumes."""
+        with self.repository.run_scope(owner, run_id):
+            run = self.repository.get_run(owner, run_id)
+            self._active(run)
+            existing = self.repository.get_operation(owner, run_id, operation_id)
+            if existing is not None:
+                if existing.node_id != node_id or existing.kind != kind:
+                    raise ActionRejected("OPERATION_ID_CONFLICT")
+                return existing
+            fact = OperationFact(operation_id, node_id, kind, run.revision)
+            self.repository.put_operation(owner, run_id, fact)
+            return fact
+
     def finish(self, owner, run_id, operation_id, result, *, status="RETURNED"):
         """Save actual outcome even after STOPPED; the first terminal fact is immutable."""
         from dataclasses import replace

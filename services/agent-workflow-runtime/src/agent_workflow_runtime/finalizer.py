@@ -70,6 +70,7 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
     def __init__(
         self, required_tool_names: Sequence[str],
         terminal_guard: Callable[[Any], None] | None = None, *, lifecycle=None,
+        node_context=None,
     ) -> None:
         names = tuple(required_tool_names)
         if not names or any(not isinstance(name, str) or not name for name in names):
@@ -79,6 +80,18 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
         self._required_tool_names = names
         self._terminal_guard = terminal_guard
         self._lifecycle = lifecycle
+        self._node_context = node_context
+
+    def _context(self, fallback):
+        if self._node_context is None:
+            return fallback
+        if (fallback.trusted_context != self._node_context.trusted_context
+                or fallback.invocation_scope.kind != "WORKFLOW"
+                or fallback.invocation_scope.run_id
+                != self._node_context.invocation_scope.run_id):
+            from .models import ActionRejected
+            raise ActionRejected("RUN_NODE_BINDING_MISMATCH")
+        return self._node_context
 
     def before_agent(
         self,
@@ -89,7 +102,7 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
 
         del state
         if self._lifecycle is not None:
-            ctx = runtime.context
+            ctx = self._context(runtime.context)
             self._lifecycle.assert_active(ctx.trusted_context, ctx.invocation_scope.run_id)
         return {
             _RUNTIME_TOOL_EVIDENCE: {
@@ -206,13 +219,15 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
         messages = state.get("messages", ())
         terminal = messages and isinstance(messages[-1], AIMessage) and not messages[-1].tool_calls
 
+        context = self._context(runtime.context)
+
         def check():
             if terminal and self._terminal_guard is not None:
-                self._terminal_guard(runtime.context)
+                self._terminal_guard(context)
             self._check_terminal_response(state)
 
         if terminal and self._lifecycle is not None:
-            self._lifecycle.execute(runtime.context, "FINALIZER", check)
+            self._lifecycle.execute(context, "FINALIZER", check)
         else:
             check()
 

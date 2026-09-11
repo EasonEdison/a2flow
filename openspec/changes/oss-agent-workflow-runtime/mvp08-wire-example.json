@@ -1,0 +1,254 @@
+{
+  "note": "Illustrative mvp08.1 wire examples, not live execution evidence.",
+  "session": {
+    "userId": "demo-user",
+    "environment": "PRT"
+  },
+  "workflows": {
+    "items": [
+      {
+        "definitionKey": "activity-planning",
+        "title": "activity-planning",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "requirement": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "requirement"
+          ],
+          "additionalProperties": false
+        },
+        "nodes": [
+          {
+            "nodeId": "plan",
+            "title": "activity-planning/plan",
+            "order": 0
+          },
+          {
+            "nodeId": "copy",
+            "title": "activity-planning/copy",
+            "order": 1
+          }
+        ]
+      }
+    ],
+    "nextCursor": null
+  },
+  "runs": {
+    "items": [
+      {
+        "runId": "sample-run",
+        "definitionKey": "activity-planning",
+        "title": "activity-planning",
+        "lifecycle": "RUNNING",
+        "createdAt": "2026-09-11T00:00:00+00:00"
+      }
+    ],
+    "nextCursor": null
+  },
+  "view": {
+    "schemaVersion": "mvp08.1",
+    "runId": "sample-run",
+    "definitionKey": "activity-planning",
+    "title": "activity-planning",
+    "definitionVersion": "v1",
+    "createdAt": "2026-09-11T00:00:00+00:00",
+    "lifecycle": "RUNNING",
+    "revision": "3:4",
+    "observedAt": "2026-09-11T00:01:00+00:00",
+    "nodes": [
+      {
+        "nodeId": "plan",
+        "title": "activity-planning/plan",
+        "order": 0,
+        "status": "WAITING",
+        "summary": null
+      },
+      {
+        "nodeId": "copy",
+        "title": "activity-planning/copy",
+        "order": 1,
+        "status": "PENDING",
+        "summary": null
+      }
+    ],
+    "cards": [
+      {
+        "cardId": "card:sample",
+        "nodeId": "plan",
+        "interactionId": "interaction:sample",
+        "applicationKey": "activity-planning.confirm",
+        "applicationVersion": "v1",
+        "protocolProfile": "a2flow.mvp08.v1",
+        "componentCatalogRef": "activity-planning.basic",
+        "rootId": "root",
+        "components": [
+          {
+            "id": "root",
+            "component": "Column",
+            "children": [
+              "prompt",
+              "selection",
+              "confirm"
+            ]
+          },
+          {
+            "id": "prompt",
+            "component": "Text",
+            "text": {
+              "path": "/prompt"
+            }
+          },
+          {
+            "id": "selection",
+            "component": "ChoicePicker",
+            "options": {
+              "path": "/options"
+            },
+            "value": {
+              "path": "/optionId"
+            },
+            "variant": "mutuallyExclusive"
+          },
+          {
+            "id": "confirm",
+            "component": "Button",
+            "label": "确认这个方案",
+            "action": {
+              "event": {
+                "name": "confirm_activity",
+                "context": {
+                  "optionId": {
+                    "path": "/optionId"
+                  },
+                  "confirmed": {
+                    "literal": true
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "data": {
+          "prompt": "请选择活动方案",
+          "options": [
+            {
+              "label": "方案 A",
+              "value": "a"
+            },
+            {
+              "label": "方案 B",
+              "value": "b"
+            }
+          ]
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "options": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "optionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "prompt",
+            "options"
+          ],
+          "additionalProperties": false
+        },
+        "actions": [
+          {
+            "actionName": "confirm_activity",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "optionId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "confirmed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "optionId",
+                "confirmed"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ],
+        "state": "WAITING",
+        "actionEligibility": "REVALIDATION_REQUIRED"
+      }
+    ],
+    "outputs": [],
+    "availability": "AVAILABLE"
+  },
+  "actionBody": {
+    "interactionId": "interaction:sample",
+    "actionName": "confirm_activity",
+    "controlRequestId": "confirm.001",
+    "inputs": {
+      "optionId": "a",
+      "confirmed": true
+    }
+  },
+  "completedOutputs": [
+    {
+      "nodeId": "plan",
+      "kind": "ACTION_RESULT",
+      "content": {
+        "selectedOptionId": "a",
+        "confirmed": true
+      }
+    },
+    {
+      "nodeId": "plan",
+      "kind": "MODEL_TEXT",
+      "content": "已确认方案 A。"
+    },
+    {
+      "nodeId": "copy",
+      "kind": "MODEL_TEXT",
+      "content": "活动宣传文案。"
+    }
+  ]
+}

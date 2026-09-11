@@ -37,6 +37,8 @@ def build_engine(
     terminal_guard: Callable[[Any], None] | None = None,
     run_lifecycle: Any = None,
     progress: Any = None,
+    node_context: Any = None,
+    system_prompt: str | None = None,
 ) -> CompiledStateGraph:
     """Build from trusted backend inputs, never request-selected Python internals.
 
@@ -44,6 +46,10 @@ def build_engine(
     unbound mode is retained only for standalone admission/Finalizer experiments.
     """
 
+    if node_context is not None and run_lifecycle is None:
+        raise ValueError("Node context requires run lifecycle")
+    if system_prompt is not None and (not isinstance(system_prompt, str) or not system_prompt):
+        raise ValueError("System prompt must be a nonempty string")
     if terminal_guard is None and any(
         (item.metadata or {}).get("requires_action_guard") for item in tools
     ):
@@ -57,24 +63,32 @@ def build_engine(
     )
     control_middleware = []
     if run_lifecycle is not None:
-        from agent_workflow_runtime.native_control import RunAdmissionMiddleware
-        control_middleware = [RunAdmissionMiddleware(run_lifecycle)]
+        from agent_workflow_runtime.native_control import (
+            BoundNodeMiddleware, RunAdmissionMiddleware,
+        )
+        control_middleware = (
+            [BoundNodeMiddleware(node_context)] if node_context is not None else []
+        )
+        control_middleware.append(RunAdmissionMiddleware(run_lifecycle, node_context))
     observation_middleware = []
     if progress is not None:
         from .progress_observer import ProgressMiddleware
-        observation_middleware = [ProgressMiddleware()]
+        observation_middleware = [ProgressMiddleware(node_context)]
     graph = create_deep_agent(
         model=model,
         checkpointer=checkpointer,
         tools=list(tools),
-        system_prompt=(
+        system_prompt=system_prompt or (
             "Use authorized Skills and operations only through Runtime-owned Tools."
         ),
         middleware=[
             *control_middleware,
             ClosedModelArgsAdmission(validators),
             *observation_middleware,
-            RequiredToolFinalizerAdmission(required_tool_names, terminal_guard, lifecycle=run_lifecycle),
+            RequiredToolFinalizerAdmission(
+                required_tool_names, terminal_guard, lifecycle=run_lifecycle,
+                node_context=node_context,
+            ),
         ],
     )
 

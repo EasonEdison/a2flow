@@ -61,15 +61,71 @@ class RunModelCallbacks(BaseCallbackHandler):
                               {"errorType": type(error).__name__}, status="UNCONFIRMED")
 
 
+class BoundNodeMiddleware(AgentMiddleware):
+    """Bind callback-visible model/Tool work to one trusted compiled node."""
+
+    def __init__(self, context):
+        if context.invocation_scope.kind != "WORKFLOW":
+            raise ValueError("WORKFLOW_BINDING_REQUIRED")
+        self.context = context
+
+    def _bind(self, request):
+        fallback = request.runtime.context
+        current_node_context(fallback)
+        if (fallback.trusted_context != self.context.trusted_context
+                or fallback.invocation_scope.kind != "WORKFLOW"
+                or fallback.invocation_scope.run_id
+                != self.context.invocation_scope.run_id):
+            raise ActionRejected("RUN_NODE_BINDING_MISMATCH")
+        return _CURRENT_WORKFLOW_NODE.set(self.context)
+
+    def _invoke(self, handler, request):
+        token = self._bind(request)
+        try:
+            return handler(request)
+        finally:
+            _CURRENT_WORKFLOW_NODE.reset(token)
+
+    def wrap_model_call(self, request, handler):
+        return self._invoke(handler, request)
+
+    def wrap_tool_call(self, request, handler):
+        return self._invoke(handler, request)
+
+    async def awrap_model_call(self, request, handler):
+        token = self._bind(request)
+        try:
+            return await handler(request)
+        finally:
+            _CURRENT_WORKFLOW_NODE.reset(token)
+
+    async def awrap_tool_call(self, request, handler):
+        token = self._bind(request)
+        try:
+            return await handler(request)
+        finally:
+            _CURRENT_WORKFLOW_NODE.reset(token)
+
+
 class RunAdmissionMiddleware(AgentMiddleware):
-    def __init__(self, lifecycle):
-        self.lifecycle = lifecycle
+    def __init__(self, lifecycle, node_context=None):
+        self.lifecycle, self.node_context = lifecycle, node_context
 
     def _check(self, context):
         scope = context.invocation_scope
         if scope.kind != "WORKFLOW":
             raise ActionRejected("WORKFLOW_BINDING_REQUIRED")
         self.lifecycle.assert_active(context.trusted_context, scope.run_id)
+
+    def _node(self, fallback):
+        if self.node_context is None:
+            return current_node_context(fallback)
+        current_node_context(self.node_context)
+        if (fallback.trusted_context != self.node_context.trusted_context
+                or fallback.invocation_scope.run_id
+                != self.node_context.invocation_scope.run_id):
+            raise ActionRejected("RUN_NODE_BINDING_MISMATCH")
+        return self.node_context
 
     def before_agent(self, state, runtime):
         self._check(runtime.context)
@@ -90,7 +146,7 @@ class RunAdmissionMiddleware(AgentMiddleware):
         return result
 
     def wrap_tool_call(self, request, handler):
-        context = current_node_context(request.runtime.context)
+        context = self._node(request.runtime.context)
         return self.lifecycle.execute(context, "TOOL", lambda: handler(request))
 
 
