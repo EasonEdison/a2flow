@@ -3,6 +3,7 @@
 from contextlib import redirect_stdout
 from dataclasses import replace
 import io
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,6 +29,7 @@ class Runtime08WindowTest(unittest.TestCase):
         self.assertEqual(300, window.SPEC.max_seconds)
         self.assertEqual(256 * 1024, window.SPEC.max_data_kib)
         self.assertIn("packages/asset-store/src", window.SPEC.pythonpath)
+        self.assertEqual(window.EVIDENCE_FILE, window.SPEC.evidence_file)
 
     def test_model_key_file_requires_exact_private_regular_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -103,7 +105,10 @@ class Runtime08WindowTest(unittest.TestCase):
         key = Path("/private/model-key")
         with patch.object(window, "verify_source", return_value=source) as verify, \
              patch.object(window, "verified_model_key_file", return_value=key) as key_check, \
+             patch.object(window, "prepare_evidence",
+                          return_value=window.EVIDENCE_FILE) as prepare, \
              patch.object(shared, "run_window") as run, \
+             patch.object(shared, "append_evidence") as append, \
              patch.dict(os.environ, {}, clear=True), \
              redirect_stdout(io.StringIO()):
             self.assertEqual(0, window.main([
@@ -112,7 +117,11 @@ class Runtime08WindowTest(unittest.TestCase):
                 source,
             ]))
         key_check.assert_called_once_with()
+        prepare.assert_called_once_with(source)
         run.assert_called_once_with(window=window.SPEC)
+        append.assert_called_once_with(
+            "WINDOW_RESULT", window=window.SPEC, outcome="PASS",
+        )
         self.assertEqual(2, verify.call_count)
 
     def test_cleanup_is_exact_and_needs_no_key_or_source(self):
@@ -122,6 +131,30 @@ class Runtime08WindowTest(unittest.TestCase):
             self.assertEqual(0, window.main(["--cleanup"]))
         cleanup.assert_called_once_with(window=window.SPEC)
         run.assert_not_called()
+
+    def test_failed_child_still_persists_safe_cleanup_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory).resolve() / "evidence.jsonl"
+            evidence.touch(mode=0o600)
+            spec = replace(window.SPEC, evidence_file=evidence)
+            shared.append_evidence(
+                "LIVE_RESULT", window=spec, outcome="FAILED",
+                errorStage="ACTION_REQUEST", errorType="RuntimeError", modelCalls=3,
+            )
+            with patch.object(
+                    shared, "stop_owned_group",
+                    side_effect=RuntimeError("synthetic-secret-must-not-persist"),
+            ), patch.object(shared, "credential_log_check"), \
+                    patch.object(shared, "cleanup") as cleanup, \
+                    self.assertRaisesRegex(RuntimeError, "synthetic-secret"):
+                shared.finish_window(None, "marker", ["not-written"], window=spec)
+            cleanup.assert_called_once_with(window=spec)
+            records = [json.loads(line) for line in evidence.read_text().splitlines()]
+            self.assertEqual(["LIVE_RESULT", "CLEANUP_RESULT"], [
+                record["stage"] for record in records
+            ])
+            self.assertEqual("PASS", records[-1]["outcome"])
+            self.assertNotIn("synthetic-secret", evidence.read_text())
 
 
 if __name__ == "__main__":
