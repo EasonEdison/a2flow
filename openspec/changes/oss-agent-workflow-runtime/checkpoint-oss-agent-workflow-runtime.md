@@ -438,3 +438,26 @@
   preview, not gateway or multi-user authentication.
 - Repair-focused affected suite: 27 PASS/0.786s; seven changed modules compileall PASS. No live
   PG/schema/setup, seed, credential, provider, listener, Compose, deployment or browser action ran.
+
+### AF-MVP-08 live window preparation
+
+- Main accepted repair 540b65d after independent 6 seeded PASS/0.215s plus export/diff gates;
+  server main and GitHub main both equal 540b65d. Source integration is complete.
+- Status: PREPARING / NOT RUN. Added one exact disposable PG/seed/real-flash/wait/confirm/copy
+  acceptance path, reusing AF03/AF04 PostgreSQL image, bootstrap, process ownership, secret-log
+  check and exact cleanup rather than a second safety framework.
+- Exact resources: a2flow-mvp08-pg, a2flow-mvp08-pgdata,
+  /home/admin/OpenSource/.tmp/a2flow-mvp08-live, loopback 127.0.0.1:18765,
+  namespace a2flow-mvp-activity-planning, owner mvp08-live-user/PRT.
+- Hard budgets: 300s total, 256MiB data, six DeepSeek flash calls, 20s/call,
+  max_tokens=2048/call (12288 configured output-token ceiling), zero retries.
+- Model key value is forbidden in CLI/direct environment; only an absolute non-symlink
+  admin-owned 0600 file path is accepted. The window reads it once and never logs content.
+- Current task venv lacks Uvicorn. A three-line listener lock is prepared; no package was
+  installed. The install itself must be part of a separately approved exact window.
+- Offline preparation: 21 PASS + 1 explicit live SKIP/0.023s; changed modules compileall and
+  runtime08 --help PASS; AF03/AF04 safety regressions are included.
+- Entry/window/probe/test/listener-lock SHA256 values are fixed in mvp08-live-window.md.
+- No key read, package install, PG/container/volume, seed, listener/socket, provider request,
+  deployment or browser action has occurred. Runtime live chain remains NOT RUN / NO READY.
+- NextExecutableAction: fixed worker-only commit/push and main-brain review of the task-venv

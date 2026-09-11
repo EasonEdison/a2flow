@@ -38,6 +38,10 @@ class WindowSpec:
     owner: str
     env_prefix: str
     test_pattern: str
+    test_directory: str = "services/agent-workflow-runtime/tests"
+    max_seconds: int = 900
+    max_data_kib: int = 1024 * 1024
+    pythonpath: str | None = None
 
 
 def window_spec(window=None):
@@ -142,12 +146,15 @@ def cleanup(*, window=None):
                       "secureEraseClaim": False}), flush=True)
 
 
-def check_budget(started, initial_swap, volume_path):
+def check_budget(started, initial_swap, volume_path, *, window=None):
+    spec = window_spec(window)
     available, swap = memory()
-    if time.monotonic() - started >= 900 or available < 512 * 1024 or swap - initial_swap > 128 * 1024:
+    if (time.monotonic() - started >= spec.max_seconds
+            or available < 512 * 1024
+            or swap - initial_swap > 128 * 1024):
         raise RuntimeError("window resource/time stop threshold")
     size = command(["sudo", "-n", "du", "-sk", volume_path]).stdout.split()[0]
-    if int(size) > 1024 * 1024:
+    if int(size) > spec.max_data_kib:
         raise RuntimeError("window data size stop threshold")
     return available, swap, int(size)
 
@@ -282,7 +289,7 @@ def run_window(*, window=None):
         deadline = time.monotonic() + 60
         import psycopg
         while True:
-            check_budget(started, initial_swap, volume_path)
+            check_budget(started, initial_swap, volume_path, window=window)
             try:
                 with psycopg.connect(_connection_string(socket, admin_file,
                                      database="runtime_admin", user="runtime_admin"),
@@ -303,21 +310,22 @@ def run_window(*, window=None):
                 raise RuntimeError("runtime role safety readback mismatch")
         environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
             LANGSMITH_TRACING="false", LANGCHAIN_TRACING_V2="false", LANGCHAIN_TRACING="false",
-            PYTHONPATH="packages/contracts/src:services/agent-workflow-runtime/src:"
-                       "services/agent-workflow-runtime/tests:services/skill-registry/src:"
-                       "experiments/runtime-phase1:experiments/runtime-phase1/tests")
+            PYTHONPATH=spec.pythonpath or
+            "packages/contracts/src:services/agent-workflow-runtime/src:"
+            "services/agent-workflow-runtime/tests:services/skill-registry/src:"
+            "experiments/runtime-phase1:experiments/runtime-phase1/tests")
         environment.update({
             spec.env_prefix + "_WINDOW_ID": window_marker,
             spec.env_prefix + "_SOCKET": str(socket),
             spec.env_prefix + "_PASSWORD_FILE": str(probe_file),
         })
         child = subprocess.Popen([PYTHON, "-m", "unittest", "discover",
-                                  "-s", "services/agent-workflow-runtime/tests",
+                                  "-s", spec.test_directory,
                                   "-p", spec.test_pattern, "-v"],
                                  cwd=REPO, env=environment, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, text=True, start_new_session=True)
         while True:
-            available, swap, data = check_budget(started, initial_swap, volume_path)
+            available, swap, data = check_budget(started, initial_swap, volume_path, window=window)
             minimum_memory = min(minimum_memory, available)
             maximum_swap = max(maximum_swap, swap)
             maximum_data = max(maximum_data, data)

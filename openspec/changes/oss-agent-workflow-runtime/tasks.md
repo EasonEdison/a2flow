@@ -122,5 +122,9 @@
 - [x] 保留原生 child checkpoint interrupt/resume；不把 Tool/Skill/model 工作历史注入 copy。
 - [x] 修复 focused affected suite 27 PASS/0.786s；七个变更模块 compileall PASS。
 - [ ] 按需读取 child 中间历史（明确 deferred；当前无 full-history fallback）。
-- [ ] main-brain 接受修复 SHA 并执行 main/GitHub 集成。
+- [x] main-brain 接受修复 SHA；server main 与 GitHub main 均已集成 540b65d。
 - [ ] 真实 PG/seed/model/listener/deploy/browser 验证；当前均未执行，Runtime 仍 NO READY。
+- [x] 准备有界 PG/seed/真实 flash/等待 Action/确认/copy 联调脚本与精确资源清理方案。
+- [x] 离线固定 provider 目标、六次调用、20 秒、2048 token、300 秒总窗口与 loopback-only 门禁。
+- [ ] 当前 task venv 安装 listener-requirements.lock（需独立窗口授权；准备阶段未安装）。
+- [ ] main-brain 审查并释放一次 AF-MVP-08-LIVE-W1；未获授权前不执行。

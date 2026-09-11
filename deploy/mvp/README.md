@@ -86,3 +86,12 @@ Starting a Run is the first operation that can call DeepSeek.
 This source and its offline tests do not prove a database import, provider call,
 listener, deployment or browser regression. Record each of those separately if
 an operator authorizes and performs it.
+
+## Prepared one-shot live window
+
+The bounded PG -> seed -> real flash -> waiting Action -> confirmation -> copy
+acceptance is specified in mvp08-live-window.md under the owning OpenSpec.
+runtime08_mvp_window reuses the accepted isolated-PG cleanup and adds exact
+model, time, data and loopback limits. The current task venv does not contain
+Uvicorn; listener-requirements.lock is prepared but has not been installed.
+The live acceptance remains NOT RUN and requires a separately released window.
