@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 任务：`oss-digital-employee`
-- 阶段：`PAUSED_BY_PRIORITY`；用户当前优先推进 Python Workflow/DeepAgent 运行引擎，本域停止新增实现、设计、契约与发布工作
+- 阶段：`MVP_PREPARATION`；2026-09-11 恢复最小 B 端方案准备，源码待 AF-MVP-08 释放
 - 设计状态：`PROPOSED`
 - Runtime 准备度：`NO READY`
 - 工作分支：`codex/oss-digital-employee/design`
@@ -45,7 +45,14 @@
 - [x] 公共契约 checker 的既定无安装入口是以 `admin` 运行 `/usr/bin/python3 packages/contracts/tests/validate_contracts.py`（当前 Python 3.6.8 / jsonschema 2.6.0）；协调方已提供独立 57/57 证据，本任务引用该公共证据，不重复运行。
 - [x] 此前使用 `python3.11` 触发的 `jsonschema` 缺失只是验证入口不匹配，不是数字员工 B 端阻塞；未安装依赖，也未把公共校验与 Python 3.11/Runtime 验证混为一谈。
 
-## 暂停交接
+## 2026-09-11 恢复准备
+
+- 已合入 origin/main `b50d5a274be699fef7e0e569b6cdfeee6dd87f40`；merge HEAD `9dd6462ee38741c03a588b4870ec03b92c1fdd56`，保留旧暂停提交。
+- 本轮产物：`mvp-preparation-08.md`，列明源码证据、接口映射、最小依赖与申请路径。PG 预置资产与 Runtime 接线由主控协调，四个 M 编辑平台后置；D2 本切片后置。
+- 仅修改本域方案与 checkpoint。未安装依赖、调用 provider、连接数据库、启动监听或部署。文档交付不表示 UI READY。
+- 以下暂停交接保留为历史，当前准备授权以 2026-09-11 委派为准。
+
+## 暂停交接（历史）
 
 - 暂停快照：worker `HEAD=bbd00344684dcf250d1512d747e7b72239a911d4`；`origin/main=f3e5a05398df58dfd4f5a5dfc1445e05604d0977`，前者已被后者包含。
 - 已合入 main 的本域内容：设计对齐 `809ebaafbfeabdf331e04a639e295bc4025b846c`、BFF 选项与职责路径 `c1050b83ddbb5e8b604e690a90b8349e1bdb0ce9`、评审修订 `7569c02e295cad0f65a6c74ede09f77aee039baa`、checker 证据口径修订 `bbd00344684dcf250d1512d747e7b72239a911d4`；没有数字员工应用源码。
@@ -55,7 +62,7 @@
 
 ## 下一可执行动作
 
-保持暂停。只有 main-brain 在 Python Workflow/DeepAgent 运行引擎优先事项之后下发新的明确最小依赖或恢复指令时，才从保留的 worktree/分支继续；届时先核对 Git 真值，不自行补接口、不进入 `apps/digital-employee/` 或 `packages/a2ui-host/`、不向用户重复请示。
+交 main-brain 审阅 `mvp-preparation-08.md` 并协调可信宿主、预置 catalog、卡片/结果/节点终态投影、控制恢复及 reset 范围；AF-MVP-08 发布准确源码路径后实施。
 
 ## 禁止与未决
 
