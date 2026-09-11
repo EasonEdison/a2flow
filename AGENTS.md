@@ -7,7 +7,11 @@
 - Existing skillweave_contracts Python imports, historical OpenSpec paths, schema identifiers and baseline IDs remain valid internal identifiers. Do not mechanically rename them or rewrite history as part of this branding change.
 - Use A2Flow in new product-facing documentation. main-brain owns GitHub synchronization after server main integration; the current engine-first scope and paused domains remain unchanged.
 
-## Latest priority: Python engine first (2026-09-07)
+## Latest priority: seeded browser MVP (2026-09-11)
+
+User-approved AF-MVP-08 supersedes the engine-only pause below for three bounded workstreams: thin PostgreSQL asset import/read adapters (oss-skill-registry), Runtime host/integration, and minimal digital-employee UI. Defer the four M authoring platforms. Read `openspec/changes/skillweave-phase1/mvp-seeded-assets-release-08.md` for exclusive paths, Tool/environment boundaries and source/live/deployment gates. Do not wait for M editors or treat synthetic execution as the real MVP. Earlier design-only and pause defaults do not revoke this scoped release.
+
+## Previous priority: Python engine first (2026-09-07)
 
 Read `openspec/changes/skillweave-phase1/priority-engine-first.md` (SW-P1-ENGINE-FIRST-01). Only the Python Agent/Workflow Runtime domain continues; all six other domains pause new work and preserve owned changes. This latest user instruction supersedes earlier start-all and candidate-extension approvals without changing established behavior or deployment boundaries.
 
