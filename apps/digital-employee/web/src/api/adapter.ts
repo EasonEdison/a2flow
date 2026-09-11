@@ -4,7 +4,7 @@ const allowedKeys=(x:Record<string,unknown>,keys:string[])=>{if(Object.keys(x).s
 const binding=(v:unknown,path:string)=>{const x=object(v);allowedKeys(x,['path']);if(x.path!==path)throw new ContractError();};
 const bounded=(value:unknown,max:number)=>{const result=string(value);if(!result.length||result.length>max)throw new ContractError();return result;};
 export function cardView(card:WireCard,active:boolean):CardView {
-if(card.protocolProfile!=='a2flow.mvp08.v1')throw new ContractError();
+if(card.protocolProfile!=='a2flow.mvp08.v1'||typeof card.componentCatalogRef!=='string')throw new ContractError();
 const components=list(card.components).map(object);
 if(components.length!==4||new Set(components.map(c=>string(c.id))).size!==4||card.rootId!=='root')throw new ContractError();
 const root=components.find(c=>c.id===card.rootId);if(!root||root.component!=='Column'||string(root.id)!=='root')throw new ContractError();allowedKeys(root,['id','component','children']);
@@ -16,6 +16,7 @@ allowedKeys(text,['id','component','text']);binding(text.text,'/prompt');
 allowedKeys(choice,['id','component','options','value','variant']);binding(choice.options,'/options');binding(choice.value,'/optionId');if(choice.variant!=='mutuallyExclusive')throw new ContractError();
 allowedKeys(button,['id','component','label','action']);if(button.label!=='确认这个方案')throw new ContractError();const action=object(button.action);allowedKeys(action,['event']);const event=object(action.event);allowedKeys(event,['name','context']);const name=string(event.name);if(name!=='confirm_activity')throw new ContractError();const context=object(event.context);allowedKeys(context,['optionId','confirmed']);binding(context.optionId,'/optionId');const confirmation=object(context.confirmed);allowedKeys(confirmation,['literal']);if(confirmation.literal!==true)throw new ContractError();
 if(card.actions.length!==1||card.actions[0].actionName!==name)throw new ContractError();
+allowedKeys(card.data,['prompt','options','optionId']);
 const choices=list(card.data.options).map(item=>{const x=object(item);allowedKeys(x,['label','value']);return {label:bounded(x.label,2000),value:bounded(x.value,128)};});
 if(choices.length<2||choices.length>8||new Set(choices.map(c=>c.value)).size!==choices.length)throw new ContractError();
 const selected=card.data.optionId===undefined?undefined:bounded(card.data.optionId,128);if(selected!==undefined&&!choices.some(c=>c.value===selected))throw new ContractError();
