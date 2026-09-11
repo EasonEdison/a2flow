@@ -20,6 +20,7 @@ class OperationSpec:
     execute: Callable
     validate_input: Callable
     validate_result: Callable
+    validate_definition: Callable
     model_allowed: bool = False
     action_allowed: bool = False
 
@@ -101,6 +102,8 @@ class RuntimeAssets:
         spec = self.operations.get(ability.operation_ref)
         if not isinstance(spec, OperationSpec):
             raise ActionRejected("OPERATION_NOT_REGISTERED")
+        if spec.validate_definition(definition) is not True:
+            raise ActionRejected("UNSUPPORTED_ABILITY_PROFILE")
         return ability, spec
 
     @staticmethod

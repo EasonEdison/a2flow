@@ -58,6 +58,7 @@ class AssetsTest(unittest.TestCase):
             return {"selectedOptionId": value["optionId"], "confirmed": True}
         self.spec = OperationSpec(execute, valid_input,
                                   lambda result: type(result) is dict and result.get("confirmed") is True,
+                                  lambda definition: True,
                                   model_allowed=False, action_allowed=True)
         self.reader = Reader()
         self.definition = {"nodes": [

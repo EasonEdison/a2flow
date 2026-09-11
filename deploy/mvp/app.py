@@ -2,12 +2,13 @@
 
 import os
 
+from a2flow_asset_store.records import canonical
 from pydantic import SecretStr
 from skillweave_contracts import TrustedContext
 
 from activity_planning_demo import (
-    BUDGET_KEY, CONFIRM_OPERATION, OPERATION_MAP,
-    application_validator, bundle_validator,
+    BUDGET_KEY, CONFIRM_KEY, CONFIRM_OPERATION, OPERATION_MAP,
+    ability_definition, application_validator, bundle_validator,
 )
 from agent_workflow_runtime.asset_adapters import OperationSpec
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
@@ -51,15 +52,22 @@ def confirmation_result(value):
             and value["confirmed"] is True)
 
 
+def ability_profile(key):
+    expected = canonical(ability_definition(key))
+    return lambda definition: canonical(definition) == expected
+
+
 def operations():
     return {
         BUDGET_KEY: OperationSpec(
             OPERATION_MAP[BUDGET_KEY], budget_input, budget_result,
+            ability_profile(BUDGET_KEY),
             model_allowed=True,
         ),
         CONFIRM_OPERATION: OperationSpec(
             OPERATION_MAP[CONFIRM_OPERATION], confirmation_input,
-            confirmation_result, action_allowed=True,
+            confirmation_result, ability_profile(CONFIRM_KEY),
+            action_allowed=True,
         ),
     }
 

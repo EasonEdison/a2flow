@@ -36,6 +36,53 @@ def validate_workflow_inputs(value):
     return value
 
 
+def confirmed_context(repository, run, node_ids):
+    """Read only saved, consumed Action results for completed predecessor nodes."""
+    if (type(node_ids) not in (tuple, list)
+            or any(type(node_id) is not str or not node_id for node_id in node_ids)):
+        raise ActionRejected("PREDECESSOR_CONTEXT_UNAVAILABLE")
+    results = []
+    with repository.scope(run.owner, run.run_id):
+        for node_id in node_ids:
+            result_count = len(results)
+            items = sorted(
+                repository.for_node(run.owner, run.run_id, node_id),
+                key=lambda item: item.interaction_id,
+            )
+            for item in items:
+                if (item.phase != "COMPLETED" or not item.resume_consumed
+                        or item.completion_request_id is None or item.display_json is None):
+                    raise ActionRejected("PREDECESSOR_CONTEXT_UNAVAILABLE")
+                attempts = [attempt for attempt in item.attempts
+                            if attempt.request.control_request_id
+                            == item.completion_request_id]
+                if (len(attempts) != 1 or attempts[0].status != "EXECUTED"
+                        or not attempts[0].business_success
+                        or not attempts[0].interaction_completed
+                        or attempts[0].result_json is None):
+                    raise ActionRejected("PREDECESSOR_CONTEXT_UNAVAILABLE")
+                try:
+                    result = json.loads(attempts[0].result_json)
+                    card = json.loads(item.display_json)
+                    selected_id = result["selectedOptionId"]
+                    options = card["data"]["options"]
+                    selected = [option for option in options
+                                if option["value"] == selected_id]
+                except (KeyError, TypeError, ValueError, RecursionError):
+                    raise ActionRejected("PREDECESSOR_CONTEXT_UNAVAILABLE") from None
+                if len(selected) != 1:
+                    raise ActionRejected("PREDECESSOR_CONTEXT_UNAVAILABLE")
+                results.append({
+                    "nodeId": node_id, "interactionId": item.interaction_id,
+                    "applicationKey": item.application_key,
+                    "actionName": attempts[0].request.action_name,
+                    "result": result, "selectedOption": selected[0],
+                })
+            if len(results) == result_count:
+                raise ActionRejected("PREDECESSOR_CONTEXT_UNAVAILABLE")
+    return json.loads(json.dumps(results, ensure_ascii=False, allow_nan=False))
+
+
 def _close_model(model):
     client = getattr(model, "client", None)
     if callable(getattr(client, "close", None)):
@@ -174,8 +221,11 @@ class MvpRuntimeHost:
                         node_context=run.context(node["nodeId"]),
                         system_prompt=self._system_prompt(node),
                     )
+                context_loader = lambda node_ids: confirmed_context(
+                    self.interactions, run, node_ids,
+                )
                 graph = compose_workflow(
-                    run, lifecycle, definition, agents, self.views, saver,
+                    run, lifecycle, definition, agents, self.views, context_loader, saver,
                 )
                 service.continuation = LangGraphContinuation(graph, lifecycle=lifecycle)
                 built[run.run_id] = service

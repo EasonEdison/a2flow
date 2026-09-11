@@ -114,10 +114,17 @@ Resolved source dependencies and remaining live decisions, without user relaying
 
 - RuntimeAssets consumes the accepted AssetReader interfaces and freezes the complete Workflow
   version closure on each Run. Skill calls are restricted to the current compiled node; Ability
-  and Application calls are restricted to the Run closure and trusted operation map.
+  and Application calls are restricted to the Run closure and trusted operation map. Each
+  allowlisted operation also requires an exact canonical match with its locally authored Ability
+  definition before argument validation or handler execution.
 - The strict compiler accepts exactly two sequential generic Skill nodes. Each child remains a
   native graph inside a RunnableSequence, so the A2UI interrupt remains visible to the parent
   checkpointer. A deterministic idempotent NODE fact spans interruption and authorized resume.
+- Parent graph state keeps only the original user task and tagged node final outputs. A successor
+  receives an isolated input containing that task, predecessor status/final output and the saved,
+  consumed confirmation result plus the actual selected option from the historical card. Tool,
+  Skill and model-working messages remain in the child checkpoint and are not copied downstream.
+  On-demand reading of that intermediate history is deferred; there is no full-history fallback.
 - Every node gets a trusted fixed context covering model callbacks, Tool admission, Finalizer and
   AF07 progress capture. The caller cannot select or replace that node context.
 - render_application validates the accepted Application profile, saves the historical display
@@ -130,8 +137,10 @@ Resolved source dependencies and remaining live decisions, without user relaying
   and Action continuation assembly. Invalid Workflow inputs are rejected before Run allocation,
   entry resolution, model construction or graph assembly.
 - deploy/mvp is source-only private-host wiring: environment-bound owner, DeepSeek flash only,
-  max_retries=0 through the existing factory, explicit operation allowlist and optional same-origin
-  static directory. Import does not perform DDL, read credentials, open a listener or call a model.
+  max_retries=0 through the existing factory, explicit operation allowlist and optional static
+  directory. Its fixed owner is suitable only for a single-user loopback plus SSH-tunnel preview;
+  it is not gateway or multi-user authentication. Import does not perform DDL, read credentials,
+  open a listener or call a model.
 
 Accepted seeded profile facts:
 
@@ -142,10 +151,12 @@ Accepted seeded profile facts:
 
 Offline verification after final code changes:
 
-- 94 affected Runtime unit/integration-style tests PASS in 4.711s, including actual seeded
-  plan -> native interrupt -> saved Action -> resume -> copy completion using scripted models.
-- compileall for Runtime and deploy/mvp PASS; canonical wire JSON parse PASS.
-- deployment module import with dummy non-routable PG configuration PASS and performs no connection.
+- The initial candidate ran 94 Runtime unit/integration-style tests PASS in 4.711s, but main review
+  rejected that SHA for Ability-profile and downstream-history isolation gaps.
+- The repair's focused affected suite is 27 PASS in 0.786s. It proves changed seeded
+  modelArgumentSchema/outputSchema/bindings are rejected before handler execution and captures the
+  copy model's actual isolated input through native interrupt, saved Action and resume.
+- compileall for all seven repair-touched Runtime/deploy/test modules PASS.
 
 Evidence boundary: no PostgreSQL schema/setup, asset seeding, DeepSeek credential read or request,
 AF07 live listener, HTTP socket, Compose apply, server deployment or browser regression was run.

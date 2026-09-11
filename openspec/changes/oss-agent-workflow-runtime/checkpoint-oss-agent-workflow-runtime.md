@@ -421,3 +421,20 @@
 - NextExecutableAction: final owned diff/secret/ownership gate, synchronize latest origin/main if
   advanced, commit and push worker branch, then send fixed SHA and evidence to main-brain.
   Main/GitHub integration and every live action remain main-owned.
+
+### AF-MVP-08 main review repair
+
+- Initial worker candidate 097a2572b2952d1c70edf63c44dc391565ec083a was rejected by
+  main-brain for two blocking findings; it is superseded, not an accepted source candidate.
+- Status: VERIFYING. Runtime now canonical-matches every resolved Ability definition to the exact
+  trusted local operation profile before input validation or handler execution. Focused seeded
+  negatives alter modelArgumentSchema, outputSchema and input bindings and prove handler calls=0.
+- Parent MessagesState now retains only the user task and tagged node final outputs. Copy receives
+  an isolated input with predecessor status/final output and a trusted saved confirmation result
+  including the actual selected option content. Child Tool/Skill/model history stays in its native
+  checkpoint and is not injected downstream.
+- On-demand intermediate-history reading remains unimplemented and is recorded as a gap; no
+  full-history fallback was added. The fixed owner host is only a loopback+SSH single-user private
+  preview, not gateway or multi-user authentication.
+- Repair-focused affected suite: 27 PASS/0.786s; seven changed modules compileall PASS. No live
+  PG/schema/setup, seed, credential, provider, listener, Compose, deployment or browser action ran.

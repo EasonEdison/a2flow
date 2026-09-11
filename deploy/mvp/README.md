@@ -8,8 +8,10 @@ app.
 
 The host is intentionally single-user and environment-bound. Browser requests
 cannot choose `userId`, environment, model, database, namespace or credentials.
-Bind only to loopback and reach it through an SSH tunnel. A public bind is outside
-this MVP contract.
+The fixed server-side identity is a private-preview boundary, not gateway
+authentication or multi-user authorization. Bind only to loopback and reach it
+through an SSH tunnel. A public bind or shared-user deployment is outside this
+MVP contract.
 
 ## Required host configuration
 

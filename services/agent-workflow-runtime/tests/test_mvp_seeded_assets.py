@@ -10,9 +10,10 @@ from langsmith import tracing_context
 from agent_workflow_runtime import ActionService, LangGraphContinuation
 
 from a2flow_asset_store import AssetReader
+from a2flow_asset_store.records import canonical, digest
 from activity_planning_demo import (
     APPLICATION_KEY, BUDGET_KEY, CONFIRM_KEY, CONFIRM_OPERATION,
-    OPERATION_MAP, application_validator, bundle_validator,
+    OPERATION_MAP, ability_definition, application_validator, bundle_validator,
 )
 from activity_planning_demo.bundle import NAMESPACE, make_bundle
 
@@ -20,6 +21,7 @@ from agent_workflow_runtime.lifecycle import RunLifecycle
 from agent_workflow_runtime.assembly import build_engine
 from agent_workflow_runtime.asset_adapters import OperationSpec, RuntimeAssets
 from agent_workflow_runtime.models import ActionRejected, Interaction
+from agent_workflow_runtime.mvp_assembly import confirmed_context
 from agent_workflow_runtime.mvp_tools import build_tools, validators
 from agent_workflow_runtime.native_control import ControlledRunRunner
 from lifecycle_support import RunRepository, fixture
@@ -31,10 +33,17 @@ from support import Repository, context
 class BundleRepository:
     environment = "PRT"
 
-    def __init__(self):
+    def __init__(self, mutate=None):
         self.validator = bundle_validator()
+        document = make_bundle("PRT")
+        if mutate is not None:
+            mutate(document)
+            for asset in document["assets"]:
+                source = {key: value for key, value in asset.items()
+                          if key != "contentDigest"}
+                asset["contentDigest"] = digest(canonical(source))
         self.bundle = self.validator.validate(
-            make_bundle("PRT"), expected_namespace=NAMESPACE,
+            document, expected_namespace=NAMESPACE,
             expected_environment="PRT",
         )
 
@@ -66,14 +75,21 @@ def confirm_result(value):
             and type(value["selectedOptionId"]) is str and value["confirmed"] is True)
 
 
+def ability_profile(key):
+    expected = canonical(ability_definition(key))
+    return lambda definition: canonical(definition) == expected
+
+
 def operation_specs():
     return {
         BUDGET_KEY: OperationSpec(
             OPERATION_MAP[BUDGET_KEY], budget_input, budget_result,
+            ability_profile(BUDGET_KEY),
             model_allowed=True,
         ),
         CONFIRM_OPERATION: OperationSpec(
             OPERATION_MAP[CONFIRM_OPERATION], confirm_input, confirm_result,
+            ability_profile(CONFIRM_KEY),
             action_allowed=True,
         ),
     }
@@ -131,6 +147,74 @@ class SeededRuntimeAssetsTest(unittest.TestCase):
         config = self.assets.action(interaction, "confirm_activity")
         self.assertTrue(config.validate_input({"optionId": "a", "confirmed": True}))
         self.assertFalse(config.validate_input({"optionId": "foreign", "confirmed": True}))
+
+    def test_missing_confirmed_context_fails_closed(self):
+        with self.assertRaisesRegex(ActionRejected, "PREDECESSOR_CONTEXT_UNAVAILABLE"):
+            confirmed_context(Repository(), self.run, ("plan",))
+
+    def _mutated_assets(self, ability_key, change):
+        def mutate(document):
+            ability = next(asset for asset in document["assets"]
+                           if asset["kind"] == "ABILITY" and asset["key"] == ability_key)
+            change(ability["definition"])
+
+        reader = AssetReader(BundleRepository(mutate), NAMESPACE)
+        _, _, sample = fixture()
+        resolved = reader.resolve_workflow("activity-planning", sample.owner)
+        run = replace(
+            sample, definition_key="activity-planning", entry_node_id="plan",
+            versions=resolved.effective_versions,
+        )
+        calls = []
+
+        def execute(value, owner):
+            calls.append((value, owner))
+            return {"confirmed": True}
+
+        specs = operation_specs()
+        operation_ref = BUDGET_KEY if ability_key == BUDGET_KEY else CONFIRM_OPERATION
+        specs[operation_ref] = replace(specs[operation_ref], execute=execute)
+        return (RuntimeAssets(
+            reader, run, specs, resolved.definition, bound_node_id="plan",
+        ), run, calls)
+
+    def test_changed_model_argument_schema_rejects_before_operation(self):
+        def narrow(definition):
+            definition["modelArgumentSchema"]["properties"]["participants"]["maximum"] = 2
+
+        assets, run, calls = self._mutated_assets(BUDGET_KEY, narrow)
+        with self.assertRaisesRegex(ActionRejected, "UNSUPPORTED_ABILITY_PROFILE"):
+            assets.execute_ability(
+                BUDGET_KEY, {"participants": 3, "budgetMinor": 1000}, run.context(),
+            )
+        self.assertEqual([], calls)
+
+    def test_changed_action_output_or_binding_profile_rejects_before_operation(self):
+        def output_schema(definition):
+            definition["outputSchema"]["properties"]["selectedOptionId"]["maxLength"] = 1
+
+        def missing_binding(definition):
+            definition["resolvedInputSchema"]["required"].remove("optionId")
+            definition["inputBindings"] = [
+                binding for binding in definition["inputBindings"]
+                if binding["targetPath"] != "/optionId"
+            ]
+
+        for change in (output_schema, missing_binding):
+            assets, run, calls = self._mutated_assets(CONFIRM_KEY, change)
+            application = assets.application(APPLICATION_KEY, run.context())
+            card = {"cardId": "card", "nodeId": "plan", "interactionId": "interaction",
+                    "data": {"options": [{"label": "A", "value": "a"}]}}
+            interaction = Interaction(
+                run.context("plan"), "interaction", APPLICATION_KEY,
+                application["resolvedVersion"]["versionId"], run.thread_id,
+                tuple(application["recordedVersions"]), display_json=json.dumps(card),
+            )
+            with self.subTest(change=change.__name__), self.assertRaisesRegex(
+                ActionRejected, "UNSUPPORTED_ABILITY_PROFILE",
+            ):
+                assets.action(interaction, "confirm_activity")
+            self.assertEqual([], calls)
 
 
 class SeededRuntimeGraphTest(unittest.TestCase):
@@ -227,7 +311,9 @@ class SeededRuntimeGraphTest(unittest.TestCase):
         views = Views()
         graph = compose_workflow(
             run, lifecycle, definition.definition,
-            {"plan": plan_graph, "copy": copy_graph}, views, MemorySaver(),
+            {"plan": plan_graph, "copy": copy_graph}, views,
+            lambda node_ids: confirmed_context(interactions, run, node_ids),
+            MemorySaver(),
         )
         service.continuation = LangGraphContinuation(graph, lifecycle=lifecycle)
         runner = ControlledRunRunner(lifecycle, None, None)
@@ -254,3 +340,14 @@ class SeededRuntimeGraphTest(unittest.TestCase):
             {"plan": "方案已确认。", "copy": "一起出发，把好心情写进这次活动。"},
             views.outputs,
         )
+        first_copy_input = copy_model.observedMessages[0]
+        self.assertTrue(all(
+            message.type in {"system", "human"} for message in first_copy_input
+        ))
+        visible = "\n".join(str(message.content) for message in first_copy_input)
+        self.assertIn("Plan", visible)
+        self.assertIn("方案已确认。", visible)
+        self.assertIn("团建晚餐", visible)
+        self.assertIn('"selectedOptionId":"dinner"', visible)
+        self.assertNotIn("perPersonMinor", visible)
+        self.assertNotIn("activity-planning/plan", visible)

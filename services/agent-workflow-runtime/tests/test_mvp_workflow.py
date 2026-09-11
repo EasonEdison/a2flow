@@ -1,15 +1,18 @@
 """Offline native subgraph composition checks for the MVP workflow loader."""
 
+import json
 import unittest
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import Command, interrupt
 
 from agent_workflow_runtime.native_control import ControlledRunRunner, RunGraphBinding
 from agent_workflow_runtime.models import ActionRejected
-from agent_workflow_runtime.workflow_loader import compose_workflow, node_operation_id
+from agent_workflow_runtime.workflow_loader import (
+    CONTEXT_PREFIX, compose_workflow, node_operation_id,
+)
 from lifecycle_support import fixture
 
 
@@ -51,8 +54,23 @@ class WorkflowLoaderTest(unittest.TestCase):
             return {"messages": [AIMessage(content="planned " + selected)]}
 
         def copy(state):
-            self.assertEqual("planned chosen", state["messages"][-1].content)
+            self.assertEqual(2, len(state["messages"]))
+            self.assertTrue(all(isinstance(message, HumanMessage)
+                                for message in state["messages"]))
+            context = json.loads(
+                state["messages"][-1].content.removeprefix(CONTEXT_PREFIX),
+            )
+            self.assertEqual(
+                "planned chosen", context["predecessors"][0]["finalOutput"],
+            )
+            self.assertEqual(
+                "Chosen plan", context["confirmations"][0]["selectedOption"]["label"],
+            )
             return {"messages": [AIMessage(content="promotional copy")]}
+
+        def load_context(node_ids):
+            self.assertEqual((run.entry_node_id,), node_ids)
+            return [{"selectedOption": {"label": "Chosen plan", "value": "chosen"}}]
 
         definition = {
             "definitionKey": run.definition_key,
@@ -73,7 +91,7 @@ class WorkflowLoaderTest(unittest.TestCase):
             "copy": RunGraphBinding(child(copy), lifecycle),
         }
         graph = compose_workflow(
-            run, lifecycle, definition, agents, views, MemorySaver(),
+            run, lifecycle, definition, agents, views, load_context, MemorySaver(),
         )
         runner = ControlledRunRunner(lifecycle, None, None)
         waiting = runner.invoke(
@@ -91,6 +109,14 @@ class WorkflowLoaderTest(unittest.TestCase):
             run, graph, Command(resume={pending.id: "chosen"}),
         )
         self.assertEqual("promotional copy", result["messages"][-1].content)
+        self.assertEqual(
+            [HumanMessage, AIMessage, AIMessage],
+            [type(message) for message in result["messages"]],
+        )
+        self.assertEqual(
+            ["workflow-node:" + run.entry_node_id, "workflow-node:copy"],
+            [message.name for message in result["messages"][1:]],
+        )
         self.assertEqual(
             {run.entry_node_id: "SUCCEEDED", "copy": "SUCCEEDED"}, views.statuses,
         )
@@ -127,5 +153,6 @@ class WorkflowLoaderTest(unittest.TestCase):
                 ActionRejected, "UNSUPPORTED_WORKFLOW_DEFINITION",
             ):
                 compose_workflow(
-                    run, lifecycle, definition, agents, Views(), MemorySaver(),
+                    run, lifecycle, definition, agents, Views(),
+                    lambda node_ids: [], MemorySaver(),
                 )
