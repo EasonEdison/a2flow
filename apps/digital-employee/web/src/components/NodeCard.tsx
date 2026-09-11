@@ -1,0 +1,16 @@
+import { useState } from 'react';
+import { statusLabels, terminal, type NodeView } from '../presentation';
+import { ChoiceCard } from './ChoiceCard';
+import { Icon } from './Icon';
+export function NodeCard({node,index,busy,onAction,onHistory}: {node:NodeView;index:number;busy:boolean;onAction:(value:string)=>Promise<void>;onHistory:()=>Promise<void>}) {
+const [disclosure,setDisclosure]=useState<{status:string;open:boolean}|null>(null);
+const open=disclosure?.status===node.status?disclosure.open:!terminal(node.status)&&node.status!=='PENDING';
+const toggle=()=>{setDisclosure({status:node.status,open:!open});if(!open)void onHistory();};
+return <article className={'node-card state-'+node.status.toLowerCase()} id={'node-'+node.id}>
+<header className="node-header"><span className="node-number">{node.status==='SUCCEEDED'?<Icon name="check"/>:index+1}</span><div className="node-title"><h2>{node.title}</h2>{node.summary?<p>{node.summary}</p>:null}</div><span className={'badge '+node.status.toLowerCase()}>{statusLabels[node.status]}</span></header>
+<div className="process"><button className="disclosure" aria-expanded={open} aria-controls={'details-'+node.id} onClick={toggle}><Icon name="chevron"/><span>{terminal(node.status)?'查看历史过程':'思考与执行过程'}</span><small>{terminal(node.status)?'只读，不重新执行':node.status==='WAITING'?'等待确认后继续':''}</small></button>
+{open?<div id={'details-'+node.id} className="process-body">{node.records.length?node.records.map(record=><div key={record.id} className={'record '+record.kind}>{record.kind==='reasoning'?<span className="record-label">模型思考 · 与已验证结果分别展示</span>:null}<p>{record.text}</p></div>):<p className="muted">{node.status==='PENDING'?'节点尚未开始。':'等待已保存的执行记录。'}</p>}{node.incomplete?<p className="observation-warning">过程记录不完整，运行状态请以节点状态为准。</p>:null}</div>:null}</div>
+{node.card?<ChoiceCard key={node.card.id} card={node.card} busy={busy} onSubmit={onAction}/>:null}
+{node.output?<section className="result"><h3>节点结果</h3><p>{node.output}</p></section>:null}
+</article>;
+}
