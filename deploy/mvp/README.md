@@ -92,6 +92,10 @@ an operator authorizes and performs it.
 The bounded PG -> seed -> real flash -> waiting Action -> confirmation -> copy
 acceptance is specified in mvp08-live-window.md under the owning OpenSpec.
 runtime08_mvp_window reuses the accepted isolated-PG cleanup and adds exact
-model, time, data and loopback limits. The current task venv does not contain
-Uvicorn; listener-requirements.lock is prepared but has not been installed.
-The live acceptance remains NOT RUN and requires a separately released window.
+model, time, data and loopback limits. The released window added the exact pinned
+Click/Uvicorn versions to the task venv and ran once. Final chain evidence was lost
+with the yielded execution handle, so the result is UNCONFIRMED and not READY. Do
+not rerun without a new explicit window release. A source-only W2 repair prepares a
+new admin-owned 0600 evidence file outside disposable PG cleanup, with fixed safe
+stage/result records and no credential, DSN, provider body or model text. W2 has not
+been released or run.

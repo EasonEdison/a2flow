@@ -1,8 +1,9 @@
 # AF-MVP-08-LIVE-W1 controlled window
 
-Status: PREPARED / NOT RUN. Preparing or reviewing these files is not authority to
-install packages, read a model credential, start PostgreSQL, open a listener, call
-DeepSeek, seed data, or execute the chain.
+Status: RAN ONCE / LIVE RESULT UNCONFIRMED. Main released the exact window and the
+single process exited within its budget, but the caller lost the yielded execution
+handle after retaining only the first output line. Final test output, exit status and
+model/card/node/Run evidence are unavailable, so this is not a successful chain proof.
 
 ## One bounded objective
 
@@ -60,13 +61,14 @@ more than 128 MiB swap growth, or more than 256 MiB task-volume data. The contai
 
 ## Dependency and exact entry
 
-The current task venv does not contain Uvicorn. `deploy/mvp/listener-requirements.lock`
-pins the only listener addition (`uvicorn==0.52.4`) and its direct Click/H11 versions.
-Installing that lock is a separate task-venv mutation and requires the same explicit
-main window release; it was not performed during preparation.
+The released dependency stage verified the two official pure-wheel hashes, then added
+only `uvicorn==0.52.4` and `click==8.3.1` to the task venv. Existing `h11==0.16.0`
+was unchanged and `pip check` passed. No system package, pip version or prior Python
+distribution was intentionally changed.
 
-After main fixes the final clean source SHA, authorizes that install and supplies the
-already-managed private key-file path, the reviewed commands are:
+Main fixed source SHA `1881855eb4650e7d08f57fbe3bd8e3b647759d0f`, authorized the
+task-venv additions and supplied the managed key-file path. The command below records
+the released entry; it must not be run again under this one-window release:
 
 ```bash
 /home/admin/OpenSource/.venvs/skillweave-runtime-p1/bin/python -m pip install \
@@ -96,12 +98,63 @@ stop and escalate; never broaden the cleanup target.
 - the live acceptance remains opt-in and skipped outside the exact window marker;
 - provider destination/token/call guards have offline request-shape tests.
 
-No live-chain success evidence exists until main releases and observes one exact run.
+The released run is consumed. A second attempt requires a new explicit window; cleanup
+success must not be used to infer model, card, node or Run success.
 
-Prepared SHA256 values:
+W1 prepared SHA256 values:
 
 - shared PG safety: 902d8c0b551b6d550ee4d5013e686248cec72712afd023b42e8b23a330cbcb6d
 - MVP08 entry: 6ff87388cd07c2d3f302e936eeb8390aa06353587a8f7be9b93b294810840e89
 - live probe: 62a4db1020af63359cb1e03c03fd6621cf5a4f028d1534dcf99e77185c20b868
 - offline window test: 05c6c3cd7b5ce18a091c39b3a2b588eeb109a190c7fc72da2017a295f1fd9613
 - opt-in acceptance test: 6f765b3581258079c08fd954a90bf57c509a96b665a093b81ff05e5501719a83
+- listener lock: 5b79fcbe1e59b0197945b4fef36d41d5bc6f5310c3a7447546638e43d2b6b8ce
+
+## Actual one-shot result
+
+- Dependency result: PASS. Official wheel SHA256 values matched the released values;
+  `pip check` and final Click/H11/Uvicorn versions passed. A first comparison command
+  stopped after installation because `comm` used inconsistent locales; the packages
+  were not downloaded or installed again, and the corrected check was read-only.
+- Entry result: the first retained line confirmed source SHA `1881855...` and that the
+  key file had only been metadata-verified at entry. The owned window and live-test
+  child were observed running with the PG container on network `none` and no ports.
+- Evidence capture failure: the tool call did not retain the yielded exec session ID.
+  After the process exited, final unittest output/exit code and the disposable database
+  were unavailable. Actual model call count, saved card, node status and Run status are
+  therefore UNKNOWN, not failed or passed facts.
+- Postflight: owned process, container, volume, private directory and listener were
+  absent; the pinned image was absent; Git remained clean at `1881855...`; the model
+  key remained admin-owned mode 0600 with 36 bytes; `pip check` passed.
+- No rerun was performed. Runtime and browser readiness remain NO READY.
+
+## W2 durable evidence preparation
+
+W2 has not been released or run. Source preparation only adds an append-only,
+task-owned evidence target outside disposable PostgreSQL cleanup:
+
+- exact file: `/home/admin/OpenSource/.evidence/oss-agent-workflow-runtime/af-mvp-08-live-w2.jsonl`;
+- parent directories must be admin-owned mode 0700; the file is newly created with
+  `O_EXCL|O_NOFOLLOW`, admin ownership and mode 0600, so prior evidence is never
+  overwritten;
+- bounded JSONL records cover `ENTRY`, `LIVE_STAGE`, `LIVE_RESULT`, `CHILD_EXIT`,
+  `PG_RESULT`, `CLEANUP_RESULT` and `WINDOW_RESULT`;
+- records contain only fixed stages, safe result fields, real model-call counts and
+  bounded resource metrics. They never contain the key, DSN, request/response body,
+  model text, run/card identifiers or exception messages;
+- evidence persistence does not relax cleanup. Exact process, container, volume,
+  private-directory and listener cleanup still runs in `finally`, and its outcome is
+  independently recorded.
+
+W2 evidence-capture SHA256 values:
+
+- PG entry/cleanup: 2a200afe4dd17c0ed6323e21b1062e62b9937f7eec05389f0b0a9be8c50f6291
+- MVP08 entry: 4ea85adb55c57930c23296eec5f9403a9b18478155020a0bb41c27fd80c2732a
+- live probe: 69a371cfa9d438d9ab4ea8c7612cdab436c043e15756d5705be15749581b0146
+- focused failure/cleanup test: 58f39b06f68ec57da82ad8922239c4a19b0fca733c2af34dbdc11ae09429bfbe
+
+A future released command must use the final reviewed source SHA in both the Git
+preflight and `--expected-source-sha`. The caller must retain and print the complete
+execution result object, including `session_id`, then poll that exact session until a
+terminal exit. Losing the handle is no longer a reason to rerun: the 0600 evidence
+file remains available for a separate metadata-checked, read-only collection step.

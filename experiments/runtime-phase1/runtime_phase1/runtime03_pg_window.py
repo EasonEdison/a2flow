@@ -6,12 +6,15 @@ only verified task-owned cleanup. --help is read-only. No credential CLI values.
 
 import argparse
 from dataclasses import dataclass
+import fcntl
 import json
+import math
 import os
 from pathlib import Path
 import secrets
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -42,6 +45,7 @@ class WindowSpec:
     max_seconds: int = 900
     max_data_kib: int = 1024 * 1024
     pythonpath: str | None = None
+    evidence_file: Path | None = None
 
 
 def window_spec(window=None):
@@ -49,6 +53,54 @@ def window_spec(window=None):
     return window if window is not None else WindowSpec(
         CONTAINER, VOLUME, PRIVATE, OWNER, "A2FLOW_RUNTIME03", "test_postgres_integration.py",
     )
+
+
+def append_evidence(stage, *, window=None, **values):
+    """Append one bounded safe JSON record outside disposable PG cleanup."""
+    path = window_spec(window).evidence_file
+    if path is None:
+        return
+    if (type(stage) is not str or not stage or len(stage) > 64
+            or any(type(key) is not str or not key or len(key) > 64 for key in values)):
+        raise RuntimeError("INVALID_EVIDENCE_RECORD")
+
+    def safe(value):
+        if value is None or type(value) in (bool, int):
+            return True
+        if type(value) is float:
+            return math.isfinite(value)
+        if type(value) is str:
+            return len(value) <= 128
+        if type(value) is list:
+            return len(value) <= 16 and all(safe(item) for item in value)
+        if type(value) is dict:
+            return (len(value) <= 16
+                    and all(type(key) is str and len(key) <= 64 and safe(item)
+                            for key, item in value.items()))
+        return False
+
+    if not all(safe(value) for value in values.values()):
+        raise RuntimeError("INVALID_EVIDENCE_RECORD")
+    payload = {"schemaVersion": 1, "stage": stage, **values}
+    encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if len(encoded) > 4096:
+        raise RuntimeError("EVIDENCE_RECORD_TOO_LARGE")
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW)
+    try:
+        metadata = os.fstat(fd)
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o600):
+            raise RuntimeError("EVIDENCE_FILE_UNSAFE")
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        remaining = encoded
+        while remaining:
+            written = os.write(fd, remaining)
+            if written <= 0:
+                raise RuntimeError("EVIDENCE_WRITE_FAILED")
+            remaining = remaining[written:]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def command(args, *, timeout=30, check=True):
@@ -217,6 +269,8 @@ def credential_log_check(passwords, *, window=None):
 
 
 def finish_window(child, marker, passwords, *, window=None):
+    evidence_exists = (window_spec(window).evidence_file is not None
+                       and window_spec(window).evidence_file.exists())
     try:
         stop_owned_group(child, marker, window=window)
     finally:
@@ -224,7 +278,15 @@ def finish_window(child, marker, passwords, *, window=None):
             credential_log_check(passwords, window=window)
         finally:
             # Even process/log checks failing must attempt resource cleanup.
-            cleanup(window=window)
+            try:
+                cleanup(window=window)
+            except BaseException:
+                if evidence_exists:
+                    append_evidence("CLEANUP_RESULT", window=window, outcome="FAILED")
+                raise
+            else:
+                if evidence_exists:
+                    append_evidence("CLEANUP_RESULT", window=window, outcome="PASS")
 
 
 def run_window(*, window=None):
@@ -250,6 +312,7 @@ def run_window(*, window=None):
     window_marker = secrets.token_hex(16)
     passwords = []
     minimum_memory, maximum_swap, maximum_data = available, initial_swap, 0
+    stage = "IMAGE"
     try:
         if not image_existed:
             private_file(".image-owned", "true", window=window)
@@ -257,6 +320,7 @@ def run_window(*, window=None):
         image = inspect("image", IMAGE)
         if image["Architecture"] != "amd64":
             raise RuntimeError("image architecture mismatch")
+        stage = "PG_CONTAINER"
         admin_password, probe_password = secrets.token_urlsafe(36), secrets.token_urlsafe(36)
         passwords = [admin_password, probe_password]
         admin_file = private_file("admin_password", admin_password, window=window)
@@ -286,6 +350,7 @@ def run_window(*, window=None):
                 or host["Memory"] != 256 * 1024 * 1024 or host["MemorySwap"] != host["Memory"]):
             raise RuntimeError("container isolation readback mismatch")
         volume_path = inspect("volume", VOLUME)["Mountpoint"]
+        stage = "PG_READY"
         deadline = time.monotonic() + 60
         import psycopg
         while True:
@@ -302,6 +367,7 @@ def run_window(*, window=None):
                 time.sleep(.5)
         if not version.startswith("17.11"):
             raise RuntimeError("unexpected PostgreSQL version")
+        stage = "PG_BOOTSTRAP"
         bootstrap_probe_database(socket, admin_file, probe_file, connection_limit=8)
         with psycopg.connect(_connection_string(socket, probe_file), autocommit=True) as conn:
             role = conn.execute("""SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolconnlimit
@@ -319,11 +385,13 @@ def run_window(*, window=None):
             spec.env_prefix + "_SOCKET": str(socket),
             spec.env_prefix + "_PASSWORD_FILE": str(probe_file),
         })
+        stage = "CHILD_START"
         child = subprocess.Popen([PYTHON, "-m", "unittest", "discover",
                                   "-s", spec.test_directory,
                                   "-p", spec.test_pattern, "-v"],
                                  cwd=REPO, env=environment, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, text=True, start_new_session=True)
+        stage = "CHILD_RUN"
         while True:
             available, swap, data = check_budget(started, initial_swap, volume_path, window=window)
             minimum_memory = min(minimum_memory, available)
@@ -334,6 +402,10 @@ def run_window(*, window=None):
                 break
             except subprocess.TimeoutExpired:
                 continue
+        stage = "CHILD_RESULT"
+        append_evidence(
+            "CHILD_EXIT", window=window, exitCode=child.returncode,
+        )
         for password in passwords:
             stdout, stderr = stdout.replace(password, "[REDACTED]"), stderr.replace(password, "[REDACTED]")
         print(stdout, end="", flush=True)
@@ -349,6 +421,22 @@ def run_window(*, window=None):
                           "elapsedSeconds": round(time.monotonic() - started, 2)}), flush=True)
         if child.returncode or sessions or locks:
             raise RuntimeError("PG acceptance or connection cleanup failed")
+        append_evidence(
+            "PG_RESULT", window=window, outcome="PASS", serverVersion=version,
+            remainingRuntimeSessions=sessions, remainingAdvisoryLocks=locks,
+            maxSwapGrowthKiB=maximum_swap - initial_swap,
+            maxDataKiB=maximum_data,
+            elapsedSeconds=round(time.monotonic() - started, 2),
+        )
+    except BaseException as error:
+        try:
+            append_evidence(
+                "PG_RESULT", window=window, outcome="FAILED",
+                errorStage=stage, errorType=type(error).__name__,
+            )
+        except Exception:
+            pass
+        raise
     finally:
         finish_window(child, window_marker, passwords, window=window)
 

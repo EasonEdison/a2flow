@@ -20,9 +20,11 @@ from activity_planning_demo import (
 from activity_planning_demo.bundle import NAMESPACE, make_bundle
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
+from runtime_phase1 import runtime03_pg_window as shared
 from runtime_phase1.postgres_parallel_probe import _connection_string
 from runtime_phase1.runtime08_mvp_window import (
     MODEL_KEY_FILE_ENV,
+    SPEC,
     verified_model_key_file,
 )
 
@@ -250,13 +252,15 @@ def assert_completed(view, selected_option):
         raise RuntimeError("FINAL_OUTPUTS_INCOMPLETE")
 
 
-def _run():
+def _execute(progress):
+    progress["stage"] = "WINDOW_CONTEXT"
     marker = environment_value("A2FLOW_MVP08_WINDOW_ID")
     if len(marker) != WINDOW_ID_PATTERN_LENGTH or any(
             character not in "0123456789abcdef" for character in marker):
         raise RuntimeError("MVP08_WINDOW_MARKER_INVALID")
     socket_directory = Path(environment_value("A2FLOW_MVP08_SOCKET"))
     password_file = Path(environment_value("A2FLOW_MVP08_PASSWORD_FILE"))
+    progress["stage"] = "MODEL_KEY_READ"
     model_key = read_model_key()
     conninfo = _connection_string(socket_directory, password_file)
     owner = TrustedContext.from_mapping({
@@ -272,8 +276,14 @@ def _run():
     })
     from deploy.mvp import app as deployment
 
+    progress["stage"] = "ASSET_SEED"
     asset_count = seed_assets(conninfo)
+    shared.append_evidence(
+        "LIVE_STAGE", window=SPEC, phase="ASSETS_SEEDED", assetCount=asset_count,
+    )
     budget = RequestBudget()
+    progress["budget"] = budget
+    progress["stage"] = "RUNTIME_HOST"
     import uvicorn
     host = MvpRuntimeHost(
         conninfo=conninfo,
@@ -286,6 +296,7 @@ def _run():
         model_factory=WindowModelFactory(owner, model_key, budget),
         identity_resolver=lambda scope: owner,
     )
+    progress["stage"] = "LISTENER_START"
     assert_listener_available()
     config = uvicorn.Config(
         host.create_app(),
@@ -313,6 +324,10 @@ def _run():
                     time.sleep(.1)
             if session != {"userId": WINDOW_USER_ID, "environment": WINDOW_ENVIRONMENT}:
                 raise RuntimeError("SESSION_IDENTITY_MISMATCH")
+            progress["stage"] = "START_REQUEST"
+            shared.append_evidence(
+                "LIVE_STAGE", window=SPEC, phase="LISTENER_READY", modelCalls=budget.calls,
+            )
             start = assert_status(client.post(
                 "/runtime/runs",
                 json={
@@ -330,7 +345,16 @@ def _run():
             run_id = start.get("runId")
             if type(run_id) is not str or not run_id:
                 raise RuntimeError("RUN_ID_UNAVAILABLE")
+            progress["stage"] = "WAITING_CARD"
+            shared.append_evidence(
+                "LIVE_STAGE", window=SPEC, phase="START_RETURNED", modelCalls=budget.calls,
+            )
             card, selected_option = waiting_card(client, run_id)
+            progress["stage"] = "ACTION_REQUEST"
+            shared.append_evidence(
+                "LIVE_STAGE", window=SPEC, phase="CARD_OBSERVED", modelCalls=budget.calls,
+                cardObserved=True,
+            )
             assert_status(client.post(
                 f"/runtime/runs/{run_id}/nodes/plan/actions",
                 json={
@@ -341,7 +365,12 @@ def _run():
                 },
                 timeout=ACTION_TIMEOUT_SECONDS,
             ))
+            progress["stage"] = "FINAL_VIEW_READ"
+            shared.append_evidence(
+                "LIVE_STAGE", window=SPEC, phase="ACTION_RETURNED", modelCalls=budget.calls,
+            )
             final_view = assert_status(client.get(f"/runtime/runs/{run_id}/view"))
+            progress["stage"] = "FINAL_VIEW_VALIDATE"
             assert_completed(final_view, selected_option)
         if not 1 <= budget.calls <= MODEL_CALL_LIMIT:
             raise RuntimeError("MODEL_CALL_COUNT_INVALID")
@@ -365,10 +394,31 @@ def _run():
             raise RuntimeError("LOOPBACK_LISTENER_RESIDUAL")
 
 
-def run():
+def _run():
+    progress = {"stage": "INITIAL", "budget": None}
     try:
-        evidence = _run()
-    except Exception:
+        evidence = _execute(progress)
+    except Exception as error:
+        budget = progress["budget"]
+        try:
+            shared.append_evidence(
+                "LIVE_RESULT", window=SPEC, outcome="FAILED",
+                errorStage=progress["stage"], errorType=type(error).__name__,
+                modelCalls=budget.calls if budget is not None else 0,
+            )
+        except Exception:
+            pass
         raise RuntimeError("MVP08_LIVE_CHAIN_FAILED") from None
+    shared.append_evidence(
+        "LIVE_RESULT", window=SPEC, outcome="PASS",
+        assetCount=evidence["assetCount"], cardObserved=True,
+        modelCalls=evidence["modelCalls"], lifecycle=evidence["lifecycle"],
+        nodeStatuses=evidence["nodeStatuses"],
+    )
+    return evidence
+
+
+def run():
+    evidence = _run()
     print(json.dumps(evidence, sort_keys=True), flush=True)
     return evidence

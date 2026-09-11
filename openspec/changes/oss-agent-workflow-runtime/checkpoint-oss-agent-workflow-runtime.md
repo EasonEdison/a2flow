@@ -453,11 +453,32 @@
   max_tokens=2048/call (12288 configured output-token ceiling), zero retries.
 - Model key value is forbidden in CLI/direct environment; only an absolute non-symlink
   admin-owned 0600 file path is accepted. The window reads it once and never logs content.
-- Current task venv lacks Uvicorn. A three-line listener lock is prepared; no package was
-  installed. The install itself must be part of a separately approved exact window.
+- Main released the exact task-venv install and one live window. Only Click 8.3.1 and
+  Uvicorn 0.52.4 were added; H11 stayed 0.16.0 and pip check passed.
 - Offline preparation: 21 PASS + 1 explicit live SKIP/0.023s; changed modules compileall and
   runtime08 --help PASS; AF03/AF04 safety regressions are included.
 - Entry/window/probe/test/listener-lock SHA256 values are fixed in mvp08-live-window.md.
-- No key read, package install, PG/container/volume, seed, listener/socket, provider request,
-  deployment or browser action has occurred. Runtime live chain remains NOT RUN / NO READY.
-- NextExecutableAction: fixed worker-only commit/push and main-brain review of the task-venv
+- The exact live command ran once, but the caller retained only its first stdout line and lost
+  the yielded exec-session handle. Final test exit/output, model call count, card, node and Run
+  assertions cannot be recovered after correct disposable-volume cleanup. Mark LIVE RESULT
+  UNCONFIRMED; do not infer success and do not rerun under the consumed release.
+- Postflight readback: exact process/container/volume/private/listener absent; pinned image absent;
+  key retained admin/0600/36B; Git clean at 1881855; pip check PASS. No deployment/browser action.
+- NextExecutableAction: commit this evidence-only correction and send main-brain the fixed SHA.
+  A second live attempt requires a new explicit release; Runtime remains NO READY.
+
+### AF-MVP-08 durable evidence repair
+
+- Status: PREPARED / W2 NOT RUN. The live wrapper now creates one exact admin-owned
+  0600 JSONL evidence file outside disposable PostgreSQL cleanup, refuses overwrite or
+  symlink traversal, and fsyncs bounded records under an exclusive lock.
+- Fixed safe records cover entry, live stages/result with actual model call count,
+  child exit, PG result, cleanup result and final window result. Key, DSN,
+  request/response content, model text, identifiers and exception messages are excluded.
+- Exact process/container/volume/private-directory/listener cleanup remains in `finally`;
+  evidence retention does not retain the database or any runtime resource.
+- Focused offline failure/cleanup scenario: 1 PASS/0.003s. Final evidence modules import
+  without side effects. No PG, credential read, provider call or listener was executed.
+- NextExecutableAction: fixed worker commit/push and main-brain review. Any W2 execution
+  still requires a new explicit release and a caller that retains the full exec result and
+  session ID. Runtime remains NO READY.
