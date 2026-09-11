@@ -53,7 +53,7 @@ class ControlledProgressTest(unittest.TestCase):
             http_client=client, http_async_client=async_client,
         ).create("synthetic", context().trusted_context)
 
-    def exercise(self, *, invalid=False, stopped=False, stop_in_tool=False):
+    def exercise(self, *, invalid=False, stopped=False, stop_in_tool=False, node_id=None):
         repository, lifecycle, run = fixture()
         store, executed = Store(), []
         writer = ProgressWriter(store).start()
@@ -74,7 +74,8 @@ class ControlledProgressTest(unittest.TestCase):
                                                "credential_ref": "synthetic"})
         graph = build_engine(model, [StructuredTool.from_function(lookup)], {"lookup": validate},
             ["lookup"], harness_profile_key=config.harness_profile_key,
-            run_lifecycle=lifecycle, progress=writer, checkpointer=MemorySaver())
+            run_lifecycle=lifecycle, progress=writer, checkpointer=MemorySaver(),
+            node_context=run.context(node_id) if node_id is not None else None)
         if stopped:
             lifecycle.stop(run.owner, run.run_id, "synthetic-stop")
         with tracing_context(enabled=False):
@@ -110,11 +111,20 @@ class ControlledProgressTest(unittest.TestCase):
             self.assertEqual([], records)
         else:
             self.assertTrue(all(binding["runId"] == run.run_id
-                                and binding["nodeId"] == run.entry_node_id
+                                and binding["nodeId"] == (node_id or run.entry_node_id)
                                 for binding, _, _, _ in store.calls))
+            if not invalid and not stop_in_tool:
+                facts = repository.operations(run.owner, run.run_id)
+                self.assertTrue(all(
+                    fact.node_id == (node_id or run.entry_node_id)
+                    for fact in facts if fact.kind in {"MODEL", "TOOL", "FINALIZER"}
+                ))
 
     def test_actual_harness_has_admitted_tool_and_native_finalizer(self):
         self.exercise()
+
+    def test_bound_node_context_covers_model_tool_finalizer_and_progress(self):
+        self.exercise(node_id="copy")
 
     def test_closed_arguments_have_no_false_tool_started(self):
         self.exercise(invalid=True)

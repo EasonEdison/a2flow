@@ -43,7 +43,7 @@ def encode(interaction):
     document["context"] = interaction.context.to_mapping()
     document["recorded_versions"] = [list(pair) for pair in interaction.recorded_versions]
     document["attempts"] = [asdict(attempt) for attempt in interaction.attempts]
-    document["schemaVersion"] = 1
+    document["schemaVersion"] = 2
     # Apply the same closed validation on writes and reads.
     decode(document)
     return document
@@ -51,8 +51,12 @@ def encode(interaction):
 
 def decode(document):
     try:
+        if type(document) is not dict or type(document.get("schemaVersion")) is not int:
+            raise ValueError("unsupported version")
+        if document["schemaVersion"] == 1 and "display_json" not in document:
+            document = {**document, "display_json": None}
         _closed(document, Interaction, ("schemaVersion",))
-        if type(document["schemaVersion"]) is not int or document["schemaVersion"] != 1:
+        if document["schemaVersion"] not in {1, 2}:
             raise ValueError("unsupported version")
         data = dict(document)
         del data["schemaVersion"]
@@ -63,6 +67,10 @@ def decode(document):
             _text(data[name])
         for name in ("run_active", "node_waiting", "resume_started", "resume_consumed"):
             _boolean(data[name])
+        if data["display_json"] is not None:
+            display = _json(data["display_json"])
+            if type(display) is not dict:
+                raise ValueError("display snapshot object required")
         if data["phase"] not in {"WAITING", "EXECUTING", "COMPLETED", "INVALIDATED"}:
             raise ValueError("invalid phase")
         if data["completion_request_id"] is not None:

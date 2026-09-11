@@ -52,12 +52,16 @@ class ExecutionSession:
 
 
 class RuntimeService:
-    def __init__(self, lifecycle, projection: ProjectionPort, execution_session, resolve_entry, *, progress=None):
+    def __init__(
+        self, lifecycle, projection: ProjectionPort, execution_session, resolve_entry,
+        *, progress=None, validate_inputs=None,
+    ):
         self.lifecycle = lifecycle
         self.projection = projection
         self.execution_session = execution_session
         self.resolve_entry = resolve_entry
         self.progress = progress
+        self.validate_inputs = validate_inputs
 
     def _runner(self, session):
         runner = session.runner
@@ -79,6 +83,8 @@ class RuntimeService:
         if type(inputs) is not dict:
             raise ActionRejected("INVALID_SERVICE_INPUT")
         inputs = json_copy(inputs)
+        if self.validate_inputs is not None:
+            self.validate_inputs(owner, definition_key, inputs)
         entry = identifier(self.resolve_entry(owner, definition_key))
         with self.execution_session(owner) as session:
             response = self._runner(session).start(
@@ -106,6 +112,8 @@ class RuntimeService:
         # A narrow identity read, not old inputs/results/version/checkpoint reuse.
         old = self.projection.restart_identity(owner, run_id)
         definition = identifier(old["definitionKey"])
+        if self.validate_inputs is not None:
+            self.validate_inputs(owner, definition, inputs)
         entry = identifier(self.resolve_entry(owner, definition))
         with self.execution_session(owner) as session:
             response = self._runner(session).start(

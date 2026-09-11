@@ -84,6 +84,7 @@ class Interaction:
     application_version: str
     graph_thread_id: str
     recorded_versions: tuple[tuple[str, str], ...]
+    display_json: str | None = None
     phase: str = "WAITING"
     run_active: bool = True
     node_waiting: bool = True

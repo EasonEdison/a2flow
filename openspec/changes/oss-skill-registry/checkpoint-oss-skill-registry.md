@@ -92,15 +92,15 @@ Await a main-brain-reviewed named shared contract revision before service implem
 
 ### Current State
 
-- Stage: source/review commit `c09536a0fa843969649f393177e8932149bee938`；fresh-main merge head `c082b9375a8b7eb50f283c2e9c24953692cced24`，pending worker push/integration.
-- Fresh `origin/main` merged: `fe9b656a12bc5f95dd6b0c2525ea2868a61f01ff`.
+- Stage: SW-P1-SUBSET-01 source delivered；worker/source/first delivered main `d60998e42b43805ae88bb10d2d1b1f2b3127a148`.
+- Fresh base merged before delivery: `fe9b656a12bc5f95dd6b0c2525ea2868a61f01ff`；integration used this task's exclusive worktree.
 - Stable shared package main: `e7797830b09ac367db21f7dde51236e3189e77f3`；reviewed content commit `54a807bc061e79f77a7ba52bcf6d6827d6966481` is included.
 - Runtime readiness: NO READY.
 - Full contracts, trusted provenance/admission, resolver, DB/service and runtime gates remain unreleased.
 
 ### Next Executable Action
 
-Commit this merge checkpoint，fetch once more，then push worker and deliver through the exclusive integration worktree.
+Commit and integrate this final bookkeeping update，then report exact SHAs and remaining NO READY gates.
 
 ### Verification Milestone
 
@@ -122,5 +122,66 @@ Commit this merge checkpoint，fetch once more，then push worker and deliver th
   `git diff --check`、line-length、forbidden-operation and sensitive scans PASS.
 - After merging fresh main `fe9b656a12bc5f95dd6b0c2525ea2868a61f01ff`,
   all four verification groups were rerun with the same passing counts.
+- Worker `d60998e42b43805ae88bb10d2d1b1f2b3127a148` was pushed，the exclusive
+  integration worktree fast-forwarded from `fe9b656a12bc5f95dd6b0c2525ea2868a61f01ff`,
+  repeated all checks and pushed `HEAD:main` to the same source SHA.
 - No dependency install、system Python change、database、service/process、
   deployment or runtime mutation occurred.
+## Pause Handoff: Workflow/DeepAgent Python Runtime Priority
+
+- Pause instruction received from main-brain after source delivery and final
+  integration verification.
+- Delivered source SHA: `d60998e42b43805ae88bb10d2d1b1f2b3127a148`;
+  it is already contained by current `origin/main`
+  `f3e5a05398df58dfd4f5a5dfc1445e05604d0977`.
+- Worker HEAD/remote worker branch:
+  `f275a2f2b18833704cb5dc4d09391a913bc691d2`. It contains only the
+  post-delivery bookkeeping commit after the delivered source.
+- Integration worktree HEAD:
+  `f275a2f2b18833704cb5dc4d09391a913bc691d2`; clean, ahead of current
+  `origin/main` by one bookkeeping commit and behind it by three concurrent
+  commits. It was intentionally not merged or pushed after the pause.
+- Uncommitted files after this update: only
+  `openspec/changes/oss-skill-registry/checkpoint-oss-skill-registry.md` in
+  the worker. Integration worktree has no uncommitted files.
+- Active commands/processes: none.
+- Exact next action: remain idle. On an explicit Runtime dependency request or
+  resume, re-read entry docs and this checkpoint, compare both worktrees with
+  Git truth, fetch current `origin/main`, and scope only the named minimum.
+  Do not merge/push the bookkeeping commit merely to close this paused task.
+
+## 2026-09-11 MVP08 bounded resumption
+
+- Assignment: main-brain requests asset mapping/gaps and two original Skill texts;
+  final AF-MVP-08 implementation release is pending. This supersedes pause only
+  for this bounded asset preparation.
+- Baseline origin/main: b50d5a274be699fef7e0e569b6cdfeee6dd87f40.
+- Worker merge HEAD: a557c0092361917dda0cca4de6cf9b908e04f122.
+- Preserved the pre-existing uncommitted pause section without stash/reset/clean.
+- Owned additions: mvp08-asset-contract-gaps.md in this change;
+  examples/activity-planning/activity-plan/SKILL.md and activity-copy/SKILL.md.
+- Candidate packages/asset-store/ has no code yet. No DB connection, DDL, import,
+  dependencies, shared-schema edit or running service in this batch.
+- Read actual CatalogPort/MaterialPort/use_skill and shared Runtime bridge;
+  Runtime ConfigurationPort, ActionConfig, resolve_entry and experimental Tools.
+- Real gaps: synthetic-only Ability result; Application probe drops data and
+  selects first Action; Workflow entry callback does not compile stored graph;
+  namespace/manifest/digest/gray rule require named release confirmation.
+- Next action: send bounded documents/source SHA to main-brain for AF-MVP-08
+  and Runtime port alignment; implement only after the final named release.
+
+## 2026-09-11 MVP08 source candidate
+
+- Implemented the approved asset-store source slice in packages/asset-store/
+  with the activity-planning demo assets in examples/activity-planning/; no
+  shared contract/schema was changed.
+- The reader provides Registry material, bounded workflow/list views, Ability
+  metadata, Application version closure, and trusted PRT/ONLINE serving
+  selection. Application release references are checked against the selected
+  Ability version.
+- The importer is opt-in and bounded: immutable insert/no-op/conflict,
+  transaction/readback flow, explicit database/environment guard and dry-run.
+  No database connection, DDL, import, service, deployment or dependency
+  installation was performed in this task.
+- Current offline validation: 15 packages/asset-store/tests tests pass with
+  the repository's existing domain packages and an SQL protocol double only.

@@ -1,6 +1,6 @@
 # Readiness: oss-skill-registry Phase 1
 
-> Source status: **SW-P1-SUBSET-01 IMPLEMENTED / VERIFIED / DELIVERY PENDING**
+> Source status: **SW-P1-SUBSET-01 IMPLEMENTED / VERIFIED / DELIVERED**
 > Overall runtime readiness: **NO READY**
 > Contract status: shared request/result consumed；broader admission contracts pending
 > Source 实现与单进程测试通过不等于服务、部署或产品可用。
@@ -21,7 +21,7 @@
 | Runtime use_skill integration | NO READY | 无 Deep Agents Tool 集成、trusted adapter 或 chat/Workflow 运行证据 |
 | Package validator | PARTIAL | 实际字节/流、digest/size、路径、数量/字节硬上限和 UTF-8/binary 边界已实现；无 YAML/frontmatter/full package validation |
 | Deployment/demo | NO READY | 未授权、未部署；没有端口、进程、数据库或服务变更 |
-| Source delivery | PENDING | 当前 batch 尚未 push/integrate；完成后写入 exact worker/integration SHA |
+| Source delivery | PASS | worker `d60998e42b43805ae88bb10d2d1b1f2b3127a148` 经独占 integration worktree fast-forward 后推送为首个 delivered `origin/main`，两者 SHA 相同 |
 
 ## Current Blocks
 

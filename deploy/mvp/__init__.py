@@ -1,0 +1,1 @@
+"""Private MVP deployment assembly."""
