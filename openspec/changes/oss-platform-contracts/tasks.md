@@ -29,3 +29,10 @@
 - [x] 4.1 fetch/merge 最新 `origin/main`，只提交本 change 与 `packages/contracts/`。
 - [x] 4.2 push worker，再通过独占 integration worktree 合入 `origin/main`。
 - [x] 4.3 准备 main-brain handoff：实际文件、SHA、检查、剩余冲突与 `NO READY` 门禁。
+
+## 5. IMPLEMENTATION RELEASE 01
+
+- [x] 5.1 完整读取并校验 `implementation-release-01.md`，只接收 `SW-P1-SUBSET-01` 的 Skill/Policy 定义闭包。
+- [x] 5.2 以测试先行实现 Python 3.11 标准库薄 adapter：冻结模型、严格映射、显式 definition dispatcher、approved-only schema loader 和不可变错误接口。
+- [x] 5.3 对照中立 schema 与现有批准正反例，完成 import、fixture、diff、敏感信息和范围验证。
+- [x] 5.4 独立 review 后 commit/push worker，并通过独占 integration worktree 合入最新 `origin/main`。

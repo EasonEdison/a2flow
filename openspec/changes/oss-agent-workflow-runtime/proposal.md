@@ -1,78 +1,110 @@
-# Agent/Workflow Runtime 提案
+# Agent/Workflow Runtime Phase 1 提案
 
-## 状态
+## 状态与权威
 
-- 设计状态：PROPOSED
+- Phase 1 基线：SW-P1-20260907.2
+- 当前已合入主干：`28dde023e323c4fa4f9f509b9f6e3954bc669b7a`
+- 工程实现批准子集：`SW-P1-SUBSET-01`；wire revision 仍为 `SW-CONTRACTS-P1-CANDIDATE.1`
+- 模块设计状态：BASELINE_ALIGNED / EXPERIMENTAL
 - Runtime 准出：NO READY
-- 证据等级：C（仅设计，未实现、未测试、未部署）
-- 决策所有者：CTO / main-brain
+- 当前授权：在 experiments/runtime-phase1/ 做隔离可行性 spike；services/runtime/ 仅预留后续实现
+- 共享契约所有者：oss-platform-contracts；本任务只消费已批准子集，不扩写共享 wire
 
-## 为什么要做
+## 目标
 
-数字员工产品需要一个业务无关的执行底座：它既能执行单个 Agent 的模型/工具循环，又能调度可恢复的 Workflow；同时能够把通用展示请求、人工动作和执行事件交给产品层处理。若把这些能力直接写进数字员工后端，业务语义、界面文案和运行状态会互相绑死，也无法独立验证多实例恢复与幂等边界。
+验证最小框架执行脊柱能否由 Python Deep Agents SDK 与 LangGraph 原生能力完成：
 
-本提案只定义首个可审查的 Runtime 边界，不实现代码，不冻结尚未批准的跨域协议。
+Deep Agents → use_skill → execute_ability / render_application → DISPLAY_ONLY 或 INTERACTIVE → 节点绑定续跑 → Finalizer / 最终结果。
 
-## 本次范围
+该 spike 使用主干中项目自有的 Skill/A2UI fixture、合成 resolver、scripted model，以及不触网的 Anthropic MockTransport。它不需要真实模型 key，不包含真实业务写操作，也不构成产品 Runtime。
 
-- 区分单 Agent 执行与 durable Workflow 调度，并允许 Workflow 通过显式节点调用 Agent 子运行。
-- 定义 PostgreSQL-only 的运行状态、租约、checkpoint、事件、幂等、HITL 和取消语义。
-- 定义 CapabilityExecutionPort 与 PresentationActionPort 两个业务无关端口。
-- 定义多实例 worker 的领取、续租、过期恢复与 fencing 边界。
-- 定义从事件游标续传的通用输出语义，不锁定 SSE、AG-UI 或其他传输版本。
-- 比较 TypeScript/LangGraphJS 与 Python/LangGraph，给出可撤销推荐。
+## 已撤销的旧主张
 
-## 不在范围
+以下内容不再是活跃方案：
 
-- 数字员工业务实体、业务分支、提示文案与前端渲染。
-- M 侧资产编辑、发布和审批流程。
-- 任意图拓扑、multi-agent swarm、通用低代码平台。
-- 模型供应商、沙箱实现、RAG/向量库与长期记忆实现。
-- 数据库 DDL、应用脚手架、部署、密钥或生产配置。
-- 对外协议版本的单方面冻结。
+- TypeScript/LangGraphJS 作为 Runtime 候选或主选；Phase 1 已确定 Python。
+- Runtime 自建第二套 durable Workflow scheduler、通用租约/fencing 引擎或跨系统 exactly-once 语义。
+- Workflow/Runtime 负责业务调用幂等、补偿、重放或 fresh restart 前的旧结果核对。
+- 通用 Skill 模型、脚本、非 A2UI Tool 失败自动 retry/recovery。
+- 运行期间冻结旧资产 revision 并继续；现改为入口处轻量版本比较，不匹配即阻断并提示显式 reset。
+- Skill 编译成固定业务子图，或要求 Skill 输出 Workflow 专用路由字段。
+- presentation 出现即暂停、Action 成功即完成交互、Finalizer 可越过交互或改写业务事实。
+- 用 thread_id 推断并行线程、分布式锁或 A 等待时 B1→B2 会自然推进。
 
-## 语言方案
+## 固定边界
 
-| 方案 | 优点 | 代价与风险 | 本提案结论 |
-| --- | --- | --- | --- |
-| TypeScript + LangGraphJS | 与 React/TypeScript 产品及共享契约同语言；官方能力覆盖 durable execution、checkpoint、streaming、interrupt/HITL 与 PostgresSaver；减少跨语言 DTO 生成和调试链路 | Python AI 生态的部分新集成可能更早或更丰富；必须用验收 spike 验证 PostgreSQL、interrupt、stream 与多实例封装 | 推荐用于 MVP，但保持 PROPOSED |
-| Python + LangGraph | Python AI/数据生态成熟；官方提供同步与异步 PostgreSQL checkpointer；复杂模型与评测集成选择多 | 前后端跨语言契约与构建链更多；仍需自行补齐租约、fencing、外部副作用幂等和产品协议适配 | 保留为强备选 |
-| TypeScript 网关 + Python Runtime | 可同时利用两侧生态 | MVP 即引入两个进程、两套序列化与恢复边界，扩大运维和故障面 | 首个纵向切片不采用 |
+- Python + Deep Agents SDK + LangGraph；不 fork SDK，不静默自研替代引擎。
+- PostgreSQL-only；不提供 SQLite、MySQL 或 InMemorySaver fallback。
+- 所有 Skill 使用统一进入 use_skill；Workflow 节点不得直接读取 Skill body/resource。
+- Ability 与 Application 通过 Tool 边界调用；trusted userId、环境与凭据由后端 context 注入，不暴露给模型选择。
+- PRT 只读 PRT 当前版本；ONLINE 只读 ONLINE stable 或 ONLINE gray candidate，gray 维度仅 userId。
+- Skill 是 Agent 执行的指令/资源包，不是固定子图。Workflow 只编排 Skill 节点、条件、序列与并行关系。
+- 仅 A2UI render 或 Action 失败/结果不满足配置成功条件可重试 owning node。
+- stop 不可 resume；restart 创建全新 run，不继承旧状态或核对旧业务结果。
+- 调用 API 后端负责业务幂等与业务 retry；Runtime 仅可处理控制请求去重。
 
-推荐理由不是“LangGraphJS 天然保证完整分布式语义”。官方资料证明两种实现都有核心编排原语和 PostgreSQL checkpointer；Runtime 仍必须自行拥有多实例租约、fencing、事件顺序和外部副作用幂等。TypeScript 的主要收益是首个纵向切片的契约一致性与较低系统复杂度。若 parity spike 未通过，回退到 Python 方案须由 CTO 记录 ADR，而不是在代码中静默双栈。
+## 首批切片与后续
 
-## 依赖输入与输出
+已完成的首批切片：
 
-| 依赖域 | Runtime 输入 | Runtime 输出 | 所有权 |
-| --- | --- | --- | --- |
-| 公共契约 | 资产标识、不可变 revision、校验和、授权上下文、错误包络 | run 标识、状态、revision、错误分类 | oss-platform-contracts |
-| Skill/Workflow 发布 | 已发布且不可变的 Agent/Workflow 定义引用 | 实际解析到的 revision 与校验结果 | oss-skill-registry / oss-workflow-composer |
-| Capability 注册 | capability revision、输入/输出 schema、幂等声明 | 带稳定 operationKey 的调用与标准结果 | oss-capability-registry |
-| A2UI 组合 | presentation artifact revision、数据 schema、action schema | 通用 presentation/action 事件，不包含渲染逻辑 | oss-a2ui-composer |
-| 数字员工产品 | start/resume/cancel/subscribe 命令与业务适配后的输入 | run snapshot、事件、action request、terminal result | oss-digital-employee |
+1. Python 3.11.13 与 task-owned venv 安装/健康复核；依赖 resolver、import、pip check 与实验 lock。
+2. `SW-P1-SUBSET-01` 的 use_skill/trusted-context 严格 Pydantic 适配，并复用 15 个 shared fixture。
+3. scripted Deep Agent、真实 Skill package bytes、strict Tool schema、spoof 拒绝与 content/artifact 分离。
+4. Deep Agents 默认文件/shell/subagent Tool 暴露审计及 Harness Profile 收口。
+5. 离线 Anthropic provider serializer 证据，以及 DISPLAY_ONLY/INTERACTIVE interrupt 小切片。
 
-## 成功标准
+下一批仍需先写 RED：A 等待时 B1→B2 独立推进、A2UI-only retry、stop/fresh restart。临时 PostgreSQL 获批后再补 AsyncPostgresSaver 与双进程合法 resume；没有这些证据始终保持 NO READY。
 
-- 单 Agent 与 Workflow 具有独立运行语义、状态和测试，不以一种模式冒充另一种。
-- 任一进程退出后，另一实例只凭 PostgreSQL 可安全恢复，不依赖进程内唯一状态。
-- 领取过期后旧 worker 的写入被 fencing 拒绝。
-- 重试复用稳定 operationKey，重复投递不制造重复外部副作用。
-- HITL 决策、取消和事件续传均可被并发测试验证。
-- Runtime 核心不出现数字员工业务字段、业务文案或前端 renderer 依赖。
+## 版本与许可证候选
 
-## 请求主控裁决
+截至 2026-09-07 的官方公开信息：
 
-1. 是否批准 TypeScript + LangGraphJS 为 MVP 首选，并要求用 parity spike 作为最终锁定门禁。
-2. 公共契约由哪个包拥有，以及资产 revision、授权、错误包络和事件 envelope 的最小字段。
-3. 首个对外传输是否采用某一 AG-UI/SSE 方案，以及 A2UI payload 与 action response 的版本边界。
+| 包 | 公开版本 | Python | 许可证 | 结论 |
+| --- | --- | --- | --- | --- |
+| deepagents | 0.7.13，Beta | >=3.11,<4.0 | MIT | 已安装/import/运行首批探针 |
+| langgraph | 1.2.11 | >=3.10 | MIT | 1.2.10 与 LangChain 1.4.0 冲突后解析所得版本 |
+| langgraph-checkpoint-postgres | 3.1.2 | >=3.10 | MIT | `AsyncPostgresSaver` import 通过，PG 尚未运行 |
+| psycopg-binary | 3.3.5 | >=3.10 | LGPL-3.0-only metadata | 仅实验 venv；正式分发/notice 仍需评审 |
 
-## 公开依据
+版本组合已在 task-owned Python 3.11.13 venv 解析、import、`pip check`，并冻结为 59 项实验 `requirements.lock`。它不修改 main-brain 所有的根 lock，也不代表生产依赖获批。
 
-- [LangGraphJS 概览](https://docs.langchain.com/oss/javascript/langgraph/overview)
-- [LangGraphJS 持久化](https://docs.langchain.com/oss/javascript/langgraph/persistence)
-- [LangGraphJS Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts)
-- [LangGraphJS Streaming](https://docs.langchain.com/oss/javascript/langgraph/streaming)
-- [LangGraphJS PostgresSaver API](https://reference.langchain.com/javascript/langchain-langgraph-checkpoint-postgres/index/PostgresSaver)
-- [LangGraph Python 持久化](https://docs.langchain.com/oss/python/langgraph/persistence)
-- [LangGraph Python Interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)
-- [LangGraph Python PostgreSQL checkpointer](https://reference.langchain.com/python/langgraph.checkpoint.postgres)
+## 当前环境结论
+
+PY-01 已由本任务作为唯一 host Python 执行者完成：DNF transaction 9 从官方仓库新增 Python 3.11.13、pip 与依赖共 7 包（无 update/remove）。默认 `python3` 仍为 platform-python 3.6.8；DNF 4.7.0 与 tuned active 已复核。
+
+admin-owned venv `/home/admin/OpenSource/.venvs/skillweave-runtime-p1` 已安装并验证候选依赖。首次固定 LangGraph 1.2.10 被 resolver 因 LangChain 1.4.0 需要 >=1.2.11 而拒绝；改为 1.2.11 后通过。首次 `AsyncPostgresSaver` import 因没有 libpq implementation 失败，加入 venv-only `psycopg-binary==3.3.5` 后通过；未修改系统 libpq、现有 MySQL、公开端口或服务。
+
+当前未启动 PostgreSQL 或公开服务。剩余环境门禁是 main-brain 协调的临时 PostgreSQL/双进程窗口与 `psycopg-binary` LGPL 分发评审，而不是 Python 可用性。
+
+## 依赖输入
+
+| 依赖 | 本任务需要的最小输入 | 当前状态 |
+| --- | --- | --- |
+| packages/contracts | `SW-P1-SUBSET-01` 的 trusted/use_skill 闭包 | 共享薄包已由 `main` 集成；Runtime 直接消费 `.from_mapping()` / `.to_mapping()` 与 15 个相关 fixture |
+| Skill registry | use_skill Tool 的授权读取与中性 Skill fixture | 真实 `evidence-first-brief` bytes/digest 已消费；Registry runtime port 尚未接入 |
+| Ability registry | execute_ability Tool 的 typed request/result 与配置成功解释 | 未接入；业务幂等仍由 API 后端 |
+| A2UI registry | render_application Tool、DISPLAY_ONLY/INTERACTIVE、Action success/completion | owner fixture 已用于 mode/interrupt 探针；full Action wire 未批准 |
+| Workflow registry | sequence/condition/parallel graph 与 nodeId 语义 | node-bound interrupt 已使用；独立并行推进待联合验证 |
+| 执行资源 | Python 3.11、候选依赖、临时 PostgreSQL、两个进程 | Python/SDK 已满足；PG 与双进程仍需协调 |
+
+## Phase 1 验收
+
+- 旧冲突在 proposal/design/spec/tasks/regression/readiness 中全部移除。
+- scripted model 的所有 Skill 使用都可观测到 use_skill Tool call。
+- model-visible Tool schema 不允许提供 userId、environment 或 credential 参数。
+- DISPLAY_ONLY 与 INTERACTIVE 行为由同一配置字段决定。
+- resume 不能靠普通 chat 或仅 thread_id 猜测，必须匹配 node/interaction/version。
+- A 等待期间 B1→B2 的真实 SDK 行为有复现；若不支持则提交最小失败证据，不自建第二引擎。
+- PostgreSQL checkpointer 和双进程证据存在前，Runtime 始终 NO READY。
+
+## 官方来源
+
+- https://docs.langchain.com/oss/python/deepagents/overview
+- https://docs.langchain.com/oss/python/deepagents/customization
+- https://docs.langchain.com/oss/python/deepagents/backends
+- https://github.com/langchain-ai/deepagents/blob/main/libs/deepagents/pyproject.toml
+- https://github.com/langchain-ai/deepagents/blob/main/LICENSE
+- https://docs.langchain.com/oss/python/langgraph/interrupts
+- https://docs.langchain.com/oss/python/langgraph/persistence
+- https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/pyproject.toml
+- https://pypi.org/project/langgraph-checkpoint-postgres/3.1.2/

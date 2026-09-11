@@ -71,3 +71,56 @@ Await a main-brain-reviewed named shared contract revision before service implem
 - Bounded public-source research covered Agent Skills/`skills-ref`、StrictYAML、ruamel.yaml、PyYAML and Python archive/path safety documentation.
 - Candidate outcome: `skills-ref` test-only conformance oracle；one pinned safe YAML parser after a compatibility spike；logicalPath/descriptor entry reader first；TAR/ZIP deferred pending separate approval.
 - Reviewed consumer input and neutral sample paths were sent to main-brain for contracts/Runtime routing；the normalized `logicalPath` descriptor clarification is included in this pending documentation batch.
+
+## SW-P1-SUBSET-01 Continuation
+
+- Approval record: SW-P1-SUBSET-01 at 3a48d4b106db8f382c3c96bbc8992f328b81e259.
+- Release record: openspec/changes/skillweave-phase1/implementation-release-01.md, SHA-256 c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4.
+- Corrected schema snapshot: a1cb44e88ce5bb603c62b4618804c78ae0d5585c, SHA-256 10fb8f2fb26529ba7850e981991bcb343037aa6defe7f22646e00f1cdf59fa3b.
+- Wire revision remains SW-CONTRACTS-P1-CANDIDATE.1.
+- Worker was clean and fast-forwarded from 8f406d4637830019dbcf8d42c7f84952fb0f9bc7 to 3a48d4b106db8f382c3c96bbc8992f328b81e259; release ancestry passed.
+- The exact approved definitions and focused semantic checker were inspected from packages/contracts/schemas/contracts-bundle.schema.json and packages/contracts/tests/validate_contracts.py.
+- The release record, not a guessed snapshot path, is authoritative for contract file locations.
+
+### Current Source Batch
+
+- Add only owner source/tests/README plus this task's OpenSpec evidence files.
+- TDD batch A: immutable descriptors and bounded actual-byte resource validation.
+- TDD batch B: separate model/trusted inputs and catalog/material ports.
+- TDD batch C: exact approved useSkillResult projection and focused compatibility tests.
+- No YAML parser, archive extraction, Tool/script execution, model filesystem locator, resolver/admission implementation, DB, service/process, dependency install, system Python change, deployment or production fallback.
+
+### Current State
+
+- Stage: source/review commit `c09536a0fa843969649f393177e8932149bee938`；fresh-main merge head `c082b9375a8b7eb50f283c2e9c24953692cced24`，pending worker push/integration.
+- Fresh `origin/main` merged: `fe9b656a12bc5f95dd6b0c2525ea2868a61f01ff`.
+- Stable shared package main: `e7797830b09ac367db21f7dde51236e3189e77f3`；reviewed content commit `54a807bc061e79f77a7ba52bcf6d6827d6966481` is included.
+- Runtime readiness: NO READY.
+- Full contracts, trusted provenance/admission, resolver, DB/service and runtime gates remain unreleased.
+
+### Next Executable Action
+
+Commit this merge checkpoint，fetch once more，then push worker and deliver through the exclusive integration worktree.
+
+### Verification Milestone
+
+- Worker merged reviewed shared-contract main at
+  `b52235a220c93c5fcee7a2b0c28d368b3bc71255`; shared content commit
+  `54a807bc061e79f77a7ba52bcf6d6827d6966481` is an ancestor of
+  `e7797830b09ac367db21f7dde51236e3189e77f3`.
+- Registry now consumes shared `UseSkillRequest`/`UseSkillResult`; no
+  duplicate model request DTO or placeholder digest remains.
+- Independent review found no critical issue and three important gaps:
+  instruction bytes bypass, expandable caller limits and stale evidence docs.
+  All were reproduced/covered and fixed.
+- Instruction `SKILL.md` and resources now share actual-byte/digest/UTF-8/
+  entry-byte-path validation；limits may only tighten fixed hard ceilings.
+- Compatibility Tool names and `scripts/*` paths remain inert metadata and
+  READ_ONLY handles；there is no executor or permission grant.
+- Fresh evidence before delivery: Registry 22/22 PASS on Python 3.11；shared
+  contracts 16/16 PASS；focused schema checker 57/57 PASS；public import PASS；
+  `git diff --check`、line-length、forbidden-operation and sensitive scans PASS.
+- After merging fresh main `fe9b656a12bc5f95dd6b0c2525ea2868a61f01ff`,
+  all four verification groups were rerun with the same passing counts.
+- No dependency install、system Python change、database、service/process、
+  deployment or runtime mutation occurred.

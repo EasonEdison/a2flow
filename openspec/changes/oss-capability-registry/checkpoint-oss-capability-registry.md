@@ -9,7 +9,7 @@
 - 当前基线：SW-P1-20260907.2
 - 基线提交：`b1a0c9f32497c04dd623edb0bb8858a01b5ae7ad`
 - 消费者内容已合入 main SHA：`57d11fcfee3481512d444a51fee0db3280357789`
-- 阶段：ResultInterpretationPolicy consumer 收敛与负向 fixture 已集成，等待 named approved contracts revision
+- 阶段：`SW-P1-SUBSET-01` 源码/evidence 已集成 main `3884af129d8bcd0772d4517cedae7c22888475c6`；本批准切片 COMPLETE
 - Runtime：`NO READY`
 
 ## 本轮已核对
@@ -27,6 +27,22 @@
 - 已创建 3 个 PROVISIONAL fixture 文件，覆盖 9 个合成调用/结果场景和 2 个非法策略样例。
 - 现有 Python 3.6.8 已完成 JSON 语法和 stdlib 不变量检查；missing/null/严格类型检查通过，未安装/升级 Python 或依赖。
 - 已核对 main 中 A2UI 最新交付使用 `successPolicyRef`、拒绝旧 `businessSuccessConditionRef` 并分离四类事实。
+- 已合入实现放行 commit `3a48d4b106db8f382c3c96bbc8992f328b81e259`。
+- 已完整读取 `implementation-release-01.md`，SHA256=`c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
+- 批准子集：authored Ability definition、named policy publication metadata、adapter-operation binding validation 与端口。
+- 明确不实现结果解释器、业务调用/重试/幂等、credential resolution、PostgreSQL 或部署。
+- TDD Task 1：先观察 `ModuleNotFoundError: capability_registry`，再实现 immutable models、ports 与 happy path，1/1 GREEN。
+- TDD Task 2：15 个 boundary 断言先失败，再实现字段、模型/服务端分离、Pointer/target 冲突门禁，10/10 GREEN。
+- TDD Task 3：operation 缺失、input path 与 credential slot 不支持三例先失败，再实现 catalog 兼容校验，13/13 GREEN。
+- 边界 review 新增 2 个畸形 JSON RED 用例；混合类型顶层 key 与非标量 binding source 现均失败关闭，15/15 GREEN。
+- Contracts owner 的稳定主干为 `e7797830b09ac367db21f7dde51236e3189e77f3`，公开实现内容 `54a807bc061e79f77a7ba52bcf6d6827d6966481`；本线程只在其集成 main 后消费。
+- TDD Task 4：先观察缺少 `SharedResultPolicySetValidator` 的 ImportError；薄 adapter 只调用共享 `from_mapping`，duplicate/dangling 的 path/code/message 保真，2/2 GREEN。
+- 主控对象级审查发现 model binding 可写 `/userId` 和 required resolved input 可缺来源；两条最小变异先失败，修正后领域测试 17/17 GREEN。
+- 完整 Capability 测试 19/19 GREEN；Contracts Python 16/16、schema 57/57、import smoke 和 9-case fixture 均 PASS。
+- owned-path、`git diff --check`、clean-room sensitive scan、生产行为、bytecode 与 `admin:admin` 属主检查均 PASS。
+- worker 源码内容至 `1286435737f869599a2179dc506b2dfd2d8fe725`；仅依赖 Python 3.11 标准库和仓库内共享 Contracts 源码。
+- 未安装依赖、未调用外部服务、未部署、未访问数据库或 credential value。
+- Runtime/PostgreSQL/部署/E2E 均保持 `NO READY`。
 
 ## 已移除的活动冲突
 
@@ -46,12 +62,12 @@
 
 不修改共享 contracts、根依赖、其他任务目录和其他 checkpoint。不部署、不配 secret、不调用真实外部写。
 
-## 首个可执行切片
+## 已批准源码切片
 
 - 修订本任务 OpenSpec 并向 main-brain 回传基线、冲突、范围、切片、依赖。
 - 创建 PROVISIONAL 合成 ability/call/failure/result fixture。
 - 用现有轻量工具验证 JSON 与可信边界。
-- 等待 Contracts 稳定 commit 与 main-brain 命名 approved revision 后再实现 Registry Python 模块。
+- `SW-P1-SUBSET-01` Python 域模块、共享 policy adapter、README 与源码验证已完成。
 
 ## 真实依赖
 
@@ -61,7 +77,7 @@
 
 ## Next Executable Action
 
-等待 Contracts 稳定 commit 与 main-brain 命名 approved revision；此前不实现 Registry Python 模块或第二解释器。
+等待 main-brain 的下一条独立 release；不继续到 PostgreSQL、Runtime、部署或 E2E。
 
 ## 交付记录
 
@@ -73,4 +89,11 @@
 - ResultInterpretationPolicy consumer 内容 commit：`6883610b70e6a8502b45084b953bb1de05a83558`。
 - 同步最新 main 后 worker/main：`57d11fcfee3481512d444a51fee0db3280357789`（fast-forward 集成）。
 - fixture 输出：9 cases、2 rejected policies；missing/null/strict JSON type 检查通过。
-- 设计/共享契约仍待 named approved revision；Runtime 仍 NO READY。
+- 实现计划 commit：`b59c15ce92172708b78f2915731dcbb7562840f0`。
+- 核心实现 commit：`92eeb151edf6132d0d873ad3fbbd82a054465cf8`。
+- 畸形 JSON fail-closed commit：`26eb1123e98343d84457fc68e830b5490670e087`。
+- README commit：`a1e7b1a2ef73c2f557ff61acdcac15f90738fc14`。
+- shared adapter commit：`331c47b0eda2862df3f3c5575d2d8986856c6994`。
+- 主控审查边界修正 commit：`1286435737f869599a2179dc506b2dfd2d8fe725`。
+- 源码/evidence 首次 main 集成：`3884af129d8bcd0772d4517cedae7c22888475c6`。
+- 本批准源码切片 COMPLETE；Runtime/PostgreSQL/部署/E2E 仍 NO READY。

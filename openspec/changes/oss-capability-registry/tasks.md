@@ -2,7 +2,7 @@
 
 ## 状态说明
 
-`tasks.md` 只记录未来实现/可执行验证。基线对齐事实记录在本任务 checkpoint。共享接口未获 main-brain 命名 revision 前，不实现依赖共享 schema 的服务代码。
+`tasks.md` 同时记录已获放行的 `SW-P1-SUBSET-01` 源码切片和仍待实现的完整 Phase 1。子集完成不自动勾选 PostgreSQL、Runtime、部署或 E2E 门禁。
 
 ## 0. 独立契约样例
 
@@ -15,7 +15,7 @@
 - [ ] 1.1 main-brain 命名已审阅的 contracts revision。
 - [ ] 1.2 接入共享 TrustedContext、Environment、ReleaseRef、CredentialRef 和错误包络。
 - [ ] 1.3 接入共享 resolver/version guard 与 AuthorizationDecision。
-- [ ] 1.4 接入 approved shared ResultInterpretationPolicy；只使用 SCHEMA_VALID/JSON_POINTER_EQUALS，不新增 ResultCondition AST 或领域私有 DSL。
+- [x] 1.4 接入 `SW-P1-SUBSET-01` 批准的 shared ResultInterpretationPolicy；只使用 SCHEMA_VALID/JSON_POINTER_EQUALS，不新增 ResultCondition AST 或领域私有 DSL。
 
 ## 2. 领域与 PostgreSQL
 
@@ -51,3 +51,12 @@
 - [ ] 6.2 回填 method/params/result 字段级断言及实际命令输出。
 - [ ] 6.3 通过来源/凭证/环境隔离负向测试。
 - [ ] 6.4 所有必需门禁有实际证据后再评估 readiness；禁止以源码合入替代 Runtime 证据。
+
+## 7. SW-P1-SUBSET-01 源码切片
+
+- [x] 7.1 提供 immutable publication metadata、adapter operation catalog port 与 shared policy validator port。
+- [x] 7.2 对 authored Ability 做字段闭合、model/server 来源隔离、RFC 6901 target 冲突和 required 来源闭合校验。
+- [x] 7.3 校验 adapter input path 与 opaque credential slot 元数据兼容性，不读取 credential value。
+- [x] 7.4 通过 `SharedResultPolicySetValidator` 保真映射共享 Contracts issue；不实现第二套结果解释器。
+- [x] 7.5 完成 Python 3.11 单元测试、import smoke、fixture、范围和 clean-room 源码证据。
+- [ ] 7.6 PostgreSQL、发布接口、resolver/admission、Runtime 接入、部署和 E2E 仍按原 Phase 1 门禁推进。

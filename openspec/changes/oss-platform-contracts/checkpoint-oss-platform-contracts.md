@@ -1,22 +1,21 @@
 # Execution Checkpoint
 
-- Updated at: 2026-09-07T02:07:23+08:00
+- Updated at: 2026-09-07T02:37:52+08:00
 - Thread: oss-platform-contracts
 - Change: oss-platform-contracts
-- Status: SOURCE_DELIVERED / PROVISIONAL
+- Status: SOURCE_DELIVERED / APPROVED SUBSET
 - Current phase: HANDOFF
 - Baseline: `SW-P1-20260907.2 + ENG-01`
 - Candidate revision: `SW-CONTRACTS-P1-CANDIDATE.1`
-- Scope: 公共契约候选、最小 JSON Schema/正反例和聚焦检查。
+- Scope: 公共契约候选，以及 `SW-P1-SUBSET-01` 批准的 Skill/Policy 薄 Python adapter。
 - Out of scope: Runtime/领域实现、根依赖、协议版本冻结、数据库/服务/部署/secret。
 
 ## Worktrees
 
 | Repo | Worker path | Worker branch | Target branch | Base/HEAD | Dirty files |
 | --- | --- | --- | --- | --- | --- |
-| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` | clean |
-| platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` | clean |
-| platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | `05cab8bd33ca89c392b21aa8be2fe8250fd696e2` | clean |
+| platform worker | `/home/admin/OpenSource/repos/.parallel/oss-platform-contracts/platform` | `codex/oss-platform-contracts/design` | `main` | `54a807bc061e79f77a7ba52bcf6d6827d6966481` | clean before final checkpoint update |
+| platform integration | `/home/admin/OpenSource/repos/.integration/oss-platform-contracts/platform` | `codex/integrate/oss-platform-contracts/design` | `main` | `54a807bc061e79f77a7ba52bcf6d6827d6966481` | clean |
 
 ## Completed With Evidence
 
@@ -37,23 +36,33 @@
 - main-brain subset probe 发现 Draft 4 `$` 的终末换行边界；新增 3 个负例得到 RED 57/54/3，并仅给 identifier/skillKey 加 CR/LF 排除后 GREEN 57/57。
 - final regex delta 内容 commit `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 已 push worker 并 fast-forward 集成到 main；integration fresh check 为 57/57、58 JSON、专属 scope PASS。
 - 环境为 Python 3.6.8/jsonschema 2.6.0；未安装依赖、未修改系统 Python。PY-01 已读，主机 Python 变更仅 Runtime 可执行。
+- `implementation-release-01.md` 已完整读取并校验：65 行，SHA256 `c14eb61371562bf512b393ab347c80d2c4e3be082e4a7e838dc13e2a0f9743a4`。
+- worker 已 fetch 并 fast-forward merge 最新 `origin/main` 到 `3a48d4b106db8f382c3c96bbc8992f328b81e259`。
+- Python 3.11 薄 adapter 完成首轮 TDD：缺包时 RED，严格模型/schema loader/显式 dispatcher 落地后 13/13 GREEN；未安装依赖。
+- fresh verification：Python 3.11 import smoke PASS、adapter 13/13、批准闭包既有 fixture 25/25 对照、Draft 4 全量 schema 57/57；测试生成的两个 task-owned `__pycache__` 已删除。
+- 首轮内容 commit `cc20e510e13b26e42943997332e1319c509d1001` 后独立 review 为 `With fixes`：无 Critical，发现异常 issues 可改写和复合 schema `$ref` 悬空两项 Important；main-brain 另实证 Workflow 显式 `conversationId:null` 与缺省混同。
+- 三项均完成 TDD：16 total / 12 PASS / 4 FAIL 后最小修复为 16/16 GREEN；同时补充非有限 JSON number 与 dispatcher allowlist probe。
+- 修复 delta 经原 reviewer 复审：无剩余 Critical/Important，`Ready to merge: Yes`。
+- worker 已 push 到 `origin/codex/oss-platform-contracts/design`；独占 integration worktree 从最新 `origin/main=bbd00344684dcf250d1512d747e7b72239a911d4` fast-forward 合入 worker 并 push `origin/main=54a807bc061e79f77a7ba52bcf6d6827d6966481`。
+- integration fresh verification：Python 3.11 adapter 16/16、批准 fixture 25/25、Draft 4 schema 57/57、`git diff --check` 全部 PASS。
 
 ## In Progress
 
-- main-brain 正在对 identifier/skillKey 两条正则与新增负例做最终 subset review。
+- 向 Skill/Capability/Runtime 回传稳定 main SHA 和最终 import API。
 
 ## Pending
 
-- main-brain 命名 approved revision；各 owner 继续运行态证据。
+- 各 consumer 从稳定 `origin/main` 采用薄 adapter；根 packaging metadata 仍由 main-brain 决定。
+- commit/push worker 并通过独占 integration worktree合入最新 `origin/main`。
 
 ## Next Executable Action
 
-- main-brain review 内容 commit `a1cb44e88ce5bb603c62b4618804c78ae0d5585c`。
+- 回传 `origin/main=54a807bc061e79f77a7ba52bcf6d6827d6966481` 与最终验证边界。
 
 ## Blockers
 
-- 源码交付无阻塞。接口命名批准、运行态 PostgreSQL/多实例/ingress/event/SDK 证据仍是 `NO READY` 门禁。
+- 薄 adapter 源码交付无阻塞。运行态 PostgreSQL/多实例/ingress/event/SDK 证据仍是 `NO READY` 门禁。
 
 ## Last External Progress
 
-- 2026-09-07T02:07:23+08:00：final regex delta `a1cb44e88ce5bb603c62b4618804c78ae0d5585c` 已集成 main，57/57 GREEN。
+- 2026-09-07T02:37:52+08:00：内容 SHA `54a807bc061e79f77a7ba52bcf6d6827d6966481` 已 push worker、集成并 push `origin/main`，integration 16/16 + 57/57 GREEN。
