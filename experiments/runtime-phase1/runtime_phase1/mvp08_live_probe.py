@@ -18,6 +18,7 @@ from activity_planning_demo import (
     bundle_validator,
 )
 from activity_planning_demo.bundle import NAMESPACE, make_bundle
+from agent_workflow_runtime.http import ERRORS
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
 from runtime_phase1 import runtime03_pg_window as shared
@@ -40,6 +41,29 @@ WINDOW_USER_ID = "mvp08-live-user"
 WINDOW_ENVIRONMENT = "PRT"
 WINDOW_DATABASE = "runtime_probe"
 WINDOW_ID_PATTERN_LENGTH = 32
+BACKEND_ERROR_CODES = frozenset(code for _, code in ERRORS.values()) | frozenset({
+    "BODY_TOO_LARGE",
+    "CAPACITY_EXHAUSTED",
+    "INTERNAL_ERROR",
+    "READ_TIMEOUT",
+    "REPLAY_UNSUPPORTED",
+    "RUNTIME_ERROR",
+    "SUBSCRIBER_CAPACITY_EXHAUSTED",
+})
+
+
+class SafeHttpFailure(RuntimeError):
+    """Retain only bounded HTTP metadata, never the response or its body."""
+
+    def __init__(self, kind, status, response_json, error_code=None):
+        super().__init__("MVP08_HTTP_RESPONSE_FAILED")
+        self.evidence = {
+            "failureKind": kind,
+            "httpStatus": status,
+            "responseJson": response_json,
+        }
+        if error_code is not None:
+            self.evidence["errorCode"] = error_code
 
 
 class RequestBudget:
@@ -173,12 +197,27 @@ def assert_listener_available():
 
 
 def assert_status(response, expected=200):
-    if response.status_code != expected:
-        raise RuntimeError("MVP08_HTTP_STATUS_MISMATCH")
     try:
-        return response.json()
+        payload = response.json()
     except ValueError:
-        raise RuntimeError("MVP08_HTTP_RESPONSE_INVALID") from None
+        raise SafeHttpFailure(
+            "HTTP_STATUS" if response.status_code != expected else "HTTP_NON_JSON",
+            response.status_code,
+            False,
+        ) from None
+    if response.status_code != expected:
+        candidate = None
+        if type(payload) is dict and type(payload.get("error")) is dict:
+            candidate = payload["error"].get("code")
+        raise SafeHttpFailure(
+            "HTTP_STATUS",
+            response.status_code,
+            True,
+            candidate if type(candidate) is str and candidate in BACKEND_ERROR_CODES else None,
+        )
+    if type(payload) is not dict:
+        raise SafeHttpFailure("HTTP_JSON_SHAPE", response.status_code, True)
+    return payload
 
 
 def seed_assets(conninfo):
@@ -313,6 +352,7 @@ def _execute(progress):
     try:
         base_url = f"http://{LISTENER_HOST}:{LISTENER_PORT}"
         with httpx.Client(base_url=base_url) as client:
+            progress["operation"] = "SESSION_READ"
             deadline = time.monotonic() + 10
             while True:
                 try:
@@ -325,6 +365,7 @@ def _execute(progress):
             if session != {"userId": WINDOW_USER_ID, "environment": WINDOW_ENVIRONMENT}:
                 raise RuntimeError("SESSION_IDENTITY_MISMATCH")
             progress["stage"] = "START_REQUEST"
+            progress["operation"] = "START_RUN"
             shared.append_evidence(
                 "LIVE_STAGE", window=SPEC, phase="LISTENER_READY", modelCalls=budget.calls,
             )
@@ -346,11 +387,13 @@ def _execute(progress):
             if type(run_id) is not str or not run_id:
                 raise RuntimeError("RUN_ID_UNAVAILABLE")
             progress["stage"] = "WAITING_CARD"
+            progress["operation"] = "WAITING_VIEW"
             shared.append_evidence(
                 "LIVE_STAGE", window=SPEC, phase="START_RETURNED", modelCalls=budget.calls,
             )
             card, selected_option = waiting_card(client, run_id)
             progress["stage"] = "ACTION_REQUEST"
+            progress["operation"] = "ACTION_SUBMIT"
             shared.append_evidence(
                 "LIVE_STAGE", window=SPEC, phase="CARD_OBSERVED", modelCalls=budget.calls,
                 cardObserved=True,
@@ -366,6 +409,7 @@ def _execute(progress):
                 timeout=ACTION_TIMEOUT_SECONDS,
             ))
             progress["stage"] = "FINAL_VIEW_READ"
+            progress["operation"] = "FINAL_VIEW"
             shared.append_evidence(
                 "LIVE_STAGE", window=SPEC, phase="ACTION_RETURNED", modelCalls=budget.calls,
             )
@@ -395,16 +439,26 @@ def _execute(progress):
 
 
 def _run():
-    progress = {"stage": "INITIAL", "budget": None}
+    progress = {"stage": "INITIAL", "operation": "WINDOW_SETUP", "budget": None}
     try:
         evidence = _execute(progress)
     except Exception as error:
         budget = progress["budget"]
+        details = {}
+        if isinstance(error, SafeHttpFailure):
+            details.update(error.evidence)
+        elif isinstance(error, httpx.TimeoutException):
+            details["failureKind"] = "HTTP_TIMEOUT"
+        elif isinstance(error, httpx.TransportError):
+            details["failureKind"] = "HTTP_TRANSPORT"
+        else:
+            details["failureKind"] = "HOST_EXCEPTION"
         try:
             shared.append_evidence(
                 "LIVE_RESULT", window=SPEC, outcome="FAILED",
                 errorStage=progress["stage"], errorType=type(error).__name__,
                 modelCalls=budget.calls if budget is not None else 0,
+                operation=progress["operation"], **details,
             )
         except Exception:
             pass

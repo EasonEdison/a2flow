@@ -128,10 +128,11 @@ W1 prepared SHA256 values:
   key remained admin-owned mode 0600 with 36 bytes; `pip check` passed.
 - No rerun was performed. Runtime and browser readiness remain NO READY.
 
-## W2 durable evidence preparation
+## W2 durable evidence result
 
-W2 has not been released or run. Source preparation only adds an append-only,
-task-owned evidence target outside disposable PostgreSQL cleanup:
+Main released fixed source `b1b408f259513b3e6cd3744ae409b968a4944cba` and
+W2 ran exactly once. The append-only task-owned evidence target remained outside
+disposable PostgreSQL cleanup:
 
 - exact file: `/home/admin/OpenSource/.evidence/oss-agent-workflow-runtime/af-mvp-08-live-w2.jsonl`;
 - parent directories must be admin-owned mode 0700; the file is newly created with
@@ -153,8 +154,40 @@ W2 evidence-capture SHA256 values:
 - live probe: 69a371cfa9d438d9ab4ea8c7612cdab436c043e15756d5705be15749581b0146
 - focused failure/cleanup test: e68c7ce9a1a762c78a44bd0813e77975fbf76090cf432b3773ec565b36eaee5c
 
-A future released command must use the final reviewed source SHA in both the Git
-preflight and `--expected-source-sha`. The caller must retain and print the complete
-execution result object, including `session_id`, then poll that exact session until a
-terminal exit. Losing the handle is no longer a reason to rerun: the 0600 evidence
-file remains available for a separate metadata-checked, read-only collection step.
+The W2 caller used the fixed reviewed source SHA in both the Git preflight and
+`--expected-source-sha`, printed the complete execution result, retained `session_id`
+and polled that exact session to terminal exit. The 0600 evidence file remained
+available for a separate metadata-checked, read-only collection step.
+
+Actual W2 result is FAILED, not UNCONFIRMED:
+
+- entry/source checks passed; seven assets were seeded and the loopback listener became
+  ready with zero model calls;
+- `START_RUN` failed during fixed stage `START_REQUEST` after four admitted provider
+  requests. Four admissions are not four successful responses;
+- the start response was not accepted, so no waiting card, Action, copy node or terminal
+  Run assertion was reached;
+- child exit was 1, PG acceptance was FAILED at `CHILD_RESULT`, and exact cleanup was PASS;
+- postflight confirmed no owned process, container, volume, private directory, image or
+  listener. Git remained clean at the fixed source and the 0600 evidence file was retained;
+- evidence file SHA256 is
+  `16df1d7e4052569807e632c623bc755db920275575a4d04336ea6394c94f9e4e`.
+
+The precise backend cause is not recoverable from W2. `assert_status` collapsed both a
+non-200 response and invalid JSON to bare `RuntimeError`, while the retained record did
+not include HTTP status or an allowlisted backend code. No surviving safe log resolves
+that ambiguity, so no provider or business cause is inferred.
+
+Post-W2 source keeps only bounded HTTP metadata: fixed operation/failure kind, numeric
+status, whether JSON was decoded, exception type, and a code only when it is in the
+backend-defined allowlist. It never retains the response/body. Timeout, transport and
+host exceptions are distinct fixed kinds. The offline error-response test preserves
+`INTERNAL_ERROR` while proving a synthetic response detail is absent.
+
+Post-W2 diagnostic SHA256 values:
+
+- live probe: 01c85ba023e7a8ea3aeb787760cfd2f321f66495581f42b797375f54f5d46281
+- opt-in/offline acceptance test: b5c17c7adb3bc3f023e68dab42b4a7455d9cee5d40f4641ca083f11cdf608650
+
+W3 is not released. Do not rerun W1/W2 or treat this diagnostic preparation as
+authority for another PostgreSQL or provider window.

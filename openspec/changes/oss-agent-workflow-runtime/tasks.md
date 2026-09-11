@@ -130,4 +130,6 @@
 - [x] main-brain 审查并释放的 AF-MVP-08-LIVE-W1 已执行一次，未重跑。
 - [ ] 最终测试输出/exit/model/card/node/Run 证据因调用方丢失 yielded session handle 而不可恢复；结果 UNCONFIRMED。
 - [x] 准备 W2 持久化 0600 脱敏证据：固定阶段、实际 modelCalls、child/PG/cleanup/window 结论，且不保留数据库。
-- [ ] W2 尚未放行或执行；后续调用方须输出完整 exec 返回对象并保存 session_id。
+- [x] W2 固定 b1b408f 已执行一次：START_REQUEST 失败，modelCalls=4，PG FAILED、精确清理 PASS；未重跑。
+- [x] 离线补齐 HTTP status/JSON/allowlisted code/timeout/transport/host 脱敏分类；响应正文不落盘，3 PASS + 1 live SKIP。
+- [ ] W3 未放行；当前无证据区分 W2 的 HTTP 非 200 与非 JSON 根因，不猜测、不重跑。

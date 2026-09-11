@@ -482,3 +482,22 @@
 - NextExecutableAction: fixed worker commit/push and main-brain review. Any W2 execution
   still requires a new explicit release and a caller that retains the full exec result and
   session ID. Runtime remains NO READY.
+
+### AF-MVP-08 W2 result and bounded diagnosis
+
+- Status: W2 FAILED / W3 NOT RELEASED. Fixed source b1b408f ran once with its full exec
+  handle retained. The child suite exited 1: two offline provider-budget checks passed and
+  the real chain errored during `START_REQUEST` after four admitted requests.
+- Durable evidence proves assets=7, listener ready, modelCalls=4, no accepted start/card/
+  Action/copy/final Run assertion, PG result FAILED, and cleanup PASS. Exact resources and
+  listener were absent postflight; evidence SHA256 is 16df1d7e4052569807e632c623bc755db920275575a4d04336ea6394c94f9e4e.
+- Exact backend cause is an evidence gap: the old `assert_status` collapsed non-200 and
+  invalid-JSON responses to `RuntimeError`; no surviving safe record contains status/code.
+  Four admitted requests are not evidence of four successful responses.
+- Minimal source diagnosis now retains only fixed operation/failure kind, numeric HTTP
+  status, JSON-decoded boolean, exception type and backend-allowlisted error code. Response
+  bodies, model text, Tool data, credentials, DSN and identifiers remain excluded.
+- Offline diagnostic test: 3 PASS + 1 live SKIP/0.004s; synthetic response detail is absent
+  while allowlisted `INTERNAL_ERROR` remains. No PG/provider/listener action ran.
+- NextExecutableAction: commit/push this bounded source repair and send the fixed SHA to
+  main-brain. W3 requires a separate explicit release; Runtime remains NO READY.
