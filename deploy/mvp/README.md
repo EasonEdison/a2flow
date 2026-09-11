@@ -86,3 +86,18 @@ Starting a Run is the first operation that can call DeepSeek.
 This source and its offline tests do not prove a database import, provider call,
 listener, deployment or browser regression. Record each of those separately if
 an operator authorizes and performs it.
+
+## Prepared one-shot live window
+
+The bounded PG -> seed -> real flash -> waiting Action -> confirmation -> copy
+acceptance is specified in mvp08-live-window.md under the owning OpenSpec.
+runtime08_mvp_window reuses the accepted isolated-PG cleanup and adds exact
+model, time, data and loopback limits. The released window added the exact pinned
+Click/Uvicorn versions to the task venv and ran once. Final chain evidence was lost
+with the yielded execution handle, so the result is UNCONFIRMED and not READY. Do
+not rerun without a new explicit window release. W2 retained an admin-owned 0600
+evidence file and finished FAILED at START_REQUEST after four admitted model requests;
+no card, Action, copy or terminal Run assertion was reached, while exact cleanup passed.
+The old probe did not retain status/code, so the precise backend cause is unavailable.
+A source-only follow-up records bounded HTTP status, JSON presence and allowlisted code
+without response content. W3 has not been released.

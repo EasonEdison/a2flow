@@ -438,3 +438,66 @@
   preview, not gateway or multi-user authentication.
 - Repair-focused affected suite: 27 PASS/0.786s; seven changed modules compileall PASS. No live
   PG/schema/setup, seed, credential, provider, listener, Compose, deployment or browser action ran.
+
+### AF-MVP-08 live window preparation
+
+- Main accepted repair 540b65d after independent 6 seeded PASS/0.215s plus export/diff gates;
+  server main and GitHub main both equal 540b65d. Source integration is complete.
+- Status: PREPARING / NOT RUN. Added one exact disposable PG/seed/real-flash/wait/confirm/copy
+  acceptance path, reusing AF03/AF04 PostgreSQL image, bootstrap, process ownership, secret-log
+  check and exact cleanup rather than a second safety framework.
+- Exact resources: a2flow-mvp08-pg, a2flow-mvp08-pgdata,
+  /home/admin/OpenSource/.tmp/a2flow-mvp08-live, loopback 127.0.0.1:18765,
+  namespace a2flow-mvp-activity-planning, owner mvp08-live-user/PRT.
+- Hard budgets: 300s total, 256MiB data, six DeepSeek flash calls, 20s/call,
+  max_tokens=2048/call (12288 configured output-token ceiling), zero retries.
+- Model key value is forbidden in CLI/direct environment; only an absolute non-symlink
+  admin-owned 0600 file path is accepted. The window reads it once and never logs content.
+- Main released the exact task-venv install and one live window. Only Click 8.3.1 and
+  Uvicorn 0.52.4 were added; H11 stayed 0.16.0 and pip check passed.
+- Offline preparation: 21 PASS + 1 explicit live SKIP/0.023s; changed modules compileall and
+  runtime08 --help PASS; AF03/AF04 safety regressions are included.
+- Entry/window/probe/test/listener-lock SHA256 values are fixed in mvp08-live-window.md.
+- The exact live command ran once, but the caller retained only its first stdout line and lost
+  the yielded exec-session handle. Final test exit/output, model call count, card, node and Run
+  assertions cannot be recovered after correct disposable-volume cleanup. Mark LIVE RESULT
+  UNCONFIRMED; do not infer success and do not rerun under the consumed release.
+- Postflight readback: exact process/container/volume/private/listener absent; pinned image absent;
+  key retained admin/0600/36B; Git clean at 1881855; pip check PASS. No deployment/browser action.
+- NextExecutableAction: commit this evidence-only correction and send main-brain the fixed SHA.
+  A second live attempt requires a new explicit release; Runtime remains NO READY.
+
+### AF-MVP-08 durable evidence repair
+
+- Status: PREPARED / W2 NOT RUN. The live wrapper now creates one exact admin-owned
+  0600 JSONL evidence file outside disposable PostgreSQL cleanup, refuses overwrite or
+  symlink traversal, and fsyncs bounded records under an exclusive lock.
+- Fixed safe records cover entry, live stages/result with actual model call count,
+  child exit, PG result, cleanup result and final window result. Key, DSN,
+  request/response content, model text, identifiers and exception messages are excluded.
+- Exact process/container/volume/private-directory/listener cleanup remains in `finally`;
+  evidence retention does not retain the database or any runtime resource.
+- Focused offline failure/cleanup scenario: 1 PASS/0.003s. Final evidence modules import
+  without side effects. No PG, credential read, provider call or listener was executed.
+- NextExecutableAction: fixed worker commit/push and main-brain review. Any W2 execution
+  still requires a new explicit release and a caller that retains the full exec result and
+  session ID. Runtime remains NO READY.
+
+### AF-MVP-08 W2 result and bounded diagnosis
+
+- Status: W2 FAILED / W3 NOT RELEASED. Fixed source b1b408f ran once with its full exec
+  handle retained. The child suite exited 1: two offline provider-budget checks passed and
+  the real chain errored during `START_REQUEST` after four admitted requests.
+- Durable evidence proves assets=7, listener ready, modelCalls=4, no accepted start/card/
+  Action/copy/final Run assertion, PG result FAILED, and cleanup PASS. Exact resources and
+  listener were absent postflight; evidence SHA256 is 16df1d7e4052569807e632c623bc755db920275575a4d04336ea6394c94f9e4e.
+- Exact backend cause is an evidence gap: the old `assert_status` collapsed non-200 and
+  invalid-JSON responses to `RuntimeError`; no surviving safe record contains status/code.
+  Four admitted requests are not evidence of four successful responses.
+- Minimal source diagnosis now retains only fixed operation/failure kind, numeric HTTP
+  status, JSON-decoded boolean, exception type and backend-allowlisted error code. Response
+  bodies, model text, Tool data, credentials, DSN and identifiers remain excluded.
+- Offline diagnostic test: 3 PASS + 1 live SKIP/0.004s; synthetic response detail is absent
+  while allowlisted `INTERNAL_ERROR` remains. No PG/provider/listener action ran.
+- NextExecutableAction: commit/push this bounded source repair and send the fixed SHA to
+  main-brain. W3 requires a separate explicit release; Runtime remains NO READY.

@@ -122,5 +122,14 @@
 - [x] 保留原生 child checkpoint interrupt/resume；不把 Tool/Skill/model 工作历史注入 copy。
 - [x] 修复 focused affected suite 27 PASS/0.786s；七个变更模块 compileall PASS。
 - [ ] 按需读取 child 中间历史（明确 deferred；当前无 full-history fallback）。
-- [ ] main-brain 接受修复 SHA 并执行 main/GitHub 集成。
-- [ ] 真实 PG/seed/model/listener/deploy/browser 验证；当前均未执行，Runtime 仍 NO READY。
+- [x] main-brain 接受修复 SHA；server main 与 GitHub main 均已集成 540b65d。
+- [ ] 真实端到端验收仍缺失：W1 启动过隔离 PG/子进程但终态证据丢失；deploy/browser 未执行，Runtime 仍 NO READY。
+- [x] 准备有界 PG/seed/真实 flash/等待 Action/确认/copy 联调脚本与精确资源清理方案。
+- [x] 离线固定 provider 目标、六次调用、20 秒、2048 token、300 秒总窗口与 loopback-only 门禁。
+- [x] 获主控窗口令后仅新增 Click 8.3.1/Uvicorn 0.52.4；H11 保持 0.16.0，pip check PASS。
+- [x] main-brain 审查并释放的 AF-MVP-08-LIVE-W1 已执行一次，未重跑。
+- [ ] 最终测试输出/exit/model/card/node/Run 证据因调用方丢失 yielded session handle 而不可恢复；结果 UNCONFIRMED。
+- [x] 准备 W2 持久化 0600 脱敏证据：固定阶段、实际 modelCalls、child/PG/cleanup/window 结论，且不保留数据库。
+- [x] W2 固定 b1b408f 已执行一次：START_REQUEST 失败，modelCalls=4，PG FAILED、精确清理 PASS；未重跑。
+- [x] 离线补齐 HTTP status/JSON/allowlisted code/timeout/transport/host 脱敏分类；响应正文不落盘，3 PASS + 1 live SKIP。
+- [ ] W3 未放行；当前无证据区分 W2 的 HTTP 非 200 与非 JSON 根因，不猜测、不重跑。
