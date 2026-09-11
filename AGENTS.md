@@ -1,4 +1,15 @@
-# Platform contributor instructions
+# A2Flow contributor instructions
+
+## Project identity
+
+- The product name is A2Flow, with the tagline "Agent Workflows with Interactive UI". The user approved this name on 2026-09-07, replacing SkillWeave.
+- GitHub repository: https://github.com/EasonEdison/a2flow ; the github remote uses git@github.com:EasonEdison/a2flow.git. Server-local origin and all worktree paths stay unchanged.
+- Existing skillweave_contracts Python imports, historical OpenSpec paths, schema identifiers and baseline IDs remain valid internal identifiers. Do not mechanically rename them or rewrite history as part of this branding change.
+- Use A2Flow in new product-facing documentation. main-brain owns GitHub synchronization after server main integration; the current engine-first scope and paused domains remain unchanged.
+
+## Latest priority: Python engine first (2026-09-07)
+
+Read `openspec/changes/skillweave-phase1/priority-engine-first.md` (SW-P1-ENGINE-FIRST-01). Only the Python Agent/Workflow Runtime domain continues; all six other domains pause new work and preserve owned changes. This latest user instruction supersedes earlier start-all and candidate-extension approvals without changing established behavior or deployment boundaries.
 
 ## Current phase authorization (2026-09-07)
 

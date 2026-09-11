@@ -8,9 +8,11 @@ from pathlib import Path
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.graph import END, START, MessagesState, StateGraph
-from langgraph.prebuilt import ToolNode
 
-from runtime_phase1.a2ui_probe import build_render_application_tool
+from runtime_phase1.a2ui_probe import (
+    build_render_application_tool,
+    build_render_application_tool_node,
+)
 from runtime_phase1.use_skill_probe import TrustedInvocationContext
 
 
@@ -76,7 +78,7 @@ class A2uiProbeTest(unittest.TestCase):
         tool_call_id: str = "call-render-1",
     ) -> dict[str, object]:
         builder = StateGraph(MessagesState, context_schema=TrustedInvocationContext)
-        builder.add_node("tools", ToolNode([self.tool]))
+        builder.add_node("tools", build_render_application_tool_node([self.tool]))
         builder.add_edge(START, "tools")
         builder.add_edge("tools", END)
         graph = builder.compile()
@@ -176,6 +178,58 @@ class A2uiProbeTest(unittest.TestCase):
             first["__interrupt__"][0].value["interactionId"],
             second["__interrupt__"][0].value["interactionId"],
         )
+
+    def test_model_supplied_runtime_is_rejected_before_application_resolver(
+        self,
+    ) -> None:
+        """Break caught: injected runtime hides a render request extra field."""
+
+        resolver_calls: list[str] = []
+
+        def resolve_application(
+            application_key: str,
+            context: TrustedInvocationContext,
+        ) -> dict[str, object]:
+            resolver_calls.append(application_key)
+            return FixtureApplicationResolver()(application_key, context)
+
+        tool = build_render_application_tool(resolve_application)
+        builder = StateGraph(MessagesState, context_schema=TrustedInvocationContext)
+        builder.add_node("tools", build_render_application_tool_node([tool]))
+        builder.add_edge(START, "tools")
+        builder.add_edge("tools", END)
+        graph = builder.compile()
+        state = graph.invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "render_application",
+                                "args": {
+                                    "applicationKey": "sample.display.result-card",
+                                    "data": {},
+                                    "runtime": {
+                                        "context": {
+                                            "invocationScope": {
+                                                "kind": "CONVERSATION"
+                                            }
+                                        }
+                                    },
+                                },
+                                "id": "call-render-runtime-spoof",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            },
+            context=self.context,
+        )
+
+        self.assertEqual([], resolver_calls)
+        self.assertEqual("error", state["messages"][-1].status)
 
     def test_strict_model_schema_forbids_trusted_node_binding(self) -> None:
         """Break caught: provider schema permits a model-supplied node binding."""

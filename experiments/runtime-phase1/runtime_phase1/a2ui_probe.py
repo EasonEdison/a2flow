@@ -1,31 +1,64 @@
 """Provisional render_application boundary for the Phase 1 probe."""
 
+from collections.abc import Sequence
 import hashlib
 import json
 from typing import Any, Callable
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
+from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 from pydantic import BaseModel, ConfigDict, Field
 
+from runtime_phase1.tool_admission import build_closed_tool_node
 from runtime_phase1.use_skill_probe import TrustedInvocationContext
 
 
 ApplicationResolver = Callable[[str, TrustedInvocationContext], dict[str, Any]]
 
 
-class RenderApplicationArgs(BaseModel):
-    """Validate render input and trusted ToolRuntime injection together."""
+class RenderApplicationModelArgs(BaseModel):
+    """Closed model-visible arguments for render_application."""
 
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+    model_config = ConfigDict(extra="forbid", strict=True)
 
-    applicationKey: str = Field(min_length=1)
+    applicationKey: str = Field(strict=True, min_length=1)
     data: dict[str, Any]
+
+
+class RenderApplicationArgs(RenderApplicationModelArgs):
+    """Add trusted ToolRuntime after original model-argument admission."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        arbitrary_types_allowed=True,
+    )
+
     runtime: ToolRuntime[TrustedInvocationContext]
 
 
-def build_render_application_tool(resolver: ApplicationResolver) -> BaseTool:
+def validate_render_application_model_args(
+    value: object,
+) -> RenderApplicationModelArgs:
+    """Validate the complete original render request before injection."""
+
+    return RenderApplicationModelArgs.model_validate(value, strict=True)
+
+
+def build_render_application_tool_node(tools: Sequence[BaseTool]) -> ToolNode:
+    """Build a pre-injection-admitted ToolNode for render_application."""
+
+    return build_closed_tool_node(
+        tools,
+        {"render_application": validate_render_application_model_args},
+    )
+
+
+def build_render_application_tool(
+    resolver: ApplicationResolver, *, action_service: Any = None,
+) -> BaseTool:
     """Build a render Tool with configuration-owned wait semantics."""
 
     @tool(
@@ -98,9 +131,44 @@ def build_render_application_tool(resolver: ApplicationResolver) -> BaseTool:
             "runId": invocation_scope.run_id,
             "versionId": version_id,
         }
-        interrupt(interaction)
-        raise NotImplementedError(
-            "Action validation and resume require PostgreSQL-backed verification"
-        )
+        if action_service is None:
+            interrupt(interaction)
+            raise RuntimeError("Action service is required for interactive resume")
 
+        from agent_workflow_runtime import ActionRejected, Interaction
+
+        saved = Interaction(
+            context=runtime.context,
+            interaction_id=interaction_id,
+            application_key=applicationKey,
+            application_version=version_id,
+            graph_thread_id=runtime.config["configurable"]["thread_id"],
+            recorded_versions=tuple(resolved["recordedVersions"]),
+        )
+        action_service.register(saved)
+        while True:
+            reference = interrupt(interaction)
+            try:
+                outcome = action_service.completion(
+                    saved.key, reference, runtime.context.trusted_context,
+                )
+                break
+            except ActionRejected as error:
+                if error.code not in {"INVALID_RESUME_REFERENCE", "INTERACTION_NOT_COMPLETED"}:
+                    raise
+                # An unsupported direct Command cannot turn unverified input into
+                # Tool success. Keep the native wait and prevent successors.
+                continue
+        content = {
+            "applicationKey": applicationKey,
+            "interactionMode": interaction_mode,
+            "rendered": True,
+            "businessSuccess": outcome.business_success,
+            "interactionCompleted": outcome.interaction_completed,
+            "result": json.loads(outcome.result_json),
+        }
+        artifact["interactionId"] = interaction_id
+        return json.dumps(content, ensure_ascii=False, sort_keys=True), artifact
+
+    render_application.metadata = {"requires_action_guard": action_service is not None}
     return render_application
