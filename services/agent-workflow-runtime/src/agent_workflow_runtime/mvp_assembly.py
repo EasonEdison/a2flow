@@ -103,6 +103,7 @@ class MvpRuntimeHost:
         application_validator, operation_specs, model_factory, identity_resolver,
         model_reference="deepseek-v4-flash", static_directory=None,
         checkpointer_factory=None, unexpected_error_observer=None,
+        application_data_validator=None,
     ):
         if not callable(identity_resolver):
             raise ValueError("VERIFIED_IDENTITY_RESOLVER_REQUIRED")
@@ -112,6 +113,7 @@ class MvpRuntimeHost:
         self.identity_resolver = identity_resolver
         self.application_validator = application_validator
         self.operation_specs = dict(operation_specs)
+        self.application_data_validator = application_data_validator
         self.model_factory = model_factory
         self.model_reference = model_reference
         self.static_directory = static_directory
@@ -205,7 +207,7 @@ class MvpRuntimeHost:
                         bound_node_id=node["nodeId"],
                     )
                     all_tools = build_tools(
-                        assets, service, self.application_validator,
+                        assets, service, self.application_validator, self.application_data_validator,
                     )
                     material = self.reader.load_skill(
                         node["skillKey"], run.context(node["nodeId"]),

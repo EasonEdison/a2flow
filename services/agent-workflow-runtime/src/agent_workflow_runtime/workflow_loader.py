@@ -91,13 +91,13 @@ class NodeBoundary:
 def compose_workflow(
     run, lifecycle, definition, agents, views, context_loader, checkpointer,
 ):
-    """Compose the strict two-node asset subset with native subgraph continuation."""
+    """Compose a bounded sequential asset workflow with native subgraph continuation."""
 
     nodes = definition.get("nodes") if type(definition) is dict else None
-    if (type(nodes) is not list or len(nodes) != 2
+    if (type(nodes) is not list or not 2 <= len(nodes) <= 8
             or definition.get("entryNodeId") != nodes[0].get("nodeId")
             or definition.get("entryNodeId") != run.entry_node_id
-            or len({node.get("nodeId") for node in nodes}) != 2
+            or len({node.get("nodeId") for node in nodes}) != len(nodes)
             or set(agents) != {node.get("nodeId") for node in nodes}):
         raise ActionRejected("UNSUPPORTED_WORKFLOW_DEFINITION")
     if not callable(context_loader):
@@ -130,6 +130,7 @@ def compose_workflow(
         builder.add_node(node_id, sequence)
         predecessor_ids.append(node_id)
     builder.add_edge(START, nodes[0]["nodeId"])
-    builder.add_edge(nodes[0]["nodeId"], nodes[1]["nodeId"])
-    builder.add_edge(nodes[1]["nodeId"], END)
+    for before, after in zip(nodes, nodes[1:]):
+        builder.add_edge(before["nodeId"], after["nodeId"])
+    builder.add_edge(nodes[-1]["nodeId"], END)
     return RunGraphBinding(builder.compile(checkpointer=checkpointer), lifecycle, progress)

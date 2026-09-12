@@ -71,6 +71,26 @@ python -m a2flow_asset_store apply \
 Remove only the exact `mktemp` path after the operator has retained any required
 audit evidence.
 
+### Additive three-node demo bundle
+
+The independent `activity-package-demo` bundle does not replace the original
+activity-planning versions. Export it explicitly, then use the same validate,
+setup, dry-run and apply sequence above with the new bundle path:
+
+```bash
+python -m deploy.mvp.export_bundle \
+  --environment "$A2FLOW_ENVIRONMENT" \
+  --demo activity-package >"$mvp_bundle"
+```
+
+Its bounded sequential nodes are `choose_plan` (interactive plan selection),
+`confirm_schedule` (interactive execution confirmation), and
+`show_activity_package` (display-only final package). Each node loads an
+independent Skill. Saved Action results are the only confirmed predecessor
+facts supplied downstream. The final node persists a real rendered Application
+card with no Action and no pause, so a later run-view read can return it after
+the Run is terminal.
+
 ## Private listener
 
 After asset readback succeeds, start the app on loopback:

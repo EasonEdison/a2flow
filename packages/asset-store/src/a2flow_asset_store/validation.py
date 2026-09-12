@@ -76,13 +76,15 @@ class BundleValidator:
         elif kind == "WORKFLOW":
             closed(definition, {"definitionKey", "entryNodeId", "nodes"})
             nodes = definition["nodes"]
-            if definition["definitionKey"] != key or type(nodes) is not list or len(nodes) != 2:
+            if (definition["definitionKey"] != key or type(nodes) is not list
+                    or not 2 <= len(nodes) <= 8):
                 raise AssetError("UNSUPPORTED_WORKFLOW")
             for node in nodes:
                 closed(node, {"nodeId", "skillKey"})
                 parse_identifier(node["nodeId"])
                 parse_skill_key(node["skillKey"])
-            if nodes[0]["nodeId"] == nodes[1]["nodeId"] or definition["entryNodeId"] != nodes[0]["nodeId"]:
+            if (len({node["nodeId"] for node in nodes}) != len(nodes)
+                    or definition["entryNodeId"] != nodes[0]["nodeId"]):
                 raise AssetError("INVALID_WORKFLOW_ENTRY")
         elif kind == "APPLICATION":
             if self.application_validator(definition) is not True:

@@ -25,7 +25,7 @@ class ActionService:
         self.lifecycle = lifecycle
 
     def register(self, interaction: Interaction) -> None:
-        """Register a trusted wait once; replay never replaces history or bindings."""
+        """Register one trusted card; replay never replaces history or bindings."""
         scope = interaction.context.invocation_scope
         if scope.kind != "WORKFLOW" or not interaction.graph_thread_id:
             raise ActionRejected("WORKFLOW_BINDING_REQUIRED")
@@ -37,7 +37,9 @@ class ActionService:
                 if replace(
                     existing, phase=interaction.phase, attempts=interaction.attempts,
                     run_active=interaction.run_active, node_waiting=interaction.node_waiting,
-                    completion_request_id=None, resume_started=False, resume_consumed=False,
+                    completion_request_id=interaction.completion_request_id,
+                    resume_started=interaction.resume_started,
+                    resume_consumed=interaction.resume_consumed,
                 ) != interaction:
                     raise ActionRejected("INTERACTION_BINDING_CONFLICT")
                 return
@@ -246,7 +248,12 @@ class ActionService:
             for item in self.repository.for_node(
                 context.trusted_context, scope.run_id, scope.node_id,
             ):
-                self._active(item, context.trusted_context)
                 self._versions(item)
+                if item.node_waiting:
+                    self._active(item, context.trusted_context)
+                elif (not item.run_active or item.phase != "COMPLETED"
+                      or item.attempts or item.completion_request_id is not None
+                      or item.resume_started or not item.resume_consumed):
+                    raise ActionRejected("REQUIRED_INTERACTION_PENDING")
                 if item.phase != "COMPLETED" or not item.resume_consumed:
                     raise ActionRejected("REQUIRED_INTERACTION_PENDING")

@@ -72,7 +72,7 @@ def validators():
     }
 
 
-def _validate_data(value):
+def validate_choice_data(value):
     if type(value) is not dict or set(value) != {"prompt", "options"}:
         raise ActionRejected("INVALID_APPLICATION_DATA")
     if type(value["prompt"]) is not str or not 1 <= len(value["prompt"]) <= 2000:
@@ -97,9 +97,12 @@ def _profile(application, application_validator):
 
 
 
-def build_tools(assets, action_service, application_validator) -> tuple[BaseTool, BaseTool, BaseTool]:
+def build_tools(assets, action_service, application_validator,
+                application_data_validator=None) -> tuple[BaseTool, BaseTool, BaseTool]:
     if not callable(application_validator):
         raise ValueError("APPLICATION_VALIDATOR_REQUIRED")
+    if application_data_validator is not None and not callable(application_data_validator):
+        raise ValueError("APPLICATION_DATA_VALIDATOR_INVALID")
     @tool("use_skill", args_schema=UseSkillArgs, response_format="content_and_artifact")
     def use_skill(skillKey: str, runtime: ToolRuntime[TrustedInvocationContext]):
         """Load the instruction and resources for this authorized Skill."""
@@ -118,15 +121,28 @@ def build_tools(assets, action_service, application_validator) -> tuple[BaseTool
     @tool("render_application", args_schema=RenderArgs, response_format="content_and_artifact")
     def render_application(applicationKey: str, data: dict[str, Any],
                            runtime: ToolRuntime[TrustedInvocationContext]):
-        """Render and wait for the configured node-bound confirmation card."""
+        """Persist one configured interactive or display-only node card."""
         context = assets.context(runtime.context)
         resolved = assets.application(applicationKey, context)
         application = resolved["application"]
-        if application["renderPolicy"] != {
-            "tool": "render_application", "interactionMode": "INTERACTIVE", "requiresPause": True
-        }:
+        policy = application["renderPolicy"]
+        interactive = policy == {
+            "tool": "render_application", "interactionMode": "INTERACTIVE",
+            "requiresPause": True,
+        }
+        display_only = policy == {
+            "tool": "render_application", "interactionMode": "DISPLAY_ONLY",
+            "requiresPause": False,
+        }
+        if not interactive and not display_only:
             raise ActionRejected("UNSUPPORTED_APPLICATION_PROFILE")
-        template, safe_data = _profile(application, application_validator), _validate_data(data)
+        template = _profile(application, application_validator)
+        if application_data_validator is None:
+            safe_data = validate_choice_data(data)
+        elif application_data_validator(application, data) is True:
+            safe_data = json.loads(json.dumps(data, ensure_ascii=False, allow_nan=False))
+        else:
+            raise ActionRejected("INVALID_APPLICATION_DATA")
         if not runtime.tool_call_id:
             raise ActionRejected("TOOL_CALL_ID_REQUIRED")
         scope = context.invocation_scope
@@ -135,6 +151,9 @@ def build_tools(assets, action_service, application_validator) -> tuple[BaseTool
                                runtime.tool_call_id], separators=(",", ":"), ensure_ascii=True)
         digest = sha256(material.encode()).hexdigest()
         interaction_id, card_id = "interaction:" + digest, "card:" + digest
+        actions = assets.card_actions(applicationKey, context) if interactive else []
+        if (interactive and len(actions) != 1) or (display_only and actions):
+            raise ActionRejected("UNSUPPORTED_APPLICATION_PROFILE")
         card = {
             "cardId": card_id, "nodeId": scope.node_id, "interactionId": interaction_id,
             "applicationKey": applicationKey,
@@ -143,12 +162,9 @@ def build_tools(assets, action_service, application_validator) -> tuple[BaseTool
             "componentCatalogRef": application["asset"]["componentCatalogRef"],
             "rootId": template["rootId"], "components": template["components"],
             "data": safe_data, "inputSchema": template["inputSchema"],
-            "actions": [{"actionName": "confirm_activity", "inputSchema": {
-                "type": "object", "properties": {
-                    "optionId": {"type": "string", "minLength": 1, "maxLength": 128},
-                    "confirmed": {"const": True}},
-                "required": ["optionId", "confirmed"], "additionalProperties": False}}],
-            "state": "WAITING", "actionEligibility": "REVALIDATION_REQUIRED",
+            "actions": actions,
+            "state": "WAITING" if interactive else "READ_ONLY",
+            "actionEligibility": "REVALIDATION_REQUIRED" if interactive else "NOT_OPERABLE",
         }
         saved = Interaction(
             context, interaction_id, applicationKey,
@@ -157,12 +173,20 @@ def build_tools(assets, action_service, application_validator) -> tuple[BaseTool
             tuple(resolved["recordedVersions"]),
             display_json=json.dumps(card, sort_keys=True, separators=(",", ":"),
                                     ensure_ascii=False, allow_nan=False),
+            phase="WAITING" if interactive else "COMPLETED",
+            node_waiting=interactive, resume_consumed=display_only,
         )
         action_service.register(saved)
+        if display_only:
+            return json.dumps({"displayed": True}, sort_keys=True), {
+                "interactionId": interaction_id, "applicationKey": applicationKey,
+                "versionId": saved.application_version,
+            }
+        action_name = actions[0]["actionName"]
         reference = {"kind": "A2UI_INTERACTION_REQUIRED", "runId": scope.run_id,
                      "nodeId": scope.node_id, "interactionId": interaction_id,
                      "applicationKey": applicationKey,
-                     "versionId": saved.application_version, "actionName": "confirm_activity"}
+                     "versionId": saved.application_version, "actionName": action_name}
         while True:
             resumed = interrupt(reference)
             try:
@@ -173,7 +197,7 @@ def build_tools(assets, action_service, application_validator) -> tuple[BaseTool
                 if error.code not in {"INVALID_RESUME_REFERENCE", "INTERACTION_NOT_COMPLETED"}:
                     raise
         result = json.loads(outcome.result_json)
-        return json.dumps({"confirmed": True, "result": result}, ensure_ascii=False,
+        return json.dumps({"completed": True, "result": result}, ensure_ascii=False,
                           sort_keys=True), {"interactionId": interaction_id,
                                            "applicationKey": applicationKey,
                                            "versionId": saved.application_version}

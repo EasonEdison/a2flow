@@ -9,6 +9,18 @@ APPLICATION_KEY = "activity-planning.confirm"
 COMPONENT_KEY = "activity-planning.basic"
 WORKFLOW_KEY = "activity-planning"
 PROFILE = "a2flow.mvp08.v1"
+PACKAGE_SELECT_ABILITY_KEY = "activity-package.select"
+PACKAGE_SELECT_OPERATION = "activity-package.select"
+PACKAGE_SCHEDULE_ABILITY_KEY = "activity-package.confirm-schedule"
+PACKAGE_SCHEDULE_OPERATION = "activity-package.confirm-schedule"
+PACKAGE_CHOOSE_APPLICATION_KEY = "activity-package.choose-plan"
+PACKAGE_SCHEDULE_APPLICATION_KEY = "activity-package.confirm-schedule"
+PACKAGE_DISPLAY_APPLICATION_KEY = "activity-package.display"
+PACKAGE_COMPONENT_KEY = "activity-package.basic"
+PACKAGE_WORKFLOW_KEY = "activity-package-demo"
+PACKAGE_APPLICATION_KEYS = frozenset({PACKAGE_CHOOSE_APPLICATION_KEY,
+                                      PACKAGE_SCHEDULE_APPLICATION_KEY,
+                                      PACKAGE_DISPLAY_APPLICATION_KEY})
 MODEL_ABILITY_KEYS = frozenset({BUDGET_KEY})
 
 
@@ -48,9 +60,32 @@ def select_activity(arguments, owner):
     return {"selectedOptionId": arguments["optionId"], "confirmed": True}
 
 
+def choose_package_plan(arguments, owner):
+    """Save one card-bound choice; Runtime establishes interaction authority."""
+    _owner(owner)
+    if (type(arguments) is not dict or set(arguments) != {"optionId"}
+            or type(arguments["optionId"]) is not str
+            or not 1 <= len(arguments["optionId"]) <= 128):
+        raise ValueError("INVALID_SELECTION_ARGUMENTS")
+    return {"selectedOptionId": arguments["optionId"]}
+
+
+def confirm_package_schedule(arguments, owner):
+    """Save one card-bound schedule confirmation without external side effects."""
+    _owner(owner)
+    if (type(arguments) is not dict or set(arguments) != {"optionId", "confirmed"}
+            or type(arguments["optionId"]) is not str
+            or not 1 <= len(arguments["optionId"]) <= 128
+            or arguments["confirmed"] is not True):
+        raise ValueError("INVALID_CONFIRMATION_ARGUMENTS")
+    return {"selectedOptionId": arguments["optionId"], "confirmed": True}
+
+
 OPERATION_MAP = {
     BUDGET_KEY: budget_activity,
     CONFIRM_OPERATION: select_activity,
+    PACKAGE_SELECT_OPERATION: choose_package_plan,
+    PACKAGE_SCHEDULE_OPERATION: confirm_package_schedule,
 }
 
 
@@ -60,6 +95,8 @@ class OperationCatalog:
         paths = {
             BUDGET_KEY: frozenset({"/participants", "/budgetMinor"}),
             CONFIRM_OPERATION: frozenset({"/optionId", "/confirmed"}),
+            PACKAGE_SELECT_OPERATION: frozenset({"/optionId"}),
+            PACKAGE_SCHEDULE_OPERATION: frozenset({"/optionId", "/confirmed"}),
         }
         if operation_ref not in paths:
             return None
@@ -88,6 +125,25 @@ def ability_definition(key):
         operation, policy = CONFIRM_OPERATION, {
             "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1", "policyRef": "confirmed",
             "operator": "JSON_POINTER_EQUALS", "jsonPointer": "/confirmed", "expectedLiteral": True}
+    elif key == PACKAGE_SELECT_ABILITY_KEY:
+        arguments = {"optionId": {"type": "string", "minLength": 1, "maxLength": 128}}
+        output = {"selectedOptionId": arguments["optionId"]}
+        operation, policy = PACKAGE_SELECT_OPERATION, {
+            "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+            "policyRef": "validSelection", "operator": "SCHEMA_VALID"}
+    elif key == PACKAGE_SCHEDULE_ABILITY_KEY:
+        arguments = {
+            "optionId": {"type": "string", "minLength": 1, "maxLength": 128},
+            "confirmed": {"type": "boolean", "enum": [True]},
+        }
+        output = {
+            "selectedOptionId": arguments["optionId"],
+            "confirmed": arguments["confirmed"],
+        }
+        operation, policy = PACKAGE_SCHEDULE_OPERATION, {
+            "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1", "policyRef": "confirmed",
+            "operator": "JSON_POINTER_EQUALS", "jsonPointer": "/confirmed",
+            "expectedLiteral": True}
     else:
         raise ValueError("UNKNOWN_DEMO_ABILITY")
     return {
@@ -147,15 +203,29 @@ def application_definition():
     }
 
 
+from .package_demo import (
+    application_definition as package_application_definition,
+    component_definition as package_component_definition,
+    data_validator as package_data_validator,
+)
+
+
 def application_validator(value):
-    # Explicit single MVP profile, not a silently permissive generic validator.
+    # Closed reviewed profiles only, not a permissive generic validator.
     from a2flow_asset_store.records import canonical
-    return canonical(value) == canonical(application_definition())
+    expected = [application_definition(), *(package_application_definition(key)
+                for key in sorted(PACKAGE_APPLICATION_KEYS))]
+    return any(canonical(value) == canonical(item) for item in expected)
 
 
 def component_validator(value):
     from a2flow_asset_store.records import canonical
-    return canonical(value) == canonical(component_definition())
+    return any(canonical(value) == canonical(item)
+               for item in (component_definition(), package_component_definition()))
+
+
+def application_data_validator(application, value):
+    return package_data_validator(application, value)
 
 
 def bundle_validator():

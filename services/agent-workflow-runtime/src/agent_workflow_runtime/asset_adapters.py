@@ -135,27 +135,54 @@ class RuntimeAssets:
         self._context(interaction.context)
         return self.current_versions()
 
-    def action(self, interaction, action_name):
-        resolved = self.application(interaction.application_key, interaction.context)
-        if resolved["resolvedVersion"]["versionId"] != interaction.application_version:
-            raise ActionRejected("RESET_REQUIRED")
-        matches = [p for p in resolved["application"]["actionPolicies"] if p["actionName"] == action_name]
+    def _action_binding(self, application_key, action_name, context):
+        resolved = self.application(application_key, context)
+        matches = [policy for policy in resolved["application"]["actionPolicies"]
+                   if policy["actionName"] == action_name]
         if len(matches) != 1:
             raise ActionRejected("ACTION_NOT_ALLOWED")
         policy = matches[0]
         key, separator, version = policy["abilityReleaseRef"].rpartition("@")
         if not separator or not key or not version:
             raise ActionRejected("INVALID_ABILITY_RELEASE")
-        ability, spec = self._ability(key, interaction.context)
+        ability, spec = self._ability(key, context)
         if ability.version_id != version or not spec.action_allowed:
             raise ActionRejected("ACTION_NOT_ALLOWED")
+        return resolved, policy, ability, spec
+
+    def card_actions(self, application_key, context):
+        """Project exact Action schemas from admitted Ability bindings."""
+        resolved = self.application(application_key, context)
+        result = []
+        for policy in resolved["application"]["actionPolicies"]:
+            _, _, ability, _ = self._action_binding(
+                application_key, policy["actionName"], context,
+            )
+            schema = json_copy(ability.definition["resolvedInputSchema"])
+            for name, value in tuple(schema["properties"].items()):
+                if value == {"type": "boolean", "enum": [True]}:
+                    schema["properties"][name] = {"const": True}
+            result.append({"actionName": policy["actionName"], "inputSchema": schema})
+        return result
+
+    def action(self, interaction, action_name):
+        resolved, policy, ability, spec = self._action_binding(
+            interaction.application_key, action_name, interaction.context,
+        )
+        if resolved["resolvedVersion"]["versionId"] != interaction.application_version:
+            raise ActionRejected("RESET_REQUIRED")
         if interaction.display_json is None:
             raise ActionRejected("CARD_NOT_FOUND")
-        card = json.loads(interaction.display_json)
-        allowed = frozenset(option["value"] for option in card["data"]["options"])
+        try:
+            card = json.loads(interaction.display_json)
+            allowed = frozenset(option["value"] for option in card["data"]["options"])
+        except (KeyError, TypeError, ValueError, RecursionError):
+            raise ActionRejected("CARD_NOT_FOUND") from None
+
         def valid_input(value):
-            return (spec.validate_input(value) is True and value.get("optionId") in allowed
-                    and value.get("confirmed") is True)
+            return (spec.validate_input(value) is True
+                    and value.get("optionId") in allowed)
+
         completes = policy["completeInteractionOnSuccess"]
         if type(completes) is not bool:
             raise ActionRejected("INVALID_ACTION_POLICY")
