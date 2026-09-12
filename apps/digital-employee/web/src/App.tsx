@@ -7,7 +7,7 @@ import { WorkflowSidebar } from './components/WorkflowSidebar';
 import { fixture, type FixtureState } from './dev/fixtures';
 import { useProgress } from './hooks/useProgress';
 import { useRuntime } from './hooks/useRuntime';
-import { statusLabels, type RunView } from './presentation';
+import { statusLabels, type InteractiveCard, type RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
 
@@ -63,18 +63,21 @@ export function App() {
     }
   };
 
-  const action = async (nodeId: string, value: string) => {
+  const action = async (
+    nodeId: string,
+    card: InteractiveCard,
+    value: string,
+  ) => {
     if (fixtureMode) {
       setFixtureState('SUCCEEDED');
       return;
     }
-    const card = run?.nodes.find((node) => node.id === nodeId)?.card;
-    if (!card?.operable || activeBusy) {
+    if (!card.operable || activeBusy) {
       return;
     }
     await runtime.action(nodeId, card.interactionId, card.actionName, {
       optionId: value,
-      confirmed: true,
+      ...(card.confirmed ? { confirmed: true } : {}),
     });
   };
 
@@ -258,7 +261,7 @@ export function App() {
                     node={node}
                     index={index}
                     busy={activeBusy}
-                    onAction={(value) => action(node.id, value)}
+                    onAction={(card, value) => action(node.id, card, value)}
                     onHistory={async () => {
                       if (!fixtureMode) {
                         await runtime.refresh();
