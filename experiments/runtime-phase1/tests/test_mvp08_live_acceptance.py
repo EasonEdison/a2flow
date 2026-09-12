@@ -66,6 +66,7 @@ class ModelBudgetTest(unittest.TestCase):
             "modelCalls": 4,
             "operation": "START_RUN",
             "failureKind": "HTTP_STATUS",
+            "failureSite": "assert_status",
             "httpStatus": 503,
             "responseJson": True,
             "errorCode": "INTERNAL_ERROR",

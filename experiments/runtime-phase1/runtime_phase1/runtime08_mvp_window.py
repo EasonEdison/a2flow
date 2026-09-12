@@ -13,7 +13,8 @@ from runtime_phase1 import runtime03_pg_window as shared
 EVIDENCE_DIRECTORY = Path(
     "/home/admin/OpenSource/.evidence/oss-agent-workflow-runtime",
 )
-EVIDENCE_FILE = EVIDENCE_DIRECTORY / "af-mvp-08-live-w2.jsonl"
+WINDOW_NAME = "AF-MVP-08-LIVE-W3"
+EVIDENCE_FILE = EVIDENCE_DIRECTORY / "af-mvp-08-live-w3.jsonl"
 SPEC = shared.WindowSpec(
     container="a2flow-mvp08-pg",
     volume="a2flow-mvp08-pgdata",
@@ -90,7 +91,7 @@ def prepare_evidence(source, *, window=SPEC):
     )
     os.close(fd)
     shared.append_evidence(
-        "ENTRY", window=window, windowName="AF-MVP-08-LIVE-W2",
+        "ENTRY", window=window, windowName=WINDOW_NAME,
         sourceSha=source, outcome="STARTED",
     )
     return path
@@ -121,7 +122,7 @@ def main(argv=None):
             evidence = prepare_evidence(source)
             print(json.dumps({
                 "sourceSha": source,
-                "window": "AF-MVP-08-LIVE-W2",
+                "window": WINDOW_NAME,
                 "modelKeyFile": "verified-not-read",
                 "evidenceFile": str(evidence),
             }), flush=True)

@@ -189,5 +189,25 @@ Post-W2 diagnostic SHA256 values:
 - live probe: 01c85ba023e7a8ea3aeb787760cfd2f321f66495581f42b797375f54f5d46281
 - opt-in/offline acceptance test: b5c17c7adb3bc3f023e68dab42b4a7455d9cee5d40f4641ca083f11cdf608650
 
-W3 is not released. Do not rerun W1/W2 or treat this diagnostic preparation as
-authority for another PostgreSQL or provider window.
+## W3 source preparation
+
+The user authorized one new private W3 window after source integration. It must use the
+separate `/home/admin/OpenSource/.evidence/oss-agent-workflow-runtime/af-mvp-08-live-w3.jsonl`
+target, created 0600 with `O_EXCL|O_NOFOLLOW`; W2 evidence remains retained and immutable.
+All previous 300-second, six-request, 20-second request, 2048-token, zero-retry, socket-only
+PostgreSQL and loopback-only listener limits remain unchanged.
+
+W3 preserves the fixed operation and failure stage plus exception type. For HTTP responses it
+also preserves only numeric status, JSON-decoded boolean, `failureSite=assert_status`, and a
+backend-allowlisted error code. Response bodies, model text, Tool data, key, DSN, identifiers
+and arbitrary exception messages remain excluded.
+
+W3 preparation SHA256 values:
+
+- MVP08 entry: 32709575de65d257073f4aad415264f61e4e603e408cc6d65c7bd5cbc74daed2
+- live probe: 7c118098f6c0cb67a7d9defcc206195e55ac9ce149eb35d599b9a7d86d1524dc
+- window test: 76b8dfe52a2bfa0336c2c30896af5bbfea6b8b24f7d3f5d0fc8a00a592ad55b4
+- acceptance/diagnostic test: 7697219f3e050dd1e199b747aa7a22312fbc5b625e5f0d0eb7e0d8cc19c3e798
+
+W3 is not yet executed. It is one attempt only after main integrates the final source SHA;
+any failure requires evidence-led source repair before another model window is considered.

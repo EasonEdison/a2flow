@@ -30,6 +30,12 @@ class Runtime08WindowTest(unittest.TestCase):
         self.assertEqual(256 * 1024, window.SPEC.max_data_kib)
         self.assertIn("packages/asset-store/src", window.SPEC.pythonpath)
         self.assertEqual(window.EVIDENCE_FILE, window.SPEC.evidence_file)
+        self.assertEqual("AF-MVP-08-LIVE-W3", window.WINDOW_NAME)
+        self.assertEqual(
+            Path("/home/admin/OpenSource/.evidence/oss-agent-workflow-runtime/"
+                 "af-mvp-08-live-w3.jsonl"),
+            window.EVIDENCE_FILE,
+        )
 
     def test_model_key_file_requires_exact_private_regular_file(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -59,6 +59,7 @@ class SafeHttpFailure(RuntimeError):
         super().__init__("MVP08_HTTP_RESPONSE_FAILED")
         self.evidence = {
             "failureKind": kind,
+            "failureSite": "assert_status",
             "httpStatus": status,
             "responseJson": response_json,
         }

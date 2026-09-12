@@ -501,3 +501,16 @@
   while allowlisted `INTERNAL_ERROR` remains. No PG/provider/listener action ran.
 - NextExecutableAction: commit/push this bounded source repair and send the fixed SHA to
   main-brain. W3 requires a separate explicit release; Runtime remains NO READY.
+
+### AF-MVP-08 W3 preparation
+
+- User authorized one private W3 execution after source integration. It retains W2 limits:
+  300 seconds, six requests, 20 seconds/request, 2048 tokens/request, zero retries, isolated
+  PostgreSQL and loopback-only listener. No public port, firewall or system change is authorized.
+- W3 uses a distinct append-only 0600 evidence file and never overwrites W2. HTTP failures now
+  carry only fixed operation/stage, exception type, numeric status, JSON flag, allowlisted code
+  and `assert_status` location; no body, model text, Tool data, key or DSN is retained.
+- Offline W3 preparation checks: 12 PASS + 1 live SKIP/0.015s. No PG, provider, credential read
+  or listener execution occurred during preparation.
+- NextExecutableAction: commit/push, main integration, then exactly one W3 window with complete
+  exec/session capture. Runtime remains NO READY until its actual evidence is reviewed.
