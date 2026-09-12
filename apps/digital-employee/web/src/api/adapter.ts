@@ -88,9 +88,11 @@ const parseInteractiveCard = (card: WireCard, active: boolean): InteractiveCard 
 
   const root = componentById(components, 'root');
   allowedKeys(root, ['id', 'component', 'children']);
+  const children = list(root.children).map(string).join(',');
+  const legacyCard = children === 'prompt,selection,confirm';
   if (
     root.component !== 'Column' ||
-    list(root.children).map(string).join(',') !== 'prompt,selection,submit'
+    (!legacyCard && children !== 'prompt,selection,submit')
   ) {
     throw new ContractError();
   }
@@ -110,7 +112,7 @@ const parseInteractiveCard = (card: WireCard, active: boolean): InteractiveCard 
   binding(selection.options, '/options');
   binding(selection.value, '/optionId');
 
-  const submit = componentById(components, 'submit');
+  const submit = componentById(components, legacyCard ? 'confirm' : 'submit');
   allowedKeys(submit, ['id', 'component', 'label', 'action']);
   if (submit.component !== 'Button') {
     throw new ContractError();
@@ -120,17 +122,18 @@ const parseInteractiveCard = (card: WireCard, active: boolean): InteractiveCard 
   const event = object(action.event);
   allowedKeys(event, ['name', 'context']);
   const actionName = string(event.name);
-  if (!['select_activity_plan', 'confirm_schedule'].includes(actionName)) {
+  if (!['select_activity_plan', 'confirm_schedule', 'confirm_activity'].includes(actionName)) {
+    throw new ContractError();
+  }
+  if (legacyCard !== (actionName === 'confirm_activity')) {
     throw new ContractError();
   }
 
   const context = object(event.context);
-  const expectedContext = actionName === 'select_activity_plan'
-    ? ['optionId']
-    : ['optionId', 'confirmed'];
+  const confirmed = actionName !== 'select_activity_plan';
+  const expectedContext = confirmed ? ['optionId', 'confirmed'] : ['optionId'];
   allowedKeys(context, expectedContext);
   binding(context.optionId, '/optionId');
-  const confirmed = actionName === 'confirm_schedule';
   if (confirmed) {
     const confirmation = object(context.confirmed);
     allowedKeys(confirmation, ['literal']);
@@ -156,8 +159,11 @@ const parseInteractiveCard = (card: WireCard, active: boolean): InteractiveCard 
     throw new ContractError();
   }
   const optionId = object(properties.optionId);
-  allowedKeys(optionId, ['type']);
-  if (optionId.type !== 'string') {
+  allowedKeys(optionId, legacyCard ? ['type', 'minLength', 'maxLength'] : ['type']);
+  if (
+    optionId.type !== 'string' ||
+    (legacyCard && (optionId.minLength !== 1 || optionId.maxLength !== 128))
+  ) {
     throw new ContractError();
   }
   if (confirmed) {

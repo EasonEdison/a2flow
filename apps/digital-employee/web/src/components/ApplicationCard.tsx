@@ -15,6 +15,7 @@ export function ApplicationCard({
   const group = useId();
   const [choice, setChoice] = useState(card.selected ?? '');
   const [error, setError] = useState('');
+  const selected = card.operable ? choice : (card.selected ?? '');
 
   return (
     <section className="choice-card" aria-label={card.prompt}>
@@ -44,13 +45,13 @@ export function ApplicationCard({
             {card.choices.map((item) => (
               <label
                 key={item.value}
-                className={'choice ' + (choice === item.value ? 'selected' : '')}
+                className={'choice ' + (selected === item.value ? 'selected' : '')}
               >
                 <input
                   type="radio"
                   name={group}
                   value={item.value}
-                  checked={choice === item.value}
+                  checked={selected === item.value}
                   onChange={() => setChoice(item.value)}
                 />
                 <span>

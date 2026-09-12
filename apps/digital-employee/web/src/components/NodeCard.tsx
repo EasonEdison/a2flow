@@ -27,8 +27,11 @@ export function NodeCard({
       ? disclosure.open
       : !terminal(node.status) && node.status !== 'PENDING';
   const interactive = node.card?.kind === 'INTERACTIVE' ? node.card : undefined;
+  const waitingInteractive =
+    interactive?.operable && node.status === 'WAITING' ? interactive : undefined;
+  const completedInteractive = interactive === waitingInteractive ? undefined : interactive;
   const display = node.card?.kind === 'DISPLAY_ONLY' ? node.card : undefined;
-  const hasResult = Boolean(node.output) || Boolean(display);
+  const hasResult = Boolean(node.output) || Boolean(display) || Boolean(completedInteractive);
 
   const toggle = () => {
     setDisclosure({ status: node.status, open: !open });
@@ -92,8 +95,13 @@ export function NodeCard({
         ) : null}
       </div>
 
-      {interactive ? (
-        <ApplicationCard card={interactive} busy={busy} onSubmit={(value) => onAction(interactive, value)} />
+      {waitingInteractive ? (
+        <ApplicationCard
+          key={waitingInteractive.id}
+          card={waitingInteractive}
+          busy={busy}
+          onSubmit={(value) => onAction(waitingInteractive, value)}
+        />
       ) : null}
 
       {hasResult ? (
@@ -109,6 +117,14 @@ export function NodeCard({
           </button>
           {resultOpen ? (
             <div id={'result-' + node.id} className="result-body">
+              {completedInteractive ? (
+                <ApplicationCard
+                  key={completedInteractive.id}
+                  card={completedInteractive}
+                  busy={busy}
+                  onSubmit={(value) => onAction(completedInteractive, value)}
+                />
+              ) : null}
               {display ? <DisplayApplicationCard title={display.title} fields={display.fields} /> : null}
               {node.output ? <MarkdownContent markdown={node.output} /> : null}
             </div>
