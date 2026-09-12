@@ -265,7 +265,7 @@ export function cardView(card: WireCard, active: boolean): CardView {
   ) {
     throw new ContractError();
   }
-  return card.state === 'READ_ONLY'
+  return card.actions.length === 0
     ? parseDisplayCard(card)
     : parseInteractiveCard(card, active);
 }

@@ -28,7 +28,7 @@ export function NodeCard({
       : !terminal(node.status) && node.status !== 'PENDING';
   const interactive = node.card?.kind === 'INTERACTIVE' ? node.card : undefined;
   const waitingInteractive =
-    interactive?.operable && node.status === 'WAITING' ? interactive : undefined;
+    interactive && node.status === 'WAITING' ? interactive : undefined;
   const completedInteractive = interactive === waitingInteractive ? undefined : interactive;
   const display = node.card?.kind === 'DISPLAY_ONLY' ? node.card : undefined;
   const hasResult = Boolean(node.output) || Boolean(display) || Boolean(completedInteractive);
