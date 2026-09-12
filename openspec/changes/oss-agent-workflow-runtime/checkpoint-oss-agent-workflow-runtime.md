@@ -534,3 +534,21 @@
 - NextExecutableAction: commit/push this repair and request main-brain integration. Do not
   run another live/model window without a new explicit release and remaining-call review.
   Runtime remains NO READY.
+
+### AF-MVP-08 W4 result and authored-identifier repair
+
+- Status: W4 FAILED / NO W5 RELEASE. Integrated source `7492f8e` ran exactly once
+  through a temporary W4-only entry overlay and exited 1 after 31.83 seconds.
+- Private evidence proves assets=7 and listener ready at zero calls. The third admitted
+  request entered `execute_ability` and raised `AssetError` at the exact
+  `reader.py:40:_resolve` / `ASSET_NOT_FOUND` branch. Public HTTP remained JSON
+  500/`INTERNAL_ERROR`; no card, Action, copy or terminal Run assertion was reached.
+- W4 evidence SHA256 is
+  `fcd9e9f2fe7f4e06c4047c596a58cf7f5308a46f9931ab573585d5b96a1f4f3a`.
+  Cleanup/postflight passed; W2/W3 are unchanged and the W4 evidence/key are retained.
+- The authored plan Skill exposed generic Tool names but not the existing allowed Ability
+  and Application identifiers or their closed fields. It now states only
+  `activity-planning.budget`, `activity-planning.confirm`, and their existing closed
+  argument/data shapes. No retry, fallback or new authority is added.
+- NextExecutableAction: focused offline verification, commit/push and main-brain review.
+  Do not run W5 without a new explicit release. Runtime remains NO READY.

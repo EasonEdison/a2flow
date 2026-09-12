@@ -239,3 +239,31 @@ the key remains admin-owned 0600 with 36 bytes. The retained W3 evidence is admi
 0600 with SHA256
 `463cdbcaf35de3805992433b378310519f2e42562147d5e137c3a7a16539456f`.
 No second live/model window is authorized. Runtime remains NO READY.
+
+## Actual W4 result
+
+Main, server and GitHub were fixed at
+`7492f8e0d3e19ab333d15838ed16d2acf2707216`. A task-owned temporary startup
+overlay changed only the window name and evidence target for parent and child processes;
+the integrated source stayed clean. W4 ran exactly once and exited 1 after 31.83 seconds.
+
+The private backend boundary removed the remaining ambiguity. Seven assets were seeded
+and the listener became ready at zero calls. On the third admitted model request,
+`execute_ability` raised `AssetError` at `reader.py:40:_resolve`, the exact
+`ASSET_NOT_FOUND` branch. The public response remained JSON HTTP 500/
+`INTERNAL_ERROR`. No waiting card, Action, copy node or terminal Run assertion was
+reached. This proves an unresolved model-selected Ability key; it does not reveal or
+retain that value or any model content.
+
+The authored activity-planning Skill previously named the Tool but supplied neither its
+allowed Ability key nor the allowed Application key/data shape. The offline repair adds
+only those existing asset identifiers and closed argument/data fields to the Skill
+instructions. It adds no fallback, retry, alternate identifier or new authority.
+
+Cleanup and postflight passed. The exact process, container, volume, private directory,
+image, listener and temporary overlay are absent; the key remains admin-owned 0600 with
+36 bytes. W2 and W3 evidence are unchanged. W4 evidence remains admin-owned 0600 at
+`/home/admin/OpenSource/.evidence/oss-agent-workflow-runtime/af-mvp-08-live-w4.jsonl`
+with SHA256
+`fcd9e9f2fe7f4e06c4047c596a58cf7f5308a46f9931ab573585d5b96a1f4f3a`.
+No W5 is authorized. Runtime remains NO READY.

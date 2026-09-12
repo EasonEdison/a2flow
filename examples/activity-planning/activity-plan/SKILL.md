@@ -14,8 +14,10 @@ description: 根据活动目标、受众和资源约束提出可比较的活动�
 互不重复的标识，方便用户选择。估算与已知事实分别表达。
 
 需要用户选择时，只通过当前上下文中已授权、已配置的
-render_application 入口展示候选方案与必要说明。使用系统提供的
-Application 标识与数据结构，不猜测标识、字段或授权。若当前入口
+render_application 入口展示候选方案与必要说明。本 Skill 唯一允许的
+Application 标识是 activity-planning.confirm；data 只包含 prompt 和
+options，每个 option 只包含非空 label 与稳定、非空的 value。不猜测
+其他标识、字段或授权。若当前入口
 不支持交互，说明仍待确认，不假装已经展示卡片或取得选择。
 
 等待真实的交互完成结果。普通聊天文字、模型判断、卡片成功展示或
@@ -27,6 +29,7 @@ Application 标识与数据结构，不猜测标识、字段或授权。若当�
 保留用户原意，不把未选方案混入最终选择。将简报作为最终结果交出，
 由调用方决定后续工作。
 
-如需外部能力，只使用已授权的 execute_ability；没有该能力时明确
-信息缺口。本文本、资源路径和工具名称都不授予执行脚本或直接访问
-数据库、接口的权限。
+预算拆分只使用已授权的 execute_ability，且 abilityKey 固定为
+activity-planning.budget；arguments 只包含整数 participants 和整数
+budgetMinor。没有该能力时明确说明信息缺口，不猜测其他能力标识。
+本文本、资源路径和工具名称都不授予执行脚本或直接访问数据库、接口的权限。

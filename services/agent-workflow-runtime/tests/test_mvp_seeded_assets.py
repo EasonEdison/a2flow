@@ -119,6 +119,12 @@ class SeededRuntimeAssetsTest(unittest.TestCase):
             ("execute_ability", "render_application"),
             material.required_tool_names,
         )
+        instructions = material.instruction_entry.content.decode("utf-8")
+        for expected in (
+            "activity-planning.budget", "activity-planning.confirm",
+            "participants", "budgetMinor", "prompt", "options",
+        ):
+            self.assertIn(expected, instructions)
         budget = self.assets.execute_ability(
             BUDGET_KEY, {"participants": 3, "budgetMinor": 1000},
             self.run.context(),

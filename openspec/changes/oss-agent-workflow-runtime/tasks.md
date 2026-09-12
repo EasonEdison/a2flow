@@ -136,3 +136,5 @@
 - [x] W3 已在集成 SHA `0ca3d7e` 上执行一次：START_RUN 返回 JSON HTTP 500/INTERNAL_ERROR，modelCalls=6，清理 PASS，未重跑。
 - [x] 增加只写私有证据的后端异常边界分类候选；公开 HTTP 仍为通用 500，且不宣称 W3 根因已修复。
 - [x] 提示仅显式列出 Finalizer 既有必需 Tool，不含自动重试；下一次 live 仍需新的显式释放。
+- [x] W4 已在集成 SHA `7492f8e` 上执行一次：第 3 次调用在 execute_ability 的 ASSET_NOT_FOUND 分支失败，清理 PASS，未运行 W5。
+- [x] authored Skill 补齐既有 Ability/Application 标识与闭合字段；未增加重试、降级或替代标识。
