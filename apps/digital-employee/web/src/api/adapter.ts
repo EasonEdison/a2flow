@@ -202,13 +202,25 @@ const parseDisplayCard = (card: WireCard): DisplayCard => {
   ) {
     throw new ContractError();
   }
-  allowedKeys(card.inputSchema, ['type', 'additionalProperties']);
+  allowedKeys(card.inputSchema, ['type', 'required', 'additionalProperties', 'properties']);
+  const required = list(card.inputSchema.required).map(string);
+  const properties = object(card.inputSchema.properties);
+  const displayFields = ['title', 'selectedPlan', 'confirmedSchedule', 'packageSummary'];
   if (
     card.inputSchema.type !== 'object' ||
-    card.inputSchema.additionalProperties !== false
+    card.inputSchema.additionalProperties !== false ||
+    required.join(',') !== displayFields.join(',') ||
+    Object.keys(properties).sort().join(',') !== [...displayFields].sort().join(',')
   ) {
     throw new ContractError();
   }
+  displayFields.forEach((field) => {
+    const schema = object(properties[field]);
+    allowedKeys(schema, ['type', 'minLength', 'maxLength']);
+    if (schema.type !== 'string' || schema.minLength !== 1 || schema.maxLength !== 2000) {
+      throw new ContractError();
+    }
+  });
   const components = list(card.components).map(object);
   if (
     components.length !== 5 ||
