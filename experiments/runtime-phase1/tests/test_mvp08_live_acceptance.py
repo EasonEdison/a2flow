@@ -1,5 +1,6 @@
 """Opt-in MVP08 live acceptance plus offline provider-budget checks."""
 
+import asyncio
 from dataclasses import replace
 import json
 import os
@@ -10,14 +11,16 @@ import unittest
 from unittest.mock import patch
 
 import httpx
+from skillweave_contracts import TrustedContext
 
 from runtime_phase1 import mvp08_live_probe as probe
 from runtime_phase1.mvp08_live_probe import (
     MAX_OUTPUT_TOKENS_PER_CALL,
-    MODEL_CALL_LIMIT,
+    MODEL_CALL_LIMIT, ModelRequestBudgetGuard, observe_backend_failure,
     RequestBudget,
     run,
 )
+from agent_workflow_runtime.mvp_host import create_mvp_app
 
 
 def request(*, host="api.deepseek.com", tokens=MAX_OUTPUT_TOKENS_PER_CALL):
@@ -34,6 +37,62 @@ def request(*, host="api.deepseek.com", tokens=MAX_OUTPUT_TOKENS_PER_CALL):
 
 
 class ModelBudgetTest(unittest.TestCase):
+    def test_host_persists_bounded_backend_origin_but_keeps_public_500_generic(self):
+        sentinel = "sensitive-backend-message-must-not-persist"
+
+        class FailingService:
+            def __init__(self):
+                self.error = None
+
+            def start(self, *args):
+                raise self.error
+
+        async def exercise(error):
+            service = FailingService()
+            service.error = error
+            owner = TrustedContext("synthetic-user", "PRT")
+            app = create_mvp_app(
+                service, object(), lambda *args: {}, lambda scope: owner,
+                unexpected_error_observer=observe_backend_failure,
+            )
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+                base_url="http://runtime.test",
+            ) as client:
+                response = await client.post("/runtime/runs", json={
+                    "controlRequestId": "synthetic", "definitionKey": "synthetic",
+                    "inputs": {},
+                })
+            self.assertEqual(500, response.status_code)
+            self.assertEqual({"error": {"code": "INTERNAL_ERROR"}}, response.json())
+            self.assertNotIn(sentinel, response.text)
+
+        cases = (
+            (ModelRequestBudgetGuard(sentinel), "MODEL_REQUEST_BUDGET_GUARD"),
+            (httpx.ConnectError(sentinel), "PROVIDER_OR_SDK_EXCEPTION"),
+            (ValueError(sentinel), "BACKEND_EXCEPTION"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory).resolve() / "evidence.jsonl"
+            evidence.touch(mode=0o600)
+            spec = replace(probe.SPEC, evidence_file=evidence)
+            with patch.object(probe, "SPEC", spec):
+                for error, _ in cases:
+                    asyncio.run(exercise(error))
+            records = [json.loads(line) for line in evidence.read_text().splitlines()]
+        self.assertEqual([expected for _, expected in cases], [
+            record["backendCategory"] for record in records
+        ])
+        self.assertEqual(["BACKEND_FAILURE"] * 3, [record["stage"] for record in records])
+        for record in records:
+            self.assertRegex(record["backendExceptionType"], r"^[A-Za-z0-9_.<>-]{1,96}$")
+            self.assertTrue(record["backendStackFrames"])
+            self.assertTrue(all(
+                "/" not in frame and "\\\\" not in frame
+                for frame in record["backendStackFrames"]
+            ))
+        self.assertNotIn(sentinel, json.dumps(records))
+
     def test_http_error_keeps_allowlisted_code_without_response_body(self):
         sensitive = "sensitive-provider-body-must-not-persist"
         response = httpx.Response(503, json={

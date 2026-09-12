@@ -31,11 +31,17 @@ class VerifiedIdentity:
         await self.app(clean, receive, send)
 
 
-def create_mvp_app(service, views, workflow_catalog, identity_resolver, *,
-                   lifespan=None, static_directory=None, read_capacity=2, read_timeout=3):
+def create_mvp_app(
+    service, views, workflow_catalog, identity_resolver, *, lifespan=None,
+    static_directory=None, read_capacity=2, read_timeout=3,
+    unexpected_error_observer=None,
+):
     if not callable(identity_resolver):
         raise ValueError("VERIFIED_IDENTITY_RESOLVER_REQUIRED")
-    app = create_app(service, read_capacity=read_capacity, read_timeout=read_timeout)
+    app = create_app(
+        service, read_capacity=read_capacity, read_timeout=read_timeout,
+        unexpected_error_observer=unexpected_error_observer,
+    )
     if lifespan is not None:
         app.router.lifespan_context = lifespan
     reads = _Lane(read_capacity)

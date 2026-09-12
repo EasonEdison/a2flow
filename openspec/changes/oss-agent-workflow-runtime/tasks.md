@@ -133,4 +133,6 @@
 - [x] W2 固定 b1b408f 已执行一次：START_REQUEST 失败，modelCalls=4，PG FAILED、精确清理 PASS；未重跑。
 - [x] 离线补齐 HTTP status/JSON/allowlisted code/timeout/transport/host 脱敏分类；响应正文不落盘，3 PASS + 1 live SKIP。
 - [x] 为 W3 准备独立 0600 证据文件标识和 HTTP 安全定位字段；W2 证据不覆盖。
-- [ ] 用户已授权 W3 私有窗口；待 main 集成固定 SHA 后只执行一次，失败后先凭证据修复，不盲跑。
+- [x] W3 已在集成 SHA `0ca3d7e` 上执行一次：START_RUN 返回 JSON HTTP 500/INTERNAL_ERROR，modelCalls=6，清理 PASS，未重跑。
+- [x] 增加只写私有证据的后端异常边界分类候选；公开 HTTP 仍为通用 500，且不宣称 W3 根因已修复。
+- [x] 提示仅显式列出 Finalizer 既有必需 Tool，不含自动重试；下一次 live 仍需新的显式释放。

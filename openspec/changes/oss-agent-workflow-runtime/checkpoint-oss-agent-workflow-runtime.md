@@ -514,3 +514,23 @@
   or listener execution occurred during preparation.
 - NextExecutableAction: commit/push, main integration, then exactly one W3 window with complete
   exec/session capture. Runtime remains NO READY until its actual evidence is reviewed.
+
+### AF-MVP-08 W3 result and offline diagnostic candidate
+
+- Status: W3 FAILED / NO FURTHER LIVE RELEASE. Integrated source `0ca3d7e` ran exactly
+  once with complete exec/session retention and exited 1 after 47.08 seconds.
+- Safe evidence proves assets=7, listener ready at zero calls, then `START_RUN` failed at
+  `START_REQUEST` after six admitted calls. The loopback response was JSON HTTP 500 with
+  allowlisted `INTERNAL_ERROR`; `SafeHttpFailure` records `assert_status`. No card,
+  Action, copy node or terminal Run assertion was reached.
+- Evidence SHA256 is `463cdbcaf35de3805992433b378310519f2e42562147d5e137c3a7a16539456f`.
+  Cleanup/postflight passed and the 0600 evidence/key were retained.
+- The evidence cannot safely distinguish provider/SDK failure from a seventh-call guard;
+  the HTTP 500 root cause is not claimed fixed. A private observer candidate now classifies
+  that boundary as budget guard, provider/SDK, or other backend and retains only sanitized
+  exception type plus bounded basename/line/function frames. Public HTTP remains generic.
+- The prompt states the Finalizer's existing required-Tool sequence without instructing any
+  automatic retry. No fallback, model call, PG process or new live window was added.
+- NextExecutableAction: commit/push this repair and request main-brain integration. Do not
+  run another live/model window without a new explicit release and remaining-call review.
+  Runtime remains NO READY.

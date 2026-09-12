@@ -4,9 +4,11 @@ import asyncio
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import threading
 import time
+import traceback
 
 import httpx
 from pydantic import SecretStr
@@ -50,6 +52,10 @@ BACKEND_ERROR_CODES = frozenset(code for _, code in ERRORS.values()) | frozenset
     "RUNTIME_ERROR",
     "SUBSCRIBER_CAPACITY_EXHAUSTED",
 })
+BACKEND_DIAGNOSTIC_FRAME_LIMIT = 8
+BACKEND_DIAGNOSTIC_TOKEN = re.compile(r"^[A-Za-z0-9_.<>-]{1,96}$")
+PROVIDER_EXCEPTION_MODULES = ("httpx", "openai", "langchain_deepseek")
+PROVIDER_EXCEPTION_TYPES = frozenset({"DeepSeekProtocolError"})
 
 
 class SafeHttpFailure(RuntimeError):
@@ -65,6 +71,63 @@ class SafeHttpFailure(RuntimeError):
         }
         if error_code is not None:
             self.evidence["errorCode"] = error_code
+
+
+class ModelRequestBudgetGuard(RuntimeError):
+    """A seventh request was rejected locally before network dispatch."""
+
+
+def _exception_chain(error):
+    observed = set()
+    while isinstance(error, BaseException) and id(error) not in observed:
+        observed.add(id(error))
+        yield error
+        error = error.__cause__ or error.__context__
+
+
+def _backend_diagnostic(error):
+    chain = tuple(_exception_chain(error))
+    selected = chain[0]
+    category = "BACKEND_EXCEPTION"
+    for candidate in chain:
+        if isinstance(candidate, ModelRequestBudgetGuard):
+            selected = candidate
+            category = "MODEL_REQUEST_BUDGET_GUARD"
+            break
+    else:
+        prefixes = tuple(item + "." for item in PROVIDER_EXCEPTION_MODULES)
+        for candidate in chain:
+            module = type(candidate).__module__
+            if (module in PROVIDER_EXCEPTION_MODULES or module.startswith(prefixes)
+                    or type(candidate).__name__ in PROVIDER_EXCEPTION_TYPES):
+                selected = candidate
+                category = "PROVIDER_OR_SDK_EXCEPTION"
+                break
+    exception_type = type(selected).__name__
+    if not BACKEND_DIAGNOSTIC_TOKEN.fullmatch(exception_type):
+        exception_type = "UNKNOWN_EXCEPTION"
+    frames = []
+    for frame in traceback.extract_tb(selected.__traceback__)[-BACKEND_DIAGNOSTIC_FRAME_LIMIT:]:
+        filename = Path(frame.filename).name
+        function = frame.name
+        if (BACKEND_DIAGNOSTIC_TOKEN.fullmatch(filename)
+                and BACKEND_DIAGNOSTIC_TOKEN.fullmatch(function)):
+            frames.append(f"{filename}:{frame.lineno}:{function}")
+    return {
+        "backendCategory": category,
+        "backendExceptionType": exception_type,
+        "backendStackFrames": frames,
+    }
+
+
+def observe_backend_failure(error):
+    """Persist a bounded private diagnostic without changing the public response."""
+    try:
+        shared.append_evidence(
+            "BACKEND_FAILURE", window=SPEC, **_backend_diagnostic(error),
+        )
+    except Exception:
+        pass
 
 
 class RequestBudget:
@@ -95,7 +158,7 @@ class RequestBudget:
             raise RuntimeError("MODEL_BUDGET_NOT_APPLIED")
         with self._lock:
             if self._calls >= MODEL_CALL_LIMIT:
-                raise RuntimeError("MODEL_CALL_LIMIT_EXCEEDED")
+                raise ModelRequestBudgetGuard("MODEL_CALL_LIMIT_EXCEEDED")
             self._calls += 1
 
 
@@ -335,6 +398,7 @@ def _execute(progress):
         operation_specs=deployment.operations(),
         model_factory=WindowModelFactory(owner, model_key, budget),
         identity_resolver=lambda scope: owner,
+        unexpected_error_observer=observe_backend_failure,
     )
     progress["stage"] = "LISTENER_START"
     assert_listener_available()

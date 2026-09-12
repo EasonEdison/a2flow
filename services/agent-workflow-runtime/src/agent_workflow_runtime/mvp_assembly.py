@@ -102,7 +102,7 @@ class MvpRuntimeHost:
         self, *, conninfo, database, environment, namespace, bundle_validator,
         application_validator, operation_specs, model_factory, identity_resolver,
         model_reference="deepseek-v4-flash", static_directory=None,
-        checkpointer_factory=None,
+        checkpointer_factory=None, unexpected_error_observer=None,
     ):
         if not callable(identity_resolver):
             raise ValueError("VERIFIED_IDENTITY_RESOLVER_REQUIRED")
@@ -115,6 +115,7 @@ class MvpRuntimeHost:
         self.model_factory = model_factory
         self.model_reference = model_reference
         self.static_directory = static_directory
+        self.unexpected_error_observer = unexpected_error_observer
         self._checkpointer_factory = checkpointer_factory or (
             lambda: PostgresSaver.from_conn_string(conninfo)
         )
@@ -166,11 +167,14 @@ class MvpRuntimeHost:
             "nextCursor": WORKFLOW_CURSOR + page[-1]["definitionKey"] if more and page else None,
         }
 
-    def _system_prompt(self, node):
+    def _system_prompt(self, node, required_tool_names):
+        required = ", ".join(required_tool_names)
         return (
             "This is one compiled workflow node. First call use_skill with exactly "
             f"skillKey={node['skillKey']!r}. Follow that Skill and use only the "
-            "Tools exposed to this node. Do not claim confirmation before the "
+            "Tools exposed to this node. Before producing any terminal text, the "
+            f"Finalizer requires these Tools to have returned successfully: {required}. "
+            "Do not claim confirmation before the "
             "interactive Tool returns a saved successful Action result."
         )
 
@@ -219,7 +223,7 @@ class MvpRuntimeHost:
                         terminal_guard=service.assert_finalizable,
                         run_lifecycle=lifecycle, progress=self.progress,
                         node_context=run.context(node["nodeId"]),
-                        system_prompt=self._system_prompt(node),
+                        system_prompt=self._system_prompt(node, required),
                     )
                 context_loader = lambda node_ids: confirmed_context(
                     self.interactions, run, node_ids,
@@ -271,4 +275,5 @@ class MvpRuntimeHost:
         return create_mvp_app(
             self.service, self.views, self.workflow_catalog, self._owner,
             lifespan=self.lifespan, static_directory=self.static_directory,
+            unexpected_error_observer=self.unexpected_error_observer,
         )

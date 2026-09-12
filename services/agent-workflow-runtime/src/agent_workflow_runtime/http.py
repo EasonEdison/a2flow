@@ -170,7 +170,10 @@ class Action(Restart):
     actionName: str = Field(min_length=1, max_length=256)
 
 
-def create_app(service, *, execution_capacity=2, read_capacity=2, stop_capacity=1, read_timeout=3):
+def create_app(
+    service, *, execution_capacity=2, read_capacity=2, stop_capacity=1,
+    read_timeout=3, unexpected_error_observer=None,
+):
     """Host middleware must set scope['a2flow.trusted_context'] to TrustedContext.
 
     Client headers/body/query cannot populate this scope key. The host is the
@@ -179,6 +182,8 @@ def create_app(service, *, execution_capacity=2, read_capacity=2, stop_capacity=
     """
     if type(read_timeout) not in (int, float) or not math.isfinite(read_timeout) or not 0 < read_timeout <= 10:
         raise ValueError("read timeout must be finite and within (0, 10] seconds")
+    if unexpected_error_observer is not None and not callable(unexpected_error_observer):
+        raise ValueError("unexpected error observer must be callable")
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.add_middleware(BodyLimit)
     execution, reads, stops = (_Lane(execution_capacity), _Lane(read_capacity), _Lane(stop_capacity))
@@ -199,6 +204,11 @@ def create_app(service, *, execution_capacity=2, read_capacity=2, stop_capacity=
 
     @app.exception_handler(Exception)
     async def unexpected(request, error):
+        if unexpected_error_observer is not None:
+            try:
+                unexpected_error_observer(error)
+            except Exception:
+                pass
         return error_response(500, "INTERNAL_ERROR")
 
     @app.post("/runtime/runs")

@@ -21,7 +21,7 @@ from agent_workflow_runtime.lifecycle import RunLifecycle
 from agent_workflow_runtime.assembly import build_engine
 from agent_workflow_runtime.asset_adapters import OperationSpec, RuntimeAssets
 from agent_workflow_runtime.models import ActionRejected, Interaction
-from agent_workflow_runtime.mvp_assembly import confirmed_context
+from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost, confirmed_context
 from agent_workflow_runtime.mvp_tools import build_tools, validators
 from agent_workflow_runtime.native_control import ControlledRunRunner
 from lifecycle_support import RunRepository, fixture
@@ -127,6 +127,20 @@ class SeededRuntimeAssetsTest(unittest.TestCase):
         application = self.assets.application(APPLICATION_KEY, self.run.context())
         self.assertTrue(application_validator(application["application"]))
         self.assertEqual(dict(self.run.versions), dict(application["recordedVersions"]))
+
+    def test_node_prompt_names_every_required_tool_before_terminal_text(self):
+        host = object.__new__(MvpRuntimeHost)
+        prompt = host._system_prompt(
+            {"skillKey": "activity-planning/plan"},
+            ("use_skill", "execute_ability", "render_application"),
+        )
+        self.assertIn("First call use_skill", prompt)
+        self.assertIn(
+            "Finalizer requires these Tools to have returned successfully: "
+            "use_skill, execute_ability, render_application",
+            prompt,
+        )
+        self.assertNotIn("call the same required Tool again", prompt)
 
     def test_seeded_confirmation_is_action_only_and_option_bound(self):
         with self.assertRaisesRegex(ActionRejected, "ABILITY_NOT_MODEL_CALLABLE"):

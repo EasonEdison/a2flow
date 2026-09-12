@@ -211,3 +211,31 @@ W3 preparation SHA256 values:
 
 W3 is not yet executed. It is one attempt only after main integrates the final source SHA;
 any failure requires evidence-led source repair before another model window is considered.
+
+## Actual W3 result
+
+Main, server and GitHub were fixed at
+`0ca3d7e9371fc74cf7fcfb9c382ee3c15ab49fbf`; the clean worker executed W3 exactly
+once and retained the complete exec session. The child exited 1 after 47.08 seconds.
+Durable safe evidence proves that seven assets were seeded and the loopback listener
+became ready with zero model calls. `START_RUN` then failed at `START_REQUEST` after
+six admitted provider requests: the loopback response was JSON HTTP 500 with allowlisted
+code `INTERNAL_ERROR`, recorded as `SafeHttpFailure` at `assert_status`. No waiting
+card, Action, copy node or terminal Run assertion was reached.
+
+The bounded record does not distinguish a provider/SDK failure from a seventh request
+rejected before dispatch, so neither is inferred and the HTTP 500 root cause is not
+claimed fixed. The post-W3 candidate keeps the public response generic while a private
+observer writes one fixed category: `MODEL_REQUEST_BUDGET_GUARD`,
+`PROVIDER_OR_SDK_EXCEPTION`, or `BACKEND_EXCEPTION`. It retains only a sanitized
+exception type and at most eight `basename:line:function` frames; messages, locals,
+source lines, absolute paths and response bodies are excluded. The prompt now states the
+Finalizer's existing ordered required-Tool set, but adds no automatic retry instruction,
+fallback or new authority.
+
+Cleanup and postflight passed: the exact process, container, volume, private directory,
+image and listener are absent; Git remained clean at the fixed source during the window;
+the key remains admin-owned 0600 with 36 bytes. The retained W3 evidence is admin-owned
+0600 with SHA256
+`463cdbcaf35de3805992433b378310519f2e42562147d5e137c3a7a16539456f`.
+No second live/model window is authorized. Runtime remains NO READY.
