@@ -34,6 +34,7 @@ from agent_workflow_runtime.langgraph_adapter import LangGraphContinuation
 from agent_workflow_runtime.lifecycle import RunLifecycle
 from agent_workflow_runtime.mvp_tools import build_tools, validators
 from agent_workflow_runtime.native_control import ControlledRunRunner
+from agent_workflow_runtime.serialization import decode, encode
 from agent_workflow_runtime.ui_projection import (
     change_node, complete_node, initial_view, project_view,
 )
@@ -267,6 +268,7 @@ class ThreeNodeDemoTest(unittest.TestCase):
         self.assertEqual("SUCCEEDED", lifecycle.read(owner, run.run_id).status)
         final = next(item for item in interactions.items.values()
                      if item.context.invocation_scope.node_id == "show_activity_package")
+        self.assertEqual(final, decode(encode(final)))
         self.assertEqual(("COMPLETED", False, True),
                          (final.phase, final.node_waiting, final.resume_consumed))
         card = json.loads(final.display_json)

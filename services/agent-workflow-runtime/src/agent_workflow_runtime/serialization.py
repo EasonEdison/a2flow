@@ -67,6 +67,7 @@ def decode(document):
             _text(data[name])
         for name in ("run_active", "node_waiting", "resume_started", "resume_consumed"):
             _boolean(data[name])
+        display = None
         if data["display_json"] is not None:
             display = _json(data["display_json"])
             if type(display) is not dict:
@@ -118,15 +119,29 @@ def decode(document):
             raise ValueError("duplicate control request")
         completion = next((a for a in attempts if
                            a.request.control_request_id == result.completion_request_id), None)
+        scope = result.context.invocation_scope
+        display_only = (
+            result.phase == "COMPLETED" and result.run_active
+            and not result.node_waiting and not result.attempts
+            and result.completion_request_id is None and not result.resume_started
+            and result.resume_consumed and type(display) is dict
+            and display.get("interactionId") == result.interaction_id
+            and display.get("applicationKey") == result.application_key
+            and display.get("applicationVersion") == result.application_version
+            and display.get("nodeId") == scope.node_id
+            and display.get("state") == "READ_ONLY"
+            and display.get("actionEligibility") == "NOT_OPERABLE"
+            and display.get("actions") == []
+        )
         requires_completion = (result.phase == "COMPLETED" or result.resume_started
                                or result.resume_consumed or result.completion_request_id is not None)
-        if requires_completion and (
+        if requires_completion and not display_only and (
             completion is None or completion.status != "EXECUTED"
             or not completion.business_success or not completion.interaction_completed
             or completion.result_json is None
         ):
             raise ValueError("real successful completion reference required")
-        if result.resume_consumed and not result.resume_started:
+        if result.resume_consumed and not result.resume_started and not display_only:
             raise ValueError("consumption requires dispatch reservation")
         if result.completion_request_id is not None and result.phase not in {"COMPLETED", "INVALIDATED"}:
             raise ValueError("completion phase mismatch")

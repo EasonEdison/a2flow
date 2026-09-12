@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import replace
+import json
 import unittest
 
 from agent_workflow_runtime import ActionRejected, ActionService
@@ -103,6 +104,35 @@ class SerializationTest(unittest.TestCase):
         legacy["schemaVersion"] = 1
         del legacy["display_json"]
         self.assertEqual(empty, decode(legacy))
+
+    def test_display_only_completion_round_trips_without_forging_action_completion(self):
+        empty = interaction(Configuration())
+        scope = empty.context.invocation_scope
+        card = {
+            "interactionId": empty.interaction_id,
+            "applicationKey": empty.application_key,
+            "applicationVersion": empty.application_version,
+            "nodeId": scope.node_id,
+            "state": "READ_ONLY",
+            "actionEligibility": "NOT_OPERABLE",
+            "actions": [],
+        }
+        displayed = replace(
+            empty, display_json=json.dumps(card), phase="COMPLETED",
+            node_waiting=False, resume_consumed=True,
+        )
+        self.assertEqual(displayed, decode(encode(displayed)))
+        for change in (
+            {"run_active": False},
+            {"node_waiting": True},
+            {"resume_started": True},
+            {"display_json": json.dumps({**card, "actions": [{}]})},
+            {"display_json": json.dumps({**card, "nodeId": "other"})},
+        ):
+            with self.subTest(change=change), self.assertRaisesRegex(
+                ActionRejected, "INVALID_STORED_RECORD",
+            ):
+                encode(replace(displayed, **change))
 
     def test_display_snapshot_must_be_a_json_object(self):
         empty = interaction(Configuration())
