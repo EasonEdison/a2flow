@@ -159,10 +159,11 @@ const parseInteractiveCard = (card: WireCard, active: boolean): InteractiveCard 
     throw new ContractError();
   }
   const optionId = object(properties.optionId);
-  allowedKeys(optionId, legacyCard ? ['type', 'minLength', 'maxLength'] : ['type']);
+  allowedKeys(optionId, ['type', 'minLength', 'maxLength']);
   if (
     optionId.type !== 'string' ||
-    (legacyCard && (optionId.minLength !== 1 || optionId.maxLength !== 128))
+    optionId.minLength !== 1 ||
+    optionId.maxLength !== 128
   ) {
     throw new ContractError();
   }
