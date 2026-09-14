@@ -58,6 +58,10 @@ class SkillManagementFeature(ManagementFeature):
     def _runtime_context(self, context):
         return TrustedContext(context.user_id, context.environment)
 
+    def _draft_context(self, context):
+        if context.environment != self.drafts.environment:
+            raise ManagementError("DRAFT_ENVIRONMENT_MISMATCH", 403)
+
     def list_published(self, context):
         runtime = self._runtime_context(context)
         result = []
@@ -92,6 +96,7 @@ class SkillManagementFeature(ManagementFeature):
 
     def get_draft(self, context, key):
         parse_skill_key(key)
+        self._draft_context(context)
         draft = self.drafts.get(self.namespace, self.kind, key)
         if draft is not None:
             return draft
@@ -115,6 +120,7 @@ class SkillManagementFeature(ManagementFeature):
 
     def save_draft(self, context, key, expected_revision, document):
         parse_skill_key(key)
+        self._draft_context(context)
         candidate = ManagedDraft.create(
             self.kind, key, 1, document, context.user_id)
         return self.drafts.save(self.namespace, candidate, expected_revision)
@@ -157,8 +163,7 @@ class SkillManagementFeature(ManagementFeature):
             raise ManagementError(code) from None
         return definition
 
-    def validate_draft(self, context, key):
-        draft = self.get_draft(context, key)
+    def _validate_snapshot(self, draft, context):
         try:
             definition = self._validate_document(draft.document, context)
         except ManagementError as error:
@@ -173,11 +178,14 @@ class SkillManagementFeature(ManagementFeature):
             ],
         })
 
+    def validate_draft(self, context, key):
+        return self._validate_snapshot(self.get_draft(context, key), context)
+
     def prepare_publication(self, context, key, expected_revision, target):
         draft = self.get_draft(context, key)
         if draft.revision != expected_revision:
             raise ManagementError("DRAFT_REVISION_CONFLICT", 409)
-        report = self.validate_draft(context, key)
+        report = self._validate_snapshot(draft, context)
         if not report.valid:
             raise ManagementError("DRAFT_NOT_PUBLISHABLE", 409)
         normalized = report.normalized

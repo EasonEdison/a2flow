@@ -15,6 +15,9 @@ _DDL = (
 
 
 class DraftRepository(ABC):
+    @property
+    @abstractmethod
+    def environment(self): ...
     @abstractmethod
     def get(self, namespace, kind, key): ...
     @abstractmethod
@@ -23,8 +26,14 @@ class DraftRepository(ABC):
 
 class MemoryDraftRepository(DraftRepository):
     """Deterministic test/development adapter; never an implicit production fallback."""
-    def __init__(self):
-        self._rows = {}
+    def __init__(self, environment):
+        if environment not in {"PRT", "ONLINE"}:
+            raise ManagementError("INVALID_TRUSTED_ENVIRONMENT")
+        self._environment, self._rows = environment, {}
+
+    @property
+    def environment(self):
+        return self._environment
 
     def get(self, namespace, kind, key):
         return self._rows.get((namespace, kind, key))
@@ -48,8 +57,12 @@ class PostgresDraftRepository(DraftRepository):
             raise ManagementError("INVALID_TRUSTED_ENVIRONMENT")
         if type(database) is not str or not database:
             raise ManagementError("EXACT_DATABASE_REQUIRED")
-        self.environment, self.database = environment, database
+        self._environment, self.database = environment, database
         self._conninfo, self._connect = conninfo, connection_factory
+
+    @property
+    def environment(self):
+        return self._environment
 
     @contextmanager
     def _connection(self):

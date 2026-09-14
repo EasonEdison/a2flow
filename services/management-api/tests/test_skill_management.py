@@ -64,7 +64,7 @@ class FakeReader:
 class ManagementSkillTests(unittest.TestCase):
     def setUp(self):
         self.reader = FakeReader()
-        self.drafts = MemoryDraftRepository()
+        self.drafts = MemoryDraftRepository("PRT")
         self.feature = create_skill_feature(
             self.reader, self.drafts, "a2flow-mvp-activity-planning")
         self.service = ManagementService([self.feature])
@@ -132,6 +132,60 @@ class ManagementSkillTests(unittest.TestCase):
             self.service.prepare_publication(
                 self.admin, "SKILL", "activity-planning/plan", 1,
                 PublicationTarget("ONLINE", "v2", "STABLE"))
+
+    def test_publication_validates_the_same_draft_snapshot(self):
+        first = self.drafts.save(
+            "a2flow-mvp-activity-planning",
+            __import__("a2flow_management").ManagedDraft.create(
+                "SKILL", "activity-planning/plan", 1,
+                self.draft_document(), "admin-1"), 0)
+        second = __import__("a2flow_management").ManagedDraft.create(
+            "SKILL", "activity-planning/plan", 2,
+            {**self.draft_document(), "skillMd": SKILL_MD + "\\nchanged"},
+            "admin-1")
+
+        class MovingDrafts:
+            environment = "PRT"
+            def __init__(inner):
+                inner.calls = 0
+            def get(inner, namespace, kind, key):
+                inner.calls += 1
+                return first if inner.calls == 1 else second
+            def save(inner, namespace, draft, expected_revision):
+                raise AssertionError("publication must not save")
+
+        moving = MovingDrafts()
+        service = ManagementService([
+            create_skill_feature(self.reader, moving,
+                                 "a2flow-mvp-activity-planning")])
+        plan = service.prepare_publication(
+            self.admin, "SKILL", "activity-planning/plan", 1,
+            PublicationTarget("PRT", "v2", "CURRENT"))
+        self.assertEqual(1, plan.draft_revision)
+        self.assertEqual(1, moving.calls)
+
+    def test_wrong_environment_rejected_before_draft_io(self):
+        class CountingDrafts:
+            environment = "PRT"
+            def __init__(inner):
+                inner.calls = 0
+            def get(inner, namespace, kind, key):
+                inner.calls += 1
+                raise AssertionError("must reject before get")
+            def save(inner, namespace, draft, expected_revision):
+                inner.calls += 1
+                raise AssertionError("must reject before save")
+
+        drafts = CountingDrafts()
+        service = ManagementService([
+            create_skill_feature(self.reader, drafts,
+                                 "a2flow-mvp-activity-planning")])
+        online = TrustedManagementContext(
+            "admin-1", "ONLINE", frozenset({"ADMIN"}))
+        with self.assertRaisesRegex(ManagementError, "DRAFT_ENVIRONMENT_MISMATCH"):
+            service.get_draft(
+                online, "SKILL", "activity-planning/plan")
+        self.assertEqual(0, drafts.calls)
 
 
 if __name__ == "__main__":
