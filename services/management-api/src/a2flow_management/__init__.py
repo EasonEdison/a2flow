@@ -3,10 +3,12 @@ from .contracts import (
     ManagedDraft, ManagementError, PublicationPlan, PublicationTarget,
     TrustedManagementContext, ValidationReport, require_admin,
 )
+from .repositories import DraftRepository, MemoryDraftRepository, PostgresDraftRepository
 from .service import ManagementFeature, ManagementService
 
 __all__ = [
-    "ManagedDraft", "ManagementError", "ManagementFeature", "ManagementService",
+    "DraftRepository", "ManagedDraft", "ManagementError", "ManagementFeature",
+    "ManagementService", "MemoryDraftRepository", "PostgresDraftRepository",
     "PublicationPlan", "PublicationTarget", "TrustedManagementContext",
     "ValidationReport", "require_admin",
 ]

@@ -77,7 +77,7 @@ class ManagedDraft:
             raise ManagementError("INVALID_ASSET_KIND")
         identifier(key, "INVALID_ASSET_KEY")
         identifier(updated_by, "INVALID_TRUSTED_USER")
-        if type(revision) is not int or revision < 1:
+        if type(revision) is not int or revision < 0:
             raise ManagementError("INVALID_DRAFT_REVISION")
         data = canonical(document)
         return cls(kind, key, revision, data,
@@ -127,6 +127,8 @@ class PublicationTarget:
     gray_user_ids: tuple[str, ...] = ()
 
     def __post_init__(self):
+        if type(self.gray_user_ids) is not tuple:
+            raise ManagementError("INVALID_GRAY_USERS")
         identifier(self.version_id, "INVALID_VERSION")
         if self.environment == "PRT":
             if self.channel != "CURRENT" or self.gray_user_ids:

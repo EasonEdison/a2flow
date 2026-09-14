@@ -1,0 +1,1 @@
+"""Asset-kind feature modules."""

@@ -88,6 +88,18 @@ class AssetReader(CatalogPort, MaterialPort):
                 skill_key, asset.asset_id, asset.version_id, asset.content_digest,
                 owner.environment, selection, "asset:" + asset.content_digest[7:]))
 
+    def resolve_asset(self, kind, key, context):
+        """Backend-only resolved record for trusted management adapters."""
+        _, _, asset, selection, versions = self._read(kind, key, context)
+        document = asset.document
+        return {
+            "kind": asset.kind, "key": asset.key, "assetId": asset.asset_id,
+            "versionId": asset.version_id, "contentDigest": asset.content_digest,
+            "definition": document["definition"],
+            "dependencies": document["dependencies"],
+            "selection": selection, "recordedVersions": versions,
+        }
+
     def resolve_workflow(self, definition_key, owner):
         _, _, asset, _, versions = self._read("WORKFLOW", definition_key, owner)
         return ResolvedWorkflow(canonical(asset.definition), versions)
