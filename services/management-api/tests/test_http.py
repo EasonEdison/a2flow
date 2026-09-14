@@ -1,5 +1,6 @@
 """Offline HTTP contract tests; no listener, database or publication write."""
 import asyncio
+import time
 import unittest
 
 import httpx
@@ -123,6 +124,30 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(413, response.status_code)
         response = self.call("GET", "/management/assets/SKILL?role=ADMIN")
         self.assertEqual(400, response.status_code)
+
+    def test_slow_sync_service_does_not_block_event_loop(self):
+        self.identity["value"] = TrustedManagementContext(
+            "user-1", "PRT", frozenset({"USER"}))
+        original = self.feature.list_published
+
+        def slow(context):
+            time.sleep(0.15)
+            return original(context)
+
+        self.feature.list_published = slow
+
+        async def scenario():
+            started = time.monotonic()
+            pending = asyncio.create_task(request(
+                self.app, "GET", "/management/assets/SKILL"))
+            await asyncio.sleep(0.02)
+            elapsed = time.monotonic() - started
+            self.assertLess(elapsed, 0.08)
+            self.assertFalse(pending.done())
+            response = await pending
+            self.assertEqual(200, response.status_code)
+
+        asyncio.run(scenario())
 
 
 if __name__ == "__main__":

@@ -134,27 +134,27 @@ def create_app(service, *, identity_resolver):
         return _error(500, "INTERNAL_ERROR")
 
     @app.get("/management/assets/{kind}")
-    async def list_published(request: Request, kind: str):
+    def list_published(request: Request, kind: str):
         return _response(service.list_published(context(request), kind))
 
     @app.get("/management/assets/{kind}/{key:path}/draft")
-    async def get_draft(request: Request, kind: str, key: str):
+    def get_draft(request: Request, kind: str, key: str):
         return _response(service.get_draft(
             context(request), kind, key_value(key)))
 
     @app.put("/management/assets/{kind}/{key:path}/draft")
-    async def save_draft(request: Request, kind: str, key: str, body: SaveDraft):
+    def save_draft(request: Request, kind: str, key: str, body: SaveDraft):
         return _response(service.save_draft(
             context(request), kind, key_value(key),
             body.expectedRevision, body.document))
 
     @app.post("/management/assets/{kind}/{key:path}/validate")
-    async def validate_draft(request: Request, kind: str, key: str):
+    def validate_draft(request: Request, kind: str, key: str):
         return _response(service.validate_draft(
             context(request), kind, key_value(key)))
 
     @app.post("/management/assets/{kind}/{key:path}/publication-plans")
-    async def prepare(request: Request, kind: str, key: str,
+    def prepare(request: Request, kind: str, key: str,
                       body: PreparePublication):
         who = context(request)
         target = PublicationTarget(
@@ -168,7 +168,7 @@ def create_app(service, *, identity_resolver):
         return _response(result)
 
     @app.get("/management/assets/{kind}/{key:path}")
-    async def detail(request: Request, kind: str, key: str):
+    def detail(request: Request, kind: str, key: str):
         return _response(service.get_published(
             context(request), kind, key_value(key)))
 
