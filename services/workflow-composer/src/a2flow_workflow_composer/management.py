@@ -86,7 +86,8 @@ class WorkflowManagementFeature(ManagementFeature):
             raise ManagementError("INVALID_WORKFLOW_DRAFT_FIELDS")
         if document["definitionKey"] != key:
             raise ManagementError("WORKFLOW_KEY_MISMATCH")
-        if document["topology"] not in _TOPOLOGIES:
+        if (type(document["topology"]) is not str
+                or document["topology"] not in _TOPOLOGIES):
             raise ManagementError("INVALID_WORKFLOW_TOPOLOGY")
         nodes = document["nodes"]
         if type(nodes) is not list or len(nodes) > 64:

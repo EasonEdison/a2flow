@@ -151,6 +151,22 @@ class WorkflowManagementTests(unittest.TestCase):
         self.assertFalse(report.valid)
         self.assertEqual("ASSET_NOT_FOUND", report.issues[0]["code"])
 
+    def test_non_string_topology_is_rejected_without_saving(self):
+        for topology in ({}, []):
+            with self.subTest(topology=topology):
+                drafts = MemoryDraftRepository("PRT")
+                service = ManagementService([create_workflow_feature(
+                    self.reader, drafts, NAMESPACE, FakeValidator())])
+                document = self.document()
+                document["topology"] = topology
+
+                with self.assertRaisesRegex(
+                        ManagementError, "INVALID_WORKFLOW_TOPOLOGY"):
+                    service.save_draft(
+                        self.admin, "WORKFLOW", WORKFLOW_KEY, 0, document)
+                self.assertIsNone(
+                    drafts.get(NAMESPACE, "WORKFLOW", WORKFLOW_KEY))
+
     def test_revision_and_environment_fail_closed_before_io(self):
         self.service.save_draft(
             self.admin, "WORKFLOW", WORKFLOW_KEY, 0, self.document())
