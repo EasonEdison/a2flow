@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import threading
+import tempfile
 import traceback
 
 import httpx
@@ -17,8 +18,14 @@ from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 
 
 _TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]{0,127}")
-_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,127}")
 _DIAGNOSTIC_LIMIT = 256 * 1024
+_BUDGET_ERROR_CODES = frozenset({
+    "MODEL_BUDGET_STATE_INVALID",
+    "MODEL_CALL_LIMIT_EXCEEDED",
+    "UNEXPECTED_PROVIDER_DESTINATION",
+    "INVALID_PROVIDER_REQUEST",
+    "MODEL_BUDGET_NOT_APPLIED",
+})
 
 
 class ModelRequestBudgetGuard(RuntimeError):
@@ -80,17 +87,21 @@ class RequestBudget:
 
     def _admit_persisted(self):
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        descriptor = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
-        with os.fdopen(descriptor, "r+", encoding="utf-8") as stream:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-            raw = stream.read()
-            if raw:
-                try:
-                    state = json.loads(raw)
-                except (TypeError, ValueError):
-                    raise ModelRequestBudgetGuard("MODEL_BUDGET_STATE_INVALID") from None
-            else:
+        lock_path = self.path.with_name(self.path.name + ".lock")
+        lock_descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        with os.fdopen(lock_descriptor, "r+", encoding="utf-8") as lock_stream:
+            os.fchmod(lock_stream.fileno(), 0o600)
+            fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+            if not self.path.exists():
                 state = {"schemaVersion": 1, "limit": self.limit, "calls": 0}
+            else:
+                try:
+                    raw = self.path.read_text(encoding="utf-8")
+                    if not raw:
+                        raise ValueError
+                    state = json.loads(raw)
+                except (OSError, TypeError, ValueError):
+                    raise ModelRequestBudgetGuard("MODEL_BUDGET_STATE_INVALID") from None
             if (type(state) is not dict or set(state) != {"schemaVersion", "limit", "calls"}
                     or state["schemaVersion"] != 1 or state["limit"] != self.limit
                     or type(state["calls"]) is not int or not 0 <= state["calls"] <= self.limit):
@@ -98,11 +109,29 @@ class RequestBudget:
             if state["calls"] >= self.limit:
                 raise ModelRequestBudgetGuard("MODEL_CALL_LIMIT_EXCEEDED")
             state["calls"] += 1
-            stream.seek(0)
-            stream.truncate()
-            json.dump(state, stream, sort_keys=True, separators=(",", ":"))
-            stream.flush()
-            os.fsync(stream.fileno())
+            temporary = None
+            try:
+                descriptor, temporary = tempfile.mkstemp(
+                    prefix=self.path.name + ".", dir=self.path.parent,
+                )
+                with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                    os.fchmod(stream.fileno(), 0o600)
+                    json.dump(state, stream, sort_keys=True, separators=(",", ":"))
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, self.path)
+                temporary = None
+                directory = os.open(self.path.parent, os.O_RDONLY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+            finally:
+                if temporary is not None:
+                    try:
+                        os.unlink(temporary)
+                    except FileNotFoundError:
+                        pass
 
     def admit(self, request, body):
         if (request.method != "POST" or request.url.scheme != "https"
@@ -205,9 +234,9 @@ class SafeErrorObserver:
             exception_type = type(error).__name__
             if not _TOKEN.fullmatch(exception_type):
                 exception_type = "UnknownError"
-            code = str(error)
-            if not _CODE.fullmatch(code):
-                code = None
+            candidate = str(error)
+            code = (candidate if isinstance(error, ModelRequestBudgetGuard)
+                    and candidate in _BUDGET_ERROR_CODES else None)
             frames = []
             for frame in traceback.extract_tb(error.__traceback__)[-4:]:
                 filename = Path(frame.filename).name
@@ -228,6 +257,7 @@ class SafeErrorObserver:
                     return
                 descriptor = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
                 try:
+                    os.fchmod(descriptor, 0o600)
                     os.write(descriptor, encoded)
                     os.fsync(descriptor)
                 finally:

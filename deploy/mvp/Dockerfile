@@ -1,6 +1,9 @@
 ARG PYTHON_IMAGE=python:3.11.14-slim-bookworm@sha256:65a93d69fa75478d554f4ad27c85c1e69fa184956261b4301ebaf6dbb0a3543d
 FROM ${PYTHON_IMAGE}
 
+ARG A2FLOW_UID=10001
+ARG A2FLOW_GID=10001
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -26,10 +29,11 @@ COPY services/agent-workflow-runtime services/agent-workflow-runtime
 COPY examples/activity-planning examples/activity-planning
 COPY deploy deploy
 
-RUN groupadd --system a2flow \
-    && useradd --system --gid a2flow --home-dir /nonexistent --shell /usr/sbin/nologin a2flow \
+RUN groupadd --system --gid ${A2FLOW_GID} a2flow \
+    && useradd --system --uid ${A2FLOW_UID} --gid ${A2FLOW_GID} \
+        --home-dir /nonexistent --shell /usr/sbin/nologin a2flow \
     && install -d -o a2flow -g a2flow -m 0700 /var/lib/a2flow
 
-USER a2flow
+USER 10001:10001
 EXPOSE 8765
 CMD ["python", "-m", "uvicorn", "deploy.mvp.app:app", "--host", "0.0.0.0", "--port", "8765", "--no-access-log"]

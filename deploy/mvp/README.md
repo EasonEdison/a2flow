@@ -34,6 +34,20 @@ private secret directory outside the repository containing exactly
 `postgres_password` and `deepseek_api_key`; do not put secret values in the env
 file. The UI path must name an already-built `apps/digital-employee/web/dist`.
 
+The Runtime and seed containers run as the fixed numeric identity
+`10001:10001`. Prepare only the exact task-owned files for that identity. One
+`postgres_password` source file is mounted into both services: the PostgreSQL
+entrypoint begins as container root and can read it, while Runtime reads it as
+group `10001`. Set that file to owner `root`, group `10001`, mode `0440` (or an
+equivalent exact-file ACL). Set `deepseek_api_key` to owner/group `10001` and
+mode `0400`. Give group `10001` read/execute only on the chosen static directory
+and read only on its files, for example directories `0750` and files `0640`.
+Apply these permissions only to the dedicated secret directory and copied UI
+artifact; do not make a shared parent tree world-readable and do not change
+global host groups or security policy. The operator must perform and verify
+these exact-file permissions before Compose starts; this repository does not
+alter host permissions automatically.
+
 Render the final configuration before any build or start:
 
 ```bash
