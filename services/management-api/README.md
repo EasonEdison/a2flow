@@ -54,3 +54,26 @@ exception text.
 
 No listener starts on import. The existing hash-pinned FastAPI/Starlette runtime
 dependencies are reused; this package does not install dependencies itself.
+
+
+## Opt-in PostgreSQL integration
+
+`tests/test_postgres_integration.py` runs only when
+`A2FLOW_MANAGEMENT_PG_SOCKET` is set. It expects two disposable databases
+named by `A2FLOW_MANAGEMENT_PRT_DATABASE` and
+`A2FLOW_MANAGEMENT_ONLINE_DATABASE`. The test creates only application tables
+inside those databases; it never creates databases, starts a listener, or
+falls back to another PostgreSQL instance.
+
+The recorded AF10 verification used the exact cached PostgreSQL image named in
+the task handoff, a unique `--network none --rm` container, tmpfs PGDATA, and a
+Unix socket bind-mounted from a task-private temporary directory. No TCP port,
+persistent volume, existing database, password, model, or deployment was used.
+
+On 2026-09-15 the opt-in test completed one real PostgreSQL case successfully:
+two environment-bound databases were initialized and seeded; draft digest,
+optimistic revision and concurrent same-revision behavior passed; wrong
+database/environment were rejected; publication preparation left immutable
+assets and serving state unchanged; and all four registered modules served
+list/detail through the unified Host. Final cleanup evidence was
+`container=removed fixture=removed`.
