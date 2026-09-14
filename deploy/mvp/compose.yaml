@@ -1,0 +1,115 @@
+name: ${A2FLOW_PROJECT_NAME:-a2flow-private}
+
+services:
+  postgres:
+    image: public.ecr.aws/docker/library/postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6
+    environment:
+      POSTGRES_DB: ${A2FLOW_DATABASE_NAME:-a2flow}
+      POSTGRES_USER: ${A2FLOW_DATABASE_USER:-a2flow}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  runtime:
+    image: ${A2FLOW_RUNTIME_IMAGE:-a2flow-runtime-private:af09-a}
+    build:
+      context: ../..
+      dockerfile: deploy/mvp/Dockerfile
+    init: true
+    user: "10001:10001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &runtime_environment
+      A2FLOW_DATABASE_HOST: postgres
+      A2FLOW_DATABASE_PORT: "5432"
+      A2FLOW_DATABASE_NAME: ${A2FLOW_DATABASE_NAME:-a2flow}
+      A2FLOW_DATABASE_USER: ${A2FLOW_DATABASE_USER:-a2flow}
+      A2FLOW_POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      A2FLOW_ENVIRONMENT: ${A2FLOW_ENVIRONMENT:-PRT}
+      A2FLOW_USER_ID: ${A2FLOW_USER_ID:?set A2FLOW_USER_ID in the private env file}
+      A2FLOW_ASSET_NAMESPACE: ${A2FLOW_ASSET_NAMESPACE:-a2flow-mvp-activity-planning}
+      A2FLOW_DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek_api_key
+      A2FLOW_MODEL_CALL_LIMIT: ${A2FLOW_MODEL_CALL_LIMIT:-27}
+      A2FLOW_MODEL_MAX_TOKENS: ${A2FLOW_MODEL_MAX_TOKENS:-2048}
+      A2FLOW_MODEL_TIMEOUT_SECONDS: ${A2FLOW_MODEL_TIMEOUT_SECONDS:-20}
+      A2FLOW_MODEL_BUDGET_FILE: /var/lib/a2flow/model-budget.json
+      A2FLOW_SAFE_ERROR_FILE: /var/lib/a2flow/backend-errors.jsonl
+      A2FLOW_STATIC_DIRECTORY: /opt/a2flow/static
+    secrets:
+      - postgres_password
+      - deepseek_api_key
+    volumes:
+      - runtime_state:/var/lib/a2flow
+      - type: bind
+        source: ${A2FLOW_STATIC_HOST_DIRECTORY:?set an absolute built UI directory}
+        target: /opt/a2flow/static
+        read_only: true
+    ports:
+      - "127.0.0.1:${A2FLOW_HOST_PORT:-8765}:8765"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; json.load(urllib.request.urlopen('http://127.0.0.1:8765/runtime/session', timeout=2))"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 45s
+
+  seed:
+    image: ${A2FLOW_RUNTIME_IMAGE:-a2flow-runtime-private:af09-a}
+    build:
+      context: ../..
+      dockerfile: deploy/mvp/Dockerfile
+    profiles: ["tools"]
+    user: "10001:10001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime_environment
+      A2FLOW_DEMO: ${A2FLOW_DEMO:-activity-package}
+    secrets:
+      - postgres_password
+    volumes:
+      - runtime_state:/var/lib/a2flow
+    command: ["python", "-m", "deploy.mvp.seed"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+secrets:
+  postgres_password:
+    file: ${A2FLOW_SECRET_DIRECTORY:?set an absolute private secret directory}/postgres_password
+  deepseek_api_key:
+    file: ${A2FLOW_SECRET_DIRECTORY:?set an absolute private secret directory}/deepseek_api_key
+
+volumes:
+  postgres_data:
+  runtime_state:
