@@ -1,0 +1,3 @@
+# DeepSeekModelFactory imports the provider SDK directly. Its transitive
+# dependencies are already pinned by experiments/runtime-phase1/requirements.lock.
+openai==3.8.0

@@ -17,12 +17,9 @@ from agent_workflow_runtime.asset_adapters import OperationSpec
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
 
-
-def required(name):
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeError("MISSING_HOST_CONFIGURATION:" + name)
-    return value
+from .runtime_support import (
+    BoundedDeepSeekFactory, SafeErrorObserver, database_conninfo, required,
+)
 
 
 def budget_input(value):
@@ -120,17 +117,25 @@ def model_secret(reference, current_owner):
     return SecretStr(required("DEEPSEEK_API_KEY"))
 
 
+compose_mode = bool(os.environ.get("A2FLOW_MODEL_BUDGET_FILE"))
+conninfo = database_conninfo() if compose_mode else required("A2FLOW_DATABASE_URL")
+model_factory = (BoundedDeepSeekFactory(owner) if compose_mode else
+                 DeepSeekModelFactory(model_configuration, model_secret))
+error_observer = SafeErrorObserver() if os.environ.get("A2FLOW_SAFE_ERROR_FILE") else None
+
+
 host = MvpRuntimeHost(
-    conninfo=required("A2FLOW_DATABASE_URL"),
+    conninfo=conninfo,
     database=required("A2FLOW_DATABASE_NAME"),
     environment=environment,
-    namespace="a2flow-mvp-activity-planning",
+    namespace=os.environ.get("A2FLOW_ASSET_NAMESPACE", "a2flow-mvp-activity-planning"),
     bundle_validator=bundle_validator(),
     application_validator=application_validator,
     operation_specs=operations(),
-    model_factory=DeepSeekModelFactory(model_configuration, model_secret),
+    model_factory=model_factory,
     identity_resolver=lambda scope: owner,
     application_data_validator=application_data_validator,
     static_directory=os.environ.get("A2FLOW_STATIC_DIRECTORY"),
+    unexpected_error_observer=error_observer,
 )
 app = host.create_app()
