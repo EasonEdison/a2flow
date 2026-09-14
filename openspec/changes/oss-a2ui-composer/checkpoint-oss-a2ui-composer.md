@@ -35,10 +35,10 @@
 - 用户恢复并仅释放 APPLICATION ManagementFeature 后端切片；旧暂停口径不再阻止本切片。
 - 新增 `services/a2ui-composer/src/a2ui_composer/management.py` 及导出，复用共享 `ManagementFeature`、`TrustedManagementContext`、`DraftRepository`、`AssetReader` 和 `PublicationPlan`。
 - 支持已发布列表/详情、管理员草稿读取/保存/校验及不可变 publication plan；prepare 不写 asset version、serving state 或真实数据库。
-- 只接受已注册 `Column/Text/ChoicePicker/Button` 闭集、结构化 path/literal 绑定及精确 Ability release；拒绝脚本、HTML、URL、凭据和客户端身份字段。
+- 只接受已注册 `Column/Text/ChoicePicker/Button` 闭集、结构化 path/literal 绑定及精确 Ability release；脚本、HTML、URL、凭据和客户端身份字段在 draft save I/O 前即被拒绝。
 - `DISPLAY_ONLY` 强制不等待且无 Action；`INTERACTIVE` 保留 Action success policy 与 `completeInteractionOnSuccess`，不修改 Finalizer。
 - 环境不匹配在任何 draft I/O 前失败；prepare 对同一 draft snapshot 校验，避免二次读取竞态。
-- 定向验证：`/bin/python3.11` 下 7/7 通过，包含真实 `AssetReader + BundleValidator + seeded Application` 跨模块兼容；默认 `python3=3.6` 因缺少 `dataclasses` 未用于结论。
+- 定向验证：`/bin/python3.11` 下 8/8 通过，包含危险字段零次 save、普通不完整草稿可保存后校验失败，以及真实 `AssetReader + BundleValidator + seeded Application` 跨模块兼容；默认 `python3=3.6` 因缺少 `dataclasses` 未用于结论。
 - 真实边界：当前 host validator 仍只准入已注册 demo 闭集；本候选不宣称任意新 Application 可执行或已发布。
 
 ## 已完成里程碑

@@ -270,6 +270,7 @@ class ApplicationManagementFeature(ManagementFeature):
     def save_draft(self, context, key, expected_revision, document):
         parse_identifier(key)
         self._draft_context(context)
+        _reject_unsafe_fields(document)
         candidate = ManagedDraft.create(
             self.kind, key, 0, document, context.user_id)
         return self.drafts.save(self.namespace, candidate, expected_revision)

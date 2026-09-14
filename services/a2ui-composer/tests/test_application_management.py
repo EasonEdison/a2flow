@@ -217,14 +217,37 @@ class ApplicationManagementTests(unittest.TestCase):
             plan.candidate["definition"]["renderPolicy"]["requiresPause"])
         self.assertEqual([], plan.candidate["definition"]["actionPolicies"])
 
-    def test_unsafe_definition_is_not_publishable(self):
-        unsafe = self.document()
-        unsafe["definition"]["surfaceTemplate"]["html"] = "<b>unsafe</b>"
-        self.service.save_draft(
-            self.admin, "APPLICATION", APPLICATION_KEY, 0, unsafe)
+    def test_unsafe_fields_are_rejected_before_draft_save_io(self):
+        for field, value in (
+                ("credential", "secret"),
+                ("script", "alert(1)"),
+                ("userId", "forged-user"),
+                ("roles", ["ADMIN"])):
+            unsafe = self.document()
+            unsafe["definition"]["surfaceTemplate"][field] = value
+            before = self.drafts.save_calls
+            with self.subTest(field=field), self.assertRaisesRegex(
+                    ManagementError, "UNSAFE_APPLICATION_FIELD"):
+                self.service.save_draft(
+                    self.admin, "APPLICATION", APPLICATION_KEY, 0, unsafe)
+            self.assertEqual(before, self.drafts.save_calls)
+
+    def test_incomplete_safe_draft_can_be_saved_then_fails_validation(self):
+        incomplete = {
+            "definition": {
+                "asset": {
+                    "kind": "APPLICATION",
+                    "applicationKey": APPLICATION_KEY,
+                },
+            },
+            "dependencies": [],
+        }
+        saved = self.service.save_draft(
+            self.admin, "APPLICATION", APPLICATION_KEY, 0, incomplete)
+        self.assertEqual(1, saved.revision)
         report = self.service.validate_draft(
             self.admin, "APPLICATION", APPLICATION_KEY)
-        self.assertEqual("UNSAFE_APPLICATION_FIELD", report.issues[0]["code"])
+        self.assertFalse(report.valid)
         with self.assertRaisesRegex(ManagementError, "DRAFT_NOT_PUBLISHABLE"):
             self.service.prepare_publication(
                 self.admin, "APPLICATION", APPLICATION_KEY, 1,
