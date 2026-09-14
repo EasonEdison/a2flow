@@ -9,6 +9,7 @@
 - 允许修改范围：
   - `openspec/changes/oss-a2ui-composer/`
   - `services/a2ui-registry/`
+  - `services/a2ui-composer/`
   - `packages/a2ui-contract-fixtures/`
 
 ## 当前磁盘真值
@@ -16,9 +17,29 @@
 - Phase 1 基线：`SW-P1-20260907.2`
 - 服务器同步：review hardening 最终集成为 `3eac2f9…`；其后安全快进到 `origin/main=3a48d4b106db8f382c3c96bbc8992f328b81e259` 并读取首批 release。全程无冲突、未 stash/reset/覆盖。
 - PY-01：只撤销“系统 Python 不可替换”的禁令；Runtime 是唯一协调执行 owner，本任务不修改系统 Python。
-- 工作区状态：review hardening 与证据元数据已集成；当前只记录 `SW-P1-SUBSET-01` 对本任务的同步影响。
+- 工作区状态：`AF10_APPLICATION_MANAGEMENT_CANDIDATE`；已同步 `origin/main=da20a8523805b35fa78985d93a5f0006399d5aad`，本 checkpoint 与 `services/a2ui-composer/` 为当前候选改动。
 - 设计状态：`PROPOSED / PHASE 1 ALIGNED`
 - 运行态：`NO READY`
+
+## 暂停交接（2026-09-07）
+
+- 原因：用户要求优先实现 Workflow/DeepAgent Python 运行引擎，A2UI 域的新实现、设计、契约扩展与发布全部暂停。
+- 当前 HEAD：`bd0f3a98e57928735547e3188df39da01bfa0865`。
+- 已合 main 的本域最新源：`bd0f3a98e57928735547e3188df39da01bfa0865`；本地观察到 `origin/main=f3e5a05398df58dfd4f5a5dfc1445e05604d0977`，按暂停指令未再合入。
+- 未提交文件：仅 `openspec/changes/oss-a2ui-composer/checkpoint-oss-a2ui-composer.md`（本暂停交接）。
+- 活动命令：无；无后台 checker、构建、服务、部署或发布命令。
+- 精确下一步：保持暂停。仅在 main-brain 下发明确 A2UI subset 后，先核对 status/HEAD，再 fetch + merge 最新 `origin/main`，随后只执行获准范围。
+
+## AF10 有界后端恢复（2026-09-15）
+
+- 用户恢复并仅释放 APPLICATION ManagementFeature 后端切片；旧暂停口径不再阻止本切片。
+- 新增 `services/a2ui-composer/src/a2ui_composer/management.py` 及导出，复用共享 `ManagementFeature`、`TrustedManagementContext`、`DraftRepository`、`AssetReader` 和 `PublicationPlan`。
+- 支持已发布列表/详情、管理员草稿读取/保存/校验及不可变 publication plan；prepare 不写 asset version、serving state 或真实数据库。
+- 只接受已注册 `Column/Text/ChoicePicker/Button` 闭集、结构化 path/literal 绑定及精确 Ability release；拒绝脚本、HTML、URL、凭据和客户端身份字段。
+- `DISPLAY_ONLY` 强制不等待且无 Action；`INTERACTIVE` 保留 Action success policy 与 `completeInteractionOnSuccess`，不修改 Finalizer。
+- 环境不匹配在任何 draft I/O 前失败；prepare 对同一 draft snapshot 校验，避免二次读取竞态。
+- 定向验证：`/bin/python3.11` 下 7/7 通过，包含真实 `AssetReader + BundleValidator + seeded Application` 跨模块兼容；默认 `python3=3.6` 因缺少 `dataclasses` 未用于结论。
+- 真实边界：当前 host validator 仍只准入已注册 demo 闭集；本候选不宣称任意新 Application 可执行或已发布。
 
 ## 已完成里程碑
 
@@ -48,7 +69,7 @@
 
 ## 下一可执行动作
 
-等待 main-brain 明确下发 A2UI Action/profile subset。保持现有 checker 20/20 范围，不继续扩展、不实现 Registry/Host。
+执行提交门禁：额度检查、fetch/merge 最新 main、复跑 7 个定向测试与 `git diff --check`，固定 candidate commit 并 push worker 分支后停止；不自行集成 main。
 
 ## 禁止越界
 
