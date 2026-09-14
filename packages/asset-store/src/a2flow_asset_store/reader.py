@@ -5,7 +5,13 @@ from skill_registry import (
 from skillweave_contracts import TrustedContext, TrustedInvocationContext
 from skill_registry import TrustedContext as RegistryContext
 
-from .records import AssetError, ResolvedAbility, ResolvedWorkflow, canonical
+from .records import (
+    KINDS,
+    AssetError,
+    ResolvedAbility,
+    ResolvedWorkflow,
+    canonical,
+)
 from .validation import entries, namespace
 
 
@@ -79,6 +85,27 @@ class AssetReader(CatalogPort, MaterialPort):
                 result.append({"skillKey": asset.key, "assetId": asset.asset_id,
                                "versionId": asset.version_id})
         return tuple(result)
+
+    def list_assets(self, kind, trusted_context):
+        """List resolved metadata for one asset kind from one trusted snapshot."""
+        if type(kind) is not str or kind not in KINDS:
+            raise AssetError("UNKNOWN_ASSET_KIND")
+        owner, bundle = self._snapshot(trusted_context)
+        result = []
+        for state in bundle.serving:
+            if state["kind"] != kind:
+                continue
+            asset, selection = self._resolve(
+                bundle, owner, kind, state["key"])
+            result.append({
+                "kind": asset.kind,
+                "key": asset.key,
+                "assetId": asset.asset_id,
+                "versionId": asset.version_id,
+                "contentDigest": asset.content_digest,
+                "selection": selection,
+            })
+        return tuple(sorted(result, key=lambda item: item["key"]))
 
     def load_skill(self, skill_key, trusted_context):
         owner, _, asset, selection, _ = self._read("SKILL", skill_key, trusted_context)

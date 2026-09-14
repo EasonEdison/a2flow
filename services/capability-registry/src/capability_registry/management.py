@@ -65,7 +65,8 @@ class AbilityManagementFeature(ManagementFeature):
             raise
 
     def list_published(self, context):
-        return tuple(self.reader.list_abilities(self._runtime_context(context)))
+        return self.reader.list_assets(
+            self.kind, self._runtime_context(context))
 
     def get_published(self, context, key):
         published = self._published(context, key)

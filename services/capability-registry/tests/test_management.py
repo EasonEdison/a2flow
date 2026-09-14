@@ -89,11 +89,16 @@ class FakeAbilityReader:
             "selection": "PRT_CURRENT",
         }
 
-    def list_abilities(self, context):
+    def list_assets(self, kind, context):
+        if kind != "ABILITY":
+            raise AssertionError("unexpected kind")
         return ({
-            "abilityKey": self.published["key"],
+            "kind": "ABILITY",
+            "key": self.published["key"],
             "assetId": self.published["assetId"],
             "versionId": self.published["versionId"],
+            "contentDigest": self.published["contentDigest"],
+            "selection": self.published["selection"],
         },)
 
     def resolve_asset(self, kind, key, context):
@@ -120,7 +125,7 @@ class AbilityManagementTests(unittest.TestCase):
 
     def test_user_can_browse_but_cannot_open_drafts(self):
         listed = self.service.list_published(USER, "ABILITY")
-        self.assertEqual("demo.catalog.lookup", listed[0]["abilityKey"])
+        self.assertEqual("demo.catalog.lookup", listed[0]["key"])
         detail = self.service.get_published(
             USER, "ABILITY", "demo.catalog.lookup")
         self.assertEqual("demo.catalog.lookup.read",
