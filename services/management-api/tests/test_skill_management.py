@@ -9,6 +9,7 @@ from a2flow_management import (
     PublicationTarget, TrustedManagementContext,
 )
 from a2flow_management.features.skill import create_skill_feature
+from skill_registry import PackageEntry, PackageEntryDescriptor
 
 
 SKILL_MD = """---
@@ -44,8 +45,12 @@ class FakeReader:
         evidence = SimpleNamespace(
             asset_id="skill-plan", version_id="v1",
             content_digest="sha256:" + "1" * 64, selection="PRT_CURRENT")
+        raw = SKILL_MD.encode()
+        instruction = PackageEntry(PackageEntryDescriptor(
+            "skill-instructions", "SKILL.md", "text/markdown",
+            len(raw), digest(raw)), raw)
         return SimpleNamespace(
-            instruction_entry=SimpleNamespace(text=SKILL_MD),
+            instruction_entry=instruction,
             resource_entries=(), required_tool_names=("execute_ability",),
             resolution_evidence=evidence)
 

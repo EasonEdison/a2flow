@@ -17,7 +17,23 @@ registering features. PRT and ONLINE repositories are separate physical
 database bindings. A feature must reject a trusted context whose environment
 does not match its repository before draft I/O.
 
+## Assembly
+
+Use `a2flow_management.assembly.create_management_app(...)` with one explicit
+environment-local `AssetReader`, `DraftRepository`, namespace and trusted
+identity resolver. The factory registers exactly Skill, Ability, APPLICATION
+and Workflow. It rejects namespace/environment/validator mismatches and does
+not register COMPONENT authoring.
+
+Required source roots are `services/management-api/src`,
+`services/capability-registry/src`, `services/a2ui-composer/src`,
+`services/workflow-composer/src`, `packages/asset-store/src`,
+`packages/contracts/src`, and `services/skill-registry/src`.
+
 ## Endpoints
+
+- `GET /management/session`: trusted server identity, environment, registered
+  kinds and `canAuthor`; no client-supplied authority.
 
 - `GET /management/assets/{kind}`: published list for USER or ADMIN.
 - `GET /management/assets/{kind}/{key}`: published detail.

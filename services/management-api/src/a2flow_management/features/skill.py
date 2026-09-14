@@ -6,6 +6,7 @@ import re
 from a2flow_asset_store.records import canonical as asset_canonical, digest
 from a2flow_asset_store.validation import entries as validate_entries
 from skillweave_contracts import TrustedContext, parse_identifier, parse_skill_key
+from skill_registry import validate_package_entries
 
 from ..contracts import (
     ManagedDraft, ManagementError, PublicationPlan, ValidationReport,
@@ -41,6 +42,11 @@ def _metadata(skill_md):
     return values
 
 
+def _verified(material):
+    return validate_package_entries(
+        (material.instruction_entry, *material.resource_entries))
+
+
 def _entry(handle, path, media_type, raw):
     return {
         "handleId": handle, "logicalPath": path, "mediaType": media_type,
@@ -67,7 +73,7 @@ class SkillManagementFeature(ManagementFeature):
         result = []
         for descriptor in self.reader.list_skills(runtime):
             material = self.reader.load_skill(descriptor["skillKey"], runtime)
-            meta = _metadata(material.instruction_entry.text)
+            meta = _metadata(_verified(material)[0].text)
             result.append({**descriptor, "name": meta["name"],
                            "description": meta["description"]})
         return tuple(result)
@@ -76,16 +82,17 @@ class SkillManagementFeature(ManagementFeature):
         parse_skill_key(key)
         runtime = self._runtime_context(context)
         material = self.reader.load_skill(key, runtime)
-        meta = _metadata(material.instruction_entry.text)
+        verified = _verified(material)
+        meta = _metadata(verified[0].text)
         return {
             "kind": self.kind, "key": key, "metadata": meta,
-            "skillMd": material.instruction_entry.text,
+            "skillMd": verified[0].text,
             "requiredToolNames": list(material.required_tool_names),
             "resources": [{
                 "handleId": item.handle_id, "logicalPath": item.logical_path,
                 "mediaType": item.media_type, "byteSize": item.byte_size,
                 "contentDigest": item.content_digest,
-            } for item in material.resource_entries],
+            } for item in verified[1:]],
             "resolution": {
                 "assetId": material.resolution_evidence.asset_id,
                 "versionId": material.resolution_evidence.version_id,

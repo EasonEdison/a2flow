@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from .contracts import (
     ManagementError, PublicationTarget, TrustedManagementContext, identifier,
+    require_reader,
 )
 
 BODY_LIMIT = 1024 * 1024
@@ -106,6 +107,8 @@ def create_app(service, *, identity_resolver):
             raise ManagementError("QUERY_PARAMETERS_NOT_ALLOWED")
         try:
             value = identity_resolver(request.scope)
+        except ManagementError:
+            raise
         except Exception:
             raise ManagementError("TRUSTED_CONTEXT_REQUIRED", 401) from None
         if type(value) is not TrustedManagementContext:
@@ -132,6 +135,16 @@ def create_app(service, *, identity_resolver):
     @app.exception_handler(Exception)
     async def unexpected(request, error):
         return _error(500, "INTERNAL_ERROR")
+
+    @app.get("/management/session")
+    def session(request: Request):
+        who = require_reader(context(request))
+        return _response({
+            "userId": who.user_id,
+            "environment": who.environment,
+            "registeredKinds": list(service.kinds),
+            "canAuthor": "ADMIN" in who.roles,
+        })
 
     @app.get("/management/assets/{kind}")
     def list_published(request: Request, kind: str):
