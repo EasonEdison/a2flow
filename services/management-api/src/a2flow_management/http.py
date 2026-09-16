@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from .contracts import (
     ManagementError, PublicationTarget, TrustedManagementContext, identifier,
-    require_reader,
+    require_admin, require_reader,
 )
 
 BODY_LIMIT = 1024 * 1024
@@ -195,7 +195,7 @@ def create_app(service, *, identity_resolver, publications=None):
         @app.get("/management/assets/{kind}/{key:path}/versions")
         def versions(request: Request, kind: str, key: str):
             return _response(publications.history(
-                context(request), kind, key_value(key)))
+                require_reader(context(request)), kind, key_value(key)))
 
         @app.post("/management/assets/{kind}/{key:path}/publications")
         def publish(request: Request, kind: str, key: str,
@@ -204,7 +204,7 @@ def create_app(service, *, identity_resolver, publications=None):
                 body.target.environment, body.target.versionId,
                 body.target.channel, tuple(body.target.grayUserIds))
             return _response(publications.publish(
-                context(request), kind, key_value(key), body.candidate,
+                require_admin(context(request)), kind, key_value(key), body.candidate,
                 target, body.expectedServingDigest))
 
         @app.post("/management/assets/{kind}/{key:path}/rollbacks")
@@ -214,7 +214,7 @@ def create_app(service, *, identity_resolver, publications=None):
                 body.target.environment, body.target.versionId,
                 body.target.channel, tuple(body.target.grayUserIds))
             return _response(publications.rollback(
-                context(request), kind, key_value(key), target,
+                require_admin(context(request)), kind, key_value(key), target,
                 body.expectedServingDigest))
 
     @app.get("/management/assets/{kind}/{key:path}")
