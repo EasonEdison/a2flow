@@ -36,6 +36,17 @@ class PreparePublication(_Closed):
     target: Target
 
 
+class PublishCandidate(_Closed):
+    expectedServingDigest: str = Field(min_length=71, max_length=71)
+    candidate: dict[str, JsonValue]
+    target: Target
+
+
+class RollbackSelection(_Closed):
+    expectedServingDigest: str = Field(min_length=71, max_length=71)
+    target: Target
+
+
 def _error(status, code):
     return JSONResponse({"error": {"code": code}}, status_code=status)
 
@@ -90,7 +101,7 @@ class BodyLimit:
         await self.app(scope, replay, send)
 
 
-def create_app(service, *, identity_resolver):
+def create_app(service, *, identity_resolver, publications=None):
     """Create an app without starting a listener.
 
     identity_resolver receives the server ASGI scope and must return an already
@@ -179,6 +190,32 @@ def create_app(service, *, identity_resolver):
         result["status"] = "PREPARED_NOT_PUBLISHED"
         result["published"] = False
         return _response(result)
+
+    if publications is not None:
+        @app.get("/management/assets/{kind}/{key:path}/versions")
+        def versions(request: Request, kind: str, key: str):
+            return _response(publications.history(
+                context(request), kind, key_value(key)))
+
+        @app.post("/management/assets/{kind}/{key:path}/publications")
+        def publish(request: Request, kind: str, key: str,
+                    body: PublishCandidate):
+            target = PublicationTarget(
+                body.target.environment, body.target.versionId,
+                body.target.channel, tuple(body.target.grayUserIds))
+            return _response(publications.publish(
+                context(request), kind, key_value(key), body.candidate,
+                target, body.expectedServingDigest))
+
+        @app.post("/management/assets/{kind}/{key:path}/rollbacks")
+        def rollback(request: Request, kind: str, key: str,
+                     body: RollbackSelection):
+            target = PublicationTarget(
+                body.target.environment, body.target.versionId,
+                body.target.channel, tuple(body.target.grayUserIds))
+            return _response(publications.rollback(
+                context(request), kind, key_value(key), target,
+                body.expectedServingDigest))
 
     @app.get("/management/assets/{kind}/{key:path}")
     def detail(request: Request, kind: str, key: str):

@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import hashlib
 import json
 
-from .records import AssetError, MAX_ASSETS, MAX_BYTES, canonical, digest
+from .records import AssetError, KINDS, MAX_ASSETS, MAX_BYTES, canonical, digest
 from .validation import environment, namespace
 
 DDL = (
@@ -182,6 +182,201 @@ class PostgresAssetRepository:
                           ("INSERTED" if inserts else "NO_CHANGE"),
                 "assets": [{"kind": a.kind, "key": a.key, "versionId": a.version_id,
                             "contentDigest": a.content_digest} for a in desired.assets]}
+
+    @staticmethod
+    def _asset_key(kind, key):
+        if type(kind) is not str or kind not in KINDS:
+            raise AssetError("UNKNOWN_ASSET_KIND")
+        if type(key) is not str or not 1 <= len(key) <= 256:
+            raise AssetError("INVALID_ASSET_KEY")
+        return kind, key
+
+    @staticmethod
+    def _serving_digest(state):
+        return digest(canonical(state))
+
+    def publication_history(self, ns, kind, key):
+        """Read retained immutable versions and the current serving CAS token."""
+        ns = namespace(ns)
+        kind, key = self._asset_key(kind, key)
+        with self._connection() as connection:
+            with connection.transaction():
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                document = self._document(connection, ns)
+                versions = [
+                    {"versionId": item["versionId"],
+                     "assetId": item["assetId"],
+                     "contentDigest": item["contentDigest"]}
+                    for item in document["assets"]
+                    if (item["kind"], item["key"]) == (kind, key)
+                ]
+                state = next((item for item in document["serving"]
+                              if (item["kind"], item["key"]) == (kind, key)), None)
+                if not versions or state is None:
+                    raise AssetError("ASSET_NOT_FOUND")
+                return {
+                    "kind": kind, "key": key, "versions": versions,
+                    "serving": state,
+                    "servingDigest": self._serving_digest(state),
+                }
+
+    def publish_candidate(self, ns, kind, key, candidate, target,
+                          expected_serving_digest):
+        """Atomically retain one immutable candidate and select its target."""
+        return self._change_serving(
+            ns, kind, key, target["versionId"], target,
+            expected_serving_digest, candidate=candidate, status="PUBLISHED")
+
+    def rollback_configuration(self, ns, kind, key, version_id, target,
+                               expected_serving_digest):
+        """Select a retained version; this never compensates business effects."""
+        return self._change_serving(
+            ns, kind, key, version_id, target, expected_serving_digest,
+            candidate=None, status="ROLLED_BACK")
+
+    def _change_serving(self, ns, kind, key, version_id, target,
+                        expected_serving_digest, *, candidate, status):
+        ns = namespace(ns)
+        kind, key = self._asset_key(kind, key)
+        if (type(expected_serving_digest) is not str
+                or not expected_serving_digest.startswith("sha256:")):
+            raise AssetError("INVALID_SERVING_DIGEST")
+        if type(target) is not dict or set(target) != {
+                "environment", "versionId", "channel", "grayUserIds"}:
+            raise AssetError("INVALID_PUBLICATION_TARGET")
+        if target["environment"] != self.environment or target["versionId"] != version_id:
+            raise AssetError("DESTINATION_MISMATCH")
+        gray_users = target["grayUserIds"]
+        if type(gray_users) is not list or len(gray_users) != len(set(gray_users)):
+            raise AssetError("INVALID_GRAY_USERS")
+        with self._connection() as connection:
+            with connection.transaction():
+                lock = int.from_bytes(
+                    hashlib.sha256(ns.encode()).digest()[:8],
+                    "big", signed=True)
+                connection.execute("SELECT pg_advisory_xact_lock(%s)", (lock,))
+                existing = self._document(connection, ns)
+                states = {(item["kind"], item["key"]): item
+                          for item in existing["serving"]}
+                old_state = states.get((kind, key))
+                if old_state is None:
+                    raise AssetError("ASSET_NOT_FOUND")
+                if self._serving_digest(old_state) != expected_serving_digest:
+                    raise AssetError("STALE_SERVING_SELECTION")
+
+                assets = {(item["kind"], item["key"], item["versionId"]): item
+                          for item in existing["assets"]}
+                identity = kind, key, version_id
+                if candidate is not None:
+                    if (type(candidate) is not dict
+                            or (candidate.get("kind"), candidate.get("key"),
+                                candidate.get("versionId")) != identity):
+                        raise AssetError("CANDIDATE_IDENTITY_MISMATCH")
+                    old = assets.get(identity)
+                    if old is not None and canonical(old) != canonical(candidate):
+                        raise AssetError("ASSET_CONFLICT")
+                    assets[identity] = candidate
+                elif identity not in assets:
+                    raise AssetError("VERSION_NOT_FOUND")
+
+                if self.environment == "PRT":
+                    if target["channel"] != "CURRENT" or gray_users:
+                        raise AssetError("INVALID_PRT_TARGET")
+                    next_state = {
+                        "kind": kind, "key": key, "current": version_id,
+                        "stable": None, "gray": None, "grayUserIds": [],
+                    }
+                else:
+                    if target["channel"] == "STABLE" and not gray_users:
+                        next_state = {
+                            "kind": kind, "key": key, "current": None,
+                            "stable": version_id, "gray": None,
+                            "grayUserIds": [],
+                        }
+                    elif target["channel"] == "GRAY" and gray_users:
+                        next_state = {
+                            "kind": kind, "key": key, "current": None,
+                            "stable": old_state["stable"], "gray": version_id,
+                            "grayUserIds": gray_users,
+                        }
+                    else:
+                        raise AssetError("INVALID_ONLINE_TARGET")
+                states[(kind, key)] = next_state
+                proposed = {
+                    **existing, "assets": list(assets.values()),
+                    "serving": list(states.values()),
+                }
+                desired = self.validator.validate(
+                    proposed, expected_namespace=ns,
+                    expected_environment=self.environment)
+                self._validate_serving_closure(proposed)
+
+                if candidate is not None and identity not in {
+                        (item["kind"], item["key"], item["versionId"])
+                        for item in existing["assets"]}:
+                    raw = canonical({
+                        field: value for field, value in candidate.items()
+                        if field != "contentDigest"
+                    })
+                    if digest(raw) != candidate.get("contentDigest"):
+                        raise AssetError("DIGEST_MISMATCH")
+                    connection.execute(
+                        "INSERT INTO a2flow_asset_versions "
+                        "(namespace,kind,asset_key,version_id,document,digest) "
+                        "VALUES(%s,%s,%s,%s,%s,%s)",
+                        (ns, kind, key, version_id, raw,
+                         candidate["contentDigest"]))
+                result = connection.execute(
+                    "UPDATE a2flow_asset_serving SET document=%s "
+                    "WHERE namespace=%s AND kind=%s AND asset_key=%s "
+                    "AND document=%s",
+                    (canonical(next_state), ns, kind, key,
+                     canonical(old_state)))
+                if getattr(result, "rowcount", 1) != 1:
+                    raise AssetError("STALE_SERVING_SELECTION")
+                self._verify(connection, ns, desired)
+                self._validate_serving_closure(self._document(connection, ns))
+        return {
+            "status": status, "published": True,
+            "businessCompensated": False,
+            "kind": kind, "key": key, "versionId": version_id,
+            "serving": next_state,
+            "servingDigest": self._serving_digest(next_state),
+        }
+
+    def _validate_serving_closure(self, document):
+        """Check selected Application ability pins for every routing cohort."""
+        states = {(item["kind"], item["key"]): item
+                  for item in document["serving"]}
+        assets = {(item["kind"], item["key"], item["versionId"]): item
+                  for item in document["assets"]}
+        users = {None}
+        if self.environment == "ONLINE":
+            users.update(user for state in states.values()
+                         for user in state["grayUserIds"])
+
+        def selected(state, user):
+            if self.environment == "PRT":
+                return state["current"]
+            if user is not None and user in state["grayUserIds"]:
+                return state["gray"]
+            return state["stable"]
+
+        for user in users:
+            for (asset_kind, asset_key), state in states.items():
+                if asset_kind != "APPLICATION":
+                    continue
+                application = assets[(
+                    asset_kind, asset_key, selected(state, user))]
+                for action in application["definition"]["actionPolicies"]:
+                    ability_key, expected_version = (
+                        action["abilityReleaseRef"].split("@"))
+                    ability_state = states.get(("ABILITY", ability_key))
+                    if (ability_state is None
+                            or selected(ability_state, user)
+                            != expected_version):
+                        raise AssetError("SERVING_DEPENDENCY_MISMATCH")
 
     def _verify(self, connection, ns, desired):
         observed = self._document(connection, ns)
