@@ -50,13 +50,35 @@ async def request(app, method, path, **kwargs):
         return await client.request(method, path, **kwargs)
 
 
+class Publications:
+    def __init__(self):
+        self.calls = []
+
+    def history(self, context, kind, key):
+        self.calls.append(("history", context.user_id, kind, key))
+        return {"kind": kind, "key": key, "versions": [],
+                "servingDigest": "sha256:" + "0" * 64}
+
+    def publish(self, context, kind, key, candidate, target, expected):
+        self.calls.append(("publish", context.user_id, kind, key))
+        return {"status": "PUBLISHED", "published": True,
+                "businessCompensated": False}
+
+    def rollback(self, context, kind, key, target, expected):
+        self.calls.append(("rollback", context.user_id, kind, key))
+        return {"status": "ROLLED_BACK", "published": True,
+                "businessCompensated": False}
+
+
 class HttpTests(unittest.TestCase):
     def setUp(self):
         self.identity = {"value": None}
         self.feature = Feature()
+        self.publications = Publications()
         self.app = create_app(
             ManagementService([self.feature]),
-            identity_resolver=lambda scope: self.identity["value"])
+            identity_resolver=lambda scope: self.identity["value"],
+            publications=self.publications)
 
     def call(self, method, path, **kwargs):
         return asyncio.run(request(self.app, method, path, **kwargs))
@@ -99,6 +121,34 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(200, prepared.status_code)
         self.assertFalse(prepared.json()["published"])
         self.assertEqual("PREPARED_NOT_PUBLISHED", prepared.json()["status"])
+
+    def test_history_read_and_explicit_admin_publish_rollback(self):
+        digest_value = "sha256:" + "0" * 64
+        self.identity["value"] = TrustedManagementContext(
+            "user-1", "PRT", frozenset({"USER"}))
+        history = self.call(
+            "GET", "/management/assets/SKILL/demo%2Fskill/versions")
+        self.assertEqual(200, history.status_code)
+        body = {"expectedServingDigest": digest_value,
+                "candidate": {"kind": "SKILL"},
+                "target": {"environment": "PRT", "versionId": "v2",
+                           "channel": "CURRENT", "grayUserIds": []}}
+        denied = self.call(
+            "POST", "/management/assets/SKILL/demo%2Fskill/publications",
+            json=body)
+        self.assertEqual(403, denied.status_code)
+        self.identity["value"] = TrustedManagementContext(
+            "admin-1", "PRT", frozenset({"ADMIN"}))
+        published = self.call(
+            "POST", "/management/assets/SKILL/demo%2Fskill/publications",
+            json=body)
+        self.assertEqual("PUBLISHED", published.json()["status"])
+        rolled_back = self.call(
+            "POST", "/management/assets/SKILL/demo%2Fskill/rollbacks",
+            json={"expectedServingDigest": digest_value,
+                  "target": body["target"]})
+        self.assertEqual("ROLLED_BACK", rolled_back.json()["status"])
+        self.assertFalse(rolled_back.json()["businessCompensated"])
 
     def test_cross_environment_and_validation_errors_are_4xx(self):
         self.identity["value"] = TrustedManagementContext(

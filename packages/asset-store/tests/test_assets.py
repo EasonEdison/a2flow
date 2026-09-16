@@ -17,8 +17,9 @@ from skill_registry import (
 
 
 class Rows:
-    def __init__(self, rows=()):
+    def __init__(self, rows=(), rowcount=None):
         self.rows = list(rows)
+        self.rowcount = rowcount
     def fetchone(self):
         return self.rows[0] if self.rows else None
     def fetchall(self):
@@ -64,6 +65,12 @@ class DatabaseDouble:
             self.assets[tuple(params[:4])] = (params[4], params[5])
         elif sql.startswith("INSERT INTO a2flow_asset_serving"):
             self.states[tuple(params[:3])] = params[3]
+        elif sql.startswith("UPDATE a2flow_asset_serving"):
+            identity = (params[1], params[2], params[3])
+            if self.states.get(identity) != params[4]:
+                return Rows(rowcount=0)
+            self.states[identity] = params[0]
+            return Rows(rowcount=1)
         elif not sql.startswith(("SET TRANSACTION", "SELECT pg_advisory")):
             raise AssertionError("unexpected SQL " + sql)
         return Rows()
@@ -86,6 +93,15 @@ class AssetTests(unittest.TestCase):
             asset["contentDigest"] = digest(canonical(
                 {k: v for k, v in asset.items() if k != "contentDigest"}))
         return doc
+
+    def candidate(self, kind, key, version):
+        value = deepcopy(next(item for item in self.document["assets"]
+                              if (item["kind"], item["key"]) == (kind, key)))
+        value["versionId"] = version
+        value["contentDigest"] = digest(canonical(
+            {field: item for field, item in value.items()
+             if field != "contentDigest"}))
+        return value
 
     def test_seed_has_all_five_kinds_and_seven_assets(self):
         for env in ("PRT", "ONLINE"):
@@ -167,6 +183,112 @@ class AssetTests(unittest.TestCase):
             with self.subTest():
                 with self.assertRaises(AssetError):
                     self.validate(case)
+
+    def test_publish_history_stale_cas_and_configuration_rollback(self):
+        self.repo.import_bundle(
+            self.document, expected_namespace=NAMESPACE, dry_run=False)
+        before = self.repo.publication_history(
+            NAMESPACE, "SKILL", "activity-planning/plan")
+        candidate = self.candidate(
+            "SKILL", "activity-planning/plan", "v2")
+        target = {"environment": "PRT", "versionId": "v2",
+                  "channel": "CURRENT", "grayUserIds": []}
+        published = self.repo.publish_candidate(
+            NAMESPACE, "SKILL", "activity-planning/plan", candidate,
+            target, before["servingDigest"])
+        self.assertEqual("PUBLISHED", published["status"])
+        self.assertFalse(published["businessCompensated"])
+        history = self.repo.publication_history(
+            NAMESPACE, "SKILL", "activity-planning/plan")
+        self.assertEqual(["v1", "v2"],
+                         [item["versionId"] for item in history["versions"]])
+        with self.assertRaisesRegex(AssetError, "STALE_SERVING_SELECTION"):
+            self.repo.rollback_configuration(
+                NAMESPACE, "SKILL", "activity-planning/plan", "v1",
+                {**target, "versionId": "v1"}, before["servingDigest"])
+        rolled_back = self.repo.rollback_configuration(
+            NAMESPACE, "SKILL", "activity-planning/plan", "v1",
+            {**target, "versionId": "v1"}, history["servingDigest"])
+        self.assertEqual("ROLLED_BACK", rolled_back["status"])
+        self.assertFalse(rolled_back["businessCompensated"])
+        self.assertTrue(any(sql.startswith("SELECT pg_advisory_xact_lock")
+                            for sql, _ in self.db.calls))
+
+    def test_publish_rejects_runtime_broken_selected_application_pin(self):
+        self.repo.import_bundle(
+            self.document, expected_namespace=NAMESPACE, dry_run=False)
+        key = CONFIRM_KEY
+        before = self.repo.publication_history(NAMESPACE, "ABILITY", key)
+        candidate = self.candidate("ABILITY", key, "v2")
+        target = {"environment": "PRT", "versionId": "v2",
+                  "channel": "CURRENT", "grayUserIds": []}
+        with self.assertRaisesRegex(
+                AssetError, "SERVING_DEPENDENCY_MISMATCH"):
+            self.repo.publish_candidate(
+                NAMESPACE, "ABILITY", key, candidate, target,
+                before["servingDigest"])
+        self.assertNotIn((NAMESPACE, "ABILITY", key, "v2"), self.db.assets)
+
+    def test_online_gray_and_finish_gray_are_atomic(self):
+        database = DatabaseDouble()
+        database.env, database.database = "ONLINE", "asset_online"
+        repository = PostgresAssetRepository(
+            "not-a-real-dsn", environment="ONLINE", database="asset_online",
+            validator=self.validator, connection_factory=database.connect)
+        document = make_bundle("ONLINE")
+        repository.import_bundle(
+            document, expected_namespace=NAMESPACE, dry_run=False)
+        key = "activity-planning/plan"
+        candidate = deepcopy(next(item for item in document["assets"]
+                                  if (item["kind"], item["key"]) ==
+                                  ("SKILL", key)))
+        candidate["versionId"] = "v2"
+        candidate["contentDigest"] = digest(canonical(
+            {field: value for field, value in candidate.items()
+             if field != "contentDigest"}))
+        history = repository.publication_history(NAMESPACE, "SKILL", key)
+        gray = {"environment": "ONLINE", "versionId": "v2",
+                "channel": "GRAY", "grayUserIds": ["gray-user"]}
+        repository.publish_candidate(
+            NAMESPACE, "SKILL", key, candidate, gray,
+            history["servingDigest"])
+        during = repository.publication_history(NAMESPACE, "SKILL", key)
+        self.assertEqual("v1", during["serving"]["stable"])
+        self.assertEqual("v2", during["serving"]["gray"])
+        stable = {**gray, "channel": "STABLE", "grayUserIds": []}
+        repository.publish_candidate(
+            NAMESPACE, "SKILL", key, candidate, stable,
+            during["servingDigest"])
+        after = repository.publication_history(NAMESPACE, "SKILL", key)
+        self.assertEqual("v2", after["serving"]["stable"])
+        self.assertIsNone(after["serving"]["gray"])
+        self.assertEqual([], after["serving"]["grayUserIds"])
+
+    def test_online_gray_rejects_selected_application_ability_mismatch(self):
+        database = DatabaseDouble()
+        database.env, database.database = "ONLINE", "asset_online"
+        repository = PostgresAssetRepository(
+            "not-a-real-dsn", environment="ONLINE", database="asset_online",
+            validator=self.validator, connection_factory=database.connect)
+        document = make_bundle("ONLINE")
+        repository.import_bundle(
+            document, expected_namespace=NAMESPACE, dry_run=False)
+        candidate = deepcopy(next(item for item in document["assets"]
+                                  if (item["kind"], item["key"]) ==
+                                  ("ABILITY", CONFIRM_KEY)))
+        candidate["versionId"] = "v2"
+        candidate["contentDigest"] = digest(canonical(
+            {field: value for field, value in candidate.items()
+             if field != "contentDigest"}))
+        history = repository.publication_history(
+            NAMESPACE, "ABILITY", CONFIRM_KEY)
+        with self.assertRaisesRegex(
+                AssetError, "SERVING_DEPENDENCY_MISMATCH"):
+            repository.publish_candidate(
+                NAMESPACE, "ABILITY", CONFIRM_KEY, candidate,
+                {"environment": "ONLINE", "versionId": "v2",
+                 "channel": "GRAY", "grayUserIds": ["gray-user"]},
+                history["servingDigest"])
 
     def test_runtime_skill_roundtrip_from_imported_bytes(self):
         self.repo.import_bundle(self.document, expected_namespace=NAMESPACE, dry_run=False)

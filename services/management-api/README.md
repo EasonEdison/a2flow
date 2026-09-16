@@ -43,8 +43,25 @@ Required source roots are `services/management-api/src`,
   immutable publication preparation.
 
 Publication preparation is not publication. Its response always includes
-`status: PREPARED_NOT_PUBLISHED` and `published: false`. This slice has no
-endpoint that mutates immutable asset versions or serving state.
+`status: PREPARED_NOT_PUBLISHED` and `published: false`.
+
+- `GET /management/assets/{kind}/{key}/versions`: USER/ADMIN retained immutable
+  version history, current serving selection, and serving digest CAS token.
+- `POST /management/assets/{kind}/{key}/publications`: ADMIN-only explicit
+  candidate retention plus serving selection.
+- `POST /management/assets/{kind}/{key}/rollbacks`: ADMIN-only selection of a
+  retained version. This is configuration rollback only; it never compensates
+  business effects.
+
+Publish and rollback serialize with bundle imports through the same
+namespace-scoped advisory transaction lock, reject stale serving digests and
+immutable-version conflicts, and validate the resulting namespace before any
+write. PRT selects one current version. ONLINE selects one stable version and
+at most one userId-targeted gray version; selecting STABLE finishes gray.
+Selected Application-to-Ability version pins are checked for the stable cohort
+and every gray user cohort. A single-asset change that would require an atomic
+linked-asset upgrade is rejected; coordinated multi-asset publication is
+explicitly deferred rather than partially applied.
 
 Bodies are limited to 1 MiB and responses to 2 MiB. Unknown fields, query
 parameters, oversized keys, malformed domain identifiers, and invalid target

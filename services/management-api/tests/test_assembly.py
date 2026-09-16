@@ -26,6 +26,15 @@ class BundleRepository:
             raise AssertionError("unexpected namespace")
         return self.bundle
 
+    def publication_history(self, *args):
+        raise AssertionError("not used in assembly browse tests")
+
+    def publish_candidate(self, *args):
+        raise AssertionError("not used in assembly browse tests")
+
+    def rollback_configuration(self, *args):
+        raise AssertionError("not used in assembly browse tests")
+
 
 async def request(app, method, path, **kwargs):
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)

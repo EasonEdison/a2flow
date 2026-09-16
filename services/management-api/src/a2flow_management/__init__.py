@@ -4,11 +4,12 @@ from .contracts import (
     TrustedManagementContext, ValidationReport, require_admin,
 )
 from .repositories import DraftRepository, MemoryDraftRepository, PostgresDraftRepository
+from .publication import PublicationService
 from .service import ManagementFeature, ManagementService
 
 __all__ = [
     "DraftRepository", "ManagedDraft", "ManagementError", "ManagementFeature",
     "ManagementService", "MemoryDraftRepository", "PostgresDraftRepository",
-    "PublicationPlan", "PublicationTarget", "TrustedManagementContext",
+    "PublicationPlan", "PublicationService", "PublicationTarget", "TrustedManagementContext",
     "ValidationReport", "require_admin",
 ]
