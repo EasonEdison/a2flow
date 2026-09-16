@@ -159,6 +159,8 @@ class ManagementPreviewHostTests(unittest.TestCase):
                         "application/json", api.headers["content-type"])
                     page = await client.get("/private-preview/login")
                     self.assertEqual(200, page.status_code)
+                    self.assertEqual(
+                        "same-origin", page.headers["referrer-policy"])
                     no_origin = await client.post(
                         "/private-preview/login",
                         data={"token": TOKEN.decode("ascii")},
