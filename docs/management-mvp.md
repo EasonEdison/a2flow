@@ -1,5 +1,19 @@
 # Management console MVP / 管理台首版
 
+## Publication UI update / 发布界面更新
+
+AF12-B (UI candidate `8d1710c`, reviewed integration `ab32dbb`) connects retained-version browsing, explicitly confirmed publication and configuration rollback. Ordinary users remain read-only. Changing a draft or publication target invalidates its prepared candidate. Pending writes lock navigation and editing. Successful writes refresh history, detail and the asset list; a later refresh failure is distinguished from a failed write. Conflicts require manual refresh and review, never automatic retry.
+
+AF12-B 已接入保留版本列表、明确确认后的正式发布与配置回滚。普通用户保持只读；修改草稿或发布目标会废弃已准备候选；写入期间锁定导航和编辑。写入成功后刷新版本、详情和目录；后续刷新失败会与写入失败区分。并发冲突必须手动刷新并复核，不自动重试。
+
+Four frontend state tests and the TypeScript/Vite build passed. A real Chrome browser with intercepted API fixtures covered four asset categories, PRT/ONLINE administrator flows, read-only access, cancel confirmation without writes, target invalidation, pending locks, retained unsaved edits, explicit rollback and stale-CAS conflict recovery. Page identity/content, absence of framework overlays, console health, screenshots and interactions passed at 1440×1000 and 390×844; no horizontal overflow or unexpected console/page errors were observed. The expected 409 conflict was exercised deliberately.
+
+4 项前端状态测试及 TypeScript/Vite 构建通过。真实 Chrome 使用模拟接口验证四类目录、PRT/ONLINE 管理员操作、只读权限、取消确认不写入、目标变更失效、等待锁定、保留未保存草稿、显式回滚与 CAS 冲突恢复。1440×1000 和 390×844 下完成页面身份、非空内容、无框架错误层、控制台、截图及交互检查；无横向溢出或非预期控制台/页面错误。409 冲突为主动覆盖的预期情况。
+
+The Browser plugin was unavailable, so existing Playwright and system Chrome were used without installing dependencies. These new UI flows have fixture-browser proof and separate real PostgreSQL backend proof, not a combined real-database browser run. There is no permanent deployed URL. General new-asset creation, visual designers, coordinated multi-asset publication and a chronological operator audit log remain outside this delivery.
+
+Browser 插件不可用，本次使用现有 Playwright 与系统 Chrome，未安装新依赖。新增操作已分别完成模拟接口浏览器验证、真实 PostgreSQL 后端验证，但尚未进行二者结合的端到端浏览器联调，也没有常驻部署地址。通用新资产创建、可视化设计器、多资产联动发布、按时间记录的操作审计仍未交付。
+
 ## Publication backend update / 发布后端更新
 
 AF12 (`e120f6c`) adds explicit single-asset publication, retained-version listing and configuration rollback APIs. Candidates remain unpublished until an authorized explicit request. Changes use a serving digest precondition and a namespace transaction lock; stale requests fail. ONLINE stable selection clears gray routing; incompatible selected Application/Ability bindings are rejected. Coordinated multi-asset publication remains deferred.
