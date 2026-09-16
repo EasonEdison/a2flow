@@ -1,11 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { settleSaveBuffer, shouldChangeKind } from '../src/draft-state.js';
+import {
+  publicationConfirmation, rollbackConfirmation, rollbackTarget,
+  settleSaveBuffer, shouldChangeKind,
+} from '../src/draft-state.js';
 
 test('keeps the current list when the active kind is clicked again', () => {
   assert.equal(shouldChangeKind('SKILL', 'SKILL'), false);
   assert.equal(shouldChangeKind('SKILL', 'ABILITY'), true);
   assert.equal(shouldChangeKind(null, 'SKILL'), true);
+});
+
+test('describes explicit publish and configuration-only rollback', () => {
+  const target = rollbackTarget('ONLINE', 'v1');
+  assert.equal(target.channel, 'STABLE');
+  assert.match(publicationConfirmation({ ...target, versionId: 'v2' }), /清除当前灰度/);
+  assert.match(rollbackConfirmation(target), /不补偿任何业务操作/);
 });
 
 const saved = {
