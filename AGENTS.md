@@ -1,5 +1,9 @@
 # A2Flow contributor instructions
 
+## Current bounded release (2026-09-16)
+
+Main-brain has released AF12 common management publication, retained-version history and configuration rollback backend work. This supersedes the historical M-side pauses below only for explicitly assigned paths. Skill registry owns asset-store and management-api changes; main-brain alone reviews and integrates. No automatic successor work, model calls, database mutation or deployment follows from this source release. Keep candidate preparation non-publishing, immutable history, trusted authorization, PRT/ONLINE isolation, userId gray routing and atomic dependency-safe serving changes. Configuration rollback never compensates business operations. Current quota and execution cursor belong in the private coordinator records, not permanent architecture requirements.
+
 ## Project identity
 
 - The product name is A2Flow, with the tagline "Agent Workflows with Interactive UI". The user approved this name on 2026-09-07, replacing SkillWeave.
