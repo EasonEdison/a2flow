@@ -251,6 +251,27 @@ class ManagementPreviewHostTests(unittest.TestCase):
 
             asyncio.run(scenario())
 
+    def test_browser_login_and_static_reject_non_loopback_server(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "index.html").write_text("ui", encoding="utf-8")
+            host = create_management_preview_host(
+                self.browser_config(directory),
+                validator=bundle_validator(),
+                bearer_token=TOKEN,
+            )
+            for path in ("/private-preview/login", "/"):
+                with self.subTest(path=path):
+                    response = asyncio.run(request(
+                        host.app,
+                        path,
+                        base_url="http://203.0.113.7",
+                    ))
+                    self.assertEqual(403, response.status_code)
+                    self.assertEqual(
+                        "PRIVATE_PREVIEW_LOOPBACK_REQUIRED",
+                        response.json()["error"]["code"],
+                    )
+
     def test_environment_factory_requires_owner_only_regular_token_file(self):
         with tempfile.TemporaryDirectory() as directory:
             token_path = Path(directory) / "management-token"

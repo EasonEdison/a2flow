@@ -83,10 +83,11 @@ fixed-Origin CSRF rejection, USER versus ADMIN authoring, server-owned identity,
 identity-header/query rejection, loopback enforcement, and protected regular
 token-file permissions.
 
-## Exact real-PostgreSQL + page preview plan (not executed)
+## Exact 30-minute real-PostgreSQL + page preview plan (not executed)
 
 The coordinator must release one bounded preview window before any of these
-steps run.
+steps run. The executor records a 30-minute deadline before creating resources;
+no retry or extension is implicit.
 
 1. Use one task-owned temporary fixture from the already cached PostgreSQL 17
    image `public.ecr.aws/docker/library/postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6`.
@@ -111,7 +112,8 @@ steps run.
    `127.0.0.1:8766` only. Confirm unauthenticated,
    wrong-token, spoofed-identity, and non-loopback requests fail before any
    asset/draft I/O; then confirm the authenticated session reports the fixed PRT
-   administrator.
+   administrator. Run the Host under a 30-minute terminating supervisor; do not
+   leave a listener alive merely because the browser is idle.
 5. After the UI owner's `apps/management/web` candidate is integrated and its
    tests pass, build it with the already locked dependencies. Point
    `A2FLOW_MANAGEMENT_STATIC_DIRECTORY` at that exact `dist`; the Host serves UI
@@ -126,11 +128,12 @@ steps run.
    labelled `PREPARED_NOT_PUBLISHED`; compare immutable asset and serving rows
    before/after to prove no publication occurred. No model call is part of this
    preview.
-7. Stop both owned listeners and remove only the exact temporary container,
-   socket, data directory, database credential, and preview token. Prove no
-   listener, container, volume, fixture path, or token remains. Main/Git source
-   delivery, PostgreSQL evidence, and browser evidence must be reported as
-   separate gates.
+7. At success, failure, or the deadline, stop the exact Host process first,
+   close the local `14176` tunnel, then stop and remove only container
+   `a2flow-af11-management-pg17`. Remove only the recorded temporary socket/data
+   and secret directories. Prove ports `8766`/`14176`, the container, volumes,
+   fixture paths, and token are absent. Main/Git source delivery, PostgreSQL
+   evidence, and browser evidence must be reported as separate gates.
 
 Current prerequisites are therefore: coordinator release, the exact cached
 PostgreSQL 17 fixture, explicit temporary DB/role/socket values, the reviewed

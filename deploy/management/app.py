@@ -18,7 +18,7 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from fastapi import Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from a2flow_asset_store import AssetReader, PostgresAssetRepository
@@ -381,6 +381,11 @@ def _login_page(status=200):
 def _attach_browser(app, authentication, static_directory):
     @app.middleware("http")
     async def protect_static(request, call_next):
+        if not _loopback(request.scope):
+            return JSONResponse(
+                {"error": {"code": "PRIVATE_PREVIEW_LOOPBACK_REQUIRED"}},
+                status_code=403,
+            )
         path = request.url.path
         if path.startswith("/management") or path in {_LOGIN_PATH, _LOGOUT_PATH}:
             return await call_next(request)
