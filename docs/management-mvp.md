@@ -1,6 +1,16 @@
 # Management console MVP / 管理台首版
 
-## Available scope / 已实现范围
+## Publication backend update / 发布后端更新
+
+AF12 (`e120f6c`) adds explicit single-asset publication, retained-version listing and configuration rollback APIs. Candidates remain unpublished until an authorized explicit request. Changes use a serving digest precondition and a namespace transaction lock; stale requests fail. ONLINE stable selection clears gray routing; incompatible selected Application/Ability bindings are rejected. Coordinated multi-asset publication remains deferred.
+
+AF12 已新增单资产正式发布、历史版本列表与配置回滚接口。候选只有经管理员明确发布才生效；生效摘要与 namespace 事务锁保护并发修改，过期请求失败。ONLINE 发布正式版本会清除灰度；不兼容的 Application/业务能力版本绑定会被拒绝。多资产联动发布暂未实现。
+
+Independent checks passed 19 asset-store tests and 18 management tests (one optional PostgreSQL test skipped). Separate real PostgreSQL acceptance covered racing publishers, immutable history, rollback, ONLINE gray/promotion, physical PRT isolation, and HTTP read/admin/stale-write behavior. The disposable database container and socket directory were removed; no models, business operations or existing databases were used. Frontend integration is tracked separately; these backend tests are not browser or deployment evidence.
+
+独立验证通过 19 项资产测试和 18 项管理测试（另有 1 项可选 PostgreSQL 测试跳过）。另行执行的真实 PostgreSQL 验证覆盖并发发布、历史保留、回滚、灰度切换、PRT 分库隔离及 HTTP 权限/冲突。临时数据库容器和 socket 目录已清理，未使用模型、业务接口或既有数据库。前端集成单独记录，后端测试不代表浏览器或部署验证。
+
+## AF11 baseline scope / AF11 已实现基线
 
 One console connects the existing Skill, Ability, Application and Workflow management modules. Authenticated readers browse published lists and details. Administrators can edit existing assets as JSON drafts, save with revision checks, validate, and prepare an explicitly unpublished candidate.
 
