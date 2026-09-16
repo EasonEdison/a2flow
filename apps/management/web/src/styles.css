@@ -170,7 +170,7 @@ code, pre { font-family: var(--mono); }
 .role-status { background: #edf0f4; color: #68727d; }
 .role-status.admin { background: var(--green-soft); color: var(--green-dark); }
 
-.json-card, .editor-panel, .candidate-panel, .readonly-panel {
+.json-card, .editor-panel, .candidate-panel, .readonly-panel, .history-panel {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
@@ -265,6 +265,19 @@ code, pre { font-family: var(--mono); }
 .candidate-title h3 { margin-top: 5px; font-size: 16px; }
 .candidate-title span { border: 1px solid #e0bf78; border-radius: 999px; padding: 5px 9px; color: #8b5b17; font-size: 9px; font-weight: 800; letter-spacing: .6px; }
 .candidate-panel > p { padding: 14px 18px; color: #6f6250; font-size: 11px; line-height: 1.6; }
+.candidate-panel .candidate-warning { padding-top: 0; color: #9a5f11; font-weight: 700; }
+.candidate-action { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 18px 16px; }
+.candidate-action small { color: var(--muted); font-family: var(--mono); font-size: 9px; overflow-wrap: anywhere; }
+.history-panel { margin-top: 18px; padding: 18px; }
+.history-heading, .version-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.history-heading h3 { margin-top: 5px; font-size: 16px; }
+.serving-summary { margin: 14px 0; color: var(--muted); font-family: var(--mono); font-size: 10px; overflow-wrap: anywhere; }
+.version-list { border-top: 1px solid var(--line); }
+.version-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.version-row strong, .version-row small { display: block; }
+.version-row strong { font-size: 12px; }
+.version-row small, .history-panel > small { margin-top: 4px; color: var(--muted); font-family: var(--mono); font-size: 9px; overflow-wrap: anywhere; }
+.history-panel > small { display: block; margin-top: 13px; font-family: inherit; }
 .candidate-panel code { overflow-wrap: anywhere; }
 .candidate-panel details { border-top: 1px solid #ead9b5; }
 .candidate-panel summary { cursor: pointer; padding: 13px 18px; color: #77571f; font-size: 11px; font-weight: 700; }

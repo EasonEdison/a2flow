@@ -4,7 +4,10 @@ import type {
   JsonObject,
   ManagedDraft,
   ManagementSession,
+  PublicationHistory,
   PublicationPlan,
+  PublicationResult,
+  PublicationTarget,
   ValidationReport,
 } from './contracts';
 
@@ -71,6 +74,21 @@ export const managementApi = {
   validate(kind: AssetKind, key: string) {
     return request<ValidationReport>(assetPath(kind, key) + '/validate', {
       method: 'POST',
+    });
+  },
+  history(kind: AssetKind, key: string, signal?: AbortSignal) {
+    return request<PublicationHistory>(assetPath(kind, key) + '/versions', {}, signal);
+  },
+  publish(kind: AssetKind, key: string, plan: PublicationPlan, expectedServingDigest: string) {
+    return request<PublicationResult>(assetPath(kind, key) + '/publications', {
+      method: 'POST',
+      body: JSON.stringify({ expectedServingDigest, candidate: plan.candidate, target: plan.target }),
+    });
+  },
+  rollback(kind: AssetKind, key: string, target: PublicationTarget, expectedServingDigest: string) {
+    return request<PublicationResult>(assetPath(kind, key) + '/rollbacks', {
+      method: 'POST',
+      body: JSON.stringify({ expectedServingDigest, target }),
     });
   },
   prepare(

@@ -42,14 +42,36 @@ export interface ValidationReport {
   normalized?: JsonObject;
 }
 
+export interface PublicationTarget {
+  environment: Environment;
+  versionId: string;
+  channel: string;
+  grayUserIds: string[];
+}
+
 export interface PublicationPlan extends JsonObject {
   kind: AssetKind;
   key: string;
   draftRevision: number;
   contentDigest: string;
+  target: PublicationTarget;
   status: 'PREPARED_NOT_PUBLISHED';
   published: false;
   candidate: JsonObject;
+}
+
+export interface PublicationHistory {
+  kind: AssetKind;
+  key: string;
+  versions: Array<{ versionId: string; assetId: string; contentDigest: string }>;
+  serving: JsonObject;
+  servingDigest: string;
+}
+
+export interface PublicationResult extends JsonObject {
+  status: 'PUBLISHED' | 'ROLLED_BACK';
+  published: true;
+  businessCompensated: false;
 }
 
 export interface DraftBuffer {

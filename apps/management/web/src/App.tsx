@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ManagementApiError, managementApi } from './api';
-import { settleSaveBuffer, shouldChangeKind } from './draft-state';
+import {
+  publicationConfirmation, rollbackConfirmation, rollbackTarget,
+  settleSaveBuffer, shouldChangeKind,
+} from './draft-state';
 import {
   KIND_COPY,
   assetKeyOf,
@@ -11,6 +14,7 @@ import {
   type DraftBuffer,
   type JsonObject,
   type ManagementSession,
+  type PublicationHistory,
   type PublicationPlan,
   type ValidationReport,
 } from './contracts';
@@ -23,6 +27,9 @@ function errorText(error: unknown): string {
       return '草稿已被其他会话更新。你的未保存内容仍保留在编辑器中，请比对后再处理。';
     }
     if (error.code === 'ADMIN_REQUIRED') return '当前会话没有管理员写权限。';
+    if (error.code === 'STALE_SERVING_SELECTION') {
+      return '服务选择已更新。请刷新版本历史并重新检查；不会自动重试。';
+    }
     return error.code + ' · HTTP ' + error.status;
   }
   if (error instanceof SyntaxError) return '草稿不是有效 JSON，请修正语法后重试。';
@@ -183,7 +190,15 @@ function ValidationView({ report }: { report: ValidationReport }) {
   );
 }
 
-function CandidateView({ plan }: { plan: PublicationPlan }) {
+function CandidateView({
+  plan, history, busy, onPublish,
+}: {
+  plan: PublicationPlan;
+  history: PublicationHistory;
+  busy: boolean;
+  onPublish: () => void;
+}) {
+  const users = plan.target.grayUserIds.length ? plan.target.grayUserIds.join(', ') : '无';
   return (
     <section className="candidate-panel" aria-live="polite">
       <div className="candidate-title">
@@ -193,13 +208,50 @@ function CandidateView({ plan }: { plan: PublicationPlan }) {
         </div>
         <span>NOT PUBLISHED</span>
       </div>
-      <p>
-        此操作没有写入版本或切换服务流量。候选摘要：<code>{plan.contentDigest}</code>
-      </p>
+      <p>环境 {plan.target.environment} · 通道 {plan.target.channel} · 版本 {plan.target.versionId} · 灰度用户 {users}</p>
+      {plan.target.channel === 'STABLE' ? <p className="candidate-warning">切换 STABLE 会清除当前灰度。</p> : null}
+      <div className="candidate-action">
+        <small>CAS：{history.servingDigest}</small>
+        <button className="primary-button" type="button" disabled={busy} onClick={onPublish}>
+          确认并显式发布
+        </button>
+      </div>
       <details>
         <summary>查看候选 JSON</summary>
         <pre>{JSON.stringify(plan.candidate, null, 2)}</pre>
       </details>
+    </section>
+  );
+}
+
+function HistoryPanel({
+  history, canAuthor, busy, onRefresh, onRollback,
+}: {
+  history: PublicationHistory;
+  canAuthor: boolean;
+  busy: boolean;
+  onRefresh: () => void;
+  onRollback: (versionId: string) => void;
+}) {
+  return (
+    <section className="history-panel">
+      <div className="history-heading">
+        <div><p className="section-label">Retained versions</p><h3>保留版本</h3></div>
+        <button className="quiet-button" type="button" disabled={busy} onClick={onRefresh}>刷新历史</button>
+      </div>
+      <p className="serving-summary">当前选择：{JSON.stringify(history.serving)}</p>
+      <div className="version-list">
+        {history.versions.map((version) => (
+          <div className="version-row" key={version.versionId}>
+            <div><strong>{version.versionId}</strong><small>{version.contentDigest}</small></div>
+            {canAuthor ? (
+              <button className="secondary-button" type="button" disabled={busy}
+                onClick={() => onRollback(version.versionId)}>回滚配置到此版本</button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      <small>按版本标识列出保留记录；当前 current/stable/gray 选择以上方状态为准。回滚只改配置，不补偿业务。</small>
     </section>
   );
 }
@@ -209,11 +261,13 @@ function PublicationControls({
   revision,
   disabled,
   onPrepare,
+  onTargetChange,
 }: {
   session: ManagementSession;
   revision: number;
   disabled: boolean;
   onPrepare: (versionId: string, channel: string, grayUserIds: string[]) => Promise<void>;
+  onTargetChange: () => void;
 }) {
   const [versionId, setVersionId] = useState('');
   const [channel, setChannel] = useState(session.environment === 'PRT' ? 'CURRENT' : 'STABLE');
@@ -239,15 +293,16 @@ function PublicationControls({
         <input
           id="version-id"
           value={versionId}
+          disabled={disabled || working}
           maxLength={256}
-          onChange={(event) => setVersionId(event.target.value)}
+          onChange={(event) => { setVersionId(event.target.value); onTargetChange(); }}
           placeholder="例如 0.2.0-rc.1"
         />
       </div>
       {session.environment === 'ONLINE' ? (
         <div>
           <label htmlFor="release-channel">目标通道</label>
-          <select id="release-channel" value={channel} onChange={(event) => setChannel(event.target.value)}>
+          <select id="release-channel" disabled={disabled || working} value={channel} onChange={(event) => { setChannel(event.target.value); onTargetChange(); }}>
             <option value="STABLE">STABLE</option>
             <option value="GRAY">GRAY</option>
           </select>
@@ -259,7 +314,8 @@ function PublicationControls({
           <textarea
             id="gray-users"
             value={grayUsers}
-            onChange={(event) => setGrayUsers(event.target.value)}
+            disabled={disabled || working}
+            onChange={(event) => { setGrayUsers(event.target.value); onTargetChange(); }}
             placeholder="每行一个用户 ID"
           />
         </div>
@@ -284,13 +340,17 @@ function AuthorWorkspace({
   buffer,
   validation,
   plan,
+  history,
   actionMessage,
+  successMessage,
   actionBusy,
   onEdit,
   onSave,
   onReload,
   onValidate,
   onPrepare,
+  onPublish,
+  onTargetChange,
 }: {
   session: ManagementSession;
   kind: AssetKind;
@@ -298,13 +358,17 @@ function AuthorWorkspace({
   buffer: DraftBuffer | undefined;
   validation: ValidationReport | null;
   plan: PublicationPlan | null;
+  history: PublicationHistory;
   actionMessage: string | null;
+  successMessage: string | null;
   actionBusy: boolean;
   onEdit: (value: string) => void;
   onSave: () => void;
   onReload: () => void;
   onValidate: () => void;
   onPrepare: (versionId: string, channel: string, users: string[]) => Promise<void>;
+  onPublish: () => void;
+  onTargetChange: () => void;
 }) {
   if (!buffer) return <div className="workspace-state">正在加载草稿…</div>;
   return (
@@ -349,14 +413,16 @@ function AuthorWorkspace({
         </div>
       </section>
       {actionMessage ? <div className="notice error">{actionMessage}</div> : null}
+      {successMessage ? <div className="notice success">{successMessage}</div> : null}
       {validation ? <ValidationView report={validation} /> : null}
       <PublicationControls
         session={session}
         revision={buffer.revision}
         disabled={buffer.dirty || actionBusy || validation?.valid !== true}
         onPrepare={onPrepare}
+        onTargetChange={onTargetChange}
       />
-      {plan ? <CandidateView plan={plan} /> : null}
+      {plan ? <CandidateView plan={plan} history={history} busy={actionBusy} onPublish={onPublish} /> : null}
     </div>
   );
 }
@@ -375,6 +441,8 @@ function App() {
   const [buffers, setBuffers] = useState<Buffers>({});
   const [validation, setValidation] = useState<ValidationReport | null>(null);
   const [plan, setPlan] = useState<PublicationPlan | null>(null);
+  const [history, setHistory] = useState<PublicationHistory | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -425,14 +493,18 @@ function App() {
     setAssetError(null);
     setValidation(null);
     setPlan(null);
+    setHistory(null);
+    setSuccessMessage(null);
     setActionMessage(null);
     const detailRequest = managementApi.detail(kind, selectedKey, controller.signal);
     const draftRequest = session.canAuthor
       ? managementApi.draft(kind, selectedKey, controller.signal)
       : Promise.resolve(null);
-    Promise.all([detailRequest, draftRequest]).then(([nextDetail, draft]) => {
+    const historyRequest = managementApi.history(kind, selectedKey, controller.signal);
+    Promise.all([detailRequest, draftRequest, historyRequest]).then(([nextDetail, draft, nextHistory]) => {
       if (controller.signal.aborted) return;
       setDetail(nextDetail);
+      setHistory(nextHistory);
       if (draft) {
         setBuffers((current) => current[currentBufferId]
           ? current
@@ -469,6 +541,7 @@ function App() {
     setValidation(null);
     setPlan(null);
     setActionMessage(null);
+    setSuccessMessage(null);
   }
 
   async function saveDraft() {
@@ -536,10 +609,89 @@ function App() {
     }
   }
 
+  async function refreshPublishedState() {
+    if (!kind || !selectedKey) return;
+    setActionBusy(true);
+    setActionMessage(null);
+    setSuccessMessage(null);
+    try {
+      const [nextHistory, nextDetail, nextAssets] = await Promise.all([
+        managementApi.history(kind, selectedKey), managementApi.detail(kind, selectedKey),
+        managementApi.list(kind),
+      ]);
+      setHistory(nextHistory);
+      setDetail(nextDetail);
+      setAssets(nextAssets);
+      setPlan(null);
+    } catch (error) {
+      setActionMessage(errorText(error));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function publishPrepared() {
+    if (!kind || !selectedKey || !plan || !history) return;
+    if (!window.confirm(publicationConfirmation(plan.target))) return;
+    setActionBusy(true);
+    setActionMessage(null);
+    setSuccessMessage(null);
+    try {
+      await managementApi.publish(kind, selectedKey, plan, history.servingDigest);
+      setPlan(null);
+      setSuccessMessage('发布完成：已写入不可变版本并更新服务选择。');
+      try {
+        const [nextHistory, nextDetail, nextAssets] = await Promise.all([
+          managementApi.history(kind, selectedKey), managementApi.detail(kind, selectedKey),
+          managementApi.list(kind),
+        ]);
+        setHistory(nextHistory);
+        setDetail(nextDetail);
+        setAssets(nextAssets);
+      } catch (refreshError) {
+        setActionMessage('发布已成功，但刷新失败：' + errorText(refreshError));
+      }
+    } catch (error) {
+      setActionMessage(errorText(error));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function rollbackVersion(versionId: string) {
+    if (!session || !kind || !selectedKey || !history) return;
+    const target = rollbackTarget(session.environment, versionId);
+    if (!window.confirm(rollbackConfirmation(target))) return;
+    setActionBusy(true);
+    setActionMessage(null);
+    setSuccessMessage(null);
+    try {
+      await managementApi.rollback(kind, selectedKey, target, history.servingDigest);
+      setPlan(null);
+      setSuccessMessage('配置回滚完成；未撤销或补偿任何业务操作。');
+      try {
+        const [nextHistory, nextDetail, nextAssets] = await Promise.all([
+          managementApi.history(kind, selectedKey), managementApi.detail(kind, selectedKey),
+          managementApi.list(kind),
+        ]);
+        setHistory(nextHistory);
+        setDetail(nextDetail);
+        setAssets(nextAssets);
+      } catch (refreshError) {
+        setActionMessage('回滚已成功，但刷新失败：' + errorText(refreshError));
+      }
+    } catch (error) {
+      setActionMessage(errorText(error));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   async function prepareCandidate(versionId: string, channel: string, grayUserIds: string[]) {
     if (!session || !kind || !selectedKey || !buffer) return;
     setActionBusy(true);
     setActionMessage(null);
+    setSuccessMessage(null);
     setPlan(null);
     try {
       const nextPlan = await managementApi.prepare(kind, selectedKey, buffer.revision, {
@@ -609,7 +761,9 @@ function App() {
             {!assetLoading && !assetError && detail ? (
               <>
                 <JsonBlock value={detail} label="当前已发布详情" />
-                {session.canAuthor ? (
+                {history ? <HistoryPanel history={history} canAuthor={session.canAuthor} busy={actionBusy}
+                  onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} /> : null}
+                {session.canAuthor && history ? (
                   <AuthorWorkspace
                     session={session}
                     kind={kind}
@@ -617,13 +771,17 @@ function App() {
                     buffer={buffer}
                     validation={validation}
                     plan={plan}
+                    history={history}
                     actionMessage={actionMessage}
+                    successMessage={successMessage}
                     actionBusy={actionBusy}
                     onEdit={editDraft}
                     onSave={saveDraft}
                     onReload={reloadDraft}
                     onValidate={validateDraft}
                     onPrepare={prepareCandidate}
+                    onPublish={publishPrepared}
+                    onTargetChange={() => { setPlan(null); setSuccessMessage(null); }}
                   />
                 ) : (
                   <section className="readonly-panel">
