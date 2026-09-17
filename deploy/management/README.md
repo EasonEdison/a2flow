@@ -68,6 +68,53 @@ preview; it is not a production authentication design. Do not change the bind
 to `0.0.0.0`, publish the port, add a public reverse-proxy route, or place the
 token in source, a URL, UI bundle, shell history, or logs.
 
+## Isolated acceptance command
+
+From the repository root, use the project's Python environment with its declared
+dependencies installed and export the existing source roots before either command
+in this section (the repository is not installed as one root Python package):
+
+```bash
+export PYTHONPATH="packages/contracts/src:packages/asset-store/src:services/skill-registry/src:services/capability-registry/src:services/a2ui-composer/src:services/workflow-composer/src:services/management-api/src:examples/activity-planning"
+```
+
+The command below is the single reviewed entry point for real management
+acceptance. Direct invocation of the PostgreSQL test file cannot accept arbitrary
+database names or DSNs; it requires an owner-only fixture plan and verifies each
+random fixture identity inside its database before schema setup. The runner checks
+Python dependencies and a local Docker endpoint before any mutation. It requires
+an explicit opt-in, a new absolute output directory, a running Docker daemon, and
+the exact pinned PostgreSQL image already present in the local cache. It never
+pulls an image, publishes a host port, accepts an external DSN, or reuses an
+existing database. It creates a distinct database and namespace for every test
+case inside one task-owned, resource-bounded, network-disabled container,
+initializes schemas and synthetic assets explicitly, exercises the real ASGI and
+PostgreSQL paths, writes sanitized test counts and failing case IDs, and removes
+only resources whose unpredictable invocation marker, exact container ID, name,
+and directory marker all match.
+
+```bash
+python -m deploy.management.acceptance \
+  --authorized-isolated-fixture \
+  --output-directory /absolute/new/path/management-acceptance
+```
+
+A missing Python dependency, local Docker CLI/daemon/context, or cached image exits
+nonzero, records PostgreSQL as `NOT_RUN`, and never prints `VERIFIED`. Remote
+Docker endpoints are rejected before mutation. A zero-test or skipped suite is
+not accepted as PostgreSQL evidence, test execution is bounded, and teardown
+failure changes aggregate status to `FAILED`. `unit`, `browser`, and `deployment`
+remain separate `NOT_RUN` fields because this command does not substitute
+PostgreSQL acceptance for those gates. The pinned image entrypoint, password-file
+handling, and `POSTGRES_INITDB_ARGS` are source-configured but remain operationally
+unverified until the real command runs. Host-mounted Unix sockets require a Docker
+host sharing the host filesystem topology; Docker Desktop cross-VM socket behavior
+has not been verified. Run offline guards with:
+
+```bash
+python -m unittest deploy.management.test_acceptance
+```
+
 ## Offline verification
 
 Run with the repository's existing environment and source roots; no dependency
