@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ManagementApiError, managementApi } from './api';
 import { filterAssets } from './asset-filter';
+import { FormEditor } from './FormEditors';
+import { hasPendingJsonField, inspectDraftText } from './form-editor-state';
 import {
   publicationConfirmation, rollbackConfirmation, rollbackTarget,
   settleSaveBuffer, shouldChangeKind,
@@ -400,18 +402,30 @@ function AuthorWorkspace({
   onPublish: () => void;
   onTargetChange: () => void;
 }) {
+  const [mode, setMode] = useState<'FORM' | 'JSON'>('FORM');
   if (!buffer) return <div className="workspace-state">正在加载草稿…</div>;
+  const inspection = inspectDraftText(buffer.text);
+  const invalidDraft = !inspection.ok;
+  const pendingJsonField = inspection.ok && hasPendingJsonField(inspection.document);
   return (
     <div className="author-workspace">
       <section className="editor-panel">
         <div className="editor-heading">
           <div>
-            <p className="section-label">结构化草稿 JSON</p>
+            <p className="section-label">管理草稿编辑器</p>
             <h2>{kind} · {keyName}</h2>
           </div>
-          <span className={buffer.dirty ? 'edit-state dirty' : 'edit-state'}>
-            {buffer.dirty ? '未保存' : '已同步'}
-          </span>
+          <div className="editor-heading-actions">
+            <div className="mode-switch" role="group" aria-label="编辑模式">
+              <button type="button" className={mode === 'FORM' ? 'active' : ''} disabled={actionBusy || invalidDraft}
+                onClick={() => setMode('FORM')}>表单</button>
+              <button type="button" className={mode === 'JSON' ? 'active' : ''} disabled={actionBusy}
+                onClick={() => setMode('JSON')}>完整 JSON</button>
+            </div>
+            <span className={buffer.dirty ? 'edit-state dirty' : 'edit-state'}>
+              {buffer.dirty ? '未保存' : '已同步'}
+            </span>
+          </div>
         </div>
         {buffer.conflict ? (
           <div className="notice warning">
@@ -422,21 +436,25 @@ function AuthorWorkspace({
             </button>
           </div>
         ) : null}
-        <textarea
-          className="json-editor"
-          aria-label="结构化草稿 JSON"
-          spellCheck={false}
-          value={buffer.text}
-          disabled={actionBusy}
-          onChange={(event) => onEdit(event.target.value)}
-        />
+        {invalidDraft ? <div className="notice warning invalid-json"><strong>完整 JSON 当前无效</strong><span>{inspection.error}</span><span>内容不会被重置；修正前不能保存、验证或发布，也不能进入表单模式。</span></div> : null}
+        {pendingJsonField ? <div className="notice warning invalid-json"><strong>存在尚未应用的字段 JSON</strong><span>请在表单中修正并应用，或切换到完整 JSON 明确处理；当前不能保存、验证或发布。</span></div> : null}
+        {mode === 'JSON' || invalidDraft ? (
+          <textarea
+            className="json-editor"
+            aria-label="结构化草稿 JSON"
+            spellCheck={false}
+            value={buffer.text}
+            disabled={actionBusy}
+            onChange={(event) => onEdit(event.target.value)}
+          />
+        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} onEdit={onEdit} />}
         <div className="editor-footer">
           <span>修订 #{buffer.revision} · {buffer.updatedBy}</span>
           <div>
-            <button className="quiet-button" type="button" disabled={actionBusy || buffer.dirty} onClick={onValidate}>
+            <button className="quiet-button" type="button" disabled={actionBusy || buffer.dirty || invalidDraft || pendingJsonField} onClick={onValidate}>
               验证已保存草稿
             </button>
-            <button className="primary-button" type="button" disabled={actionBusy || !buffer.dirty} onClick={onSave}>
+            <button className="primary-button" type="button" disabled={actionBusy || !buffer.dirty || invalidDraft || pendingJsonField} onClick={onSave}>
               {actionBusy ? '处理中…' : '保存草稿'}
             </button>
           </div>
@@ -448,7 +466,7 @@ function AuthorWorkspace({
       <PublicationControls
         session={session}
         revision={buffer.revision}
-        disabled={buffer.dirty || actionBusy || validation?.valid !== true}
+        disabled={buffer.dirty || actionBusy || invalidDraft || pendingJsonField || validation?.valid !== true}
         onPrepare={onPrepare}
         onTargetChange={onTargetChange}
       />

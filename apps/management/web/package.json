@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "node --test tests/draft-state.test.mjs",
+    "test": "node --test tests/draft-state.test.mjs tests/form-editor-state.test.mjs",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
