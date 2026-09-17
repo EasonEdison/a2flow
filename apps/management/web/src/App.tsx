@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ManagementApiError, managementApi } from './api';
+import { filterAssets } from './asset-filter';
 import {
   publicationConfirmation, rollbackConfirmation, rollbackTarget,
   settleSaveBuffer, shouldChangeKind,
@@ -103,6 +104,8 @@ function ShellSidebar({
 function AssetList({
   kind,
   assets,
+  query,
+  onQueryChange,
   selectedKey,
   buffers,
   loading,
@@ -112,6 +115,8 @@ function AssetList({
 }: {
   kind: AssetKind;
   assets: AssetSummary[];
+  query: string;
+  onQueryChange: (query: string) => void;
   selectedKey: string | null;
   buffers: Buffers;
   loading: boolean;
@@ -119,6 +124,9 @@ function AssetList({
   onSelect: (key: string) => void;
   disabled: boolean;
 }) {
+  const filteredAssets = useMemo(() => filterAssets(assets, query), [assets, query]);
+  const hasQuery = query.trim().length > 0;
+
   return (
     <section className="asset-rail" aria-label={KIND_COPY[kind].label + ' 列表'}>
       <header className="rail-header">
@@ -126,16 +134,38 @@ function AssetList({
           <p className="section-label">资产目录</p>
           <h1>{KIND_COPY[kind].label}</h1>
         </div>
-        <span className="count">{assets.length}</span>
+        <span className="count" aria-label={`匹配 ${filteredAssets.length} 项，共 ${assets.length} 项`}>
+          {filteredAssets.length}/{assets.length}
+        </span>
       </header>
       <p className="guidance">{KIND_COPY[kind].guidance}</p>
+      <div className="asset-search">
+        <label htmlFor="asset-search">搜索当前资产类型</label>
+        <div className="asset-search-control">
+          <input
+            id="asset-search"
+            type="search"
+            value={query}
+            disabled={disabled}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="按名称或标识符搜索"
+          />
+          <button type="button" disabled={disabled || !query} onClick={() => onQueryChange('')}>
+            清除
+          </button>
+        </div>
+        <span className="search-count" aria-live="polite">匹配 {filteredAssets.length} 项，共 {assets.length} 项</span>
+      </div>
       {loading ? <div className="rail-state">正在加载列表…</div> : null}
       {error ? <div className="rail-state error">{error}</div> : null}
       {!loading && !error && assets.length === 0 ? (
         <div className="rail-state">当前环境没有已发布资产。</div>
       ) : null}
+      {!loading && !error && assets.length > 0 && hasQuery && filteredAssets.length === 0 ? (
+        <div className="rail-state no-match">没有匹配的资产，请调整搜索条件。</div>
+      ) : null}
       <div className="asset-items">
-        {assets.map((asset) => {
+        {filteredAssets.map((asset) => {
           const key = assetKeyOf(asset);
           const dirty = buffers[bufferId(kind, key)]?.dirty;
           return (
@@ -432,6 +462,7 @@ function App() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [kind, setKind] = useState<AssetKind | null>(null);
   const [assets, setAssets] = useState<AssetSummary[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -528,6 +559,7 @@ function App() {
   function changeKind(next: AssetKind) {
     if (!shouldChangeKind(kind, next)) return;
     setKind(next);
+    setSearchQuery('');
     setSelectedKey(null);
     setAssets([]);
   }
@@ -727,6 +759,8 @@ function App() {
         <AssetList
           kind={kind}
           assets={assets}
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
           selectedKey={selectedKey}
           buffers={buffers}
           loading={listLoading}

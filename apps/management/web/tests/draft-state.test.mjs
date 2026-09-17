@@ -4,6 +4,7 @@ import {
   publicationConfirmation, rollbackConfirmation, rollbackTarget,
   settleSaveBuffer, shouldChangeKind,
 } from '../src/draft-state.js';
+import './asset-filter.test.mjs';
 
 test('keeps the current list when the active kind is clicked again', () => {
   assert.equal(shouldChangeKind('SKILL', 'SKILL'), false);
