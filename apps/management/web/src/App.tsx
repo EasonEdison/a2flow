@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { ManagementApiError, managementApi } from './api';
 import { filterAssets } from './asset-filter';
 import { FormEditor } from './FormEditors';
-import { hasPendingJsonField, inspectDraftText } from './form-editor-state';
+import {
+  applyPendingField, createPendingFieldState, discardPendingField, editPendingField, inspectDraftText,
+  pendingFieldConflict, reconcilePendingFields, type PendingFields,
+} from './form-editor-state';
 import {
   publicationConfirmation, rollbackConfirmation, rollbackTarget,
   settleSaveBuffer, shouldChangeKind,
@@ -23,6 +26,7 @@ import {
 } from './contracts';
 
 type Buffers = Record<string, DraftBuffer>;
+type PendingBuffers = Record<string, PendingFields>;
 
 function errorText(error: unknown): string {
   if (error instanceof ManagementApiError) {
@@ -203,6 +207,27 @@ function JsonBlock({ value, label }: { value: unknown; label: string }) {
   );
 }
 
+const ISSUE_FIELD_LABELS: Record<string, string> = {
+  '/metadata/name': '名称',
+  '/metadata/description': '描述',
+  '/modelArgumentSchema': 'Model argument schema',
+  '/resolvedInputSchema': 'Resolved input schema',
+  '/outputSchema': 'Output schema',
+  '/definition/surfaceTemplate': 'Surface template',
+  '/definition/surfaceTemplate/inputSchema': 'Parameter schema',
+  '/definition/renderPolicy/interactionMode': 'Mode',
+  '/topology': 'Topology（只读，不会自动转换）',
+};
+
+function focusValidationPath(path?: string) {
+  const label = path ? ISSUE_FIELD_LABELS[path] : undefined;
+  if (!label) return;
+  const control = document.querySelector<HTMLElement>(`[aria-label="${CSS.escape(label)}"]`)
+    ?? [...document.querySelectorAll<HTMLLabelElement>('label')].find((item) => item.textContent?.includes(label))?.querySelector<HTMLElement>('input, textarea, select');
+  control?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  control?.focus();
+}
+
 function ValidationView({ report }: { report: ValidationReport }) {
   return (
     <section className={report.valid ? 'notice success' : 'notice warning'} aria-live="polite">
@@ -213,7 +238,9 @@ function ValidationView({ report }: { report: ValidationReport }) {
         <ul>
           {report.issues.map((issue, index) => (
             <li key={issue.code + index}>
-              {issue.code}{issue.path ? ' · ' + issue.path : ''}{issue.message ? ' · ' + issue.message : ''}
+              {ISSUE_FIELD_LABELS[issue.path ?? ''] ? <button type="button" className="issue-link" onClick={() => focusValidationPath(issue.path)}>
+                {issue.code}{issue.path ? ' · ' + issue.path : ''}{issue.message ? ' · ' + issue.message : ''}
+              </button> : <span>{issue.code}{issue.path ? ' · ' + issue.path : ''}{issue.message ? ' · ' + issue.message : ''}</span>}
             </li>
           ))}
         </ul>
@@ -376,7 +403,12 @@ function AuthorWorkspace({
   actionMessage,
   successMessage,
   actionBusy,
+  pendingFields,
   onEdit,
+  onPendingChange,
+  onApplyPending,
+  onDiscardPending,
+  getPendingConflict,
   onSave,
   onReload,
   onValidate,
@@ -394,7 +426,12 @@ function AuthorWorkspace({
   actionMessage: string | null;
   successMessage: string | null;
   actionBusy: boolean;
+  pendingFields: PendingFields;
   onEdit: (value: string) => void;
+  onPendingChange: (path: string[], text: string, expected: 'object' | 'array', baseValue: unknown) => void;
+  onApplyPending: (path: string[], expected: 'object' | 'array') => void;
+  onDiscardPending: (path: string[]) => void;
+  getPendingConflict: (path: string[]) => string | null;
   onSave: () => void;
   onReload: () => void;
   onValidate: () => void;
@@ -406,7 +443,7 @@ function AuthorWorkspace({
   if (!buffer) return <div className="workspace-state">正在加载草稿…</div>;
   const inspection = inspectDraftText(buffer.text);
   const invalidDraft = !inspection.ok;
-  const pendingJsonField = inspection.ok && hasPendingJsonField(inspection.document);
+  const pendingJsonField = Object.keys(pendingFields).length > 0;
   return (
     <div className="author-workspace">
       <section className="editor-panel">
@@ -437,7 +474,7 @@ function AuthorWorkspace({
           </div>
         ) : null}
         {invalidDraft ? <div className="notice warning invalid-json"><strong>完整 JSON 当前无效</strong><span>{inspection.error}</span><span>内容不会被重置；修正前不能保存、验证或发布，也不能进入表单模式。</span></div> : null}
-        {pendingJsonField ? <div className="notice warning invalid-json"><strong>存在尚未应用的字段 JSON</strong><span>请在表单中修正并应用，或切换到完整 JSON 明确处理；当前不能保存、验证或发布。</span></div> : null}
+        {pendingJsonField ? <div className="notice warning invalid-json"><strong>存在尚未应用的字段 JSON</strong><span>canonical 草稿尚未改变。请在表单中明确应用或丢弃；切换资产或模式不会清除字段文本。</span></div> : null}
         {mode === 'JSON' || invalidDraft ? (
           <textarea
             className="json-editor"
@@ -447,7 +484,9 @@ function AuthorWorkspace({
             disabled={actionBusy}
             onChange={(event) => onEdit(event.target.value)}
           />
-        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} onEdit={onEdit} />}
+        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} onEdit={onEdit}
+          onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending}
+          getPendingConflict={getPendingConflict} />}
         <div className="editor-footer">
           <span>修订 #{buffer.revision} · {buffer.updatedBy}</span>
           <div>
@@ -488,6 +527,7 @@ function App() {
   const [assetLoading, setAssetLoading] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [buffers, setBuffers] = useState<Buffers>({});
+  const [pendingBuffers, setPendingBuffers] = useState<PendingBuffers>({});
   const [validation, setValidation] = useState<ValidationReport | null>(null);
   const [plan, setPlan] = useState<PublicationPlan | null>(null);
   const [history, setHistory] = useState<PublicationHistory | null>(null);
@@ -569,6 +609,7 @@ function App() {
 
   const activeBufferId = kind && selectedKey ? bufferId(kind, selectedKey) : null;
   const buffer = activeBufferId ? buffers[activeBufferId] : undefined;
+  const pendingFields = activeBufferId ? pendingBuffers[activeBufferId] ?? createPendingFieldState() : createPendingFieldState();
   const selectedSummary = useMemo(
     () => assets.find((asset) => assetKeyOf(asset) === selectedKey) ?? null,
     [assets, selectedKey],
@@ -583,15 +624,49 @@ function App() {
   }
 
   function editDraft(value: string) {
-    if (!activeBufferId) return;
+    if (!activeBufferId || !buffer) return;
+    const nextInspection = inspectDraftText(value);
+    if (nextInspection.ok) {
+      setPendingBuffers((current) => ({
+        ...current,
+        [activeBufferId]: reconcilePendingFields(current[activeBufferId] ?? {}, nextInspection.document),
+      }));
+    }
     setBuffers((current) => ({
       ...current,
-      [activeBufferId]: { ...current[activeBufferId], text: value, dirty: true, conflict: false },
+      [activeBufferId]: { ...current[activeBufferId], text: value, dirty: true },
     }));
     setValidation(null);
     setPlan(null);
     setActionMessage(null);
     setSuccessMessage(null);
+  }
+
+  function changePendingField(path: string[], text: string, expected: 'object' | 'array', baseValue: unknown) {
+    if (!activeBufferId) return;
+    setPendingBuffers((current) => ({
+      ...current,
+      [activeBufferId]: editPendingField(current[activeBufferId] ?? {}, path, text, expected, baseValue),
+    }));
+    setValidation(null);
+    setPlan(null);
+  }
+
+  function applyPending(path: string[], expected: 'object' | 'array') {
+    if (!activeBufferId || !buffer) return;
+    const inspection = inspectDraftText(buffer.text);
+    if (!inspection.ok) return;
+    const result = applyPendingField(inspection.document, pendingFields, path, expected);
+    setPendingBuffers((current) => ({ ...current, [activeBufferId]: result.pending }));
+    if (result.applied) editDraft(JSON.stringify(result.document, null, 2));
+  }
+
+  function discardPending(path: string[]) {
+    if (!activeBufferId || !buffer) return;
+    const inspection = inspectDraftText(buffer.text);
+    if (!inspection.ok || !window.confirm('丢弃该字段尚未应用的文本并恢复 canonical 值？')) return;
+    const result = discardPendingField(inspection.document, pendingFields, path);
+    setPendingBuffers((current) => ({ ...current, [activeBufferId]: result.pending }));
   }
 
   async function saveDraft() {
@@ -627,7 +702,8 @@ function App() {
 
   async function reloadDraft() {
     if (!kind || !selectedKey || !activeBufferId) return;
-    if (!window.confirm('重新加载会丢弃当前未保存内容。确定继续吗？')) return;
+    const pendingCount = Object.keys(pendingFields).length;
+    if (!window.confirm(`重新加载会丢弃当前未保存内容${pendingCount ? `和 ${pendingCount} 个尚未应用的字段编辑` : ''}。确定继续吗？`)) return;
     setActionBusy(true);
     setActionMessage(null);
     try {
@@ -636,6 +712,7 @@ function App() {
         ...current,
         [activeBufferId]: createDraftBuffer(latest),
       }));
+      setPendingBuffers((current) => ({ ...current, [activeBufferId]: createPendingFieldState() }));
       setValidation(null);
       setPlan(null);
     } catch (error) {
@@ -827,7 +904,12 @@ function App() {
                     actionMessage={actionMessage}
                     successMessage={successMessage}
                     actionBusy={actionBusy}
+                    pendingFields={pendingFields}
                     onEdit={editDraft}
+                    onPendingChange={changePendingField}
+                    onApplyPending={applyPending}
+                    onDiscardPending={discardPending}
+                    getPendingConflict={(path) => pendingFieldConflict(pendingFields, path)}
                     onSave={saveDraft}
                     onReload={reloadDraft}
                     onValidate={validateDraft}

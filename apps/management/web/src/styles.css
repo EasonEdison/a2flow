@@ -266,6 +266,10 @@ code, pre { font-family: var(--mono); }
 .json-form-field textarea { min-height: 180px; font-family: var(--mono); line-height: 1.55; }
 .field-feedback { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .field-feedback.error { color: var(--red); }
+.field-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.malformed-row { min-width: 0; border: 1px solid #e4b8b3; border-radius: 7px; padding: 9px 10px; background: var(--red-soft); color: var(--red); font-size: 10px; line-height: 1.5; }
+.malformed-row strong, .malformed-row code, .malformed-row span { display: block; overflow-wrap: anywhere; }
+.malformed-row code { margin-block: 4px; white-space: pre-wrap; }
 .resource-summary { grid-column: 1 / -1; max-height: 240px; margin: 0; overflow: auto; border-radius: 7px; padding: 12px; background: #f4f7f6; color: #31453f; font-size: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .form-section > small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
 .fixed-policy { border-radius: 7px; padding: 9px; background: #f0f4f2; color: var(--muted); font-family: var(--mono); font-size: 10px; overflow-wrap: anywhere; }
@@ -293,6 +297,7 @@ code, pre { font-family: var(--mono); }
 .notice.warning { background: var(--amber-soft); color: #7f5018; }
 .notice.error { background: var(--red-soft); color: var(--red); }
 .notice ul { margin: 3px 0 0; padding-left: 19px; }
+.issue-link { border: 0; padding: 0; background: transparent; color: inherit; text-align: left; text-decoration: underline; }
 
 .publication-controls {
   display: grid;
@@ -385,8 +390,14 @@ code, pre { font-family: var(--mono); }
   .guidance { margin-block: 10px 12px; }
   .asset-search { margin-bottom: 14px; }
   .asset-search-control { max-width: 440px; }
-  .asset-items { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
-  .asset-row { min-width: 200px; }
+  .asset-items { flex-direction: row; overflow-x: auto; padding-bottom: 4px; max-width: 100%; }
+  .asset-row { min-width: min(200px, calc(100vw - 28px)); }
+  .editor-heading { flex-direction: column; }
+  .editor-heading-actions { width: 100%; align-items: stretch; }
+  .mode-switch { width: 100%; }
+  .mode-switch button { flex: 1; }
+  .field-feedback { align-items: flex-start; flex-direction: column; }
+  .field-actions { justify-content: flex-start; }
   .content { padding: 24px 14px 50px; }
   .content-header { margin-bottom: 20px; }
   .content-header h1 { font-size: 25px; }

@@ -14,6 +14,12 @@ import {
   moveRow,
   skillFrontmatterMismatch,
   workflowTopologyWarning,
+  createPendingFieldState,
+  editPendingField,
+  applyPendingField,
+  discardPendingField,
+  pendingFieldConflict,
+  reconcilePendingFields,
 } from '../src/form-editor-state.js';
 
 const drafts = {
@@ -165,6 +171,104 @@ test('skill metadata reports narrow frontmatter mismatch and unsupported headers
   assert.match(skillFrontmatterMismatch(updatePath(drafts.SKILL, ['skillMd'], '---\nname: plan\nextra: value\ndescription: Plan safely\n---\n')), /不受支持/);
 });
 
+test('pending JSON state stays separate from canonical data and resolves explicitly', () => {
+  const path = ['modelArgumentSchema'];
+  const original = drafts.ABILITY;
+  let pending = createPendingFieldState();
+  pending = editPendingField(pending, path, '{"type":');
+  assert.deepEqual(original.modelArgumentSchema, { type: 'object', extension: { keep: true } });
+  assert.equal(pending[path.join('.')].text, '{"type":');
+  assert.equal(pending[path.join('.')].error.length > 0, true);
+
+  const invalidApply = applyPendingField(original, pending, path, 'object');
+  assert.equal(invalidApply.applied, false);
+  assert.equal(invalidApply.document, original);
+  assert.equal(invalidApply.pending[path.join('.')].text, '{"type":');
+
+  pending = editPendingField(pending, path, '{"type":"array"}');
+  const applied = applyPendingField(original, pending, path, 'object');
+  assert.equal(applied.applied, true);
+  assert.deepEqual(applied.document.modelArgumentSchema, { type: 'array' });
+  assert.deepEqual(applied.pending, {});
+
+  const discarded = discardPendingField(original, editPendingField({}, path, '{broken'), path);
+  assert.equal(discarded.document, original);
+  assert.deepEqual(discarded.pending, {});
+});
+
+test('pending fields survive reconciliation and overlapping paths lock in both directions', () => {
+  const child = ['definition', 'surfaceTemplate', 'inputSchema'];
+  const parent = ['definition', 'surfaceTemplate'];
+  const pending = editPendingField({}, child, '{child pending');
+  assert.match(pendingFieldConflict(pending, parent), /Parameter schema/);
+  assert.equal(pendingFieldConflict(pending, child), null);
+  assert.deepEqual(reconcilePendingFields(pending, drafts.APPLICATION), pending);
+  assert.deepEqual(reconcilePendingFields(pending, drafts.SKILL), pending);
+
+  const parentPending = editPendingField({}, parent, '{parent pending');
+  assert.match(pendingFieldConflict(parentPending, child), /Surface template/);
+});
+
+test('full JSON overlap detection keeps pending text while allowing unrelated canonical edits', () => {
+  const path = ['modelArgumentSchema'];
+  const pending = editPendingField({}, path, '{unfinished', 'object', drafts.ABILITY.modelArgumentSchema);
+  const unrelated = { ...drafts.ABILITY, adapterOperationRef: 'changed' };
+  const reconciled = reconcilePendingFields(pending, unrelated, drafts.ABILITY);
+  assert.equal(reconciled[path.join('.')].text, '{unfinished');
+  assert.equal(reconciled[path.join('.')].conflict, false);
+
+  const overlapping = { ...drafts.ABILITY, modelArgumentSchema: { type: 'array' } };
+  const conflicted = reconcilePendingFields(pending, overlapping, drafts.ABILITY);
+  assert.equal(conflicted[path.join('.')].text, '{unfinished');
+  assert.equal(conflicted[path.join('.')].conflict, true);
+});
+
+test('pending nested field ignores sibling edits and detects ancestor replacement', () => {
+  const path = ['definition', 'surfaceTemplate'];
+  const pending = editPendingField({}, path, '{unfinished', 'object', drafts.APPLICATION.definition.surfaceTemplate);
+  const siblingChanged = structuredClone(drafts.APPLICATION);
+  siblingChanged.definition.renderPolicy.interactionMode = 'DISPLAY_ONLY';
+  assert.equal(reconcilePendingFields(pending, siblingChanged, drafts.APPLICATION)[path.join('.')].conflict, false);
+
+  const ancestorReplaced = { ...drafts.APPLICATION, definition: null };
+  assert.equal(reconcilePendingFields(pending, ancestorReplaced, siblingChanged)[path.join('.')].conflict, true);
+});
+
+test('pending conflict recovers when canonical value returns to captured base', () => {
+  const path = ['modelArgumentSchema'];
+  const pending = editPendingField({}, path, '{unfinished', 'object', drafts.ABILITY.modelArgumentSchema);
+  const changed = { ...drafts.ABILITY, modelArgumentSchema: { type: 'array' } };
+  const conflicted = reconcilePendingFields(pending, changed, drafts.ABILITY);
+  assert.equal(conflicted[path.join('.')].conflict, true);
+  const recovered = reconcilePendingFields(conflicted, drafts.ABILITY, changed);
+  assert.equal(recovered[path.join('.')].conflict, false);
+  assert.equal(recovered[path.join('.')].text, '{unfinished');
+});
+
+test('apply rechecks canonical base and retains pending when path update is blocked', () => {
+  const path = ['definition', 'surfaceTemplate', 'inputSchema'];
+  const base = drafts.APPLICATION.definition.surfaceTemplate.inputSchema;
+  const pending = editPendingField({}, path, '{"type":"array"}', 'object', base);
+  const changed = structuredClone(drafts.APPLICATION);
+  changed.definition.surfaceTemplate.inputSchema = { type: 'string' };
+  const stale = applyPendingField(changed, pending, path, 'object');
+  assert.equal(stale.applied, false);
+  assert.equal(stale.pending[path.join('.')].conflict, true);
+
+  const blocked = structuredClone(drafts.APPLICATION);
+  blocked.definition.surfaceTemplate = null;
+  const blockedResult = applyPendingField(blocked, pending, path, 'object');
+  assert.equal(blockedResult.applied, false);
+  assert.equal(blockedResult.pending[path.join('.')].text, '{"type":"array"}');
+});
+
+test('malformed string rows remain exact and require explicit removal', () => {
+  const malformed = [{ extension: 1 }, 42, null];
+  const draft = { ...drafts.SKILL, requiredToolNames: malformed };
+  const unrelated = updatePath(draft, ['metadata', 'description'], 'changed');
+  assert.deepEqual(unrelated.requiredToolNames, malformed);
+  assert.deepEqual(removeRow(draft, ['requiredToolNames'], 1).requiredToolNames, [{ extension: 1 }, null]);
+});
 test('unsupported workflow topology warns without conversion or mutation', () => {
   const draft = updatePath(drafts.WORKFLOW, ['topology'], 'PARALLEL');
   assert.match(workflowTopologyWarning(draft), /无法发布/);

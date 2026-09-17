@@ -10,9 +10,107 @@ function objectAt(document, path) {
   return path.reduce((value, key) => value?.[key], document);
 }
 
+const JSON_FIELD_LABELS = new Map([
+  ['modelArgumentSchema', 'Model argument schema'],
+  ['resolvedInputSchema', 'Resolved input schema'],
+  ['outputSchema', 'Output schema'],
+  ['resultInterpretationPolicies', 'Result interpretation policies'],
+  ['definition.surfaceTemplate', 'Surface template'],
+  ['definition.surfaceTemplate.inputSchema', 'Parameter schema'],
+]);
+
+function pathKey(path) {
+  safePath(path);
+  return path.join('.');
+}
+
+function pathFromKey(key) {
+  return key.split('.');
+}
+
+function valuesEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function createPendingFieldState() {
+  return {};
+}
+
+export function editPendingField(pending, path, text, expected, baseValue) {
+  const key = pathKey(path);
+  const parsed = expected ? parseJsonField(text, expected) : (() => {
+    try {
+      JSON.parse(text);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
+  })();
+  return {
+    ...pending,
+    [key]: {
+      path: [...path],
+      text,
+      expected: expected ?? pending[key]?.expected ?? null,
+      error: parsed.ok ? null : parsed.error,
+      conflict: pending[key]?.conflict ?? false,
+      hasBase: Object.hasOwn(pending, key) ? pending[key].hasBase : arguments.length >= 5,
+      baseValue: Object.hasOwn(pending, key) ? pending[key].baseValue : baseValue,
+    },
+  };
+}
+
+export function pendingFieldConflict(pending, path) {
+  for (const entry of Object.values(pending)) {
+    if (samePath(entry.path, path)) continue;
+    if (pathContains(entry.path, path) || pathContains(path, entry.path)) {
+      return `${JSON_FIELD_LABELS.get(pathKey(entry.path)) ?? entry.path.join('.')} 存在尚未应用的文本，请先应用或丢弃。`;
+    }
+  }
+  return null;
+}
+
+export function applyPendingField(document, pending, path, expected) {
+  const key = pathKey(path);
+  const entry = pending[key];
+  if (!entry) return { applied: false, document, pending };
+  const parsed = parseJsonField(entry.text, expected);
+  if (!parsed.ok) return { applied: false, document, pending: editPendingField(pending, path, entry.text, expected, entry.baseValue) };
+  const currentValue = objectAt(document, path);
+  if ((entry.hasBase && !valuesEqual(currentValue, entry.baseValue)) || !inspectPathEditability(document, path).editable || pendingFieldConflict(pending, path)) {
+    return {
+      applied: false,
+      document,
+      pending: { ...pending, [key]: { ...entry, conflict: entry.hasBase && !valuesEqual(currentValue, entry.baseValue) } },
+    };
+  }
+  const nextDocument = updatePath(document, path, parsed.value);
+  if (nextDocument === document) return { applied: false, document, pending };
+  const nextPending = { ...pending };
+  delete nextPending[key];
+  return { applied: true, document: nextDocument, pending: nextPending };
+}
+
+export function discardPendingField(document, pending, path) {
+  const nextPending = { ...pending };
+  delete nextPending[pathKey(path)];
+  return { document, pending: nextPending };
+}
+
+export function reconcilePendingFields(pending, document) {
+  return Object.fromEntries(Object.entries(pending).map(([key, entry]) => {
+    const path = pathFromKey(key);
+    return [key, {
+      ...entry,
+      conflict: entry.hasBase ? !valuesEqual(objectAt(document, path), entry.baseValue) : entry.conflict,
+    }];
+  }));
+}
+
 export function isEditableRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+
 
 export function inspectPathEditability(document, path) {
   safePath(path);
