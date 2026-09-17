@@ -15,6 +15,7 @@ const { chromium } = require(playwrightPath);
 fs.mkdirSync(output, { recursive: true });
 
 const kinds = Object.keys(drafts);
+const emptyServingDigest = 'sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b';
 const clone = (value) => structuredClone(value);
 const deferred = () => {
   let release;
@@ -33,7 +34,16 @@ async function createHarness(browser, options = {}) {
   const documents = clone(options.documents ?? drafts);
   const serverDocuments = clone(options.serverDocuments ?? documents);
   const revisions = Object.fromEntries(kinds.map((kind) => [kind, 1]));
+  const draftOnly = Object.fromEntries(kinds.map((kind) => [kind, new Set()]));
+  const createdKeys = Object.fromEntries(kinds.map((kind) => [kind, new Set()]));
+  const createdVersions = Object.fromEntries(kinds.map((kind) => [kind, new Map()]));
+  const retained = Object.fromEntries(kinds.map((kind) => [kind, {
+    v1: clone(documents[kind]),
+    v0: options.distinctVersions ? { ...clone(documents[kind]), fixtureVersion: 0 } : clone(documents[kind]),
+  }]));
+  const versions = Object.fromEntries(kinds.map((kind) => [kind, ['v1', 'v0']]));
   const draftReads = [];
+  const listReads = [];
   const gates = options.gates ?? {};
   let conflictOnce = options.conflictOnce ?? false;
   let reloadFailureOnce = options.reloadFailureOnce ?? false;
@@ -41,7 +51,7 @@ async function createHarness(browser, options = {}) {
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     const text = message.text();
-    if (/Failed to load resource: the server responded with a status of (409|503)/.test(text)) expectedHttpErrors.push(text);
+    if (/Failed to load resource: the server responded with a status of (400|404|409|503)/.test(text)) expectedHttpErrors.push(text);
     else unexpected.push(text);
   });
   await context.route('**/*', async (route) => {
@@ -53,12 +63,74 @@ async function createHarness(browser, options = {}) {
     if (pathname === '/management/session') return reply({ userId: `${options.environment?.toLowerCase() ?? 'prt'}-${options.canAuthor === false ? 'reader' : 'admin'}`, environment: options.environment ?? 'PRT', registeredKinds: kinds, canAuthor: options.canAuthor !== false });
     if (pathname.startsWith('/management/assets/')) {
       const kind = pathname.split('/')[3];
-      const key = `demo/${kind.toLowerCase()}`;
-      const summary = { kind, key, assetId: kind.toLowerCase(), versionId: 'v1', contentDigest: digest, name: `${kind} fixture` };
-      if (pathname === `/management/assets/${kind}`) return reply([summary]);
-      if (pathname.endsWith('/versions')) return reply({ kind, key, versions: [{ versionId: 'v1', assetId: summary.assetId, contentDigest: digest }, { versionId: 'v0', assetId: `${summary.assetId}-old`, contentDigest: `sha256:${'2'.repeat(64)}` }], serving: { current: 'v1', stable: 'v1', gray: {} }, servingDigest: digest });
+      const key = pathname.split('/').slice(4, -1).join('/') || `demo/${kind.toLowerCase()}`;
+      const defaultKey = `demo/${kind.toLowerCase()}`;
+      const activeKey = pathname === `/management/assets/${kind}` ? defaultKey : key;
+      const summary = { kind, key: defaultKey, assetId: kind.toLowerCase(), versionId: 'v1', contentDigest: digest, name: `${kind} fixture` };
+      if (pathname === `/management/assets/${kind}`) {
+        listReads.push(kind);
+        return reply([
+          summary,
+          ...[...createdKeys[kind]].map((item) => ({
+            kind, key: item,
+            ...(draftOnly[kind].has(item)
+              ? { draftOnly: true, draftRevision: revisions[kind] }
+              : { assetId: `${kind.toLowerCase()}-created`, versionId: [...createdVersions[kind].get(item).keys()].at(-1), contentDigest: digest }),
+          })),
+        ]);
+      }
+      const versionMatch = pathname.match(/\/versions\/([^/]+)$/);
+      if (versionMatch) {
+        if (options.missingVersion === versionMatch[1]) return reply({ error: { code: 'VERSION_NOT_FOUND' } }, 404);
+        const versionKey = pathname.split('/').slice(4, -2).join('/');
+        const created = createdVersions[kind].get(versionKey)?.get(versionMatch[1]);
+        const authored = versionKey === defaultKey
+          ? clone(retained[kind][versionMatch[1]] ?? documents[kind])
+          : clone(created ?? serverDocuments[kind]);
+        return reply({ kind, key: versionKey, versionId: versionMatch[1], contentDigest: digest, document: authored });
+      }
+      if (pathname.endsWith('/versions')) {
+        if (options.historyError && kind === 'ABILITY') return reply({ error: { code: 'HISTORY_UNAVAILABLE' } }, 503);
+        if (draftOnly[kind].has(activeKey)) return reply({ kind, key: activeKey, versions: [], serving: null, servingDigest: emptyServingDigest });
+        const activeVersions = activeKey === defaultKey
+          ? versions[kind]
+          : [...(createdVersions[kind].get(activeKey)?.keys() ?? [])];
+        const firstVersion = activeVersions.at(-1) ?? null;
+        return reply({ kind, key: activeKey, versions: activeVersions.map((versionId) => ({ versionId, assetId: summary.assetId, contentDigest: digest })), serving: firstVersion ? { current: firstVersion, stable: firstVersion, gray: null, grayUserIds: [] } : null, servingDigest: firstVersion ? digest : emptyServingDigest });
+      }
+      if (pathname.endsWith('/comparison-documents')) {
+        const comparisonRequest = { type: 'compare', kind, key: activeKey, payload: request.postDataJSON() };
+        requests.push(comparisonRequest);
+        options.compareErrorOnce = options.compareErrorOnce ?? false;
+        if (options.compareErrorOnce) {
+          options.compareErrorOnce = false;
+          return reply({ error: { code: 'COMPARISON_UNAVAILABLE' } }, 503);
+        }
+        gates.compare?.markStarted();
+        if (gates.compare) await gates.compare.blocked;
+        return reply(clone(comparisonRequest.payload.document));
+      }
       if (pathname.endsWith('/draft')) {
         assert.equal(options.canAuthor !== false, true);
+        if (request.method() === 'POST') {
+          requests.push({ type: 'create', kind, key: activeKey });
+          if (options.createError || draftOnly[kind].has(activeKey) || activeKey === defaultKey) {
+            return reply({ error: { code: options.createError ?? 'ASSET_ALREADY_EXISTS' } }, options.createError ? 400 : 409);
+          }
+          const templates = {
+            SKILL: { metadata: { name: activeKey.split('/').at(-1), description: '待配置' }, skillMd: `---\nname: ${activeKey.split('/').at(-1)}\ndescription: 待配置\n---\n\n`, requiredToolNames: [], abilityBindings: [], applicationBindings: [], resources: [] },
+            ABILITY: { abilityKey: activeKey, adapterOperationRef: '', credentialRequirements: [], defaultSuccessPolicyRef: '', inputBindings: [], modelArgumentSchema: {}, outputSchema: {}, resolvedInputSchema: {}, resultInterpretationPolicies: [] },
+            APPLICATION: { definition: { asset: { kind: 'APPLICATION', applicationKey: activeKey, protocolProfileRef: '', componentCatalogRef: '' }, renderPolicy: { tool: 'render_application', interactionMode: 'DISPLAY_ONLY', requiresPause: false }, interactionPolicy: { bindingScope: 'NONE', ordinaryChatMayResume: false }, versionAdmissionPolicy: { compareBeforeExecution: true, compareBeforeContinue: true, compareBeforeAction: true, onMismatch: 'RESET_REQUIRED' }, actionPolicies: [], retryPolicy: { allowedReasons: ['RENDER_FAILED'] }, finalizerPolicy: { mayOverrideBusinessFacts: false, mayBypassRequiredInteraction: false }, surfaceTemplate: { surfaceKey: '', rootId: '', inputSchema: {}, components: [] } }, dependencies: [] },
+            WORKFLOW: { definitionKey: activeKey, topology: 'SEQUENTIAL', nodes: [] },
+          };
+          documents[kind] = clone(templates[kind]);
+          serverDocuments[kind] = clone(templates[kind]);
+          revisions[kind] = 1;
+          draftOnly[kind].add(activeKey);
+          createdKeys[kind].add(activeKey);
+          createdVersions[kind].set(activeKey, new Map());
+          return reply({ kind, key: activeKey, revision: 1, document: serverDocuments[kind], contentDigest: digest, updatedBy: 'fixture-admin' });
+        }
         if (request.method() === 'PUT') {
           const payload = request.postDataJSON();
           requests.push({ type: 'save', kind, payload });
@@ -82,21 +154,33 @@ async function createHarness(browser, options = {}) {
       }
       if (pathname.endsWith('/validate')) {
         requests.push({ type: 'validate', kind });
+        const normalized = clone(documents[kind]);
         return reply(options.validation ?? { valid: false, issues: [
           { code: 'INVALID_FIELD', path: '/metadata/name', message: 'exact backend message' },
           { code: 'UNKNOWN_EXTENSION', path: '/extension/mystery', message: 'unknown path remains visible' },
-        ] });
+        ], normalized });
       }
       if (pathname.endsWith('/publication-plans')) {
         const payload = request.postDataJSON();
-        requests.push({ type: 'prepare', kind, payload });
-        return reply({ kind, key, draftRevision: revisions[kind], contentDigest: digest, target: payload.target, status: 'PREPARED_NOT_PUBLISHED', published: false, candidate: clone(documents[kind]) });
+        requests.push({ type: 'prepare', kind, key: activeKey, payload });
+        return reply({ kind, key: activeKey, draftRevision: revisions[kind], contentDigest: digest, target: payload.target, status: 'PREPARED_NOT_PUBLISHED', published: false, candidate: clone(documents[kind]) });
       }
       if (pathname.endsWith('/publications')) {
         const payload = request.postDataJSON();
-        requests.push({ type: 'publish', kind, payload });
+        requests.push({ type: 'publish', kind, key: activeKey, payload });
         gates.publish?.markStarted();
         if (gates.publish) await gates.publish.blocked;
+        if (draftOnly[kind].has(activeKey) && options.environment === 'ONLINE' && payload.target.channel === 'GRAY') {
+          return reply({ error: { code: 'INVALID_ONLINE_TARGET' } }, 400);
+        }
+        draftOnly[kind].delete(activeKey);
+        if (activeKey === defaultKey) {
+          retained[kind][payload.target.versionId] = clone(documents[kind]);
+          if (!versions[kind].includes(payload.target.versionId)) versions[kind].push(payload.target.versionId);
+        } else {
+          if (!createdVersions[kind].has(activeKey)) createdVersions[kind].set(activeKey, new Map());
+          createdVersions[kind].get(activeKey).set(payload.target.versionId, clone(documents[kind]));
+        }
         return reply({ status: 'PUBLISHED', published: true, businessCompensated: false });
       }
       if (pathname.endsWith('/rollbacks')) {
@@ -120,10 +204,10 @@ async function createHarness(browser, options = {}) {
   const finish = async (expectedStatuses = []) => {
     assert.equal(await page.locator('vite-error-overlay').count(), 0);
     assert.deepEqual(unexpected, []);
-    assert.deepEqual(expectedHttpErrors.map((text) => Number(text.match(/(409|503)/)[1])), expectedStatuses);
+    assert.deepEqual(expectedHttpErrors.map((text) => Number(text.match(/(400|404|409|503)/)[1])), expectedStatuses);
     await context.close();
   };
-  return { context, page, requests, documents, serverDocuments, revisions, draftReads, button, selectKind, finish };
+  return { context, page, requests, documents, serverDocuments, revisions, draftReads, listReads, button, selectKind, finish };
 }
 
 async function assertNoEditRoundtrips(harness) {
@@ -167,7 +251,7 @@ async function runEditorCoverage(browser) {
   assert.equal(await page.getByRole('textbox', { name: '所需工具 3', exact: true }).inputValue(), 'duplicate-typed');
   page.once('dialog', (dialog) => dialog.dismiss());
   await page.getByRole('button', { name: '确认移除异常项', exact: true }).first().click();
-  assert.equal(await page.getByText('{"extension":1}', { exact: true }).count(), 1);
+  assert.equal(await page.locator('.editor-panel').getByText('{"extension":1}', { exact: true }).count(), 1);
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '确认移除异常项', exact: true }).first().click();
   await button('保存草稿').click();
@@ -221,8 +305,8 @@ async function runEditorCoverage(browser) {
   assert.equal(await page.getByLabel('Node ID').nth(1).inputValue(), 'one');
   await page.getByRole('button', { name: '添加节点', exact: true }).click();
   await page.getByLabel('Node ID').last().fill('three');
-  await page.getByLabel('Skill key').last().fill('demo/three');
-  assert.match(await page.getByRole('group', { name: '顺序预览' }).innerText(), /three.*demo\/three/s);
+  await page.getByLabel('Skill key').last().selectOption('demo/skill');
+  assert.match(await page.getByRole('group', { name: '顺序预览' }).innerText(), /three.*demo\/skill/s);
   await page.getByRole('group', { name: 'Nodes' }).getByRole('button', { name: '移除', exact: true }).first().click();
   assert.equal(await page.getByLabel('Node ID').count(), 2);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -420,11 +504,12 @@ async function runBusyAndPublication(browser, environment) {
   assert.equal(publish.payload.target.versionId, `${environment.toLowerCase()}-v2`);
   assert.deepEqual(publish.payload.candidate, save.payload.document);
 
+  const rollbackV0 = page.locator('.version-row').filter({ hasText: 'v0' }).getByRole('button', { name: '回滚配置到此版本', exact: true });
   page.once('dialog', (dialog) => dialog.dismiss());
-  await page.getByRole('button', { name: '回滚配置到此版本', exact: true }).last().click();
+  await rollbackV0.click();
   assert.equal(requests.filter((item) => item.type === 'rollback').length, 0);
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: '回滚配置到此版本', exact: true }).last().click();
+  await rollbackV0.click();
   await page.getByText(/配置回滚完成/).waitFor();
   const rollback = requests.find((item) => item.type === 'rollback');
   assert.equal(rollback.payload.expectedServingDigest, digest);
@@ -460,15 +545,238 @@ async function runReader(browser, environment) {
     await page.getByRole('heading', { name: `${kind} fixture`, exact: true }).waitFor();
   }
   assert.equal(await page.getByRole('button', { name: '保存草稿', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: '新建', exact: true }).count(), 0);
   assert.equal(await page.locator('.author-workspace').count(), 0);
   assert.equal(draftReads.length, 0);
   assert.equal(requests.length, 0);
   await finish();
 }
 
+async function runCreateDraftFlows(browser) {
+  const harness = await createHarness(browser);
+  const { page, requests, button, selectKind, finish } = harness;
+  for (const kind of kinds) {
+    await selectKind(kind);
+    await button('新建').click();
+    const dialog = page.getByRole('dialog', { name: `新建 ${kind}` });
+    const key = `new/${kind.toLowerCase()}`;
+    await dialog.getByRole('textbox', { name: '不可变 Key' }).fill(key);
+    await dialog.getByRole('button', { name: '取消' }).click();
+    assert.equal(requests.filter((item) => item.type === 'create' && item.kind === kind).length, 0);
+    await button('新建').click();
+    await page.getByRole('dialog', { name: `新建 ${kind}` }).getByRole('textbox', { name: '不可变 Key' }).fill(key);
+    await page.getByRole('dialog', { name: `新建 ${kind}` }).getByRole('button', { name: '创建草稿' }).click();
+    await page.getByText('仅草稿', { exact: true }).first().waitFor();
+    await page.getByText('该资产尚无已发布版本，无法比较。', { exact: true }).waitFor();
+    await page.reload();
+    await page.getByRole('button', { name: new RegExp(kind, 'i') }).click();
+    await page.getByText(key, { exact: true }).click();
+    await page.getByText('仅草稿', { exact: true }).first().waitFor();
+  }
+  await button('新建').click();
+  await page.getByRole('dialog').getByRole('textbox', { name: '不可变 Key' }).fill('demo/workflow');
+  await page.getByRole('dialog').getByRole('button', { name: '创建草稿' }).click();
+  await page.getByText('ASSET_ALREADY_EXISTS · HTTP 409', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('dialog').getByRole('textbox', { name: '不可变 Key' }).inputValue(), 'demo/workflow');
+  await finish([409]);
+}
+
+async function runFirstPublishFlows(browser, environment) {
+  const harness = await createHarness(browser, {
+    environment,
+    validation: { valid: true, issues: [] },
+  });
+  const { page, requests, listReads, button, selectKind, finish } = harness;
+  for (const kind of kinds) {
+    await selectKind(kind);
+    await button('新建').click();
+    const key = `first/${environment.toLowerCase()}/${kind.toLowerCase()}`;
+    const dialog = page.getByRole('dialog', { name: `新建 ${kind}` });
+    await dialog.getByRole('textbox', { name: '不可变 Key' }).fill(key);
+    await dialog.getByRole('button', { name: '创建草稿' }).click();
+    await page.getByText('该资产尚无已发布版本，无法比较。', { exact: true }).waitFor();
+    await button('完整 JSON').click();
+    await page.getByLabel('结构化草稿 JSON').fill(JSON.stringify(drafts[kind]));
+    await button('保存草稿').click();
+    await page.getByText('已同步', { exact: true }).waitFor();
+    await button('验证已保存草稿').click();
+    await page.getByText('草稿验证通过', { exact: true }).waitFor();
+    const versionId = `first-${kind.toLowerCase()}`;
+    await page.getByLabel('候选版本标识').fill(versionId);
+    if (environment === 'ONLINE') {
+      await page.getByLabel('目标通道').selectOption('GRAY');
+      await page.getByLabel('灰度用户 ID').fill('first-user');
+      await button('准备未发布候选').click();
+      await page.getByText('候选已准备，但尚未发布', { exact: true }).waitFor();
+      page.once('dialog', (dialogEvent) => dialogEvent.accept());
+      await button('确认并显式发布').click();
+      await page.getByText('INVALID_ONLINE_TARGET · HTTP 400', { exact: true }).waitFor();
+      assert.equal(await page.getByText('仅草稿', { exact: true }).count() > 0, true);
+      await page.getByLabel('目标通道').selectOption('STABLE');
+      await button('准备未发布候选').click();
+      await page.getByText('候选已准备，但尚未发布', { exact: true }).waitFor();
+    } else {
+      await button('准备未发布候选').click();
+      await page.getByText('候选已准备，但尚未发布', { exact: true }).waitFor();
+    }
+    const prepare = requests.filter((item) => item.type === 'prepare' && item.kind === kind && item.key === key).at(-1);
+    assert.equal(prepare.payload.expectedRevision, 2);
+    assert.deepEqual(prepare.payload.target, {
+      environment,
+      versionId,
+      channel: environment === 'PRT' ? 'CURRENT' : 'STABLE',
+      grayUserIds: [],
+    });
+    page.once('dialog', (dialogEvent) => dialogEvent.accept());
+    await button('确认并显式发布').click();
+    await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
+    const publish = requests.filter((item) => item.type === 'publish' && item.kind === kind && item.key === key).at(-1);
+    assert.equal(publish.payload.expectedServingDigest, emptyServingDigest);
+    assert.deepEqual(publish.payload.candidate, drafts[kind]);
+    assert.equal(await page.getByText('仅草稿', { exact: true }).count(), 0);
+    await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
+    assert.equal(listReads.filter((item) => item === kind).length >= 2, true);
+    await page.reload();
+    await page.getByRole('button', { name: new RegExp(kind, 'i') }).click();
+    await page.getByText(key, { exact: true }).click();
+    await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
+    assert.equal(await page.getByText('仅草稿', { exact: true }).count(), 0);
+  }
+  await page.screenshot({ path: path.join(output, `${environment.toLowerCase()}-first-publication-desktop.png`), fullPage: false });
+  await finish(environment === 'ONLINE' ? [400, 400, 400, 400] : []);
+}
+
+async function runComparisonAndReferenceCoverage(browser) {
+  const harness = await createHarness(browser);
+  const { page, requests, button, selectKind, finish } = harness;
+  await button('比较当前草稿').click();
+  await page.getByText('没有差异。', { exact: true }).waitFor();
+  assert.equal(requests.filter((item) => item.type === 'compare').length, 1);
+  await page.getByLabel('描述').fill('changed comparison value');
+  assert.equal(requests.filter((item) => item.type === 'compare').length, 1);
+  await page.getByText('比较内容已过时，请显式刷新后再查看当前 canonical 草稿。', { exact: true }).waitFor();
+  await button('刷新过时比较').click();
+  await page.getByText('/metadata/description', { exact: true }).waitFor();
+  await page.getByLabel('比较右侧').selectOption('v0');
+  await page.getByText('没有差异。', { exact: true }).waitFor();
+
+  await selectKind('Workflow');
+  await page.getByLabel('Skill key').first().selectOption('demo/skill');
+  assert.equal(await page.getByLabel('Skill key').first().inputValue(), 'demo/skill');
+  await selectKind('Application');
+  assert.equal(await page.getByLabel('abilityReleaseRef key').first().inputValue(), 'demo.confirm');
+  assert.equal(await page.getByLabel('abilityReleaseRef version').first().inputValue(), 'v1');
+  await button('完整 JSON').click();
+  const malformed = JSON.parse(await page.getByLabel('结构化草稿 JSON').inputValue());
+  malformed.definition.actionPolicies[0].abilityReleaseRef = { malformed: true };
+  await page.getByLabel('结构化草稿 JSON').fill(JSON.stringify(malformed));
+  await button('表单').click();
+  assert.equal(await page.getByText(/当前值类型不受支持.*malformed.*原值已保留/).count(), 1);
+  assert.equal(await page.getByLabel('abilityReleaseRef key').isDisabled(), true);
+  await finish();
+}
+
+async function runDeferredComparison(browser) {
+  const compareGate = deferred();
+  const harness = await createHarness(browser, { gates: { compare: compareGate }, distinctVersions: true });
+  const { page, requests, button, selectKind, finish } = harness;
+  void button('比较当前草稿').click();
+  await compareGate.started;
+  await page.getByLabel('描述').fill('edited while comparing');
+  compareGate.release();
+  await page.getByText('比较内容已过时，请显式刷新后再查看当前 canonical 草稿。', { exact: true }).waitFor();
+  assert.equal(requests.filter((item) => item.type === 'compare').length, 1);
+  await button('刷新过时比较').click();
+  await page.getByText('/metadata/description', { exact: true }).waitFor();
+  assert.equal(await page.getByText(/比较内容已过时/).count(), 0);
+  for (const kind of kinds) {
+    await selectKind(kind);
+    await page.getByLabel('比较右侧').selectOption('v0');
+    await page.getByText('/fixtureVersion', { exact: true }).waitFor();
+  }
+  await finish();
+}
+
+async function runFourKindComparisons(browser) {
+  const harness = await createHarness(browser, { distinctVersions: true });
+  const { page, requests, button, selectKind, finish } = harness;
+  for (const kind of kinds) {
+    await selectKind(kind);
+    await button('比较当前草稿').click();
+    await page.getByText('没有差异。', { exact: true }).waitFor();
+    assert.equal(requests.filter((item) => item.type === 'compare' && item.kind === kind).length, 1);
+    await page.getByLabel('比较右侧').selectOption('v0');
+    await page.getByText('/fixtureVersion', { exact: true }).waitFor();
+  }
+  await finish();
+}
+
+async function runDeferredAssetSwitch(browser) {
+  const compareGate = deferred();
+  const harness = await createHarness(browser, { gates: { compare: compareGate } });
+  const { page, button, selectKind, finish } = harness;
+  void button('比较当前草稿').click();
+  await compareGate.started;
+  await selectKind('Workflow');
+  compareGate.release();
+  await page.getByRole('heading', { name: 'WORKFLOW · demo/workflow', exact: true }).waitFor();
+  assert.equal(await page.locator('.diff-view').count(), 0);
+  assert.equal(await page.getByText(/比较内容已过时/).count(), 0);
+  await finish();
+}
+
+async function runComparisonErrorSwitch(browser) {
+  const harness = await createHarness(browser, { compareErrorOnce: true });
+  const { page, button, finish } = harness;
+  await button('比较当前草稿').click();
+  await page.getByText('COMPARISON_UNAVAILABLE · HTTP 503', { exact: true }).waitFor();
+  await page.getByLabel('比较右侧').selectOption('v0');
+  await page.getByText('没有差异。', { exact: true }).waitFor();
+  assert.equal(await page.getByText('COMPARISON_UNAVAILABLE · HTTP 503', { exact: true }).count(), 0);
+  await finish([503]);
+}
+
+async function runReferenceHistoryError(browser) {
+  const documents = clone(drafts);
+  documents.APPLICATION.definition.actionPolicies[0].abilityReleaseRef = 'demo/ability@v1';
+  const harness = await createHarness(browser, { historyError: true, documents });
+  const { page, selectKind, finish } = harness;
+  await selectKind('Application');
+  await page.getByText(/版本历史加载失败：HISTORY_UNAVAILABLE/).first().waitFor();
+  assert.equal(await page.getByRole('button', { name: '重试', exact: true }).count() > 0, true);
+  await finish([503]);
+}
+
+async function runDirtyBeforeUnload(browser) {
+  const canonical = await createHarness(browser);
+  await canonical.page.getByLabel('描述').fill('dirty');
+  canonical.page.once('dialog', (dialog) => dialog.dismiss());
+  await canonical.page.reload({ waitUntil: 'commit' }).catch(() => {});
+  assert.equal(canonical.page.url(), 'http://a2flow.test/');
+  await canonical.finish();
+
+  const pending = await createHarness(browser);
+  await pending.selectKind('Ability');
+  await pending.page.getByLabel('Model argument schema').fill('{pending');
+  pending.page.once('dialog', (dialog) => dialog.dismiss());
+  await pending.page.reload({ waitUntil: 'commit' }).catch(() => {});
+  assert.equal(pending.page.url(), 'http://a2flow.test/');
+  await pending.finish();
+}
+
 const browser = await chromium.launch({ headless: true, executablePath: chromePath });
 try {
   await runEditorCoverage(browser);
+  await runCreateDraftFlows(browser);
+  await runFirstPublishFlows(browser, 'PRT');
+  await runFirstPublishFlows(browser, 'ONLINE');
+  await runComparisonAndReferenceCoverage(browser);
+  await runDeferredComparison(browser);
+  await runFourKindComparisons(browser);
+  await runDeferredAssetSwitch(browser);
+  await runComparisonErrorSwitch(browser);
+  await runReferenceHistoryError(browser);
+  await runDirtyBeforeUnload(browser);
   await runPendingAndValidation(browser);
   await runApplicationPendingRecovery(browser);
   await runConflictReload(browser);

@@ -101,6 +101,9 @@ class FakeAbilityReader:
             "selection": self.published["selection"],
         },)
 
+    def asset_exists(self, kind, key, context):
+        return kind == "ABILITY" and key == self.published["key"]
+
     def resolve_asset(self, kind, key, context):
         if kind == "ABILITY" and key == self.published["key"]:
             return self.published
@@ -134,6 +137,17 @@ class AbilityManagementTests(unittest.TestCase):
         with self.assertRaisesRegex(ManagementError, "ADMIN_REQUIRED"):
             self.service.get_draft(
                 USER, "ABILITY", "demo.catalog.lookup")
+
+    def test_admin_creates_unconfigured_draft_without_publishing(self):
+        created = self.service.create_draft(
+            ADMIN, "ABILITY", "new.ability")
+        self.assertEqual("new.ability", created.document["abilityKey"])
+        self.assertFalse(self.service.validate_draft(
+            ADMIN, "ABILITY", "new.ability").valid)
+        self.assertIn("new.ability", {
+            item["key"] for item in self.service.list_published(ADMIN, "ABILITY")})
+        self.assertNotIn("new.ability", {
+            item["key"] for item in self.service.list_published(USER, "ABILITY")})
 
     def test_admin_can_edit_and_validate_draft(self):
         initial = self.service.get_draft(

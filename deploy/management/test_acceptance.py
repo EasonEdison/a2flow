@@ -180,6 +180,8 @@ class AcceptanceGuardTests(unittest.TestCase):
 
     def test_fixture_plan_has_distinct_database_and_namespace_per_case(self):
         plan = acceptance._fixture_plan("run-token")
+        self.assertEqual(set(acceptance.PG_CASES), set(plan))
+        self.assertIn("test_concurrent_create_same_key_is_atomic_conflict", plan)
         self.assertEqual(len(acceptance.PG_CASES), len(plan))
         self.assertEqual(len(plan), len({item["database"] for item in plan.values()}))
         self.assertEqual(len(plan), len({item["namespace"] for item in plan.values()}))

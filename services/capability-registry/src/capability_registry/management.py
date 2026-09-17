@@ -92,6 +92,24 @@ class AbilityManagementFeature(ManagementFeature):
         return ManagedDraft.create(
             self.kind, key, 0, published["definition"], context.user_id)
 
+    def create_draft(self, context, key):
+        parse_identifier(key)
+        self._draft_context(context)
+        if self.drafts.get(self.namespace, self.kind, key) is not None:
+            raise ManagementError("DRAFT_ALREADY_EXISTS", 409)
+        if self.reader.asset_exists(self.kind, key, self._runtime_context(context)):
+            raise ManagementError("ASSET_ALREADY_EXISTS", 409)
+        document = {
+            "abilityKey": key, "adapterOperationRef": "",
+            "credentialRequirements": [], "defaultSuccessPolicyRef": "",
+            "inputBindings": [], "modelArgumentSchema": {},
+            "outputSchema": {}, "resolvedInputSchema": {},
+            "resultInterpretationPolicies": [],
+        }
+        candidate = ManagedDraft.create(
+            self.kind, key, 1, document, context.user_id)
+        return self.drafts.create(self.namespace, candidate)
+
     def _validate_snapshot(self, draft):
         result = self.validator.validate(draft.document)
         if not result.is_valid:
@@ -130,6 +148,19 @@ class AbilityManagementFeature(ManagementFeature):
 
     def validate_draft(self, context, key):
         return self._validate_snapshot(self.get_draft(context, key))
+
+    def comparison_document(self, context, key, document):
+        parse_identifier(key)
+        self._draft_context(context)
+        if type(document) is not dict:
+            raise ManagementError("DRAFT_NOT_COMPARABLE", 409)
+        return document
+
+    def retained_comparison_document(self, context, key, document):
+        parse_identifier(key)
+        if type(document) is not dict or type(document.get("definition")) is not dict:
+            raise ManagementError("RETAINED_VERSION_NOT_COMPARABLE", 409)
+        return document["definition"]
 
     def _asset_id(self, context, key):
         try:

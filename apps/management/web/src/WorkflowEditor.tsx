@@ -1,7 +1,7 @@
 import { appendRow, isEditableRecord, moveRow, removeRow, updateRow, workflowTopologyWarning } from './form-editor-state';
-import { Field, MalformedValue, RowActions, Section, useRowKeys, type FormProps } from './EditorControls';
+import { Field, MalformedValue, ReferencePicker, RowActions, Section, useRowKeys, type FormProps } from './EditorControls';
 
-export function WorkflowEditor({ document, disabled, onChange }: FormProps) {
+export function WorkflowEditor({ document, disabled, onChange, references }: FormProps) {
   const nodes = document.nodes;
   const warning = workflowTopologyWarning(document);
   const rowKeys = useRowKeys(Array.isArray(nodes) ? nodes.length : 0);
@@ -11,7 +11,7 @@ export function WorkflowEditor({ document, disabled, onChange }: FormProps) {
     <Section title="Nodes">
       {Array.isArray(nodes) ? nodes.map((row: unknown, index) => isEditableRecord(row) ? <div className="form-row compact" key={rowKeys.keys[index]}>
         <Field label="Node ID" value={row.nodeId} disabled={disabled} onChange={(value) => onChange(updateRow(document, ['nodes'], index, 'nodeId', value))} />
-        <Field label="Skill key" value={row.skillKey} disabled={disabled} onChange={(value) => onChange(updateRow(document, ['nodes'], index, 'skillKey', value))} />
+        <ReferencePicker label="Skill key" value={row.skillKey} kind="SKILL" disabled={disabled} references={references} onChange={(value) => onChange(updateRow(document, ['nodes'], index, 'skillKey', value))} />
         <RowActions index={index} length={nodes.length} disabled={disabled} onMove={(direction) => { rowKeys.move(index, direction); onChange(moveRow(document, ['nodes'], index, direction)); }} onRemove={() => { rowKeys.remove(index); onChange(removeRow(document, ['nodes'], index)); }} />
       </div> : <MalformedValue key={rowKeys.keys[index]} label={`nodes[${index}]`} value={row} />) : <p className="field-feedback error">nodes 不是数组。</p>}
       <button className="secondary-button add-row" type="button" disabled={disabled || !Array.isArray(nodes)} onClick={() => onChange(appendRow(document, ['nodes'], { nodeId: '', skillKey: '' }))}>添加节点</button>

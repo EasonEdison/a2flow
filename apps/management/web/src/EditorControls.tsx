@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from 'react';
-import type { JsonObject } from './contracts';
+import type { AssetKind, JsonObject, ReferenceCatalog } from './contracts';
 import {
   inspectPathEditability, isEditableRecord, parseJsonField, type PendingFields,
 } from './form-editor-state';
@@ -19,6 +19,7 @@ export type FormProps = {
   onApplyPending: PendingResolve;
   onDiscardPending: PendingDiscard;
   getPendingConflict: PendingConflict;
+  references?: ReferenceCatalog;
 };
 
 let nextRowId = 1;
@@ -56,6 +57,63 @@ export function Field({ label, value, disabled, multiline = false, readOnly = fa
   return <label className="form-field"><span>{label}</span>{control}{malformed
     ? <small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），请在完整 JSON 模式修正。</small>
     : null}</label>;
+}
+
+export function ReferencePicker({ label, value, kind, disabled, references, onChange }: {
+  label: string; value: unknown; kind: AssetKind; disabled: boolean;
+  references?: ReferenceCatalog; onChange: (value: string) => void;
+}) {
+  if (typeof value !== 'string') {
+    return <label className="form-field"><span>{label}</span><select aria-label={label} value="" disabled><option value="">类型错误</option></select>
+      <small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），原值已保留；请在完整 JSON 模式明确修复。</small></label>;
+  }
+  const current = value;
+  const options = references?.assets[kind] ?? [];
+  const values = options.map((item) => item.key ?? item.skillKey).filter((item): item is string => Boolean(item));
+  const known = values.includes(current);
+  return <label className="form-field"><span>{label}</span><select aria-label={label} value={current}
+    disabled={disabled || references?.loading} onChange={(event) => onChange(event.target.value)}>
+    <option value="">请选择已发布 {kind}</option>
+    {current && !known ? <option value={current}>当前不可用：{current}</option> : null}
+    {values.map((item) => <option value={item} key={item}>{item}</option>)}
+  </select>
+  {references?.loading ? <small className="field-feedback">正在加载引用…</small> : null}
+  {references?.errors[kind] ? <small className="field-feedback error">引用加载失败：{references.errors[kind]}</small> : null}
+  {!references?.loading && !references?.errors[kind] && values.length === 0 ? <small className="field-feedback">没有可用的已发布引用。</small> : null}
+  {current && !known ? <small className="field-feedback error">当前引用不可用，原值已保留。</small> : null}</label>;
+}
+
+export function ReleaseReferencePicker({ label, value, disabled, references, onChange }: {
+  label: string; value: unknown; disabled: boolean; references?: ReferenceCatalog; onChange: (value: string) => void;
+}) {
+  if (typeof value !== 'string') {
+    return <div className="form-field"><span>{label}</span><div className="reference-pair">
+      <select aria-label={`${label} key`} value="" disabled><option value="">类型错误</option></select>
+      <select aria-label={`${label} version`} value="" disabled><option value="">类型错误</option></select>
+    </div><small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），原值已保留；请在完整 JSON 模式明确修复。</small></div>;
+  }
+  const current = value;
+  const [key = '', version = ''] = current.split('@');
+  const abilities = references?.assets.ABILITY ?? [];
+  const keys = abilities.map((item) => item.key).filter((item): item is string => Boolean(item));
+  const versions = references?.histories[`ABILITY:${key}`]?.versions ?? [];
+  const historyError = references?.errors[`ABILITY:${key}`];
+  return <div className="form-field"><span>{label}</span><div className="reference-pair">
+    <select aria-label={`${label} key`} value={key} disabled={disabled || references?.loading}
+      onChange={(event) => onChange(event.target.value ? `${event.target.value}@` : '')}>
+      <option value="">选择 Ability</option>
+      {key && !keys.includes(key) ? <option value={key}>当前不可用：{key}</option> : null}
+      {keys.map((item) => <option value={item} key={item}>{item}</option>)}
+    </select>
+    <select aria-label={`${label} version`} value={version} disabled={disabled || !key || Boolean(historyError)}
+      onChange={(event) => onChange(`${key}@${event.target.value}`)}>
+      <option value="">选择保留版本</option>
+      {version && !versions.some((item) => item.versionId === version) ? <option value={version}>当前不可用：{version}</option> : null}
+      {versions.map((item) => <option value={item.versionId} key={item.versionId}>{item.versionId}</option>)}
+    </select>
+  </div>{historyError ? <small className="field-feedback error">版本历史加载失败：{historyError} <button type="button" className="quiet-button" onClick={references?.retry}>重试</button></small> : null}
+  {current && (!keys.includes(key) || (!historyError && !versions.some((item) => item.versionId === version)))
+    ? <small className="field-feedback error">当前 release 引用不可用，原值已保留。</small> : null}</div>;
 }
 
 export function EnumSelect({ label, value, options, disabled, onChange }: {

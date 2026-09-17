@@ -125,6 +125,24 @@ class SkillManagementFeature(ManagementFeature):
         return ManagedDraft.create(
             self.kind, key, 0, document, context.user_id)
 
+    def create_draft(self, context, key):
+        parse_skill_key(key)
+        self._draft_context(context)
+        if self.drafts.get(self.namespace, self.kind, key) is not None:
+            raise ManagementError("DRAFT_ALREADY_EXISTS", 409)
+        if self.reader.asset_exists(self.kind, key, self._runtime_context(context)):
+            raise ManagementError("ASSET_ALREADY_EXISTS", 409)
+        name = key.rsplit("/", 1)[-1]
+        document = {
+            "metadata": {"name": name, "description": "待配置"},
+            "skillMd": f"---\nname: {name}\ndescription: 待配置\n---\n\n",
+            "requiredToolNames": [], "abilityBindings": [],
+            "applicationBindings": [], "resources": [],
+        }
+        candidate = ManagedDraft.create(
+            self.kind, key, 1, document, context.user_id)
+        return self.drafts.create(self.namespace, candidate)
+
     def save_draft(self, context, key, expected_revision, document):
         parse_skill_key(key)
         self._draft_context(context)
@@ -187,6 +205,39 @@ class SkillManagementFeature(ManagementFeature):
 
     def validate_draft(self, context, key):
         return self._validate_snapshot(self.get_draft(context, key), context)
+
+    def comparison_document(self, context, key, document):
+        parse_skill_key(key)
+        self._draft_context(context)
+        if type(document) is not dict:
+            raise ManagementError("DRAFT_NOT_COMPARABLE", 409)
+        return document
+
+    def retained_comparison_document(self, context, key, document):
+        parse_skill_key(key)
+        if type(document) is not dict or type(document.get("definition")) is not dict:
+            raise ManagementError("RETAINED_VERSION_NOT_COMPARABLE", 409)
+        definition = document["definition"]
+        instruction, *resources = definition.get("entries", ())
+        if type(instruction) is not dict or type(instruction.get("base64")) is not str:
+            raise ManagementError("RETAINED_VERSION_NOT_COMPARABLE", 409)
+        try:
+            skill_md = base64.b64decode(
+                instruction["base64"], validate=True).decode("utf-8")
+            metadata = _metadata(skill_md)
+        except (ValueError, UnicodeDecodeError, ManagementError):
+            raise ManagementError("RETAINED_VERSION_NOT_COMPARABLE", 409) from None
+        dependencies = document.get("dependencies", [])
+        return {
+            "metadata": metadata,
+            "skillMd": skill_md,
+            "requiredToolNames": definition.get("requiredToolNames", []),
+            "abilityBindings": [item.get("key") for item in dependencies
+                                if type(item) is dict and item.get("kind") == "ABILITY"],
+            "applicationBindings": [item.get("key") for item in dependencies
+                                    if type(item) is dict and item.get("kind") == "APPLICATION"],
+            "resources": resources,
+        }
 
     def prepare_publication(self, context, key, expected_revision, target):
         draft = self.get_draft(context, key)

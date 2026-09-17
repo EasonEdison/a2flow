@@ -14,7 +14,7 @@ _NOT_FOUND = {"ASSET_NOT_FOUND", "VERSION_NOT_FOUND"}
 class PublicationService:
     def __init__(self, repository, namespace):
         for name in (
-                "publication_history", "publish_candidate",
+                "publication_history", "retained_version", "publish_candidate",
                 "rollback_configuration"):
             if not callable(getattr(repository, name, None)):
                 raise ManagementError("PUBLICATION_REPOSITORY_REQUIRED")
@@ -41,6 +41,12 @@ class PublicationService:
         self._environment(context)
         return self._translate(lambda: self.repository.publication_history(
             self.namespace, kind, key))
+
+    def version(self, context, kind, key, version_id):
+        require_reader(context)
+        self._environment(context)
+        return self._translate(lambda: self.repository.retained_version(
+            self.namespace, kind, key, version_id))
 
     def publish(self, context, kind, key, candidate, target,
                 expected_serving_digest):

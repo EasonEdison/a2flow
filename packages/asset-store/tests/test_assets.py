@@ -59,12 +59,19 @@ class DatabaseDouble:
             return Rows([(*k[1:], v[0], v[1]) for k, v in sorted(self.assets.items()) if k[0] == params[0]])
         if sql.startswith("SELECT kind,asset_key,document"):
             return Rows([(*k[1:], v) for k, v in sorted(self.states.items()) if k[0] == params[0]])
+        if sql.startswith("SELECT document,digest FROM a2flow_asset_versions"):
+            value = self.assets.get(tuple(params))
+            return Rows([value] if value is not None else [])
         if sql.startswith("INSERT INTO a2flow_asset_versions"):
             if self.fail_insert:
                 raise RuntimeError("database detail must not escape")
             self.assets[tuple(params[:4])] = (params[4], params[5])
         elif sql.startswith("INSERT INTO a2flow_asset_serving"):
-            self.states[tuple(params[:3])] = params[3]
+            identity = tuple(params[:3])
+            if identity in self.states:
+                return Rows(rowcount=0)
+            self.states[identity] = params[3]
+            return Rows(rowcount=1)
         elif sql.startswith("UPDATE a2flow_asset_serving"):
             identity = (params[1], params[2], params[3])
             if self.states.get(identity) != params[4]:
@@ -213,6 +220,67 @@ class AssetTests(unittest.TestCase):
         self.assertFalse(rolled_back["businessCompensated"])
         self.assertTrue(any(sql.startswith("SELECT pg_advisory_xact_lock")
                             for sql, _ in self.db.calls))
+
+    def test_first_publication_creates_serving_without_bootstrap_version(self):
+        self.repo.import_bundle(
+            self.document, expected_namespace=NAMESPACE, dry_run=False)
+        key = "new/skill"
+        source = self.candidate("SKILL", "activity-planning/plan", "v1")
+        value = {**source, "key": key, "assetId": "skill-new"}
+        value["contentDigest"] = digest(canonical(
+            {field: item for field, item in value.items()
+             if field != "contentDigest"}))
+        result = self.repo.publish_candidate(
+            NAMESPACE, "SKILL", key, value,
+            {"environment": "PRT", "versionId": "v1",
+             "channel": "CURRENT", "grayUserIds": []},
+            digest(canonical(None)))
+        self.assertEqual("PUBLISHED", result["status"])
+        self.assertEqual(["v1"], [item["versionId"] for item in
+                                  self.repo.publication_history(
+                                      NAMESPACE, "SKILL", key)["versions"]])
+
+    def test_asset_exists_ignores_user_gray_routing(self):
+        self.repo.import_bundle(
+            self.document, expected_namespace=NAMESPACE, dry_run=False)
+        reader = AssetReader(self.repo, NAMESPACE)
+        self.assertTrue(reader.asset_exists(
+            "SKILL", "activity-planning/plan", TrustedContext("not-gray", "PRT")))
+        self.assertFalse(reader.asset_exists(
+            "SKILL", "missing/skill", TrustedContext("not-gray", "PRT")))
+
+    def test_first_online_publication_must_be_stable(self):
+        database = DatabaseDouble()
+        database.env, database.database = "ONLINE", "asset_online"
+        repository = PostgresAssetRepository(
+            "not-a-real-dsn", environment="ONLINE", database="asset_online",
+            validator=self.validator, connection_factory=database.connect)
+        document = make_bundle("ONLINE")
+        repository.import_bundle(document, expected_namespace=NAMESPACE, dry_run=False)
+        source = deepcopy(next(item for item in document["assets"]
+                               if item["kind"] == "SKILL"))
+        source["key"] = "new/online"
+        source["assetId"] = "skill-new-online"
+        source["contentDigest"] = digest(canonical({
+            field: value for field, value in source.items()
+            if field != "contentDigest"}))
+        with self.assertRaisesRegex(AssetError, "INVALID_ONLINE_TARGET"):
+            repository.publish_candidate(
+                NAMESPACE, "SKILL", "new/online", source,
+                {"environment": "ONLINE", "versionId": source["versionId"],
+                 "channel": "GRAY", "grayUserIds": ["gray-user"]},
+                digest(canonical(None)))
+
+    def test_retained_version_returns_exact_immutable_document(self):
+        self.repo.import_bundle(
+            self.document, expected_namespace=NAMESPACE, dry_run=False)
+        retained = self.repo.retained_version(
+            NAMESPACE, "SKILL", "activity-planning/plan", "v1")
+        self.assertEqual("v1", retained["versionId"])
+        self.assertEqual("v1", retained["document"]["versionId"])
+        with self.assertRaisesRegex(AssetError, "VERSION_NOT_FOUND"):
+            self.repo.retained_version(
+                NAMESPACE, "SKILL", "activity-planning/plan", "missing")
 
     def test_publish_rejects_runtime_broken_selected_application_pin(self):
         self.repo.import_bundle(

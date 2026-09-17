@@ -8,6 +8,7 @@ import type {
   PublicationPlan,
   PublicationResult,
   PublicationTarget,
+  RetainedVersion,
   ValidationReport,
 } from './contracts';
 
@@ -65,6 +66,9 @@ export const managementApi = {
   draft(kind: AssetKind, key: string, signal?: AbortSignal) {
     return request<ManagedDraft>(assetPath(kind, key) + '/draft', {}, signal);
   },
+  createDraft(kind: AssetKind, key: string) {
+    return request<ManagedDraft>(assetPath(kind, key) + '/draft', { method: 'POST' });
+  },
   saveDraft(kind: AssetKind, key: string, expectedRevision: number, document: JsonObject) {
     return request<ManagedDraft>(assetPath(kind, key) + '/draft', {
       method: 'PUT',
@@ -76,8 +80,16 @@ export const managementApi = {
       method: 'POST',
     });
   },
+  comparisonDocument(kind: AssetKind, key: string, document: JsonObject, signal?: AbortSignal) {
+    return request<JsonObject>(assetPath(kind, key) + '/comparison-documents', {
+      method: 'POST', body: JSON.stringify({ document }),
+    }, signal);
+  },
   history(kind: AssetKind, key: string, signal?: AbortSignal) {
     return request<PublicationHistory>(assetPath(kind, key) + '/versions', {}, signal);
+  },
+  version(kind: AssetKind, key: string, versionId: string, signal?: AbortSignal) {
+    return request<RetainedVersion>(assetPath(kind, key) + '/versions/' + encodeURIComponent(versionId), {}, signal);
   },
   publish(kind: AssetKind, key: string, plan: PublicationPlan, expectedServingDigest: string) {
     return request<PublicationResult>(assetPath(kind, key) + '/publications', {

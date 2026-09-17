@@ -54,6 +54,9 @@ class FakeReader:
             resource_entries=(), required_tool_names=("execute_ability",),
             resolution_evidence=evidence)
 
+    def asset_exists(self, kind, key, context):
+        return kind == "SKILL" and key == "activity-planning/plan"
+
     def resolve_asset(self, kind, key, context):
         if kind == "SKILL" and key == "activity-planning/plan":
             return {"assetId": "skill-plan", "definition": self.definition,
@@ -99,6 +102,39 @@ class ManagementSkillTests(unittest.TestCase):
             self.service.get_draft(
                 self.user, "SKILL", "activity-planning/plan")
 
+    def test_admin_creates_draft_only_skill_and_user_listing_stays_published_only(self):
+        created = self.service.create_draft(
+            self.admin, "SKILL", "new/skill")
+        self.assertEqual(1, created.revision)
+        self.assertEqual("new/skill", created.key)
+        self.assertEqual(created, self.service.get_draft(
+            self.admin, "SKILL", "new/skill"))
+        admin_keys = {item.get("key", item.get("skillKey"))
+                      for item in self.service.list_published(self.admin, "SKILL")}
+        user_keys = {item.get("key", item.get("skillKey"))
+                     for item in self.service.list_published(self.user, "SKILL")}
+        self.assertIn("new/skill", admin_keys)
+        self.assertNotIn("new/skill", user_keys)
+        with self.assertRaisesRegex(ManagementError, "DRAFT_ALREADY_EXISTS"):
+            self.service.create_draft(self.admin, "SKILL", "new/skill")
+        with self.assertRaisesRegex(ManagementError, "ADMIN_REQUIRED"):
+            self.service.create_draft(self.user, "SKILL", "other/skill")
+
+    def test_create_rejects_existing_asset_without_resolving_user_route(self):
+        class ExistingReader(FakeReader):
+            def asset_exists(inner, kind, key, context):
+                return key == "gray-only/skill"
+            def resolve_asset(inner, kind, key, context):
+                if key == "gray-only/skill":
+                    raise ManagementError("SELECTED_VERSION_MISSING", 404)
+                return super().resolve_asset(kind, key, context)
+
+        service = ManagementService([create_skill_feature(
+            ExistingReader(), MemoryDraftRepository("PRT"),
+            "a2flow-mvp-activity-planning")])
+        with self.assertRaisesRegex(ManagementError, "ASSET_ALREADY_EXISTS"):
+            service.create_draft(self.admin, "SKILL", "gray-only/skill")
+
     def test_draft_validation_and_publication_plan_do_not_publish(self):
         initial = self.service.get_draft(
             self.admin, "SKILL", "activity-planning/plan")
@@ -124,6 +160,13 @@ class ManagementSkillTests(unittest.TestCase):
         self.assertEqual("v2", plan.candidate["versionId"])
         self.assertEqual("skill-plan", plan.candidate["assetId"])
         self.assertEqual("v1", self.reader.list_skills(None)[0]["versionId"])
+
+    def test_invalid_draft_remains_comparable_without_publish_validation(self):
+        invalid = self.draft_document()
+        invalid["metadata"]["description"] = "does not match frontmatter"
+        compared = self.service.comparison_document(
+            self.admin, "SKILL", "activity-planning/plan", invalid)
+        self.assertEqual(invalid, compared)
 
     def test_optimistic_revision_and_environment_are_enforced(self):
         self.service.save_draft(

@@ -106,6 +106,9 @@ class Reader:
                  "contentDigest": "sha256:" + "1" * 64,
                  "selection": "PRT_CURRENT"},)
 
+    def asset_exists(self, kind, key, context):
+        return kind == "APPLICATION" and key == APPLICATION_KEY
+
     def resolve_asset(self, kind, key, context):
         if kind == "APPLICATION" and key == APPLICATION_KEY:
             return {"kind": kind, "key": key, "assetId": "application-confirm",
@@ -133,6 +136,13 @@ class Drafts:
     def get(self, namespace, kind, key):
         self.get_calls += 1
         return self.rows.get((namespace, kind, key))
+
+    def list(self, namespace, kind):
+        return tuple(value for identity, value in sorted(self.rows.items())
+                     if identity[:2] == (namespace, kind))
+
+    def create(self, namespace, draft):
+        return self.save(namespace, draft, 0)
 
     def save(self, namespace, draft, expected_revision):
         self.save_calls += 1
@@ -190,6 +200,22 @@ class ApplicationManagementTests(unittest.TestCase):
         self.assertEqual("PRT_CURRENT", detail["selection"])
         with self.assertRaisesRegex(ManagementError, "ADMIN_REQUIRED"):
             self.service.get_draft(self.user, "APPLICATION", APPLICATION_KEY)
+
+    def test_admin_creates_unconfigured_application_draft(self):
+        created = self.service.create_draft(
+            self.admin, "APPLICATION", "new.application")
+        self.assertEqual("new.application",
+                         created.document["definition"]["asset"]["applicationKey"])
+        self.assertEqual("DISPLAY_ONLY",
+                         created.document["definition"]["renderPolicy"]["interactionMode"])
+        self.assertFalse(self.service.validate_draft(
+            self.admin, "APPLICATION", "new.application").valid)
+        self.assertIn("new.application", {
+            item["key"] for item in self.service.list_published(
+                self.admin, "APPLICATION")})
+        self.assertNotIn("new.application", {
+            item["key"] for item in self.service.list_published(
+                self.user, "APPLICATION")})
 
     def test_interactive_validates_and_prepares_without_publish(self):
         saved = self.service.save_draft(

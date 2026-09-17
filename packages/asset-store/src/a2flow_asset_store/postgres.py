@@ -221,6 +221,33 @@ class PostgresAssetRepository:
                     "servingDigest": self._serving_digest(state),
                 }
 
+    def retained_version(self, ns, kind, key, version_id):
+        ns = namespace(ns)
+        kind, key = self._asset_key(kind, key)
+        if type(version_id) is not str or not 1 <= len(version_id) <= 256:
+            raise AssetError("INVALID_VERSION_ID")
+        with self._connection() as connection:
+            with connection.transaction():
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                self._check_environment(connection)
+                row = connection.execute(
+                    "SELECT document,digest FROM a2flow_asset_versions "
+                    "WHERE namespace=%s AND kind=%s AND asset_key=%s AND version_id=%s",
+                    (ns, kind, key, version_id)).fetchone()
+        if row is None:
+            raise AssetError("VERSION_NOT_FOUND")
+        raw, expected = bytes(row[0]), row[1]
+        if digest(raw) != expected:
+            raise AssetError("READBACK_DIGEST_MISMATCH")
+        document = json.loads(raw)
+        if canonical(document) != raw or (
+                document.get("kind"), document.get("key"), document.get("versionId")) != (
+                    kind, key, version_id):
+            raise AssetError("READBACK_IDENTITY_MISMATCH")
+        return {"kind": kind, "key": key, "versionId": version_id,
+                "contentDigest": expected, "document": document}
+
     def publish_candidate(self, ns, kind, key, candidate, target,
                           expected_serving_digest):
         """Atomically retain one immutable candidate and select its target."""
@@ -260,9 +287,13 @@ class PostgresAssetRepository:
                 states = {(item["kind"], item["key"]): item
                           for item in existing["serving"]}
                 old_state = states.get((kind, key))
+                empty_digest = self._serving_digest(None)
                 if old_state is None:
-                    raise AssetError("ASSET_NOT_FOUND")
-                if self._serving_digest(old_state) != expected_serving_digest:
+                    if candidate is None:
+                        raise AssetError("ASSET_NOT_FOUND")
+                    if expected_serving_digest != empty_digest:
+                        raise AssetError("STALE_SERVING_SELECTION")
+                elif self._serving_digest(old_state) != expected_serving_digest:
                     raise AssetError("STALE_SERVING_SELECTION")
 
                 assets = {(item["kind"], item["key"], item["versionId"]): item
@@ -288,6 +319,8 @@ class PostgresAssetRepository:
                         "stable": None, "gray": None, "grayUserIds": [],
                     }
                 else:
+                    if old_state is None and target["channel"] == "GRAY":
+                        raise AssetError("INVALID_ONLINE_TARGET")
                     if target["channel"] == "STABLE" and not gray_users:
                         next_state = {
                             "kind": kind, "key": key, "current": None,
@@ -297,7 +330,7 @@ class PostgresAssetRepository:
                     elif target["channel"] == "GRAY" and gray_users:
                         next_state = {
                             "kind": kind, "key": key, "current": None,
-                            "stable": old_state["stable"], "gray": version_id,
+                            "stable": old_state["stable"] if old_state else None, "gray": version_id,
                             "grayUserIds": gray_users,
                         }
                     else:
@@ -327,12 +360,18 @@ class PostgresAssetRepository:
                         "VALUES(%s,%s,%s,%s,%s,%s)",
                         (ns, kind, key, version_id, raw,
                          candidate["contentDigest"]))
-                result = connection.execute(
-                    "UPDATE a2flow_asset_serving SET document=%s "
-                    "WHERE namespace=%s AND kind=%s AND asset_key=%s "
-                    "AND document=%s",
-                    (canonical(next_state), ns, kind, key,
-                     canonical(old_state)))
+                if old_state is None:
+                    result = connection.execute(
+                        "INSERT INTO a2flow_asset_serving(namespace,kind,asset_key,document) "
+                        "VALUES(%s,%s,%s,%s) ON CONFLICT(namespace,kind,asset_key) DO NOTHING",
+                        (ns, kind, key, canonical(next_state)))
+                else:
+                    result = connection.execute(
+                        "UPDATE a2flow_asset_serving SET document=%s "
+                        "WHERE namespace=%s AND kind=%s AND asset_key=%s "
+                        "AND document=%s",
+                        (canonical(next_state), ns, kind, key,
+                         canonical(old_state)))
                 if getattr(result, "rowcount", 1) != 1:
                     raise AssetError("STALE_SERVING_SELECTION")
                 self._verify(connection, ns, desired)

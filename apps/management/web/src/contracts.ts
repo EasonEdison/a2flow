@@ -19,6 +19,8 @@ export interface AssetSummary extends JsonObject {
   selection?: string;
   name?: string;
   description?: string;
+  draftOnly?: boolean;
+  draftRevision?: number;
 }
 
 export interface ManagedDraft {
@@ -72,6 +74,22 @@ export interface PublicationResult extends JsonObject {
   status: 'PUBLISHED' | 'ROLLED_BACK';
   published: true;
   businessCompensated: false;
+}
+
+export interface RetainedVersion {
+  kind: AssetKind;
+  key: string;
+  versionId: string;
+  contentDigest: string;
+  document: JsonObject;
+}
+
+export interface ReferenceCatalog {
+  loading: boolean;
+  errors: Record<string, string>;
+  assets: Partial<Record<AssetKind, AssetSummary[]>>;
+  histories: Record<string, PublicationHistory>;
+  retry?: () => void;
 }
 
 export interface DraftBuffer {

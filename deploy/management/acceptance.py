@@ -22,6 +22,9 @@ PG_CASES = (
     "test_online_stable_gray_finish_rollback_and_isolation",
     "test_dependency_invalid_publication_is_atomic_for_each_environment.PRT",
     "test_dependency_invalid_publication_is_atomic_for_each_environment.ONLINE",
+    "test_concurrent_create_same_key_is_atomic_conflict",
+    "test_first_edit_of_imported_asset_creates_draft",
+    "test_create_waits_for_uncommitted_import_then_rejects",
 )
 
 

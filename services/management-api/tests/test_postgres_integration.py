@@ -1,16 +1,20 @@
 """Opt-in management acceptance using provisioner-owned per-case databases."""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+import hashlib
 import json
 import os
 from pathlib import Path
+import threading
+import time
 import unittest
 
 import httpx
 from psycopg import connect
 from psycopg.conninfo import make_conninfo
 
-from a2flow_asset_store import AssetReader, PostgresAssetRepository
+from a2flow_asset_store import AssetError, AssetReader, PostgresAssetRepository
 from a2flow_asset_store.records import canonical, digest
 from a2flow_management import PostgresDraftRepository, TrustedManagementContext
 from a2flow_management.assembly import create_management_app
@@ -44,6 +48,9 @@ if CONFIGURED:
             "test_online_stable_gray_finish_rollback_and_isolation",
             "test_dependency_invalid_publication_is_atomic_for_each_environment.PRT",
             "test_dependency_invalid_publication_is_atomic_for_each_environment.ONLINE",
+            "test_concurrent_create_same_key_is_atomic_conflict",
+            "test_first_edit_of_imported_asset_creates_draft",
+            "test_create_waits_for_uncommitted_import_then_rejects",
     }:
         raise RuntimeError("POSTGRES_FIXTURE_PLAN_INVALID")
 
@@ -187,6 +194,117 @@ class PostgresIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(403, denied.status_code)
         self.assertEqual("ADMIN_REQUIRED", denied.json()["error"]["code"])
+
+    def test_concurrent_create_same_key_is_atomic_conflict(self):
+        database, namespace = self.fixture(
+            "test_concurrent_create_same_key_is_atomic_conflict")
+        repository, drafts = self.repository("PRT", database, namespace)
+        admin = TrustedManagementContext(
+            "accept-admin", "PRT", frozenset({"ADMIN"}))
+        app = self.app(repository, drafts, admin, namespace)
+        path = self.path("SKILL", "new/concurrent", "/draft")
+
+        async def scenario():
+            transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+            async with httpx.AsyncClient(
+                    transport=transport, base_url="http://test") as client:
+                return await asyncio.gather(
+                    client.post(path), client.post(path))
+
+        responses = asyncio.run(scenario())
+        self.assertEqual([200, 409], sorted(response.status_code for response in responses))
+        self.assertEqual(1, drafts.get(
+            namespace, "SKILL", "new/concurrent").revision)
+        with self.assertRaisesRegex(AssetError, "ASSET_NOT_FOUND"):
+            repository.publication_history(
+                namespace, "SKILL", "new/concurrent")
+
+    def test_first_edit_of_imported_asset_creates_draft(self):
+        database, namespace = self.fixture(
+            "test_first_edit_of_imported_asset_creates_draft")
+        repository, drafts = self.repository("PRT", database, namespace)
+        admin = TrustedManagementContext(
+            "accept-admin", "PRT", frozenset({"ADMIN"}))
+        app = self.app(repository, drafts, admin, namespace)
+        key = self.keys["SKILL"]
+        path = self.path("SKILL", key, "/draft")
+        initial = self.call(app, "GET", path)
+        self.assertEqual(200, initial.status_code, initial.text)
+        self.assertEqual(0, initial.json()["revision"])
+        saved = self.call(app, "PUT", path, json={
+            "expectedRevision": 0,
+            "document": initial.json()["document"],
+        })
+        self.assertEqual(200, saved.status_code, saved.text)
+        self.assertEqual(1, saved.json()["revision"])
+
+    def test_create_waits_for_uncommitted_import_then_rejects(self):
+        database, namespace = self.fixture(
+            "test_create_waits_for_uncommitted_import_then_rejects")
+        repository = PostgresAssetRepository(
+            conninfo(database), environment="PRT", database=database,
+            validator=bundle_validator())
+        repository.setup()
+        drafts = PostgresDraftRepository(
+            conninfo(database), environment="PRT", database=database)
+        drafts.setup()
+        key = "new/concurrent-import"
+        source = make_bundle("PRT")
+        skill = deepcopy(next(item for item in source["assets"]
+                              if item["kind"] == "SKILL"))
+        skill["key"] = key
+        skill["assetId"] = "concurrent-import-skill"
+        raw = canonical({field: value for field, value in skill.items()
+                         if field != "contentDigest"})
+        skill["contentDigest"] = digest(raw)
+        lock = int.from_bytes(
+            hashlib.sha256(namespace.encode()).digest()[:8],
+            "big", signed=True)
+        started = threading.Event()
+        connection_started = threading.Event()
+
+        def connect_after_started(*args, **kwargs):
+            connection_started.set()
+            return connect(*args, **kwargs)
+
+        waiting_drafts = PostgresDraftRepository(
+            conninfo(database), environment="PRT", database=database,
+            connection_factory=connect_after_started)
+        with connect(conninfo(database), autocommit=False, connect_timeout=5) as importer:
+            importer.execute("SELECT pg_advisory_xact_lock(%s)", (lock,))
+            importer.execute(
+                "INSERT INTO a2flow_asset_versions "
+                "(namespace,kind,asset_key,version_id,document,digest) "
+                "VALUES(%s,%s,%s,%s,%s,%s)",
+                (namespace, "SKILL", key, skill["versionId"], raw,
+                 skill["contentDigest"]))
+            candidate = ManagedDraft.create(
+                "SKILL", key, 0, {"metadata": {}}, "accept-admin")
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    lambda: (started.set(), waiting_drafts.create(namespace, candidate))[1])
+                self.assertTrue(started.wait(timeout=5))
+                self.assertTrue(connection_started.wait(timeout=5))
+                deadline = time.monotonic() + 5
+                observed_wait = False
+                while time.monotonic() < deadline:
+                    # Statistics may otherwise stay cached within this transaction.
+                    importer.execute("SELECT pg_stat_clear_snapshot()")
+                    waiter = importer.execute(
+                        "SELECT wait_event_type,wait_event FROM pg_stat_activity "
+                        "WHERE application_name='a2flow-management' "
+                        "AND state='active'").fetchone()
+                    if waiter == ("Lock", "advisory"):
+                        observed_wait = True
+                        break
+                importer.commit()
+                with self.assertRaisesRegex(
+                        ManagementError, "ASSET_ALREADY_EXISTS"):
+                    future.result(timeout=15)
+                self.assertTrue(
+                    observed_wait,
+                    "create did not wait on the namespace advisory lock")
+        self.assertIsNone(drafts.get(namespace, "SKILL", key))
 
     def test_four_kind_immutable_publication_serving_cas_and_rollback(self):
         database, namespace = self.fixture(

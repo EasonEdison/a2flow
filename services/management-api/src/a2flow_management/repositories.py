@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 import copy
+import hashlib
 
 from .contracts import ManagedDraft, ManagementError, identifier
 
@@ -21,7 +22,11 @@ class DraftRepository(ABC):
     @abstractmethod
     def get(self, namespace, kind, key): ...
     @abstractmethod
+    def list(self, namespace, kind): ...
+    @abstractmethod
     def save(self, namespace, draft, expected_revision): ...
+    @abstractmethod
+    def create(self, namespace, draft): ...
 
 
 class MemoryDraftRepository(DraftRepository):
@@ -37,6 +42,16 @@ class MemoryDraftRepository(DraftRepository):
 
     def get(self, namespace, kind, key):
         return self._rows.get((namespace, kind, key))
+
+    def list(self, namespace, kind):
+        return tuple(copy.deepcopy(value) for identity, value in sorted(self._rows.items())
+                     if identity[:2] == (namespace, kind))
+
+    def create(self, namespace, draft):
+        identity = namespace, draft.kind, draft.key
+        if identity in self._rows:
+            raise ManagementError("DRAFT_REVISION_CONFLICT", 409)
+        return self.save(namespace, draft, 0)
 
     def save(self, namespace, draft, expected_revision):
         identity = namespace, draft.kind, draft.key
@@ -117,6 +132,55 @@ class PostgresDraftRepository(DraftRepository):
             raise ManagementError("DRAFT_DIGEST_MISMATCH", 500)
         return draft
 
+    def list(self, namespace, kind):
+        identifier(namespace, "INVALID_NAMESPACE")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT asset_key,revision,document,digest,updated_by "
+                "FROM a2flow_management_drafts "
+                "WHERE namespace=%s AND kind=%s ORDER BY asset_key",
+                (namespace, kind)).fetchall()
+        result = []
+        for key, revision, document, expected, updated_by in rows:
+            draft = ManagedDraft.create(
+                kind, key, revision, __import__("json").loads(bytes(document)), updated_by)
+            if draft.content_digest != expected:
+                raise ManagementError("DRAFT_DIGEST_MISMATCH", 500)
+            result.append(draft)
+        return tuple(result)
+
+    def create(self, namespace, draft):
+        identifier(namespace, "INVALID_NAMESPACE")
+        with self._connection() as connection:
+            with connection.transaction():
+                lock = int.from_bytes(
+                    hashlib.sha256(namespace.encode()).digest()[:8],
+                    "big", signed=True)
+                connection.execute(
+                    "SELECT pg_advisory_xact_lock(%s)", (lock,))
+                published = connection.execute(
+                    "SELECT 1 FROM a2flow_asset_versions "
+                    "WHERE namespace=%s AND kind=%s AND asset_key=%s LIMIT 1",
+                    (namespace, draft.kind, draft.key)).fetchone()
+                if published is not None:
+                    raise ManagementError("ASSET_ALREADY_EXISTS", 409)
+                row = self._insert(connection, namespace, draft)
+                if row is None:
+                    raise ManagementError("DRAFT_REVISION_CONFLICT", 409)
+                return ManagedDraft.create(
+                    draft.kind, draft.key, row[0], draft.document, draft.updated_by)
+
+    @staticmethod
+    def _insert(connection, namespace, draft):
+        return connection.execute(
+            "INSERT INTO a2flow_management_drafts "
+            "(namespace,kind,asset_key,revision,document,digest,updated_by) "
+            "VALUES(%s,%s,%s,1,%s,%s,%s) "
+            "ON CONFLICT(namespace,kind,asset_key) DO NOTHING "
+            "RETURNING revision",
+            (namespace, draft.kind, draft.key, draft.data,
+             draft.content_digest, draft.updated_by)).fetchone()
+
     def save(self, namespace, draft, expected_revision):
         identifier(namespace, "INVALID_NAMESPACE")
         if type(expected_revision) is not int or expected_revision < 0:
@@ -124,14 +188,7 @@ class PostgresDraftRepository(DraftRepository):
         with self._connection() as connection:
             with connection.transaction():
                 if expected_revision == 0:
-                    row = connection.execute(
-                        "INSERT INTO a2flow_management_drafts "
-                        "(namespace,kind,asset_key,revision,document,digest,updated_by) "
-                        "VALUES(%s,%s,%s,1,%s,%s,%s) "
-                        "ON CONFLICT(namespace,kind,asset_key) DO NOTHING "
-                        "RETURNING revision",
-                        (namespace, draft.kind, draft.key, draft.data,
-                         draft.content_digest, draft.updated_by)).fetchone()
+                    row = self._insert(connection, namespace, draft)
                 else:
                     row = connection.execute(
                         "UPDATE a2flow_management_drafts SET revision=revision+1,"

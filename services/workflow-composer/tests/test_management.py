@@ -48,6 +48,9 @@ class FakeReader:
             "selection": "PRT_CURRENT",
         },)
 
+    def asset_exists(self, kind, key, context):
+        return kind == "WORKFLOW" and key == WORKFLOW_KEY
+
     def resolve_asset(self, kind, key, context):
         if kind == "WORKFLOW" and key == WORKFLOW_KEY:
             return {
@@ -97,6 +100,21 @@ class WorkflowManagementTests(unittest.TestCase):
         with self.assertRaisesRegex(ManagementError, "ADMIN_REQUIRED"):
             self.service.get_draft(
                 self.user, "WORKFLOW", WORKFLOW_KEY)
+
+    def test_admin_creates_empty_sequential_draft(self):
+        created = self.service.create_draft(
+            self.admin, "WORKFLOW", "new-workflow")
+        self.assertEqual({"definitionKey": "new-workflow",
+                          "topology": "SEQUENTIAL", "nodes": []},
+                         created.document)
+        self.assertFalse(self.service.validate_draft(
+            self.admin, "WORKFLOW", "new-workflow").valid)
+        self.assertIn("new-workflow", {
+            item["key"] for item in self.service.list_published(
+                self.admin, "WORKFLOW")})
+        self.assertNotIn("new-workflow", {
+            item["key"] for item in self.service.list_published(
+                self.user, "WORKFLOW")})
 
     def test_sequential_draft_validates_and_prepares_without_publishing(self):
         saved = self.service.save_draft(

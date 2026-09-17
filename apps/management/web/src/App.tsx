@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ManagementApiError, managementApi } from './api';
+import { DiffView } from './DiffView';
+import { diffValues } from './structured-diff';
 import { filterAssets } from './asset-filter';
 import { FormEditor } from './FormEditors';
 import {
@@ -22,6 +24,8 @@ import {
   type ManagementSession,
   type PublicationHistory,
   type PublicationPlan,
+  type ReferenceCatalog,
+  type RetainedVersion,
   type ValidationReport,
 } from './contracts';
 
@@ -117,6 +121,8 @@ function AssetList({
   loading,
   error,
   onSelect,
+  onCreate,
+  canAuthor,
   disabled,
 }: {
   kind: AssetKind;
@@ -128,6 +134,8 @@ function AssetList({
   loading: boolean;
   error: string | null;
   onSelect: (key: string) => void;
+  onCreate: () => void;
+  canAuthor: boolean;
   disabled: boolean;
 }) {
   const filteredAssets = useMemo(() => filterAssets(assets, query), [assets, query]);
@@ -140,9 +148,9 @@ function AssetList({
           <p className="section-label">资产目录</p>
           <h1>{KIND_COPY[kind].label}</h1>
         </div>
-        <span className="count" aria-label={`匹配 ${filteredAssets.length} 项，共 ${assets.length} 项`}>
+        <div className="rail-actions"><span className="count" aria-label={`匹配 ${filteredAssets.length} 项，共 ${assets.length} 项`}>
           {filteredAssets.length}/{assets.length}
-        </span>
+        </span>{canAuthor ? <button type="button" className="secondary-button" disabled={disabled} onClick={onCreate}>新建</button> : null}</div>
       </header>
       <p className="guidance">{KIND_COPY[kind].guidance}</p>
       <div className="asset-search">
@@ -184,7 +192,7 @@ function AssetList({
             >
               <span className="asset-key">{asset.name ?? key}</span>
               <span className="asset-meta">
-                {asset.versionId ?? key}
+                {asset.draftOnly ? '仅草稿' : asset.versionId ?? key}
                 {dirty ? <i title="有未保存修改">未保存</i> : null}
               </span>
               {asset.description ? <span className="asset-description">{asset.description}</span> : null}
@@ -194,6 +202,151 @@ function AssetList({
       </div>
     </section>
   );
+}
+
+function CreateDialog({ kind, busy, error, onCancel, onCreate }: {
+  kind: AssetKind; busy: boolean; error: string | null; onCancel: () => void;
+  onCreate: (key: string) => void;
+}) {
+  const [key, setKey] = useState('');
+  return <div className="dialog-backdrop"><section className="create-dialog" role="dialog" aria-modal="true" aria-label={`新建 ${kind}`}>
+    <p className="section-label">Draft only</p><h2>新建 {KIND_COPY[kind].label}</h2>
+    <label className="form-field"><span>不可变 Key</span><input autoFocus value={key} maxLength={256} disabled={busy}
+      onChange={(event) => setKey(event.target.value)} /></label>
+    <p>将创建未发布草稿；模板中的执行与引用字段保持未配置。</p>
+    {error ? <div className="notice error">{error}</div> : null}
+    <div className="dialog-actions"><button type="button" className="quiet-button" disabled={busy} onClick={onCancel}>取消</button>
+      <button type="button" className="primary-button" disabled={busy || !key} onClick={() => onCreate(key)}>{busy ? '正在创建…' : '创建草稿'}</button></div>
+  </section></div>;
+}
+
+function ComparisonPanel({ kind, keyName, history, buffer, pendingCount }: {
+  kind: AssetKind; keyName: string; history: PublicationHistory; buffer?: DraftBuffer; pendingCount: number;
+}) {
+  const firstVersion = history.versions[0]?.versionId ?? '';
+  const secondVersion = history.versions[1]?.versionId ?? firstVersion;
+  const [left, setLeft] = useState(firstVersion);
+  const [right, setRight] = useState(buffer ? 'DRAFT' : secondVersion);
+  const [documents, setDocuments] = useState<Record<string, RetainedVersion>>({});
+  const [canonicalDraft, setCanonicalDraft] = useState<JsonObject | undefined>();
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [versionError, setVersionError] = useState<string | null>(null);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [versionLoading, setVersionLoading] = useState(false);
+  const [requestEpoch, setRequestEpoch] = useState(0);
+  const [comparedText, setComparedText] = useState<string | null>(null);
+  const compareController = useRef<AbortController | null>(null);
+  const compareEpoch = useRef(0);
+  const bufferText = buffer?.text;
+  const comparisonStale = canonicalDraft !== undefined && comparedText !== bufferText;
+  useEffect(() => {
+    const nextFirst = history.versions[0]?.versionId ?? '';
+    const nextSecond = history.versions[1]?.versionId ?? nextFirst;
+    compareController.current?.abort();
+    compareEpoch.current += 1;
+    setLeft(nextFirst);
+    setRight(buffer ? 'DRAFT' : nextSecond);
+    setDocuments({});
+    setCanonicalDraft(undefined);
+    setComparedText(null);
+    setDraftLoading(false);
+    setDraftError(null);
+    setVersionError(null);
+    setRequestEpoch((current) => current + 1);
+    return () => compareController.current?.abort();
+  }, [kind, keyName, history, Boolean(buffer)]);
+  useEffect(() => {
+    const versions = [...new Set([left, right].filter((value) => value && value !== 'DRAFT'))];
+    if (!versions.length) return;
+    const controller = new AbortController();
+    const epoch = requestEpoch;
+    setVersionLoading(true);
+    setVersionError(null);
+    Promise.all(versions.map((version) => managementApi.version(kind, keyName, version, controller.signal)))
+      .then((values) => {
+        if (!controller.signal.aborted && epoch === requestEpoch) {
+          setDocuments(Object.fromEntries(values.map((value) => [value.versionId, value])));
+        }
+      })
+      .catch((reason: unknown) => { if (!controller.signal.aborted) setVersionError(errorText(reason)); })
+      .finally(() => { if (!controller.signal.aborted) setVersionLoading(false); });
+    return () => controller.abort();
+  }, [kind, keyName, left, right, requestEpoch]);
+  async function compareDraft() {
+    const snapshot = buffer?.text;
+    if (snapshot === undefined) {
+      compareController.current?.abort();
+      compareEpoch.current += 1;
+      setCanonicalDraft(undefined);
+      setComparedText(null);
+      setDraftLoading(false);
+      setDraftError('没有可比较的草稿。');
+      return;
+    }
+    const inspected = inspectDraftText(snapshot);
+    if (!inspected.ok) {
+      compareController.current?.abort();
+      compareEpoch.current += 1;
+      setCanonicalDraft(undefined);
+      setComparedText(null);
+      setDraftLoading(false);
+      setDraftError(inspected.error);
+      return;
+    }
+    compareController.current?.abort();
+    const controller = new AbortController();
+    const epoch = compareEpoch.current + 1;
+    compareEpoch.current = epoch;
+    compareController.current = controller;
+    setDraftLoading(true);
+    setDraftError(null);
+    try {
+      const document = await managementApi.comparisonDocument(
+        kind, keyName, inspected.document, controller.signal);
+      if (!controller.signal.aborted && epoch === compareEpoch.current) {
+        setCanonicalDraft(document);
+        setComparedText(snapshot);
+      }
+    } catch (reason) {
+      if (!controller.signal.aborted && epoch === compareEpoch.current) {
+        setCanonicalDraft(undefined);
+        setComparedText(null);
+        setDraftError(errorText(reason));
+      }
+    } finally {
+      if (!controller.signal.aborted && epoch === compareEpoch.current) {
+        setDraftLoading(false);
+        compareController.current = null;
+      }
+    }
+  }
+  function selectRetainedSide(side: 'left' | 'right', value: string) {
+    compareController.current?.abort();
+    compareEpoch.current += 1;
+    setDraftLoading(false);
+    setDraftError(null);
+    if (side === 'left') setLeft(value);
+    else {
+      setRight(value);
+      setCanonicalDraft(undefined);
+      setComparedText(null);
+    }
+  }
+  if (!history.versions.length) return <section className="history-panel"><h3>版本比较</h3><p>该资产尚无已发布版本，无法比较。</p></section>;
+  const value = (side: string) => side === 'DRAFT' ? canonicalDraft : documents[side]?.document;
+  const leftValue = value(left); const rightValue = value(right);
+  const loading = draftLoading || versionLoading;
+  const error = draftError ?? versionError;
+  return <section className="history-panel"><div className="history-heading"><div><p className="section-label">Read-only comparison</p><h3>版本比较</h3></div></div>
+    <div className="compare-controls"><select aria-label="比较左侧" value={left} onChange={(event) => selectRetainedSide('left', event.target.value)}>{history.versions.map((version) => <option key={version.versionId}>{version.versionId}</option>)}</select>
+      <select aria-label="比较右侧" value={right} onChange={(event) => selectRetainedSide('right', event.target.value)}>{buffer ? <option value="DRAFT">当前 canonical 草稿</option> : null}{history.versions.map((version) => <option key={version.versionId}>{version.versionId}</option>)}</select>
+      {buffer && right === 'DRAFT' ? <button type="button" className="secondary-button" disabled={draftLoading} onClick={() => void compareDraft()}>{comparisonStale ? '刷新过时比较' : canonicalDraft ? '更新草稿比较' : '比较当前草稿'}</button> : null}</div>
+    {right === 'DRAFT' && canonicalDraft === undefined && !draftError ? <p>点击“比较当前草稿”读取当前 canonical 草稿；尚未应用的字段 JSON 不会包含。</p> : null}
+    {right === 'DRAFT' && comparisonStale ? <p className="notice warning">比较内容已过时，请显式刷新后再查看当前 canonical 草稿。</p> : null}
+    {pendingCount ? <p className="notice warning">{pendingCount} 个尚未应用的字段 JSON 不包含在 canonical 草稿比较中。</p> : null}
+    {loading ? <p>正在读取比较内容…</p> : null}{error ? <div className="notice error">{error}</div> : null}
+    {!loading && !error && leftValue !== undefined && rightValue !== undefined ? <DiffView entries={diffValues(leftValue, rightValue)} leftLabel={left} rightLabel={right === 'DRAFT' ? comparisonStale ? '过时 canonical 草稿快照' : '当前 canonical 草稿' : right} /> : null}
+  </section>;
 }
 
 function JsonBlock({ value, label }: { value: unknown; label: string }) {
@@ -404,6 +557,7 @@ function AuthorWorkspace({
   successMessage,
   actionBusy,
   pendingFields,
+  references,
   onEdit,
   onPendingChange,
   onApplyPending,
@@ -427,6 +581,7 @@ function AuthorWorkspace({
   successMessage: string | null;
   actionBusy: boolean;
   pendingFields: PendingFields;
+  references: ReferenceCatalog;
   onEdit: (value: string) => void;
   onPendingChange: (path: string[], text: string, expected: 'object' | 'array', baseValue: unknown) => void;
   onApplyPending: (path: string[], expected: 'object' | 'array') => void;
@@ -484,7 +639,7 @@ function AuthorWorkspace({
             disabled={actionBusy}
             onChange={(event) => onEdit(event.target.value)}
           />
-        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} onEdit={onEdit}
+        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} references={references} onEdit={onEdit}
           onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending}
           getPendingConflict={getPendingConflict} />}
         <div className="editor-footer">
@@ -534,6 +689,53 @@ function App() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [references, setReferences] = useState<ReferenceCatalog>({ loading: false, errors: {}, assets: {}, histories: {} });
+  const [referenceRefresh, setReferenceRefresh] = useState(0);
+
+  useEffect(() => {
+    const dirty = Object.values(buffers).some((item) => item.dirty)
+      || Object.values(pendingBuffers).some((item) => Object.keys(item).length > 0);
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [buffers, pendingBuffers]);
+
+  useEffect(() => {
+    if (!session?.canAuthor) return;
+    const controller = new AbortController();
+    setReferences((current) => ({ ...current, loading: true }));
+    const kinds: AssetKind[] = ['SKILL', 'ABILITY', 'APPLICATION'];
+    Promise.all(kinds.map(async (referenceKind) => {
+      try { return [referenceKind, await managementApi.list(referenceKind, controller.signal)] as const; }
+      catch (error) { return [referenceKind, error] as const; }
+    })).then(async (results) => {
+      if (controller.signal.aborted) return;
+      const nextAssets: ReferenceCatalog['assets'] = {};
+      const errors: ReferenceCatalog['errors'] = {};
+      for (const [referenceKind, value] of results) {
+        if (Array.isArray(value)) nextAssets[referenceKind] = value.filter((item) => !item.draftOnly);
+        else errors[referenceKind] = errorText(value);
+      }
+      const historyEntries = await Promise.all((nextAssets.ABILITY ?? []).map(async (item): Promise<[string, PublicationHistory | Error]> => {
+        const key = assetKeyOf(item);
+        try { return [`ABILITY:${key}`, await managementApi.history('ABILITY', key, controller.signal)]; }
+        catch (error) { return [`ABILITY:${key}`, error instanceof Error ? error : new Error(errorText(error))]; }
+      }));
+      const histories: Record<string, PublicationHistory> = {};
+      for (const [catalogKey, value] of historyEntries) {
+        if (value instanceof Error) errors[catalogKey] = errorText(value);
+        else histories[catalogKey] = value;
+      }
+      if (!controller.signal.aborted) setReferences({
+        loading: false, errors, assets: nextAssets, histories,
+        retry: () => setReferenceRefresh((current) => current + 1),
+      });
+    });
+    return () => controller.abort();
+  }, [session, referenceRefresh]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -571,6 +773,11 @@ function App() {
     return () => controller.abort();
   }, [kind]);
 
+  const selectedSummary = useMemo(
+    () => assets.find((asset) => assetKeyOf(asset) === selectedKey) ?? null,
+    [assets, selectedKey],
+  );
+
   useEffect(() => {
     if (!session || !kind || !selectedKey) {
       setDetail(null);
@@ -585,7 +792,9 @@ function App() {
     setHistory(null);
     setSuccessMessage(null);
     setActionMessage(null);
-    const detailRequest = managementApi.detail(kind, selectedKey, controller.signal);
+    const detailRequest = selectedSummary?.draftOnly
+      ? Promise.resolve(null)
+      : managementApi.detail(kind, selectedKey, controller.signal);
     const draftRequest = session.canAuthor
       ? managementApi.draft(kind, selectedKey, controller.signal)
       : Promise.resolve(null);
@@ -605,15 +814,30 @@ function App() {
       if (!controller.signal.aborted) setAssetLoading(false);
     });
     return () => controller.abort();
-  }, [session, kind, selectedKey]);
+  }, [session, kind, selectedKey, selectedSummary?.draftOnly]);
 
   const activeBufferId = kind && selectedKey ? bufferId(kind, selectedKey) : null;
   const buffer = activeBufferId ? buffers[activeBufferId] : undefined;
   const pendingFields = activeBufferId ? pendingBuffers[activeBufferId] ?? createPendingFieldState() : createPendingFieldState();
-  const selectedSummary = useMemo(
-    () => assets.find((asset) => assetKeyOf(asset) === selectedKey) ?? null,
-    [assets, selectedKey],
-  );
+
+  async function createDraft(keyName: string) {
+    if (!kind) return;
+    setActionBusy(true);
+    setCreateError(null);
+    try {
+      const created = await managementApi.createDraft(kind, keyName);
+      const summary: AssetSummary = { kind, key: keyName, draftOnly: true, draftRevision: created.revision };
+      setAssets((current) => [...current.filter((item) => assetKeyOf(item) !== keyName), summary]
+        .sort((left, right) => assetKeyOf(left).localeCompare(assetKeyOf(right))));
+      setBuffers((current) => ({ ...current, [bufferId(kind, keyName)]: createDraftBuffer(created) }));
+      setSelectedKey(keyName);
+      setCreateOpen(false);
+    } catch (error) {
+      setCreateError(errorText(error));
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   function changeKind(next: AssetKind) {
     if (!shouldChangeKind(kind, next)) return;
@@ -775,6 +999,7 @@ function App() {
         setHistory(nextHistory);
         setDetail(nextDetail);
         setAssets(nextAssets);
+        setReferenceRefresh((current) => current + 1);
       } catch (refreshError) {
         setActionMessage('发布已成功，但刷新失败：' + errorText(refreshError));
       }
@@ -804,6 +1029,7 @@ function App() {
         setHistory(nextHistory);
         setDetail(nextDetail);
         setAssets(nextAssets);
+        setReferenceRefresh((current) => current + 1);
       } catch (refreshError) {
         setActionMessage('回滚已成功，但刷新失败：' + errorText(refreshError));
       }
@@ -861,6 +1087,8 @@ function App() {
           loading={listLoading}
           error={listError}
           onSelect={setSelectedKey}
+          onCreate={() => { setCreateError(null); setCreateOpen(true); }}
+          canAuthor={session.canAuthor}
           disabled={actionBusy}
         />
       ) : null}
@@ -879,7 +1107,7 @@ function App() {
                 <p>{selectedKey}</p>
               </div>
               <div className="header-status">
-                <span className="published-status">已发布版本</span>
+                <span className="published-status">{selectedSummary?.draftOnly ? '仅草稿' : '已发布版本'}</span>
                 <span className={session.canAuthor ? 'role-status admin' : 'role-status'}>
                   {session.canAuthor ? '可编辑草稿' : '只读'}
                 </span>
@@ -887,11 +1115,12 @@ function App() {
             </header>
             {assetLoading ? <div className="workspace-state">正在读取资产…</div> : null}
             {assetError ? <div className="notice error">{assetError}</div> : null}
-            {!assetLoading && !assetError && detail ? (
+            {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) ? (
               <>
-                <JsonBlock value={detail} label="当前已发布详情" />
-                {history ? <HistoryPanel history={history} canAuthor={session.canAuthor} busy={actionBusy}
+                {detail ? <JsonBlock value={detail} label="当前已发布详情" /> : <section className="readonly-panel"><strong>仅草稿</strong><p>尚无已发布版本；不会显示虚构版本或历史。</p></section>}
+                {history ? <HistoryPanel history={history} canAuthor={session.canAuthor && history.versions.length > 0} busy={actionBusy}
                   onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} /> : null}
+                {history ? <ComparisonPanel kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length} /> : null}
                 {session.canAuthor && history ? (
                   <AuthorWorkspace
                     session={session}
@@ -905,6 +1134,7 @@ function App() {
                     successMessage={successMessage}
                     actionBusy={actionBusy}
                     pendingFields={pendingFields}
+                    references={references}
                     onEdit={editDraft}
                     onPendingChange={changePendingField}
                     onApplyPending={applyPending}
@@ -928,6 +1158,8 @@ function App() {
           </>
         )}
       </main>
+      {createOpen && kind ? <CreateDialog kind={kind} busy={actionBusy} error={createError}
+        onCancel={() => setCreateOpen(false)} onCreate={(keyName) => void createDraft(keyName)} /> : null}
     </div>
   );
 }

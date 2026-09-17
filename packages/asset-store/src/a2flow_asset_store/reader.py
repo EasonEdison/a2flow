@@ -115,6 +115,12 @@ class AssetReader(CatalogPort, MaterialPort):
                 skill_key, asset.asset_id, asset.version_id, asset.content_digest,
                 owner.environment, selection, "asset:" + asset.content_digest[7:]))
 
+    def asset_exists(self, kind, key, context):
+        owner, bundle = self._snapshot(context)
+        if type(kind) is not str or kind not in KINDS:
+            raise AssetError("UNKNOWN_ASSET_KIND")
+        return any(asset.identity[:2] == (kind, key) for asset in bundle.assets)
+
     def resolve_asset(self, kind, key, context):
         """Backend-only resolved record for trusted management adapters."""
         _, _, asset, selection, versions = self._read(kind, key, context)

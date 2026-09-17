@@ -267,6 +267,39 @@ class ApplicationManagementFeature(ManagementFeature):
     def get_draft(self, context, key):
         return self._draft_snapshot(context, key)
 
+    def create_draft(self, context, key):
+        parse_identifier(key)
+        self._draft_context(context)
+        if self.drafts.get(self.namespace, self.kind, key) is not None:
+            raise ManagementError("DRAFT_ALREADY_EXISTS", 409)
+        if self.reader.asset_exists(self.kind, key, self._runtime_context(context)):
+            raise ManagementError("ASSET_ALREADY_EXISTS", 409)
+        document = {
+            "definition": {
+                "asset": {"kind": "APPLICATION", "applicationKey": key,
+                          "protocolProfileRef": "", "componentCatalogRef": ""},
+                "renderPolicy": {"tool": "render_application",
+                                 "interactionMode": "DISPLAY_ONLY",
+                                 "requiresPause": False},
+                "interactionPolicy": {"bindingScope": "NONE",
+                                      "ordinaryChatMayResume": False},
+                "versionAdmissionPolicy": {"compareBeforeExecution": True,
+                                           "compareBeforeContinue": True,
+                                           "compareBeforeAction": True,
+                                           "onMismatch": "RESET_REQUIRED"},
+                "actionPolicies": [],
+                "retryPolicy": {"allowedReasons": ["RENDER_FAILED"]},
+                "finalizerPolicy": {"mayOverrideBusinessFacts": False,
+                                    "mayBypassRequiredInteraction": False},
+                "surfaceTemplate": {"surfaceKey": "", "rootId": "",
+                                    "inputSchema": {}, "components": []},
+            },
+            "dependencies": [],
+        }
+        candidate = ManagedDraft.create(
+            self.kind, key, 1, document, context.user_id)
+        return self.drafts.create(self.namespace, candidate)
+
     def save_draft(self, context, key, expected_revision, document):
         parse_identifier(key)
         self._draft_context(context)
@@ -314,6 +347,23 @@ class ApplicationManagementFeature(ManagementFeature):
     def validate_draft(self, context, key):
         draft = self._draft_snapshot(context, key)
         return self._validate_snapshot(draft, context)
+
+    def comparison_document(self, context, key, document):
+        parse_identifier(key)
+        self._draft_context(context)
+        if type(document) is not dict:
+            raise ManagementError("DRAFT_NOT_COMPARABLE", 409)
+        return document
+
+    def retained_comparison_document(self, context, key, document):
+        parse_identifier(key)
+        if type(document) is not dict:
+            raise ManagementError("RETAINED_VERSION_NOT_COMPARABLE", 409)
+        definition = document.get("definition")
+        dependencies = document.get("dependencies")
+        if type(definition) is not dict or type(dependencies) is not list:
+            raise ManagementError("RETAINED_VERSION_NOT_COMPARABLE", 409)
+        return {"definition": definition, "dependencies": dependencies}
 
     def prepare_publication(self, context, key, expected_revision, target):
         parse_identifier(key)

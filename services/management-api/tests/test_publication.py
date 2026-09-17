@@ -17,6 +17,10 @@ class Repository:
         self.calls += 1
         return {}
 
+    def retained_version(self, *args):
+        self.calls += 1
+        return {}
+
     def publish_candidate(self, *args):
         self.calls += 1
         return {}
@@ -37,6 +41,8 @@ class PublicationServiceTests(unittest.TestCase):
         operations = (
             lambda: service.history(
                 context, "SKILL", "activity-planning/plan"),
+            lambda: service.version(
+                context, "SKILL", "activity-planning/plan", "v1"),
             lambda: service.publish(
                 context, "SKILL", "activity-planning/plan", {}, target,
                 "sha256:" + "0" * 64),

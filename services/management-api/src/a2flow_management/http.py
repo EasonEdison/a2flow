@@ -1,4 +1,5 @@
 """Bounded ASGI adapter. The Host owns authentication and listener setup."""
+import hashlib
 from typing import Annotated, Any
 
 from fastapi import FastAPI, Request
@@ -21,6 +22,10 @@ class _Closed(BaseModel):
 
 class SaveDraft(_Closed):
     expectedRevision: int = Field(ge=0)
+    document: dict[str, JsonValue]
+
+
+class CompareDraft(_Closed):
     document: dict[str, JsonValue]
 
 
@@ -166,6 +171,11 @@ def create_app(service, *, identity_resolver, publications=None):
         return _response(service.get_draft(
             context(request), kind, key_value(key)))
 
+    @app.post("/management/assets/{kind}/{key:path}/draft")
+    def create_draft(request: Request, kind: str, key: str):
+        return _response(service.create_draft(
+            context(request), kind, key_value(key)))
+
     @app.put("/management/assets/{kind}/{key:path}/draft")
     def save_draft(request: Request, kind: str, key: str, body: SaveDraft):
         return _response(service.save_draft(
@@ -176,6 +186,12 @@ def create_app(service, *, identity_resolver, publications=None):
     def validate_draft(request: Request, kind: str, key: str):
         return _response(service.validate_draft(
             context(request), kind, key_value(key)))
+
+    @app.post("/management/assets/{kind}/{key:path}/comparison-documents")
+    def comparison_document(request: Request, kind: str, key: str,
+                            body: CompareDraft):
+        return _response(service.comparison_document(
+            context(request), kind, key_value(key), body.document))
 
     @app.post("/management/assets/{kind}/{key:path}/publication-plans")
     def prepare(request: Request, kind: str, key: str,
@@ -194,8 +210,31 @@ def create_app(service, *, identity_resolver, publications=None):
     if publications is not None:
         @app.get("/management/assets/{kind}/{key:path}/versions")
         def versions(request: Request, kind: str, key: str):
-            return _response(publications.history(
-                require_reader(context(request)), kind, key_value(key)))
+            who = require_reader(context(request))
+            asset_key = key_value(key)
+            try:
+                return _response(publications.history(who, kind, asset_key))
+            except ManagementError as error:
+                if error.code != "ASSET_NOT_FOUND" or "ADMIN" not in who.roles:
+                    raise
+                service.get_draft(who, kind, asset_key)
+                return _response({
+                    "kind": kind, "key": asset_key, "versions": [], "serving": None,
+                    "servingDigest": "sha256:" + hashlib.sha256(b"null").hexdigest(),
+                })
+
+        @app.get("/management/assets/{kind}/{key:path}/versions/{version_id}")
+        def version(request: Request, kind: str, key: str, version_id: str):
+            who = require_reader(context(request))
+            asset_key = key_value(key)
+            retained = publications.version(
+                who, kind, asset_key,
+                identifier(version_id, "INVALID_VERSION_ID"))
+            return _response({
+                **retained,
+                "document": service.retained_comparison_document(
+                    who, kind, asset_key, retained["document"]),
+            })
 
         @app.post("/management/assets/{kind}/{key:path}/publications")
         def publish(request: Request, kind: str, key: str,
