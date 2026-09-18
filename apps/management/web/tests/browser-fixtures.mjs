@@ -26,7 +26,17 @@ export const drafts = {
       renderPolicy: { tool: 'render_application', interactionMode: 'INTERACTIVE', requiresPause: true },
       interactionPolicy: { fixed: true }, versionAdmissionPolicy: { fixed: true }, retryPolicy: { fixed: true }, finalizerPolicy: { fixed: true },
       actionPolicies: [{ actionName: 'confirm', sourceComponentId: 'button', abilityReleaseRef: 'demo.confirm@v1', successPolicyRef: 'ok', completeInteractionOnSuccess: true, controlRequestDedupeOnly: true, businessIdempotencyOwner: 'CALLED_API_BACKEND', extension: 1 }],
-      surfaceTemplate: { inputSchema: { type: 'object' }, components: [], extension: { keep: true } },
+      surfaceTemplate: {
+        surfaceKey: 'demo', rootId: 'root',
+        inputSchema: { type: 'object', required: ['prompt', 'options'], properties: { prompt: { type: 'string' }, options: { type: 'array' }, selection: { type: 'string' } } },
+        components: [
+          { id: 'root', component: 'Column', children: ['prompt', 'selection', 'button'], extension: { keep: true } },
+          { id: 'prompt', component: 'Text', text: { path: '/prompt' }, extension: 'keep' },
+          { id: 'selection', component: 'ChoicePicker', options: { path: '/options' }, value: { path: '/selection' }, variant: 'mutuallyExclusive' },
+          { id: 'button', component: 'Button', label: 'Confirm', action: { event: { name: 'confirm', context: { selection: { path: '/selection' } } } } },
+        ],
+        extension: { keep: true },
+      },
       extension: { keep: true },
     },
     dependencies: [{ kind: 'ABILITY', key: 'demo.confirm', extension: true }],

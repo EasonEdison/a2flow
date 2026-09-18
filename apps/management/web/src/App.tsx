@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { initialApplicationPreviewState, type ApplicationPreviewState } from './A2UIWorkbench';
 import { ManagementApiError, managementApi } from './api';
 import { DiffView } from './DiffView';
 import { diffValues } from './structured-diff';
@@ -31,6 +32,7 @@ import {
 
 type Buffers = Record<string, DraftBuffer>;
 type PendingBuffers = Record<string, PendingFields>;
+type PreviewBuffers = Record<string, ApplicationPreviewState>;
 
 function errorText(error: unknown): string {
   if (error instanceof ManagementApiError) {
@@ -557,11 +559,13 @@ function AuthorWorkspace({
   successMessage,
   actionBusy,
   pendingFields,
+  previewState,
   references,
   onEdit,
   onPendingChange,
   onApplyPending,
   onDiscardPending,
+  onPreviewStateChange,
   getPendingConflict,
   onSave,
   onReload,
@@ -581,11 +585,13 @@ function AuthorWorkspace({
   successMessage: string | null;
   actionBusy: boolean;
   pendingFields: PendingFields;
+  previewState: ApplicationPreviewState;
   references: ReferenceCatalog;
   onEdit: (value: string) => void;
   onPendingChange: (path: string[], text: string, expected: 'object' | 'array', baseValue: unknown) => void;
   onApplyPending: (path: string[], expected: 'object' | 'array') => void;
   onDiscardPending: (path: string[]) => void;
+  onPreviewStateChange: (state: ApplicationPreviewState) => void;
   getPendingConflict: (path: string[]) => string | null;
   onSave: () => void;
   onReload: () => void;
@@ -639,7 +645,7 @@ function AuthorWorkspace({
             disabled={actionBusy}
             onChange={(event) => onEdit(event.target.value)}
           />
-        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} references={references} onEdit={onEdit}
+        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} references={references} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
           onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending}
           getPendingConflict={getPendingConflict} />}
         <div className="editor-footer">
@@ -683,6 +689,7 @@ function App() {
   const [assetError, setAssetError] = useState<string | null>(null);
   const [buffers, setBuffers] = useState<Buffers>({});
   const [pendingBuffers, setPendingBuffers] = useState<PendingBuffers>({});
+  const [previewBuffers, setPreviewBuffers] = useState<PreviewBuffers>({});
   const [validation, setValidation] = useState<ValidationReport | null>(null);
   const [plan, setPlan] = useState<PublicationPlan | null>(null);
   const [history, setHistory] = useState<PublicationHistory | null>(null);
@@ -819,6 +826,7 @@ function App() {
   const activeBufferId = kind && selectedKey ? bufferId(kind, selectedKey) : null;
   const buffer = activeBufferId ? buffers[activeBufferId] : undefined;
   const pendingFields = activeBufferId ? pendingBuffers[activeBufferId] ?? createPendingFieldState() : createPendingFieldState();
+  const previewState = activeBufferId ? previewBuffers[activeBufferId] ?? initialApplicationPreviewState() : initialApplicationPreviewState();
 
   async function createDraft(keyName: string) {
     if (!kind) return;
@@ -844,6 +852,8 @@ function App() {
     setKind(next);
     setSearchQuery('');
     setSelectedKey(null);
+    setHistory(null);
+    setDetail(null);
     setAssets([]);
   }
 
@@ -1120,7 +1130,7 @@ function App() {
                 {detail ? <JsonBlock value={detail} label="当前已发布详情" /> : <section className="readonly-panel"><strong>仅草稿</strong><p>尚无已发布版本；不会显示虚构版本或历史。</p></section>}
                 {history ? <HistoryPanel history={history} canAuthor={session.canAuthor && history.versions.length > 0} busy={actionBusy}
                   onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} /> : null}
-                {history ? <ComparisonPanel kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length} /> : null}
+                {history ? <ComparisonPanel key={`${kind}:${selectedKey}`} kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length} /> : null}
                 {session.canAuthor && history ? (
                   <AuthorWorkspace
                     session={session}
@@ -1134,11 +1144,13 @@ function App() {
                     successMessage={successMessage}
                     actionBusy={actionBusy}
                     pendingFields={pendingFields}
+                    previewState={previewState}
                     references={references}
                     onEdit={editDraft}
                     onPendingChange={changePendingField}
                     onApplyPending={applyPending}
                     onDiscardPending={discardPending}
+                    onPreviewStateChange={(state) => { if (activeBufferId) setPreviewBuffers((current) => ({ ...current, [activeBufferId]: state })); }}
                     getPendingConflict={(path) => pendingFieldConflict(pendingFields, path)}
                     onSave={saveDraft}
                     onReload={reloadDraft}

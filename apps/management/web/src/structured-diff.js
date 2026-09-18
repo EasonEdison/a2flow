@@ -65,7 +65,7 @@ function append(changes, entry) {
 function walk(before, after, path, depth, changes) {
   if (changes.length >= MAX_ENTRIES) return false;
   if (depth >= MAX_DEPTH) {
-    if (!Object.is(before, after)) append(changes, {
+    if (JSON.stringify(before) !== JSON.stringify(after)) append(changes, {
       path: path || '/', kind: 'truncated',
       before: summarize(before), after: summarize(after),
     });

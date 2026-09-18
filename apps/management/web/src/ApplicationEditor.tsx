@@ -1,7 +1,8 @@
+import { A2UIWorkbench } from './A2UIWorkbench';
 import { appendRow, isEditableRecord, moveRow, removeRow, updatePath, updateRow } from './form-editor-state';
 import { EnumSelect, Field, JsonField, MalformedValue, ReferencePicker, ReleaseReferencePicker, RowActions, Section, useRowKeys, type FormProps } from './EditorControls';
 
-export function ApplicationEditor({ document, disabled, onChange, pendingFields, references, onPendingChange, onApplyPending, onDiscardPending, getPendingConflict }: FormProps) {
+export function ApplicationEditor({ document, disabled, onChange, pendingFields, references, previewState, onPreviewStateChange, onPendingChange, onApplyPending, onDiscardPending, getPendingConflict }: FormProps) {
   const definition = document.definition;
   const actions = isEditableRecord(definition) ? definition.actionPolicies : undefined;
   const dependencies = document.dependencies;
@@ -19,6 +20,7 @@ export function ApplicationEditor({ document, disabled, onChange, pendingFields,
         {(mode === 'DISPLAY_ONLY' && Array.isArray(actions) && actions.length > 0) || (mode === 'INTERACTIVE' && Array.isArray(actions) && actions.length === 0) ? <div className="notice warning">当前 interactionMode 与 Action 数量不一致；后端验证会拒绝，表单不会自动修复。</div> : null}
       </Section>
       <JsonField label="Parameter schema" document={document} path={['definition', 'surfaceTemplate', 'inputSchema']} expected="object" disabled={disabled} pendingFields={pendingFields} onPendingChange={onPendingChange} onApply={onApplyPending} onDiscard={onDiscardPending} getConflict={getPendingConflict} />
+      {isEditableRecord(definition.surfaceTemplate) && previewState && onPreviewStateChange ? <A2UIWorkbench document={document} surface={definition.surfaceTemplate} disabled={disabled} previewState={previewState} pendingFields={pendingFields} onPreviewStateChange={onPreviewStateChange} onChange={onChange} onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending} getPendingConflict={getPendingConflict} /> : <div className="notice warning">Surface template 结构不可用；已保留原值，请使用完整 JSON 修正。</div>}
       <Section title="Action policies">
         {Array.isArray(actions) ? actions.map((row: unknown, index) => isEditableRecord(row) ? <div className="form-row action-row" key={actionKeys.keys[index]}>
           {['actionName', 'sourceComponentId', 'successPolicyRef'].map((field) => <Field key={field} label={field} value={row[field]} disabled={disabled} onChange={(value) => onChange(updateRow(document, ['definition', 'actionPolicies'], index, field, value))} />)}

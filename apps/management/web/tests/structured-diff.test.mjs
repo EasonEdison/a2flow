@@ -31,6 +31,11 @@ test('nested added and type-changed values are recursively bounded', () => {
   assert.ok(JSON.stringify(changed).length < 2000);
 });
 
+test('equal deeply nested JSON values do not become truncation differences', () => {
+  const value = { definition: { surfaceTemplate: { components: [{ action: { event: { context: { selection: { path: '/selection' } } } } }] } } };
+  assert.deepEqual(diffValues(structuredClone(value), structuredClone(value)), []);
+});
+
 test('depth and entry budgets emit visible truncation entries', () => {
   let deep = { value: 'end' };
   for (let index = 0; index < 40; index += 1) deep = { nested: deep };

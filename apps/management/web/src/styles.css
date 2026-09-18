@@ -279,6 +279,39 @@ code, pre { font-family: var(--mono); }
 .sequence-preview strong, .sequence-preview span { display: block; font-size: 11px; overflow-wrap: anywhere; }
 .sequence-preview span { color: var(--muted); font-family: var(--mono); font-size: 10px; }
 
+.a2ui-workbench { border: 1px solid #b9d7d0; border-radius: 11px; background: #fff; overflow: hidden; }
+.a2ui-workbench-heading, .a2ui-preview-controls, .a2ui-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.a2ui-workbench-heading { padding: 16px; background: #edf7f4; }
+.a2ui-workbench-heading h3 { margin-top: 4px; font-size: 16px; }
+.a2ui-workbench-heading > span { border-radius: 999px; padding: 5px 9px; background: #d8eee8; color: #076353; font-size: 9px; font-weight: 800; }
+.a2ui-issues { margin: 14px; }
+.a2ui-author-grid, .a2ui-preview-grid { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(280px, 1.2fr); gap: 14px; padding: 14px; }
+.a2ui-component-tree, .a2ui-property-panel, .a2ui-preview-panel { border: 1px solid var(--line); border-radius: 9px; padding: 14px; background: #fbfcfc; }
+.a2ui-panel-title { flex-wrap: wrap; }
+.a2ui-panel-title select { min-width: 100px; border: 1px solid #cfdcd8; border-radius: 7px; padding: 8px; background: #fff; }
+.a2ui-component-tree ol { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
+.a2ui-component-tree li { border: 1px solid var(--line); border-radius: 8px; padding: 9px; background: #fff; }
+.a2ui-component-tree li.selected { border-color: #66a99c; box-shadow: 0 0 0 2px #dcefeb; }
+.a2ui-component-tree li > button { width: 100%; border: 0; padding: 0; background: transparent; color: var(--ink); text-align: left; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.a2ui-component-tree small { display: block; margin: 5px 0 8px; color: var(--muted); font-family: var(--mono); font-size: 9px; overflow-wrap: anywhere; }
+.a2ui-property-panel { display: flex; flex-direction: column; gap: 12px; }
+.a2ui-property-panel h4 { margin: 4px 0 0; overflow-wrap: anywhere; }
+.a2ui-preview-panel { margin: 0 14px 14px; }
+.a2ui-preview-controls small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+.a2ui-preview-grid { padding: 14px 0 0; }
+.a2ui-preview-grid textarea { min-height: 210px; font-family: var(--mono); }
+.a2ui-preview-frame { width: 100%; min-height: 260px; border: 1px solid #cbdad6; border-radius: 10px; padding: 18px; background: #fff; transition: width .15s ease; }
+.a2ui-preview-frame.narrow { width: min(360px, 100%); justify-self: center; }
+.a2ui-preview-frame > p { color: var(--muted); font-size: 11px; }
+.a2ui-preview-column { display: flex; flex-direction: column; gap: 14px; }
+.a2ui-preview-text { color: var(--ink) !important; font-size: 16px !important; overflow-wrap: anywhere; }
+.a2ui-preview-choices { display: grid; gap: 7px; }
+.a2ui-preview-choices label { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; }
+.a2ui-preview-column > button { align-self: flex-start; border: 1px solid var(--green); border-radius: 7px; padding: 9px 14px; background: var(--green); color: #fff; }
+.simulated-event { margin-top: 12px; border-radius: 8px; padding: 12px; background: #eef4f2; }
+.simulated-event pre { max-height: 180px; overflow: auto; font-size: 10px; white-space: pre-wrap; }
+.simulated-event span { color: var(--muted); font-size: 10px; }
+
 .primary-button, .secondary-button, .quiet-button, .warning-button {
   border-radius: 7px;
   padding: 9px 14px;
@@ -388,7 +421,7 @@ code, pre { font-family: var(--mono); }
   .session-card { justify-content: center; }
   .content-header, .editor-footer { flex-direction: column; align-items: stretch; }
   .editor-heading-actions { flex-direction: column; align-items: flex-end; }
-  .form-section, .form-row, .form-row.compact, .form-row.action-row { grid-template-columns: 1fr; }
+  .form-section, .form-row, .form-row.compact, .form-row.action-row, .a2ui-author-grid, .a2ui-preview-grid { grid-template-columns: 1fr; }
   .form-row.action-row .row-actions, .form-row.action-row .fixed-policy { grid-column: auto; }
   .header-status { padding-top: 0; }
   .editor-footer > div { justify-content: flex-end; }

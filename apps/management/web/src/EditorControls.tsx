@@ -1,4 +1,5 @@
 import { useRef, type ReactNode } from 'react';
+import type { ApplicationPreviewState } from './A2UIWorkbench';
 import type { AssetKind, JsonObject, ReferenceCatalog } from './contracts';
 import {
   inspectPathEditability, isEditableRecord, parseJsonField, type PendingFields,
@@ -20,6 +21,8 @@ export type FormProps = {
   onDiscardPending: PendingDiscard;
   getPendingConflict: PendingConflict;
   references?: ReferenceCatalog;
+  previewState?: ApplicationPreviewState;
+  onPreviewStateChange?: (state: ApplicationPreviewState) => void;
 };
 
 let nextRowId = 1;

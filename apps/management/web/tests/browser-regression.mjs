@@ -764,8 +764,95 @@ async function runDirtyBeforeUnload(browser) {
   await pending.finish();
 }
 
+async function runApplicationWorkbench(browser) {
+  const harness = await createHarness(browser);
+  const { page, requests, button, selectKind, finish } = harness;
+  await selectKind('Application');
+  const children = page.getByLabel('Children IDs');
+  await children.focus();
+  await children.pressSequentially('x');
+  assert.match(await children.inputValue(), /x$/);
+  await selectKind('Skill');
+  await selectKind('Application');
+  assert.match(await page.getByLabel('Children IDs').inputValue(), /x$/);
+  page.once('dialog', (dialog) => dialog.accept());
+  await button('丢弃字段编辑').click();
+  await page.getByLabel('Children IDs').focus();
+  await page.getByLabel('Children IDs').press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await page.getByLabel('Children IDs').pressSequentially('["prompt","selection","button"]');
+  await button('应用 JSON').click();
+  await page.getByRole('button', { name: /prompt · Text/ }).click();
+  await page.getByLabel('Text binding path').fill('/headline');
+  await page.getByLabel('Preview sample JSON').fill(JSON.stringify({ headline: 'Preview changed', options: [{ label: 'One', value: 'one' }], selection: 'one', prompt: 'legacy' }));
+  await button('更新本地预览').click();
+  await page.getByText('Preview changed', { exact: true }).waitFor();
+  await page.getByRole('button', { name: /prompt · Text/ }).click();
+  await button('完整 JSON').click();
+  const malformedPreview = JSON.parse(await page.getByLabel('结构化草稿 JSON').inputValue());
+  malformedPreview.definition.surfaceTemplate.components[1].text = null;
+  await page.getByLabel('结构化草稿 JSON').fill(JSON.stringify(malformedPreview));
+  await button('表单').click();
+  await page.getByText(/INVALID_TEXT_BINDING/).waitFor();
+  await page.getByRole('button', { name: /prompt · Text/ }).click();
+  assert.equal(await page.getByLabel('Text binding path').isDisabled(), true);
+  assert.equal(await page.getByText(/完整 JSON 模式修正/).count() > 0, true);
+  assert.equal(await page.getByText('Preview changed', { exact: true }).count(), 0);
+  assert.equal(await page.locator('vite-error-overlay').count(), 0);
+  await page.getByLabel('Preview sample JSON').fill('');
+  await button('更新本地预览').click();
+  await page.getByText(/INVALID_SAMPLE_JSON/).waitFor();
+  assert.equal(await page.getByLabel('Preview sample JSON').inputValue(), '');
+  await button('完整 JSON').click();
+  const repairedPreview = JSON.parse(await page.getByLabel('结构化草稿 JSON').inputValue());
+  repairedPreview.definition.surfaceTemplate.components[1].text = { path: '/headline' };
+  await page.getByLabel('结构化草稿 JSON').fill(JSON.stringify(repairedPreview));
+  await button('表单').click();
+  await page.getByLabel('Preview sample JSON').fill(JSON.stringify({ headline: 'Preview changed', options: [{ label: 'One', value: 'one' }], selection: 'one', prompt: 'legacy' }));
+  await button('更新本地预览').click();
+  await page.getByText('Preview changed', { exact: true }).waitFor();
+  assert.equal(requests.some((item) => item.type === 'action'), false);
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await page.getByText(/"simulated": true/).waitFor();
+  assert.equal(requests.some((item) => item.type === 'action'), false);
+  await page.screenshot({ path: path.join(output, 'a2ui-workbench-desktop.png'), fullPage: false });
+  await page.getByRole('button', { name: '窄屏', exact: true }).click();
+  assert.equal(await page.locator('.a2ui-preview-frame.narrow').count(), 1);
+  await page.screenshot({ path: path.join(output, 'a2ui-workbench-narrow.png'), fullPage: false });
+  await button('完整 JSON').click();
+  const full = page.getByLabel('结构化草稿 JSON');
+  const edited = JSON.parse(await full.inputValue());
+  assert.equal(edited.definition.surfaceTemplate.components[1].extension, 'keep');
+  assert.equal(edited.definition.surfaceTemplate.extension.keep, true);
+  edited.definition.surfaceTemplate.components.push({ id: 'prompt', component: 'FutureCard', payload: { keep: true } });
+  await full.fill(JSON.stringify(edited));
+  await button('表单').click();
+  await page.getByText(/组件 ID prompt 重复/).waitFor();
+  await page.getByText(/不支持的组件类型 FutureCard/).waitFor();
+  await button('完整 JSON').click();
+  assert.deepEqual(JSON.parse(await full.inputValue()).definition.surfaceTemplate.components.at(-1).payload, { keep: true });
+  await finish();
+}
+
+async function runApplicationPreviewIsolation(browser) {
+  const documents = clone(drafts);
+  const second = clone(drafts.APPLICATION);
+  second.definition.asset.applicationKey = 'second/app';
+  const harness = await createHarness(browser, { documents });
+  const { page, button, selectKind, finish } = harness;
+  await selectKind('Application');
+  await page.getByLabel('Preview sample JSON').fill('{pending sample');
+  await selectKind('Skill');
+  await selectKind('Application');
+  assert.equal(await page.getByLabel('Preview sample JSON').inputValue(), '{pending sample');
+  await button('完整 JSON').click();
+  assert.deepEqual(JSON.parse(await page.getByLabel('结构化草稿 JSON').inputValue()), documents.APPLICATION);
+  await finish();
+}
+
 const browser = await chromium.launch({ headless: true, executablePath: chromePath });
 try {
+  await runApplicationWorkbench(browser);
+  await runApplicationPreviewIsolation(browser);
   await runEditorCoverage(browser);
   await runCreateDraftFlows(browser);
   await runFirstPublishFlows(browser, 'PRT');

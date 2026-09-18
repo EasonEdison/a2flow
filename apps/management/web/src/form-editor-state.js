@@ -10,6 +10,14 @@ function objectAt(document, path) {
   return path.reduce((value, key) => value?.[key], document);
 }
 
+function editableContainer(value) {
+  return isEditableRecord(value) || Array.isArray(value);
+}
+
+function validContainerKey(value, key) {
+  return !Array.isArray(value) || /^(0|[1-9]\d*)$/.test(key);
+}
+
 const JSON_FIELD_LABELS = new Map([
   ['modelArgumentSchema', 'Model argument schema'],
   ['resolvedInputSchema', 'Resolved input schema'],
@@ -18,6 +26,14 @@ const JSON_FIELD_LABELS = new Map([
   ['definition.surfaceTemplate', 'Surface template'],
   ['definition.surfaceTemplate.inputSchema', 'Parameter schema'],
 ]);
+
+function jsonFieldLabel(path) {
+  const known = JSON_FIELD_LABELS.get(pathKey(path));
+  if (known) return known;
+  return path.length >= 5 && path[0] === 'definition' && path[1] === 'surfaceTemplate' && path[2] === 'components' && path.at(-1) === 'children'
+    ? 'Children IDs'
+    : path.join('.');
+}
 
 function pathKey(path) {
   safePath(path);
@@ -64,7 +80,7 @@ export function pendingFieldConflict(pending, path) {
   for (const entry of Object.values(pending)) {
     if (samePath(entry.path, path)) continue;
     if (pathContains(entry.path, path) || pathContains(path, entry.path)) {
-      return `${JSON_FIELD_LABELS.get(pathKey(entry.path)) ?? entry.path.join('.')} 存在尚未应用的文本，请先应用或丢弃。`;
+      return `${jsonFieldLabel(entry.path)} 存在尚未应用的文本，请先应用或丢弃。`;
     }
   }
   return null;
@@ -116,17 +132,18 @@ export function inspectPathEditability(document, path) {
   safePath(path);
   let value = document;
   for (let index = 0; index < path.length - 1; index += 1) {
-    if (!isEditableRecord(value)) {
+    if (!editableContainer(value)) {
       return { editable: false, blockedPath: path.slice(0, index) };
     }
     const key = path[index];
+    if (!validContainerKey(value, key)) return { editable: false, blockedPath: path.slice(0, index) };
     if (!Object.hasOwn(value, key)) return { editable: true };
     value = value[key];
-    if (!isEditableRecord(value)) {
+    if (!editableContainer(value)) {
       return { editable: false, blockedPath: path.slice(0, index + 1) };
     }
   }
-  return isEditableRecord(value) ? { editable: true } : { editable: false, blockedPath: path.slice(0, -1) };
+  return editableContainer(value) && validContainerKey(value, path.at(-1)) ? { editable: true } : { editable: false, blockedPath: path.slice(0, -1) };
 }
 
 const APPLICATION_JSON_FIELDS = [
@@ -200,6 +217,11 @@ export function updatePath(document, path, value) {
 function updatePathUnchecked(document, path, value) {
   if (!path.length) return value;
   const [key, ...rest] = path;
+  if (Array.isArray(document)) {
+    const source = document.slice();
+    source[Number(key)] = updatePathUnchecked(source[Number(key)], rest, value);
+    return source;
+  }
   const source = isEditableRecord(document) ? document : {};
   return { ...source, [key]: updatePathUnchecked(source[key], rest, value) };
 }
