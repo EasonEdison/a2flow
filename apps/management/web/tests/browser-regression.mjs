@@ -28,6 +28,21 @@ const deferred = () => {
 async function createHarness(browser, options = {}) {
   const context = await browser.newContext({ viewport: options.viewport ?? { width: 1440, height: 1000 } });
   const page = await context.newPage();
+  await page.addInitScript(() => {
+    const original = crypto.subtle.digest.bind(crypto.subtle);
+    let releases = [];
+    Object.defineProperty(globalThis, '__digestTestControl', { value: {
+      defer(value) { globalThis.__deferDigest = value; },
+      rejectNext() { globalThis.__rejectNextDigest = true; },
+      release() { const pending = releases; releases = []; pending.forEach((resolve) => resolve()); },
+      pending() { return releases.length; },
+    } });
+    Object.defineProperty(crypto.subtle, 'digest', { configurable: true, value: async (...args) => {
+      if (globalThis.__deferDigest) await new Promise((resolve) => releases.push(resolve));
+      if (globalThis.__rejectNextDigest) { globalThis.__rejectNextDigest = false; throw new Error('injected digest failure'); }
+      return original(...args);
+    } });
+  });
   const unexpected = [];
   const expectedHttpErrors = [];
   const requests = [];
@@ -47,6 +62,8 @@ async function createHarness(browser, options = {}) {
   const gates = options.gates ?? {};
   let conflictOnce = options.conflictOnce ?? false;
   let reloadFailureOnce = options.reloadFailureOnce ?? false;
+  let referenceListFailurePending = options.referenceListError ?? false;
+  let referenceListDelayPending = options.referenceListDelay ?? false;
   page.on('pageerror', (error) => unexpected.push(error.message));
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
@@ -57,7 +74,7 @@ async function createHarness(browser, options = {}) {
   await context.route('**/*', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.hostname !== 'a2flow.test') return route.abort();
+    if (url.hostname !== 'localhost') return route.abort();
     const pathname = decodeURIComponent(url.pathname);
     const reply = (value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
     if (pathname === '/management/session') return reply({ userId: `${options.environment?.toLowerCase() ?? 'prt'}-${options.canAuthor === false ? 'reader' : 'admin'}`, environment: options.environment ?? 'PRT', registeredKinds: kinds, canAuthor: options.canAuthor !== false });
@@ -66,11 +83,26 @@ async function createHarness(browser, options = {}) {
       const key = pathname.split('/').slice(4, -1).join('/') || `demo/${kind.toLowerCase()}`;
       const defaultKey = `demo/${kind.toLowerCase()}`;
       const activeKey = pathname === `/management/assets/${kind}` ? defaultKey : key;
-      const summary = { kind, key: defaultKey, assetId: kind.toLowerCase(), versionId: 'v1', contentDigest: digest, name: `${kind} fixture` };
+      const summary = {
+        kind, key: defaultKey, assetId: kind.toLowerCase(), versionId: 'v1', contentDigest: digest,
+        name: `${kind} fixture`, description: kind === 'ABILITY' ? 'Business lookup capability' : kind === 'APPLICATION' ? 'Interactive confirmation application' : undefined,
+      };
       if (pathname === `/management/assets/${kind}`) {
         listReads.push(kind);
+        if (referenceListDelayPending && options.referenceListErrorNow && kind === 'ABILITY') {
+          gates.references?.markStarted();
+          if (gates.references) await gates.references.blocked;
+          referenceListDelayPending = false;
+        }
+        if ((referenceListFailurePending || options.referenceListErrorNow) && kind === 'ABILITY') {
+          referenceListFailurePending = false;
+          options.referenceListErrorNow = false;
+          return reply({ error: { code: 'ABILITY_CATALOG_UNAVAILABLE' } }, 503);
+        }
         return reply([
           summary,
+          ...(kind === 'ABILITY' ? [{ ...summary, key: 'demo.lookup', assetId: 'ability-lookup', name: 'Order lookup', description: 'Business lookup capability' }] : []),
+          ...(kind === 'APPLICATION' ? [{ ...summary, key: 'demo.confirm', assetId: 'application-confirm', name: 'Confirmation UI', description: 'Interactive confirmation application' }] : []),
           ...[...createdKeys[kind]].map((item) => ({
             kind, key: item,
             ...(draftOnly[kind].has(item)
@@ -194,7 +226,7 @@ async function createHarness(browser, options = {}) {
     if (!file.startsWith(path.join(root, 'dist') + path.sep) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: 'Not found' });
     return route.fulfill({ status: 200, contentType: file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html', body: fs.readFileSync(file) });
   });
-  await page.goto('http://a2flow.test/');
+  await page.goto('http://localhost/');
   await page.getByRole('heading', { name: '保留版本', exact: true }).waitFor();
   const button = (name) => page.getByRole('button', { name, exact: true });
   const selectKind = async (kind) => {
@@ -222,6 +254,162 @@ async function assertNoEditRoundtrips(harness) {
     await button('完整 JSON').click();
     assert.deepEqual(JSON.parse(await full.inputValue()), drafts[kind]);
   }
+}
+
+async function runSkillWorkbench(browser) {
+  const harness = await createHarness(browser);
+  const { page, requests, listReads, button, selectKind, finish } = harness;
+  const preview = page.locator('.author-workspace .markdown-preview');
+  await preview.waitFor();
+  assert.equal(await preview.getByRole('heading', { name: 'Plan', exact: true }).count(), 1);
+  assert.equal(await preview.locator('script,img,a').count(), 0);
+  assert.equal(await page.evaluate(() => globalThis.pwned), undefined);
+  const instruction = page.getByLabel('SKILL.md（不会自动改写 frontmatter）');
+  await instruction.fill('---\nname: plan\ndescription: Plan safely\n---\n\n# Updated\n\n- item');
+  await preview.getByRole('heading', { name: 'Updated', exact: true }).waitFor();
+
+  const bindings = page.getByRole('group', { name: 'Skill 绑定工作台' });
+  await bindings.waitFor();
+  assert.match(await bindings.innerText(), /Business abilities.*2 个绑定.*2 个可用/s);
+  assert.match(await bindings.innerText(), /A2UI Applications.*1 个绑定.*2 个可用/s);
+  assert.equal(await bindings.locator('code').filter({ hasText: /^missing\.ability$/ }).count(), 1);
+  assert.equal(await bindings.getByText('当前环境不可用', { exact: true }).count(), 1);
+  const bindingListReads = [...listReads];
+  await bindings.getByRole('searchbox', { name: '搜索 Business abilities' }).fill('lookup');
+  assert.equal(await bindings.locator('code').filter({ hasText: /^demo\.lookup$/ }).count(), 2);
+  assert.equal(await bindings.getByRole('button', { name: '绑定 demo.lookup', exact: true }).isDisabled(), true);
+  assert.deepEqual(listReads, bindingListReads);
+  await bindings.getByRole('button', { name: '查看详情', exact: true }).first().click();
+  await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: /Ability/i }).evaluate((element) => {
+    if (!element.classList.contains('active')) throw new Error('detail navigation did not activate Ability');
+  });
+  await selectKind('Skill');
+  assert.equal(await page.getByLabel('SKILL.md（不会自动改写 frontmatter）').inputValue(), '---\nname: plan\ndescription: Plan safely\n---\n\n# Updated\n\n- item');
+  const reopenedBindings = page.getByRole('group', { name: 'Skill 绑定工作台' });
+  await reopenedBindings.getByRole('button', { name: '绑定 demo/ability', exact: true }).click();
+  await reopenedBindings.getByRole('button', { name: '绑定 demo/application', exact: true }).click();
+  await button('完整 JSON').click();
+  const bindingDraft = JSON.parse(await page.getByLabel('结构化草稿 JSON').inputValue());
+  assert.deepEqual(bindingDraft.abilityBindings, ['demo.lookup', 'missing.ability', 'demo/ability']);
+  assert.deepEqual(bindingDraft.applicationBindings, ['demo.confirm', 'demo/application']);
+  assert.deepEqual(bindingDraft.resources, drafts.SKILL.resources);
+  await button('表单').click();
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await bindings.getByRole('button', { name: '解除绑定 missing.ability', exact: true }).click();
+  assert.equal(await bindings.locator('code').filter({ hasText: /^missing\.ability$/ }).count(), 1);
+  page.once('dialog', (dialog) => dialog.accept());
+  await bindings.getByRole('button', { name: '解除绑定 missing.ability', exact: true }).click();
+  assert.equal(await bindings.locator('code').filter({ hasText: /^missing\.ability$/ }).count(), 0);
+  assert.equal(await page.getByLabel('SKILL.md（不会自动改写 frontmatter）').inputValue(), '---\nname: plan\ndescription: Plan safely\n---\n\n# Updated\n\n- item');
+  assert.equal(await button('保存草稿').isDisabled(), false);
+
+  await page.getByRole('navigation', { name: '资源导航' }).getByRole('button', { name: 'guide.md' }).click();
+  const resourceText = page.getByLabel('资源文本');
+  await resourceText.fill('你好 resource');
+  assert.equal(await button('保存草稿').isDisabled(), true);
+  await button('完整 JSON').click();
+  await selectKind('Ability');
+  await selectKind('Skill');
+  await button('表单').click();
+  assert.equal(await page.getByLabel('资源文本').inputValue(), '你好 resource');
+  await button('应用资源文本').click();
+  await page.waitForTimeout(100);
+  assert.equal(await page.getByText('RESOURCE_CONFLICT', { exact: true }).count(), 0);
+  await page.getByLabel('新文本资源路径').fill('../blocked.txt');
+  assert.equal(await button('添加文本资源').isDisabled(), true);
+  await page.getByLabel('新文本资源路径').fill('notes/new.txt');
+  await button('添加文本资源').click();
+  await page.waitForTimeout(200);
+  assert.match(await page.getByRole('group', { name: '资源工作台' }).innerText(), /notes\/new\.txt/);
+
+  await page.getByLabel('上传资源文件').setInputFiles({ name: 'blocked.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
+  await page.getByText('UNSUPPORTED_FILE_TYPE', { exact: true }).waitFor();
+  await page.getByLabel('上传资源文件').setInputFiles({ name: 'upload.txt', mimeType: 'text/plain', buffer: Buffer.from('upload exact', 'utf8') });
+  await page.getByRole('navigation', { name: '资源导航' }).getByRole('button', { name: 'upload.txt' }).waitFor();
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await button('移除资源').click();
+  assert.equal(await page.getByRole('navigation', { name: '资源导航' }).getByRole('button', { name: 'upload.txt' }).count(), 1);
+  page.once('dialog', (dialog) => dialog.accept());
+  await button('移除资源').click();
+  assert.equal(await page.getByRole('navigation', { name: '资源导航' }).getByRole('button', { name: 'upload.txt' }).count(), 0);
+
+  await button('保存草稿').click();
+  await page.getByText('已同步', { exact: true }).waitFor();
+  const saved = requests.filter((item) => item.type === 'save' && item.kind === 'SKILL').at(-1).payload.document;
+  assert.equal(Buffer.from(saved.resources[0].base64, 'base64').toString('utf8'), '你好 resource');
+  assert.equal(saved.resources[0].byteSize, Buffer.byteLength('你好 resource'));
+  assert.match(saved.resources[0].contentDigest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(saved.resources[1].logicalPath, 'notes/new.txt');
+  await page.reload();
+  await preview.getByRole('heading', { name: 'Updated', exact: true }).waitFor();
+  await button('完整 JSON').click();
+  const reloadedDraft = JSON.parse(await page.getByLabel('结构化草稿 JSON').inputValue());
+  assert.deepEqual(reloadedDraft.abilityBindings, ['demo.lookup', 'demo/ability']);
+  assert.deepEqual(reloadedDraft.applicationBindings, ['demo.confirm', 'demo/application']);
+  await button('表单').click();
+  await page.getByRole('navigation', { name: '资源导航' }).getByRole('button', { name: 'guide.md' }).click();
+  assert.equal(await page.getByLabel('资源文本').inputValue(), '你好 resource');
+  await page.screenshot({ path: path.join(output, 'skill-workbench-desktop.png'), fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2), false);
+  await page.screenshot({ path: path.join(output, 'skill-workbench-narrow.png'), fullPage: false });
+  await finish();
+}
+
+async function runDeferredResourceIntegrity(browser) {
+  const documents = clone(drafts);
+  documents.SKILL.resources.push({ ...clone(documents.SKILL.resources[0]), logicalPath: 'duplicate.md' });
+  const harness = await createHarness(browser, { documents });
+  const { page, button, selectKind, finish } = harness;
+  const resourceNav = page.getByRole('navigation', { name: '资源导航' });
+  await page.getByText('资源身份冲突', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('资源文本').count(), 0);
+  assert.equal(await button('移除资源').isDisabled(), true);
+
+  await button('完整 JSON').click();
+  const full = page.getByLabel('结构化草稿 JSON');
+  const repaired = JSON.parse(await full.inputValue());
+  repaired.resources = [repaired.resources[0]];
+  await full.fill(JSON.stringify(repaired));
+  await button('表单').click();
+  await resourceNav.getByRole('button', { name: 'guide.md' }).click();
+  const text = page.getByLabel('资源文本');
+  await text.fill('first pending');
+  await page.evaluate(() => globalThis.__digestTestControl.rejectNext());
+  await button('应用资源文本').click();
+  await page.getByText('SHA256_DIGEST_FAILED', { exact: true }).waitFor();
+  assert.equal(await text.inputValue(), 'first pending');
+  await button('完整 JSON').click();
+  assert.equal(Buffer.from(JSON.parse(await full.inputValue()).resources[0].base64, 'base64').toString('utf8'), 'secret-bytes');
+  await button('表单').click();
+  await button('应用资源文本').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => {
+    const candidate = [...document.querySelectorAll('button')].find((element) => element.textContent === '应用资源文本');
+    return candidate && !candidate.disabled;
+  });
+
+  await page.evaluate(() => globalThis.__digestTestControl.defer(true));
+  void button('应用资源文本').click();
+  await page.waitForFunction(() => globalThis.__digestTestControl.pending() === 1);
+  await text.fill('newer pending');
+  await page.evaluate(() => globalThis.__digestTestControl.release());
+  await page.waitForTimeout(50);
+  assert.equal(await text.inputValue(), 'newer pending');
+  await button('完整 JSON').click();
+  assert.equal(Buffer.from(JSON.parse(await full.inputValue()).resources[0].base64, 'base64').toString('utf8'), 'secret-bytes');
+  await button('表单').click();
+
+  const upload = page.getByLabel('上传资源文件');
+  await upload.setInputFiles({ name: 'stale.txt', mimeType: 'text/plain', buffer: Buffer.from('stale upload') });
+  await page.waitForFunction(() => globalThis.__digestTestControl.pending() === 1);
+  await selectKind('Ability');
+  await page.evaluate(() => { globalThis.__digestTestControl.defer(false); globalThis.__digestTestControl.release(); });
+  await selectKind('Skill');
+  assert.equal(await resourceNav.getByRole('button', { name: 'stale.txt' }).count(), 0);
+  await button('完整 JSON').click();
+  const preserved = JSON.parse(await full.inputValue());
+  assert.equal(Buffer.from(preserved.resources[0].base64, 'base64').toString('utf8'), 'secret-bytes');
+  await finish();
 }
 
 async function runEditorCoverage(browser) {
@@ -537,6 +725,69 @@ async function runPendingPublicationLockout(browser) {
   await finish();
 }
 
+async function runBindingCatalogStaleState(browser) {
+  const referenceGate = deferred();
+  const options = { gates: { references: referenceGate }, referenceListDelay: true, historyError: true };
+  const harness = await createHarness(browser, options);
+  const { page, button, selectKind, finish } = harness;
+  const bindings = page.getByRole('group', { name: 'Skill 绑定工作台' });
+  const section = bindings.locator('section[aria-label="Business abilities"]');
+  await section.waitFor();
+  const bind = section.getByRole('button', { name: '绑定 demo/ability', exact: true });
+  await bind.waitFor();
+  assert.equal(await bind.isDisabled(), false);
+  options.referenceListErrorNow = true;
+  const retry = await page.evaluateHandle(() => {
+    const root = document.querySelector('#root');
+    const key = Object.keys(root ?? {}).find((item) => item.startsWith('__reactContainer'));
+    const stack = key ? [root[key]] : [];
+    const seen = new Set();
+    while (stack.length) {
+      const fiber = stack.pop();
+      if (!fiber || seen.has(fiber)) continue;
+      seen.add(fiber);
+      if (fiber.memoizedProps?.references?.retry) return fiber.memoizedProps.references.retry;
+      stack.push(fiber.child, fiber.sibling);
+    }
+    return null;
+  });
+  await retry.evaluate((callback) => callback());
+  await selectKind('Skill');
+  const staleBindings = page.getByRole('group', { name: 'Skill 绑定工作台' });
+  const staleSection = staleBindings.locator('section[aria-label="Business abilities"]');
+  const staleBind = staleSection.getByRole('button', { name: '绑定 demo/ability', exact: true });
+  await referenceGate.started;
+  assert.equal(await staleBind.count(), 1);
+  assert.equal(await staleBind.isDisabled(), true);
+  await staleBind.dispatchEvent('click');
+  await button('完整 JSON').click();
+  const full = page.getByLabel('结构化草稿 JSON');
+  assert.equal(JSON.parse(await full.inputValue()).abilityBindings.includes('demo/ability'), false);
+  await button('表单').click();
+  referenceGate.release();
+  await staleSection.getByText(/目录加载失败：ABILITY_CATALOG_UNAVAILABLE · HTTP 503/).waitFor();
+  assert.equal(await staleBind.count(), 1);
+  assert.equal(await staleBind.isDisabled(), true);
+  await staleBind.dispatchEvent('click');
+  await button('完整 JSON').click();
+  assert.equal(JSON.parse(await full.inputValue()).abilityBindings.includes('demo/ability'), false);
+  await finish([503, 503, 503]);
+}
+
+async function runBindingCatalogFailure(browser) {
+  const harness = await createHarness(browser, { referenceListError: true });
+  const { page, button, finish } = harness;
+  const bindings = page.getByRole('group', { name: 'Skill 绑定工作台' });
+  await bindings.getByText(/目录加载失败：ABILITY_CATALOG_UNAVAILABLE · HTTP 503/).waitFor();
+  assert.equal(await bindings.locator('code').filter({ hasText: /^demo\.lookup$/ }).count(), 1);
+  assert.equal(await bindings.locator('code').filter({ hasText: /^missing\.ability$/ }).count(), 1);
+  assert.equal(await bindings.getByText('未知（目录错误）', { exact: true }).count(), 2);
+  assert.equal(await bindings.getByText('当前环境不可用', { exact: true }).count(), 0);
+  assert.equal(await bindings.getByRole('group', { name: 'Business abilities' }).getByRole('button', { name: /^绑定 / }).count(), 0);
+  assert.equal(await button('保存草稿').isDisabled(), true);
+  await finish([503]);
+}
+
 async function runReader(browser, environment) {
   const harness = await createHarness(browser, { canAuthor: false, environment });
   const { page, requests, draftReads, finish } = harness;
@@ -744,7 +995,7 @@ async function runReferenceHistoryError(browser) {
   await selectKind('Application');
   await page.getByText(/版本历史加载失败：HISTORY_UNAVAILABLE/).first().waitFor();
   assert.equal(await page.getByRole('button', { name: '重试', exact: true }).count() > 0, true);
-  await finish([503]);
+  await finish([503, 503]);
 }
 
 async function runDirtyBeforeUnload(browser) {
@@ -752,7 +1003,7 @@ async function runDirtyBeforeUnload(browser) {
   await canonical.page.getByLabel('描述').fill('dirty');
   canonical.page.once('dialog', (dialog) => dialog.dismiss());
   await canonical.page.reload({ waitUntil: 'commit' }).catch(() => {});
-  assert.equal(canonical.page.url(), 'http://a2flow.test/');
+  assert.equal(canonical.page.url(), 'http://localhost/');
   await canonical.finish();
 
   const pending = await createHarness(browser);
@@ -760,7 +1011,7 @@ async function runDirtyBeforeUnload(browser) {
   await pending.page.getByLabel('Model argument schema').fill('{pending');
   pending.page.once('dialog', (dialog) => dialog.dismiss());
   await pending.page.reload({ waitUntil: 'commit' }).catch(() => {});
-  assert.equal(pending.page.url(), 'http://a2flow.test/');
+  assert.equal(pending.page.url(), 'http://localhost/');
   await pending.finish();
 }
 
@@ -851,6 +1102,8 @@ async function runApplicationPreviewIsolation(browser) {
 
 const browser = await chromium.launch({ headless: true, executablePath: chromePath });
 try {
+  await runSkillWorkbench(browser);
+  await runDeferredResourceIntegrity(browser);
   await runApplicationWorkbench(browser);
   await runApplicationPreviewIsolation(browser);
   await runEditorCoverage(browser);
@@ -863,6 +1116,8 @@ try {
   await runDeferredAssetSwitch(browser);
   await runComparisonErrorSwitch(browser);
   await runReferenceHistoryError(browser);
+  await runBindingCatalogStaleState(browser);
+  await runBindingCatalogFailure(browser);
   await runDirtyBeforeUnload(browser);
   await runPendingAndValidation(browser);
   await runApplicationPendingRecovery(browser);

@@ -5,6 +5,7 @@ import { DiffView } from './DiffView';
 import { diffValues } from './structured-diff';
 import { filterAssets } from './asset-filter';
 import { FormEditor } from './FormEditors';
+import { saveBodyIssue } from './skill-resource-state';
 import {
   applyPendingField, createPendingFieldState, discardPendingField, editPendingField, inspectDraftText,
   pendingFieldConflict, reconcilePendingFields, type PendingFields,
@@ -23,6 +24,7 @@ import {
   type DraftBuffer,
   type JsonObject,
   type ManagementSession,
+  type PendingResourceEdits,
   type PublicationHistory,
   type PublicationPlan,
   type ReferenceCatalog,
@@ -32,6 +34,7 @@ import {
 
 type Buffers = Record<string, DraftBuffer>;
 type PendingBuffers = Record<string, PendingFields>;
+type PendingResourceBuffers = Record<string, PendingResourceEdits>;
 type PreviewBuffers = Record<string, ApplicationPreviewState>;
 
 function errorText(error: unknown): string {
@@ -559,13 +562,16 @@ function AuthorWorkspace({
   successMessage,
   actionBusy,
   pendingFields,
+  pendingResources,
   previewState,
   references,
   onEdit,
   onPendingChange,
   onApplyPending,
   onDiscardPending,
+  onPendingResourcesChange,
   onPreviewStateChange,
+  onNavigateReference,
   getPendingConflict,
   onSave,
   onReload,
@@ -585,13 +591,16 @@ function AuthorWorkspace({
   successMessage: string | null;
   actionBusy: boolean;
   pendingFields: PendingFields;
+  pendingResources: PendingResourceEdits;
   previewState: ApplicationPreviewState;
   references: ReferenceCatalog;
   onEdit: (value: string) => void;
   onPendingChange: (path: string[], text: string, expected: 'object' | 'array', baseValue: unknown) => void;
   onApplyPending: (path: string[], expected: 'object' | 'array') => void;
   onDiscardPending: (path: string[]) => void;
+  onPendingResourcesChange: (pending: PendingResourceEdits) => void;
   onPreviewStateChange: (state: ApplicationPreviewState) => void;
+  onNavigateReference: (kind: AssetKind, key: string) => void;
   getPendingConflict: (path: string[]) => string | null;
   onSave: () => void;
   onReload: () => void;
@@ -605,6 +614,8 @@ function AuthorWorkspace({
   const inspection = inspectDraftText(buffer.text);
   const invalidDraft = !inspection.ok;
   const pendingJsonField = Object.keys(pendingFields).length > 0;
+  const pendingResource = Object.keys(pendingResources).length > 0;
+  const saveBudgetIssue = inspection.ok ? saveBodyIssue({ expectedRevision: buffer.revision, document: inspection.document }) : null;
   return (
     <div className="author-workspace">
       <section className="editor-panel">
@@ -635,7 +646,8 @@ function AuthorWorkspace({
           </div>
         ) : null}
         {invalidDraft ? <div className="notice warning invalid-json"><strong>完整 JSON 当前无效</strong><span>{inspection.error}</span><span>内容不会被重置；修正前不能保存、验证或发布，也不能进入表单模式。</span></div> : null}
-        {pendingJsonField ? <div className="notice warning invalid-json"><strong>存在尚未应用的字段 JSON</strong><span>canonical 草稿尚未改变。请在表单中明确应用或丢弃；切换资产或模式不会清除字段文本。</span></div> : null}
+        {pendingJsonField || pendingResource ? <div className="notice warning invalid-json"><strong>存在尚未应用的局部编辑</strong><span>canonical 草稿尚未改变。请在表单中明确应用或丢弃；切换资产或模式不会清除字段或资源文本。</span></div> : null}
+        {saveBudgetIssue ? <div className="notice error"><strong>草稿超过保存请求预算</strong><span>{saveBudgetIssue}；当前 management Host 的 `BODY_LIMIT` 为 1 MiB，检查包含 expectedRevision/document 完整请求封套；请缩小资源后再保存。</span></div> : null}
         {mode === 'JSON' || invalidDraft ? (
           <textarea
             className="json-editor"
@@ -645,16 +657,16 @@ function AuthorWorkspace({
             disabled={actionBusy}
             onChange={(event) => onEdit(event.target.value)}
           />
-        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} references={references} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
-          onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending}
+        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} pendingResources={pendingResources} assetId={`${kind}:${keyName}`} revision={buffer.revision} references={references} onNavigateReference={onNavigateReference} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
+          onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending} onPendingResourcesChange={onPendingResourcesChange}
           getPendingConflict={getPendingConflict} />}
         <div className="editor-footer">
           <span>修订 #{buffer.revision} · {buffer.updatedBy}</span>
           <div>
-            <button className="quiet-button" type="button" disabled={actionBusy || buffer.dirty || invalidDraft || pendingJsonField} onClick={onValidate}>
+            <button className="quiet-button" type="button" disabled={actionBusy || buffer.dirty || invalidDraft || pendingJsonField || pendingResource} onClick={onValidate}>
               验证已保存草稿
             </button>
-            <button className="primary-button" type="button" disabled={actionBusy || !buffer.dirty || invalidDraft || pendingJsonField} onClick={onSave}>
+            <button className="primary-button" type="button" disabled={actionBusy || !buffer.dirty || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue)} onClick={onSave}>
               {actionBusy ? '处理中…' : '保存草稿'}
             </button>
           </div>
@@ -666,7 +678,7 @@ function AuthorWorkspace({
       <PublicationControls
         session={session}
         revision={buffer.revision}
-        disabled={buffer.dirty || actionBusy || invalidDraft || pendingJsonField || validation?.valid !== true}
+        disabled={buffer.dirty || actionBusy || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue) || validation?.valid !== true}
         onPrepare={onPrepare}
         onTargetChange={onTargetChange}
       />
@@ -689,6 +701,7 @@ function App() {
   const [assetError, setAssetError] = useState<string | null>(null);
   const [buffers, setBuffers] = useState<Buffers>({});
   const [pendingBuffers, setPendingBuffers] = useState<PendingBuffers>({});
+  const [pendingResourceBuffers, setPendingResourceBuffers] = useState<PendingResourceBuffers>({});
   const [previewBuffers, setPreviewBuffers] = useState<PreviewBuffers>({});
   const [validation, setValidation] = useState<ValidationReport | null>(null);
   const [plan, setPlan] = useState<PublicationPlan | null>(null);
@@ -703,17 +716,18 @@ function App() {
 
   useEffect(() => {
     const dirty = Object.values(buffers).some((item) => item.dirty)
-      || Object.values(pendingBuffers).some((item) => Object.keys(item).length > 0);
+      || Object.values(pendingBuffers).some((item) => Object.keys(item).length > 0)
+      || Object.values(pendingResourceBuffers).some((item) => Object.keys(item).length > 0);
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [buffers, pendingBuffers]);
+  }, [buffers, pendingBuffers, pendingResourceBuffers]);
 
   useEffect(() => {
     if (!session?.canAuthor) return;
     const controller = new AbortController();
-    setReferences((current) => ({ ...current, loading: true }));
+    setReferences((current) => ({ ...current, loading: true, retry: () => setReferenceRefresh((value) => value + 1) }));
     const kinds: AssetKind[] = ['SKILL', 'ABILITY', 'APPLICATION'];
     Promise.all(kinds.map(async (referenceKind) => {
       try { return [referenceKind, await managementApi.list(referenceKind, controller.signal)] as const; }
@@ -736,10 +750,13 @@ function App() {
         if (value instanceof Error) errors[catalogKey] = errorText(value);
         else histories[catalogKey] = value;
       }
-      if (!controller.signal.aborted) setReferences({
-        loading: false, errors, assets: nextAssets, histories,
-        retry: () => setReferenceRefresh((current) => current + 1),
-      });
+      if (!controller.signal.aborted) setReferences((current) => ({
+        loading: false,
+        errors,
+        assets: Object.fromEntries(kinds.map((referenceKind) => [referenceKind, errors[referenceKind] ? current.assets[referenceKind] ?? [] : nextAssets[referenceKind] ?? []])),
+        histories,
+        retry: () => setReferenceRefresh((value) => value + 1),
+      }));
     });
     return () => controller.abort();
   }, [session, referenceRefresh]);
@@ -826,6 +843,7 @@ function App() {
   const activeBufferId = kind && selectedKey ? bufferId(kind, selectedKey) : null;
   const buffer = activeBufferId ? buffers[activeBufferId] : undefined;
   const pendingFields = activeBufferId ? pendingBuffers[activeBufferId] ?? createPendingFieldState() : createPendingFieldState();
+  const pendingResources = activeBufferId ? pendingResourceBuffers[activeBufferId] ?? {} : {};
   const previewState = activeBufferId ? previewBuffers[activeBufferId] ?? initialApplicationPreviewState() : initialApplicationPreviewState();
 
   async function createDraft(keyName: string) {
@@ -936,7 +954,7 @@ function App() {
 
   async function reloadDraft() {
     if (!kind || !selectedKey || !activeBufferId) return;
-    const pendingCount = Object.keys(pendingFields).length;
+    const pendingCount = Object.keys(pendingFields).length + Object.keys(pendingResources).length;
     if (!window.confirm(`重新加载会丢弃当前未保存内容${pendingCount ? `和 ${pendingCount} 个尚未应用的字段编辑` : ''}。确定继续吗？`)) return;
     setActionBusy(true);
     setActionMessage(null);
@@ -947,6 +965,7 @@ function App() {
         [activeBufferId]: createDraftBuffer(latest),
       }));
       setPendingBuffers((current) => ({ ...current, [activeBufferId]: createPendingFieldState() }));
+      setPendingResourceBuffers((current) => ({ ...current, [activeBufferId]: {} }));
       setValidation(null);
       setPlan(null);
     } catch (error) {
@@ -1130,7 +1149,7 @@ function App() {
                 {detail ? <JsonBlock value={detail} label="当前已发布详情" /> : <section className="readonly-panel"><strong>仅草稿</strong><p>尚无已发布版本；不会显示虚构版本或历史。</p></section>}
                 {history ? <HistoryPanel history={history} canAuthor={session.canAuthor && history.versions.length > 0} busy={actionBusy}
                   onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} /> : null}
-                {history ? <ComparisonPanel key={`${kind}:${selectedKey}`} kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length} /> : null}
+                {history ? <ComparisonPanel key={`${kind}:${selectedKey}`} kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length + Object.keys(pendingResources).length} /> : null}
                 {session.canAuthor && history ? (
                   <AuthorWorkspace
                     session={session}
@@ -1144,13 +1163,16 @@ function App() {
                     successMessage={successMessage}
                     actionBusy={actionBusy}
                     pendingFields={pendingFields}
+                    pendingResources={pendingResources}
                     previewState={previewState}
                     references={references}
                     onEdit={editDraft}
                     onPendingChange={changePendingField}
                     onApplyPending={applyPending}
                     onDiscardPending={discardPending}
+                    onPendingResourcesChange={(pending) => { if (activeBufferId) setPendingResourceBuffers((current) => ({ ...current, [activeBufferId]: pending })); }}
                     onPreviewStateChange={(state) => { if (activeBufferId) setPreviewBuffers((current) => ({ ...current, [activeBufferId]: state })); }}
+                    onNavigateReference={(referenceKind, keyName) => { setKind(referenceKind); setSearchQuery(''); setSelectedKey(keyName); setHistory(null); setDetail(null); setAssets([]); }}
                     getPendingConflict={(path) => pendingFieldConflict(pendingFields, path)}
                     onSave={saveDraft}
                     onReload={reloadDraft}

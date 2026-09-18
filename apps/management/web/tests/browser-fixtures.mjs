@@ -3,11 +3,11 @@ export const digest = `sha256:${'1'.repeat(64)}`;
 export const drafts = {
   SKILL: {
     metadata: { name: 'plan', description: 'Plan safely', extra: { retained: true } },
-    skillMd: '---\nname: plan\ndescription: Plan safely\n---\n\n# Plan',
+    skillMd: '---\nname: plan\ndescription: Plan safely\n---\n\n# Plan\n\n- safe item\n\n```js\nconst preserved = true;\n```\n\n<script>globalThis.pwned = true</script>\n\n![remote](https://example.invalid/track.png)\n\n[blocked](javascript:alert(1))',
     requiredToolNames: ['execute_ability', { extension: 1 }, 42, null],
-    abilityBindings: ['demo.lookup'],
+    abilityBindings: ['demo.lookup', 'missing.ability'],
     applicationBindings: ['demo.confirm'],
-    resources: [{ logicalPath: 'guide.md', contentBase64: 'c2VjcmV0LWJ5dGVz', digest: 'sha256:resource' }],
+    resources: [{ handleId: 'guide-md', logicalPath: 'guide.md', mediaType: 'text/markdown', byteSize: 12, contentDigest: 'sha256:0364152ae8c7da79c1ee2d96e53bebe5dfbff303e7ee51621fe6fef2505da94a', base64: 'c2VjcmV0LWJ5dGVz' }],
     extension: { nested: { retained: true } },
   },
   ABILITY: {

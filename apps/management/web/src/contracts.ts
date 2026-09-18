@@ -101,6 +101,15 @@ export interface DraftBuffer {
   updatedBy: string;
 }
 
+export interface PendingResourceEdit {
+  identity: string;
+  base: string;
+  text: string;
+  conflict?: boolean;
+}
+
+export type PendingResourceEdits = Record<string, PendingResourceEdit>;
+
 export const KIND_COPY: Record<AssetKind, { label: string; short: string; guidance: string }> = {
   SKILL: {
     label: 'Skill',
