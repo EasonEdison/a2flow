@@ -1,9 +1,11 @@
 import type {
   AssetKind,
   AssetSummary,
+  DependencyGraph,
   JsonObject,
   ManagedDraft,
   ManagementSession,
+  PublicationCheck,
   PublicationHistory,
   PublicationPlan,
   PublicationResult,
@@ -63,6 +65,9 @@ export const managementApi = {
   detail(kind: AssetKind, key: string, signal?: AbortSignal) {
     return request<JsonObject>(assetPath(kind, key), {}, signal);
   },
+  dependencies(kind: AssetKind, key: string, signal?: AbortSignal) {
+    return request<DependencyGraph>(assetPath(kind, key) + '/dependencies', {}, signal);
+  },
   draft(kind: AssetKind, key: string, signal?: AbortSignal) {
     return request<ManagedDraft>(assetPath(kind, key) + '/draft', {}, signal);
   },
@@ -101,6 +106,16 @@ export const managementApi = {
     return request<PublicationResult>(assetPath(kind, key) + '/rollbacks', {
       method: 'POST',
       body: JSON.stringify({ expectedServingDigest, target }),
+    });
+  },
+  publicationCheck(
+    kind: AssetKind,
+    key: string,
+    expectedRevision: number,
+    target: PublicationTarget,
+  ) {
+    return request<PublicationCheck>(assetPath(kind, key) + '/publication-checks', {
+      method: 'POST', body: JSON.stringify({ expectedRevision, target }),
     });
   },
   prepare(

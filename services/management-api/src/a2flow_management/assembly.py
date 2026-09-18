@@ -7,6 +7,7 @@ from a2flow_workflow_composer.management import create_workflow_feature
 from capability_registry.management import create_ability_feature
 
 from .contracts import ManagementError, TrustedManagementContext
+from .dependencies import DependencyService
 from .features.skill import create_skill_feature
 from .http import create_app
 from .publication import PublicationService
@@ -46,6 +47,7 @@ def create_management_app(*, reader, drafts, namespace, identity_resolver):
     )
     service = ManagementService(features)
     publications = PublicationService(repository, expected_namespace)
+    dependencies = DependencyService(repository, drafts, expected_namespace)
 
     def environment_identity(scope):
         identity = identity_resolver(scope)
@@ -57,4 +59,4 @@ def create_management_app(*, reader, drafts, namespace, identity_resolver):
     return ManagementAssembly(
         service, publications,
         create_app(service, identity_resolver=environment_identity,
-                   publications=publications))
+                   publications=publications, dependencies=dependencies))

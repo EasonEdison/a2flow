@@ -83,6 +83,6 @@ export function SkillBindingWorkbench({ document, disabled, references, onChange
   return <fieldset className="binding-workbench" aria-label="Skill 绑定工作台"><legend>Skill 绑定工作台</legend>
     <BindingSection kind="ABILITY" values={document.abilityBindings} document={document} disabled={disabled} references={references} onChange={onChange} onNavigate={onNavigate} />
     <BindingSection kind="APPLICATION" values={document.applicationBindings} document={document} disabled={disabled} references={references} onChange={onChange} onNavigate={onNavigate} />
-    <div className="notice warning"><strong>版本与就绪信息暂未扩展</strong><span>仅展示当前环境管理 API 已提供的证据；完整依赖、版本与发布就绪面板将在后续包实现。</span></div>
+    <div className="notice"><strong>依赖与发布检查</strong><span>完整版本与反向引用证据位于资产详情的只读检查面板；打开详情不会丢弃当前未保存缓冲区。</span></div>
   </fieldset>;
 }

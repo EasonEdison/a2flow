@@ -64,6 +64,7 @@ async function createHarness(browser, options = {}) {
   let reloadFailureOnce = options.reloadFailureOnce ?? false;
   let referenceListFailurePending = options.referenceListError ?? false;
   let referenceListDelayPending = options.referenceListDelay ?? false;
+  let dependencyDelayPending = Boolean(gates.dependencies);
   page.on('pageerror', (error) => unexpected.push(error.message));
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
@@ -110,6 +111,27 @@ async function createHarness(browser, options = {}) {
               : { assetId: `${kind.toLowerCase()}-created`, versionId: [...createdVersions[kind].get(item).keys()].at(-1), contentDigest: digest }),
           })),
         ]);
+      }
+      if (pathname.endsWith('/dependencies')) {
+        if (dependencyDelayPending) {
+          gates.dependencies.markStarted();
+          await gates.dependencies.blocked;
+          dependencyDelayPending = false;
+        }
+        if (options.dependencyError) return reply({ error: { code: 'DEPENDENCY_CHECK_UNAVAILABLE' } }, 503);
+        const missing = options.missingDependency === true;
+        return reply({
+          root: { kind, key: activeKey, source: 'published', environment: options.environment ?? 'PRT', status: 'resolved', versionId: 'v1', contentDigest: digest },
+          upstream: kind === 'SKILL' ? [{
+            fromKind: kind, fromKey: activeKey, toKind: 'ABILITY', toKey: missing ? 'missing.ability' : 'demo.lookup',
+            source: 'published', path: '/abilityBindings/0', selectorType: 'logical-key',
+            target: { kind: 'ABILITY', key: missing ? 'missing.ability' : 'demo.lookup', source: 'published', environment: options.environment ?? 'PRT', status: missing ? 'missing' : 'resolved', ...(missing ? {} : { versionId: 'v1', contentDigest: digest, selection: 'PRT_CURRENT' }) },
+            ...(missing ? { error: 'MISSING_DEPENDENCY' } : {}),
+          }] : [],
+          dependents: [], cycle: false, truncated: false, incomplete: missing,
+          limits: { maxDepth: 8, maxNodes: 128, maxEdges: 256 },
+          historyScope: 'current-selection-and-explicit-retained-references',
+        });
       }
       const versionMatch = pathname.match(/\/versions\/([^/]+)$/);
       if (versionMatch) {
@@ -191,6 +213,17 @@ async function createHarness(browser, options = {}) {
           { code: 'INVALID_FIELD', path: '/metadata/name', message: 'exact backend message' },
           { code: 'UNKNOWN_EXTENSION', path: '/extension/mystery', message: 'unknown path remains visible' },
         ], normalized });
+      }
+      if (pathname.endsWith('/publication-checks')) {
+        const payload = request.postDataJSON();
+        requests.push({ type: 'prepare', kind, key: activeKey, payload });
+        return reply({
+          validation: options.validation ?? { valid: true, issues: [], normalized: clone(documents[kind]) },
+          dependencies: { root: { kind, key: activeKey }, upstream: [], dependents: [], missing: [], unresolved: [], cycle: false, truncated: false, incomplete: false },
+          kind, key: activeKey, draftRevision: revisions[kind], preparedRevision: revisions[kind], contentDigest: digest,
+          candidateIdentity: { kind, key: activeKey, versionId: payload.target.versionId, contentDigest: digest },
+          target: payload.target, status: 'PREPARED_NOT_PUBLISHED', published: false, candidate: clone(documents[kind]),
+        });
       }
       if (pathname.endsWith('/publication-plans')) {
         const payload = request.postDataJSON();
@@ -820,7 +853,7 @@ async function runCreateDraftFlows(browser) {
     await page.getByText('仅草稿', { exact: true }).first().waitFor();
     await page.getByText('该资产尚无已发布版本，无法比较。', { exact: true }).waitFor();
     await page.reload();
-    await page.getByRole('button', { name: new RegExp(kind, 'i') }).click();
+    await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
     await page.getByText(key, { exact: true }).click();
     await page.getByText('仅草稿', { exact: true }).first().waitFor();
   }
@@ -888,7 +921,7 @@ async function runFirstPublishFlows(browser, environment) {
     await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
     assert.equal(listReads.filter((item) => item === kind).length >= 2, true);
     await page.reload();
-    await page.getByRole('button', { name: new RegExp(kind, 'i') }).click();
+    await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
     await page.getByText(key, { exact: true }).click();
     await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
     assert.equal(await page.getByText('仅草稿', { exact: true }).count(), 0);
@@ -1100,8 +1133,85 @@ async function runApplicationPreviewIsolation(browser) {
   await finish();
 }
 
+async function runDependencyPanel(browser) {
+  const harness = await createHarness(browser);
+  const { page, finish } = harness;
+  const panel = page.getByRole('region', { name: '依赖与发布检查' });
+  await panel.waitFor();
+  await panel.getByText('ABILITY · demo.lookup', { exact: true }).waitFor();
+  assert.equal(await panel.getByText('当前依赖证据完整', { exact: true }).count(), 1);
+  await page.getByLabel('描述').fill('unsaved dependency edit');
+  await panel.getByText('未保存本地编辑已排除', { exact: true }).waitFor();
+  await panel.getByText('检查结果已过期', { exact: true }).waitFor();
+  await page.screenshot({ path: path.join(output, 'dependency-panel-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: path.join(output, 'dependency-panel-narrow.png'), fullPage: true });
+  await finish();
+}
+
+async function runDependencyPendingRaces(browser) {
+  {
+    const dependencyGate = deferred();
+    const harness = await createHarness(browser, { gates: { dependencies: dependencyGate } });
+    const { page, finish } = harness;
+    const panel = page.getByRole('region', { name: '依赖与发布检查' });
+    await dependencyGate.started;
+    await page.getByLabel('描述').fill('edited while dependency pending');
+    await panel.getByText('检查结果已过期', { exact: true }).waitFor();
+    dependencyGate.release();
+    await panel.getByText('UNSAVED_LOCAL_EDITS_EXCLUDED', { exact: true }).waitFor();
+    assert.equal(await panel.getByText('当前依赖证据完整', { exact: true }).count(), 0);
+    assert.equal(await panel.getByRole('button', { name: '显式刷新', exact: true }).isEnabled(), true);
+    await finish();
+  }
+  {
+    const dependencyGate = deferred();
+    const harness = await createHarness(browser, { gates: { dependencies: dependencyGate } });
+    const { page, button, finish } = harness;
+    const panel = page.getByRole('region', { name: '依赖与发布检查' });
+    await dependencyGate.started;
+    await page.getByLabel('描述').fill('saved while dependency pending');
+    await button('保存草稿').click();
+    await page.getByText('已同步', { exact: true }).waitFor();
+    dependencyGate.release();
+    await panel.getByText('SAVED_DRAFT_CHANGED', { exact: true }).waitFor();
+    assert.equal(await panel.getByText('未保存本地编辑已排除', { exact: true }).count(), 0);
+    assert.equal(await panel.getByRole('button', { name: '显式刷新', exact: true }).isEnabled(), true);
+    await finish();
+  }
+  {
+    const dependencyGate = deferred();
+    const harness = await createHarness(browser, { gates: { dependencies: dependencyGate } });
+    const { page, selectKind, finish } = harness;
+    await dependencyGate.started;
+    await selectKind('Ability');
+    dependencyGate.release();
+    const panel = page.getByRole('region', { name: '依赖与发布检查' });
+    await panel.getByText('当前依赖证据完整', { exact: true }).waitFor();
+    assert.equal(await panel.getByText('ABILITY · demo.lookup', { exact: true }).count(), 0);
+    assert.equal(await page.getByRole('heading', { name: 'ABILITY · demo/ability', exact: true }).count(), 1);
+    await finish();
+  }
+}
+
+async function runDependencyMissingAndReader(browser) {
+  const missing = await createHarness(browser, { missingDependency: true });
+  const missingPanel = missing.page.getByRole('region', { name: '依赖与发布检查' });
+  await missingPanel.getByText('检查不完整，不能判定为可发布', { exact: true }).waitFor();
+  await missingPanel.getByText('MISSING_DEPENDENCY', { exact: true }).waitFor();
+  await missing.finish();
+  const reader = await createHarness(browser, { canAuthor: false });
+  const readerPanel = reader.page.getByRole('region', { name: '依赖与发布检查' });
+  await readerPanel.waitFor();
+  assert.equal(await readerPanel.getByRole('heading', { name: '已保存草稿诊断', exact: true }).count(), 0);
+  await reader.finish();
+}
+
 const browser = await chromium.launch({ headless: true, executablePath: chromePath });
 try {
+  await runDependencyPanel(browser);
+  await runDependencyPendingRaces(browser);
+  await runDependencyMissingAndReader(browser);
   await runSkillWorkbench(browser);
   await runDeferredResourceIntegrity(browser);
   await runApplicationWorkbench(browser);

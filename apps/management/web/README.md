@@ -13,6 +13,9 @@ Minimal React/Vite console for the four registered management asset kinds.
 - Complex field JSON is held in a per-asset pending buffer, separate from the canonical draft. Apply is the only operation that changes canonical data; discard requires confirmation. Pending text survives asset and mode switches, blocks save/validate/prepare, and overlapping full JSON edits surface a conflict instead of overwriting it.
 - Revision conflicts retain canonical and pending input. Reload requires confirmation; cancellation or failure preserves both, while a successful reload adopts the server revision and clears pending state.
 
+- The dependency and publication-check panel is read-only. It separates published facts from ADMIN-only saved-draft diagnostics, marks unsaved local edits as excluded, and requires explicit refresh after edits, saves, publication, rollback, or source changes.
+- Missing or truncated dependency evidence is never presented as ready. Exact release references retain their requested version and do not fall back to a current version.
+
 Trusted identity and environment come only from the same-origin HttpOnly session.
 
 ## Offline checks

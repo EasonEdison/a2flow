@@ -1,4 +1,5 @@
 export type AssetKind = 'SKILL' | 'ABILITY' | 'APPLICATION' | 'WORKFLOW';
+export type DependencyKind = AssetKind | 'COMPONENT';
 export type Environment = 'PRT' | 'ONLINE';
 export type JsonObject = Record<string, unknown>;
 
@@ -51,6 +52,17 @@ export interface PublicationTarget {
   grayUserIds: string[];
 }
 
+export interface PublicationCheck extends JsonObject {
+  validation: ValidationReport;
+  dependencies?: DependencyGraph;
+  target: PublicationTarget;
+  status: 'VALIDATION_FAILED' | 'PREPARED_NOT_PUBLISHED';
+  published: false;
+  preparedRevision?: number;
+  candidateIdentity?: { kind: AssetKind; key: string; versionId: string; contentDigest: string };
+  candidate?: JsonObject;
+}
+
 export interface PublicationPlan extends JsonObject {
   kind: AssetKind;
   key: string;
@@ -82,6 +94,47 @@ export interface RetainedVersion {
   versionId: string;
   contentDigest: string;
   document: JsonObject;
+}
+
+export interface DependencyNode {
+  kind: DependencyKind;
+  key: string;
+  source: 'published' | 'retained' | 'saved-draft';
+  environment: Environment;
+  status: 'resolved' | 'missing';
+  assetId?: string;
+  versionId?: string;
+  revision?: number;
+  contentDigest?: string;
+  selection?: string;
+}
+
+export interface DependencyEdge {
+  fromKind: DependencyKind;
+  fromKey: string;
+  toKind: DependencyKind;
+  toKey: string;
+  source: 'published' | 'retained' | 'saved-draft';
+  path: string;
+  selectorType: 'logical-key' | 'exact-release';
+  requestedVersionId?: string;
+  target?: DependencyNode;
+  from?: DependencyNode;
+  error?: string;
+  cycle?: boolean;
+}
+
+export interface DependencyGraph {
+  root: DependencyNode;
+  upstream: DependencyEdge[];
+  dependents: DependencyEdge[];
+  missing: Array<{ kind: DependencyKind; key: string; versionId?: string }>;
+  unresolved: Array<{ kind: DependencyKind; key: string; reason: string }>;
+  cycle: boolean;
+  truncated: boolean;
+  incomplete: boolean;
+  limits: { maxDepth: number; maxNodes: number; maxEdges: number };
+  historyScope: string;
 }
 
 export interface ReferenceCatalog {

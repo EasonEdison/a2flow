@@ -426,6 +426,15 @@ code, pre { font-family: var(--mono); }
 .readonly-panel { margin-top: 18px; padding: 18px; }
 .readonly-panel strong { font-size: 13px; }
 .readonly-panel p { margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.dependency-panel { display: grid; gap: 14px; }
+.dependency-panel .panel-heading, .dependency-edge > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dependency-panel h2, .dependency-panel h3 { margin: 0; }
+.dependency-panel h3 { font-size: 13px; }
+.dependency-list { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+.dependency-edge { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto auto; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 10px; }
+.dependency-edge.error { border-color: #df9d9d; background: var(--red-soft); }
+.dependency-edge code { color: var(--muted); overflow-wrap: anywhere; }
+.dependency-empty { margin: 8px 0 0 !important; }
 .empty-content, .workspace-state { display: grid; place-items: center; min-height: 55vh; color: var(--muted); text-align: center; }
 .empty-content h2 { color: var(--ink); font-size: 21px; }
 .empty-content p { margin-top: 8px; font-size: 12px; }
@@ -481,6 +490,8 @@ code, pre { font-family: var(--mono); }
   .content-header h1 { font-size: 25px; }
   .json-editor { min-height: 360px; padding: 14px; font-size: 11px; }
   .publication-controls { grid-template-columns: 1fr; }
+  .dependency-panel .panel-heading, .dependency-edge > div { align-items: flex-start; flex-direction: column; }
+  .dependency-edge { grid-template-columns: 1fr; }
   .publication-controls .secondary-button, .publication-controls small, .gray-users { grid-column: auto; }
   .candidate-title { flex-direction: column; }
 }

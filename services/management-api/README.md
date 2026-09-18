@@ -42,6 +42,13 @@ Required source roots are `services/management-api/src`,
 - `POST /management/assets/{kind}/{key}/publication-plans`: ADMIN-only
   immutable publication preparation.
 
+- `GET /management/assets/{kind}/{key}/dependencies`: bounded, environment-local
+  upstream and reverse dependency evidence. ADMIN receives saved-draft diagnostics;
+  USER receives published evidence only. Exact release selectors never fall back.
+- `POST /management/assets/{kind}/{key}/publication-checks`: ADMIN-only validation
+  and candidate preparation through the existing flow. It performs no publication
+  write and returns `PREPARED_NOT_PUBLISHED` only after validation succeeds.
+
 Publication preparation is not publication. Its response always includes
 `status: PREPARED_NOT_PUBLISHED` and `published: false`.
 

@@ -106,7 +106,7 @@ class BodyLimit:
         await self.app(scope, replay, send)
 
 
-def create_app(service, *, identity_resolver, publications=None):
+def create_app(service, *, identity_resolver, publications=None, dependencies=None):
     """Create an app without starting a listener.
 
     identity_resolver receives the server ASGI scope and must return an already
@@ -193,6 +193,44 @@ def create_app(service, *, identity_resolver, publications=None):
         return _response(service.comparison_document(
             context(request), kind, key_value(key), body.document))
 
+    @app.post("/management/assets/{kind}/{key:path}/publication-checks")
+    def publication_check(request: Request, kind: str, key: str,
+                          body: PreparePublication):
+        who = require_admin(context(request))
+        asset_key = key_value(key)
+        target = PublicationTarget(
+            body.target.environment, body.target.versionId,
+            body.target.channel, tuple(body.target.grayUserIds))
+        validation = service.validate_draft(who, kind, asset_key)
+        dependency_graph = dependencies.inspect(
+            who, kind, asset_key, root_sources=("saved-draft",)) if dependencies is not None else None
+        validation_mapping = validation.to_mapping()
+        result = {
+            "validation": validation_mapping,
+            "dependencies": dependency_graph,
+            "target": {"environment": target.environment,
+                       "versionId": target.version_id,
+                       "channel": target.channel,
+                       "grayUserIds": list(target.gray_user_ids)},
+            "status": "VALIDATION_FAILED",
+            "published": False,
+        }
+        if validation_mapping["valid"]:
+            plan = service.prepare_publication(
+                who, kind, asset_key, body.expectedRevision, target)
+            result.update(plan.to_mapping())
+            result.update({
+                "status": "PREPARED_NOT_PUBLISHED",
+                "preparedRevision": plan.draft_revision,
+                "candidateIdentity": {
+                    "kind": plan.kind, "key": plan.key,
+                    "versionId": plan.target.version_id,
+                    "contentDigest": plan.content_digest,
+                },
+                "published": False,
+            })
+        return _response(result)
+
     @app.post("/management/assets/{kind}/{key:path}/publication-plans")
     def prepare(request: Request, kind: str, key: str,
                       body: PreparePublication):
@@ -255,6 +293,12 @@ def create_app(service, *, identity_resolver, publications=None):
             return _response(publications.rollback(
                 require_admin(context(request)), kind, key_value(key), target,
                 body.expectedServingDigest))
+
+    if dependencies is not None:
+        @app.get("/management/assets/{kind}/{key:path}/dependencies")
+        def dependency_graph(request: Request, kind: str, key: str):
+            return _response(dependencies.inspect(
+                require_reader(context(request)), kind, key_value(key)))
 
     @app.get("/management/assets/{kind}/{key:path}")
     def detail(request: Request, kind: str, key: str):

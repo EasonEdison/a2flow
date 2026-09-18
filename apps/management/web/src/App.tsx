@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { initialApplicationPreviewState, type ApplicationPreviewState } from './A2UIWorkbench';
 import { ManagementApiError, managementApi } from './api';
 import { DiffView } from './DiffView';
+import { DependencyPanel } from './DependencyPanel';
+import { beginDependencyLoad, settleDependencyLoad, staleDependencyState, type DependencyViewState } from './dependency-state';
 import { diffValues } from './structured-diff';
 import { filterAssets } from './asset-filter';
 import { FormEditor } from './FormEditors';
@@ -713,6 +715,10 @@ function App() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [references, setReferences] = useState<ReferenceCatalog>({ loading: false, errors: {}, assets: {}, histories: {} });
   const [referenceRefresh, setReferenceRefresh] = useState(0);
+  const [dependencyState, setDependencyState] = useState<DependencyViewState | null>(null);
+  const dependencyIdentity = session && kind && selectedKey
+    ? `${session.userId}:${session.environment}:${kind}:${selectedKey}`
+    : null;
 
   useEffect(() => {
     const dirty = Object.values(buffers).some((item) => item.dirty)
@@ -840,6 +846,27 @@ function App() {
     return () => controller.abort();
   }, [session, kind, selectedKey, selectedSummary?.draftOnly]);
 
+  useEffect(() => {
+    if (!session || !kind || !selectedKey || !dependencyIdentity) {
+      setDependencyState(null);
+      return;
+    }
+    const controller = new AbortController();
+    const identity = dependencyIdentity;
+    const next = beginDependencyLoad(null, identity);
+    setDependencyState(next);
+    managementApi.dependencies(kind, selectedKey, controller.signal).then((graph) => {
+      if (controller.signal.aborted) return;
+      setDependencyState((current) => settleDependencyLoad(
+        current, identity, next.requestId, graph, null));
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setDependencyState((current) => settleDependencyLoad(
+        current, identity, next.requestId, null, errorText(error)));
+    });
+    return () => controller.abort();
+  }, [session, kind, selectedKey, dependencyIdentity]);
+
   const activeBufferId = kind && selectedKey ? bufferId(kind, selectedKey) : null;
   const buffer = activeBufferId ? buffers[activeBufferId] : undefined;
   const pendingFields = activeBufferId ? pendingBuffers[activeBufferId] ?? createPendingFieldState() : createPendingFieldState();
@@ -888,6 +915,8 @@ function App() {
       ...current,
       [activeBufferId]: { ...current[activeBufferId], text: value, dirty: true },
     }));
+    setDependencyState((current) => staleDependencyState(
+      current, 'UNSAVED_LOCAL_EDITS_EXCLUDED'));
     setValidation(null);
     setPlan(null);
     setActionMessage(null);
@@ -900,6 +929,8 @@ function App() {
       ...current,
       [activeBufferId]: editPendingField(current[activeBufferId] ?? {}, path, text, expected, baseValue),
     }));
+    setDependencyState((current) => staleDependencyState(
+      current, 'UNSAVED_LOCAL_EDITS_EXCLUDED'));
     setValidation(null);
     setPlan(null);
   }
@@ -936,6 +967,8 @@ function App() {
         ...current,
         [activeBufferId]: settleSaveBuffer(current[activeBufferId], submittedText, saved),
       }));
+      setDependencyState((current) => staleDependencyState(
+        current, 'SAVED_DRAFT_CHANGED'));
       setValidation(null);
       setPlan(null);
     } catch (error) {
@@ -989,6 +1022,26 @@ function App() {
     }
   }
 
+  async function refreshDependencies() {
+    if (!kind || !selectedKey || !dependencyIdentity) return;
+    const identity = dependencyIdentity;
+    const unsavedAtRequest = Boolean(buffer?.dirty
+      || Object.keys(pendingFields).length
+      || Object.keys(pendingResources).length);
+    const next = beginDependencyLoad(dependencyState, identity);
+    setDependencyState(next);
+    try {
+      const graph = await managementApi.dependencies(kind, selectedKey);
+      setDependencyState((current) => settleDependencyLoad(
+        current, identity, next.requestId, graph, null,
+        unsavedAtRequest ? 'UNSAVED_LOCAL_EDITS_EXCLUDED' : null));
+    } catch (error) {
+      setDependencyState((current) => settleDependencyLoad(
+        current, identity, next.requestId, null, errorText(error),
+        unsavedAtRequest ? 'UNSAVED_LOCAL_EDITS_EXCLUDED' : null));
+    }
+  }
+
   async function refreshPublishedState() {
     if (!kind || !selectedKey) return;
     setActionBusy(true);
@@ -1019,6 +1072,8 @@ function App() {
     try {
       await managementApi.publish(kind, selectedKey, plan, history.servingDigest);
       setPlan(null);
+      setDependencyState((current) => staleDependencyState(
+        current, 'PUBLISHED_SELECTION_CHANGED'));
       setSuccessMessage('发布完成：已写入不可变版本并更新服务选择。');
       try {
         const [nextHistory, nextDetail, nextAssets] = await Promise.all([
@@ -1076,13 +1131,27 @@ function App() {
     setSuccessMessage(null);
     setPlan(null);
     try {
-      const nextPlan = await managementApi.prepare(kind, selectedKey, buffer.revision, {
+      const check = await managementApi.publicationCheck(kind, selectedKey, buffer.revision, {
         environment: session.environment,
         versionId,
         channel,
         grayUserIds,
       });
-      setPlan(nextPlan);
+      setValidation(check.validation);
+      if (check.status !== 'PREPARED_NOT_PUBLISHED' || !check.candidate || !check.preparedRevision || !check.candidateIdentity) {
+        setDependencyState((current) => staleDependencyState(current, 'PUBLICATION_CHECK_INCOMPLETE'));
+        return;
+      }
+      setPlan({
+        kind,
+        key: selectedKey,
+        draftRevision: check.preparedRevision,
+        contentDigest: check.candidateIdentity.contentDigest,
+        target: check.target,
+        status: 'PREPARED_NOT_PUBLISHED',
+        published: false,
+        candidate: check.candidate,
+      });
     } catch (error) {
       setActionMessage(errorText(error));
     } finally {
@@ -1150,6 +1219,17 @@ function App() {
                 {history ? <HistoryPanel history={history} canAuthor={session.canAuthor && history.versions.length > 0} busy={actionBusy}
                   onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} /> : null}
                 {history ? <ComparisonPanel key={`${kind}:${selectedKey}`} kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length + Object.keys(pendingResources).length} /> : null}
+                <DependencyPanel
+                  graph={dependencyState?.graph ?? null}
+                  loading={dependencyState?.loading ?? false}
+                  error={dependencyState?.error ?? null}
+                  stale={dependencyState?.stale ?? false}
+                  staleReason={dependencyState?.staleReason ?? null}
+                  canAuthor={session.canAuthor}
+                  unsaved={Boolean(buffer?.dirty || Object.keys(pendingFields).length || Object.keys(pendingResources).length)}
+                  onRefresh={() => void refreshDependencies()}
+                  onNavigate={(referenceKind, keyName) => { setKind(referenceKind); setSearchQuery(''); setSelectedKey(keyName); setHistory(null); setDetail(null); setAssets([]); }}
+                />
                 {session.canAuthor && history ? (
                   <AuthorWorkspace
                     session={session}
@@ -1170,7 +1250,12 @@ function App() {
                     onPendingChange={changePendingField}
                     onApplyPending={applyPending}
                     onDiscardPending={discardPending}
-                    onPendingResourcesChange={(pending) => { if (activeBufferId) setPendingResourceBuffers((current) => ({ ...current, [activeBufferId]: pending })); }}
+                    onPendingResourcesChange={(pending) => {
+                      if (!activeBufferId) return;
+                      setPendingResourceBuffers((current) => ({ ...current, [activeBufferId]: pending }));
+                      setDependencyState((current) => staleDependencyState(
+                        current, 'UNSAVED_LOCAL_EDITS_EXCLUDED'));
+                    }}
                     onPreviewStateChange={(state) => { if (activeBufferId) setPreviewBuffers((current) => ({ ...current, [activeBufferId]: state })); }}
                     onNavigateReference={(referenceKind, keyName) => { setKind(referenceKind); setSearchQuery(''); setSelectedKey(keyName); setHistory(null); setDetail(null); setAssets([]); }}
                     getPendingConflict={(path) => pendingFieldConflict(pendingFields, path)}
