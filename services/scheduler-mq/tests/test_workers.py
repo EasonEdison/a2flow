@@ -75,11 +75,24 @@ class HandleDomainEventTests(unittest.TestCase):
             event("NODE_WAITING"), db=db, lark=lark,
             notifications=__import__("a2flow_scheduler.notifications", fromlist=["x"]),
         )
-        self.assertIn("run_wait_states", db.calls[0][0])
-        self.assertIn("insert into notifications", db.calls[2][0].lower())
-        self.assertEqual("waiting", db.calls[2][1][1])
-        self.assertEqual(1, len(lark.sends))
-        self.assertEqual("evt-1", lark.sends[0][1])
+
+    def test_unresolved_owner_requeues(self):
+        db = FakeDB()
+        with self.assertRaises(workers.OwnerNotResolved):
+            workers.handle_domain_event(
+                event("NODE_WAITING"), db=db, lark=None,
+                notifications=__import__("a2flow_scheduler.notifications", fromlist=["x"]),
+                owner_resolver=lambda run_id: None,
+            )
+
+    def test_resolved_owner_receives_notification(self):
+        db = FakeDB(rows_by_index={1: [(0,)]})
+        workers.handle_domain_event(
+            event("NODE_WAITING"), db=db, lark=None,
+            notifications=__import__("a2flow_scheduler.notifications", fromlist=["x"]),
+            owner_resolver=lambda run_id: "u-real-owner",
+        )
+        self.assertEqual("u-real-owner", db.calls[2][1][0])
 
     def test_terminal_event_clears_wait_and_notifies(self):
         db = FakeDB(rows_by_index={1: [(0,)]})

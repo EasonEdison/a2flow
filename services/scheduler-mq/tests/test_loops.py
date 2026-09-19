@@ -149,7 +149,7 @@ class EventConsumerTests(unittest.TestCase):
             item_id=3, queue="domain_events",
             payload=wait_event(), attempts=1,
         )])
-        db = FakeDB(rows_by_index={2: [(0,)]})
+        db = FakeDB(rows_by_index={1: [("u1",)], 2: [(0,)]})
         processed = loops.run_event_consumer_iteration(
             conn=db, queue=queue, lark=FakeLark()
         )

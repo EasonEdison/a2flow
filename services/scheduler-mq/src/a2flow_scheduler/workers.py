@@ -79,6 +79,10 @@ class LarkSender(Protocol):
     def send(self, card: dict, *, dedup_key: str | None = None) -> None: ...
 
 
+class OwnerNotResolved(Exception):
+    """Raised when a run owner cannot be resolved yet; the loop requeues."""
+
+
 def _parse_ts(value: str) -> dt.datetime:
     parsed = dt.datetime.fromisoformat(value)
     if parsed.tzinfo is None:
@@ -131,8 +135,11 @@ def handle_domain_event(
     user_id = event.get("user_id") or ""
     if owner_resolver is not None and event.get("run_id"):
         resolved = owner_resolver(event.get("run_id"))
-        if resolved:
-            user_id = resolved
+        if not resolved:
+            # Ownership is bound shortly after a run starts; retry later
+            # instead of notifying the runtime's fixed principal.
+            raise OwnerNotResolved(event.get("run_id"))
+        user_id = resolved
     event_id = event.get("event_id") or ""
     count = db.execute(_HOURLY_COUNT_SQL, (user_id,)).fetchall()[0][0]
     if notifications.within_cap(count):
@@ -140,7 +147,8 @@ def handle_domain_event(
             _NOTIFY_INSERT_SQL,
             (user_id, kind, title, body, "run", run_id, event_id),
         )
-        lark.send(_lark_card(title, body), dedup_key=event_id)
+        if lark is not None:
+            lark.send(_lark_card(title, body), dedup_key=event_id)
         return
     merged_kind, merged_title, merged_body, merged_key = (
         notifications.cap_exceeded_plan(
@@ -151,7 +159,8 @@ def handle_domain_event(
         _NOTIFY_INSERT_SQL,
         (user_id, merged_kind, merged_title, merged_body, None, None, merged_key),
     )
-    lark.send(_lark_card(merged_title, merged_body), dedup_key=merged_key)
+    if lark is not None:
+        lark.send(_lark_card(merged_title, merged_body), dedup_key=merged_key)
 
 
 def trigger_due_schedules(
