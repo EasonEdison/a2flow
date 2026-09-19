@@ -76,3 +76,12 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS notifications_user
     ON notifications(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS run_ownership (
+    control_id text PRIMARY KEY,
+    user_id text NOT NULL REFERENCES users(user_id),
+    workflow_key text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS run_ownership_user
+    ON run_ownership(user_id, created_at DESC);
