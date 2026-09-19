@@ -119,6 +119,7 @@ async function createHarness(browser, options = {}) {
           dependencyDelayPending = false;
         }
         if (options.dependencyError) return reply({ error: { code: 'DEPENDENCY_CHECK_UNAVAILABLE' } }, 503);
+        if (options.dependencyGraph) return reply(clone(options.dependencyGraph));
         const missing = options.missingDependency === true;
         return reply({
           root: { kind, key: activeKey, source: 'published', environment: options.environment ?? 'PRT', status: 'resolved', versionId: 'v1', contentDigest: digest },
@@ -1149,6 +1150,69 @@ async function runDependencyPanel(browser) {
   await finish();
 }
 
+async function runDependencyLineageGraph(browser) {
+  const environment = 'PRT';
+  const published = { kind: 'SKILL', key: 'demo/skill', source: 'published', environment, status: 'resolved', versionId: 'v1', selection: 'PRT_CURRENT' };
+  const draft = { kind: 'SKILL', key: 'demo/skill', source: 'saved-draft', environment, status: 'resolved', revision: 3 };
+  const ability = { kind: 'ABILITY', key: 'demo.lookup', source: 'published', environment, status: 'resolved', versionId: 'v1' };
+  const app = { kind: 'APPLICATION', key: 'demo.confirm', source: 'retained', environment, status: 'resolved', versionId: 'v0' };
+  const workflow = { kind: 'WORKFLOW', key: 'demo/workflow', source: 'published', environment, status: 'resolved', versionId: 'v1' };
+  const missing = { kind: 'ABILITY', key: 'missing.ability', source: 'published', environment, status: 'missing' };
+  const dependencyGraph = {
+    root: published, rootVariants: [published, draft],
+    upstream: [
+      { fromKind: 'SKILL', fromKey: 'demo/skill', toKind: 'ABILITY', toKey: 'demo.lookup', source: 'published', path: '/abilityBindings/0', selectorType: 'logical-key', from: published, target: ability, depth: 1 },
+      { fromKind: 'ABILITY', fromKey: 'demo.lookup', toKind: 'APPLICATION', toKey: 'demo.confirm', source: 'published', path: '/applicationReleaseRef', selectorType: 'exact-release', requestedVersionId: 'v0', targetsInspectedVersion: false, from: ability, target: app, depth: 2 },
+      { fromKind: 'SKILL', fromKey: 'demo/skill', toKind: 'ABILITY', toKey: 'missing.ability', source: 'saved-draft', path: '/abilityBindings/1', selectorType: 'logical-key', from: draft, target: missing, error: 'MISSING_DEPENDENCY', depth: 1 },
+    ],
+    dependents: [{ fromKind: 'WORKFLOW', fromKey: 'demo/workflow', toKind: 'SKILL', toKey: 'demo/skill', source: 'published', path: '/nodes/0/skillKey', selectorType: 'logical-key', from: workflow, target: published, depth: 1 }],
+    missing: [{ kind: 'ABILITY', key: 'missing.ability' }], unresolved: [], diagnostics: [],
+    cycle: false, truncated: true, incomplete: true,
+    limits: { maxDepth: 8, maxNodes: 128, maxEdges: 256 }, counts: { nodes: 6, edges: 4 },
+    historyScope: 'current-selection-and-explicit-retained-references',
+  };
+  const harness = await createHarness(browser, { dependencyGraph });
+  const { page, finish } = harness;
+  const dependencyPanel = page.getByRole('region', { name: '依赖与发布检查' });
+  const panel = page.getByRole('region', { name: '资产血缘图' });
+  await panel.waitFor();
+  await dependencyPanel.getByText('结果达到边界并已截断。', { exact: true }).waitFor();
+  assert.equal(await panel.getByText('demo.confirm', { exact: false }).count(), 0);
+  const abilityRow = panel.locator('.lineage-list-node').filter({ hasText: 'ABILITY · demo.lookup' });
+  await abilityRow.getByRole('button', { name: /ABILITY · demo.lookup/ }).click();
+  await abilityRow.getByRole('button', { name: '展开分支', exact: true }).click();
+  await panel.getByText('APPLICATION · demo.confirm', { exact: true }).waitFor();
+  await panel.getByRole('button', { name: /demo.lookup → APPLICATION · demo.confirm/ }).click();
+  await panel.getByText('/applicationReleaseRef', { exact: true }).last().waitFor();
+  await panel.getByText('否', { exact: true }).waitFor();
+  await panel.getByLabel('血缘方向').selectOption('downstream');
+  await panel.getByText('WORKFLOW · demo/workflow', { exact: true }).waitFor();
+  await panel.getByLabel('血缘方向').selectOption('upstream');
+  await panel.getByLabel('证据来源').selectOption('saved-draft');
+  await panel.getByText('ABILITY · missing.ability', { exact: true }).waitFor();
+  const missingRow = panel.locator('.lineage-list-node').filter({ hasText: 'ABILITY · missing.ability' });
+  await missingRow.getByRole('button', { name: /ABILITY · missing.ability/ }).click();
+  assert.equal(await panel.getByRole('button', { name: '查看资产详情', exact: true }).count(), 0);
+  assert.equal(await panel.getByRole('button', { name: '查看目标详情', exact: true }).count(), 0);
+  await page.getByLabel('描述').fill('preserve while exploring lineage');
+  await dependencyPanel.getByText('检查结果已过期', { exact: true }).waitFor();
+  await panel.getByRole('button', { name: '重置视图', exact: true }).click();
+  assert.equal(await page.getByLabel('描述').inputValue(), 'preserve while exploring lineage');
+  await page.screenshot({ path: path.join(output, 'lineage-graph-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
+  await page.screenshot({ path: path.join(output, 'lineage-graph-narrow.png'), fullPage: true });
+  await finish();
+
+  const reader = await createHarness(browser, { dependencyGraph, canAuthor: false, viewport: { width: 390, height: 844 } });
+  const readerPanel = reader.page.getByRole('region', { name: '资产血缘图' });
+  await readerPanel.waitFor();
+  assert.equal(await readerPanel.getByLabel('证据来源').locator('option[value="saved-draft"]').count(), 0);
+  assert.equal(await readerPanel.getByText('missing.ability', { exact: false }).count(), 0);
+  assert.equal(await reader.page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
+  await reader.finish();
+}
+
 async function runDependencyPendingRaces(browser) {
   {
     const dependencyGate = deferred();
@@ -1198,7 +1262,7 @@ async function runDependencyMissingAndReader(browser) {
   const missing = await createHarness(browser, { missingDependency: true });
   const missingPanel = missing.page.getByRole('region', { name: '依赖与发布检查' });
   await missingPanel.getByText('检查不完整，不能判定为可发布', { exact: true }).waitFor();
-  await missingPanel.getByText('MISSING_DEPENDENCY', { exact: true }).waitFor();
+  await missingPanel.getByText('MISSING_DEPENDENCY', { exact: true }).first().waitFor();
   await missing.finish();
   const reader = await createHarness(browser, { canAuthor: false });
   const readerPanel = reader.page.getByRole('region', { name: '依赖与发布检查' });
@@ -1210,6 +1274,7 @@ async function runDependencyMissingAndReader(browser) {
 const browser = await chromium.launch({ headless: true, executablePath: chromePath });
 try {
   await runDependencyPanel(browser);
+  await runDependencyLineageGraph(browser);
   await runDependencyPendingRaces(browser);
   await runDependencyMissingAndReader(browser);
   await runSkillWorkbench(browser);

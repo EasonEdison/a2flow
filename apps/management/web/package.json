@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "node --test tests/a2ui-workbench.test.mjs tests/asset-filter.test.mjs tests/dependency-state.test.mjs tests/draft-state.test.mjs tests/form-editor-state.test.mjs tests/skill-binding-state.test.mjs tests/skill-resource-state.test.mjs tests/structured-diff.test.mjs",
+    "test": "node --test tests/a2ui-workbench.test.mjs tests/asset-filter.test.mjs tests/dependency-state.test.mjs tests/draft-state.test.mjs tests/form-editor-state.test.mjs tests/lineage-state.test.mjs tests/skill-binding-state.test.mjs tests/skill-resource-state.test.mjs tests/structured-diff.test.mjs",
     "test:browser": "node tests/browser-regression.mjs",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"

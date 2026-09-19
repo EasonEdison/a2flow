@@ -120,20 +120,35 @@ export interface DependencyEdge {
   requestedVersionId?: string;
   target?: DependencyNode;
   from?: DependencyNode;
+  depth?: number;
+  targetsInspectedVersion?: boolean;
   error?: string;
   cycle?: boolean;
 }
 
+export interface DependencyDiagnostic {
+  code: string;
+  kind: DependencyKind;
+  key: string;
+  source: DependencyNode['source'];
+  paths: string[];
+  versionId?: string;
+  revision?: number;
+}
+
 export interface DependencyGraph {
   root: DependencyNode;
+  rootVariants?: DependencyNode[];
   upstream: DependencyEdge[];
   dependents: DependencyEdge[];
   missing: Array<{ kind: DependencyKind; key: string; versionId?: string }>;
   unresolved: Array<{ kind: DependencyKind; key: string; reason: string }>;
+  diagnostics?: DependencyDiagnostic[];
   cycle: boolean;
   truncated: boolean;
   incomplete: boolean;
   limits: { maxDepth: number; maxNodes: number; maxEdges: number };
+  counts?: { nodes: number; edges: number };
   historyScope: string;
 }
 

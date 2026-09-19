@@ -15,6 +15,7 @@ Minimal React/Vite console for the four registered management asset kinds.
 
 - The dependency and publication-check panel is read-only. It separates published facts from ADMIN-only saved-draft diagnostics, marks unsaved local edits as excluded, and requires explicit refresh after edits, saves, publication, rollback, or source changes.
 - Missing or truncated dependency evidence is never presented as ready. Exact release references retain their requested version and do not fall back to a current version.
+- The asset detail includes a read-only lineage explorer over the dependency response. Arrow direction is source depends on target; direction/source filters and bounded expansion only hide returned evidence and never assert global absence. Structured node identities keep published, saved-draft, retained versions, revisions, environments and missing targets distinct. Missing targets expose evidence but cannot navigate to fabricated asset details.
 
 Trusted identity and environment come only from the same-origin HttpOnly session.
 

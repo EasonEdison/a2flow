@@ -435,6 +435,41 @@ code, pre { font-family: var(--mono); }
 .dependency-edge.error { border-color: #df9d9d; background: var(--red-soft); }
 .dependency-edge code { color: var(--muted); overflow-wrap: anywhere; }
 .dependency-empty { margin: 8px 0 0 !important; }
+.lineage-explorer { min-width: 0; border: 1px solid #c9ddd8; border-radius: 10px; padding: 14px; background: #f9fbfa; }
+.lineage-heading, .lineage-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lineage-controls { flex-wrap: wrap; margin-top: 12px; }
+.lineage-controls label { display: flex; align-items: center; gap: 7px; color: #495d57; font-size: 11px; font-weight: 700; }
+.lineage-controls select { border: 1px solid #b7cac5; border-radius: 7px; padding: 7px 9px; background: #fff; color: var(--ink); }
+.lineage-controls > span, .lineage-boundary { color: var(--muted); font-family: var(--mono); font-size: 9px; }
+.lineage-boundary { display: flex; flex-wrap: wrap; gap: 7px 16px; border: 1px dashed var(--line); border-radius: 8px; padding: 10px; overflow-wrap: anywhere; }
+.lineage-canvas { max-width: 100%; margin-top: 12px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.lineage-canvas svg { display: block; }
+.lineage-svg-edge { cursor: pointer; }
+.lineage-svg-edge line { stroke: #79958e; stroke-width: 2; }
+.lineage-svg-edge.selected line { stroke: var(--amber); stroke-width: 4; }
+#lineage-arrow path { fill: #79958e; }
+.lineage-svg-node { cursor: pointer; }
+.lineage-svg-node rect { fill: #fff; stroke: #79a99f; stroke-width: 1.5; }
+.lineage-svg-node text { fill: var(--ink); font-family: var(--mono); font-size: 9px; pointer-events: none; }
+.lineage-svg-node text:first-of-type { fill: var(--green-dark); font-weight: 800; }
+.lineage-svg-node.missing rect { fill: var(--red-soft); stroke: var(--red); stroke-dasharray: 4 3; }
+.lineage-svg-node.selected rect { stroke: var(--amber); stroke-width: 3; }
+.lineage-detail { min-height: 64px; margin-top: 10px; border-radius: 8px; padding: 12px; background: #edf4f2; }
+.lineage-detail dl { display: grid; gap: 5px; margin: 8px 0; }
+.lineage-detail dl div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 9px; }
+.lineage-detail dt { color: var(--muted); font-size: 10px; }
+.lineage-detail dd { margin: 0; font-family: var(--mono); font-size: 10px; overflow-wrap: anywhere; }
+.lineage-accessible { margin-top: 10px; }
+.lineage-accessible summary, .dependency-panel > details > summary { cursor: pointer; color: var(--green-dark); font-size: 11px; font-weight: 700; }
+.lineage-accessible ul { display: grid; gap: 7px; margin: 10px 0; padding: 0; list-style: none; }
+.lineage-list-node { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 8px; padding: 7px; background: #fff; }
+.lineage-list-node.selected { border-color: var(--amber); }
+.lineage-node-button, .lineage-edge-button { min-width: 0; border: 0; padding: 4px; background: transparent; color: var(--ink); text-align: left; }
+.lineage-node-button strong, .lineage-node-button span, .lineage-edge-button strong, .lineage-edge-button code, .lineage-edge-button span { display: block; margin-top: 3px; overflow-wrap: anywhere; }
+.lineage-node-button span, .lineage-edge-button span { color: var(--muted); font-size: 9px; }
+.lineage-edge-button.selected { border-radius: 6px; background: var(--amber-soft); }
+.warning-text { color: var(--amber); }
+.lineage-empty { margin-top: 10px; border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--muted); font-size: 11px; text-align: center; }
 .empty-content, .workspace-state { display: grid; place-items: center; min-height: 55vh; color: var(--muted); text-align: center; }
 .empty-content h2 { color: var(--ink); font-size: 21px; }
 .empty-content p { margin-top: 8px; font-size: 12px; }
@@ -490,8 +525,9 @@ code, pre { font-family: var(--mono); }
   .content-header h1 { font-size: 25px; }
   .json-editor { min-height: 360px; padding: 14px; font-size: 11px; }
   .publication-controls { grid-template-columns: 1fr; }
-  .dependency-panel .panel-heading, .dependency-edge > div { align-items: flex-start; flex-direction: column; }
-  .dependency-edge { grid-template-columns: 1fr; }
+  .dependency-panel .panel-heading, .dependency-edge > div, .lineage-heading { align-items: flex-start; flex-direction: column; }
+  .dependency-edge, .lineage-list-node { grid-template-columns: 1fr; }
+  .lineage-detail dl div { grid-template-columns: 1fr; gap: 2px; }
   .publication-controls .secondary-button, .publication-controls small, .gray-users { grid-column: auto; }
   .candidate-title { flex-direction: column; }
 }
