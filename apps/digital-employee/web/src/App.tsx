@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NodeCard } from './components/NodeCard';
 import { MarkdownContent } from './components/MarkdownContent';
 import { FixturePreview } from './FixturePreview';
-import { productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
+import { apiErrorMessage, productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
@@ -21,9 +21,9 @@ function Login({ onSession }: { onSession: (session: Session) => void }) {
     <section className="auth-card">
       <h2>{register ? '创建 A2Flow 账号' : '登录 A2Flow'}</h2>
       <p>{register ? '注册后立即进入数字员工工作台' : '欢迎回来，请使用企业账号登录'}</p>
-      <form onSubmit={async (event) => { event.preventDefault(); setError(''); try { onSession(await (register ? productApi.register(username, password) : productApi.login(username, password))); } catch { setError('操作失败，请检查账号信息'); } }}>
+      <form onSubmit={async (event) => { event.preventDefault(); setError(''); try { onSession(await (register ? productApi.register(username, password) : productApi.login(username, password))); } catch (error) { setError(apiErrorMessage(error, '操作失败，请检查账号信息')); } }}>
         <label htmlFor="username">用户名</label><input id="username" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" />
-        <label htmlFor="password">密码</label><input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required autoComplete={register ? 'new-password' : 'current-password'} />
+        <label htmlFor="password">密码</label><input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required autoComplete={register ? 'new-password' : 'current-password'} />
         <button className="primary full" type="submit">{register ? '注册并登录' : '登录'}</button>
       </form>
       {error ? <p className="inline-error" role="alert">{error}</p> : null}
