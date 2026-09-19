@@ -175,6 +175,7 @@ class ManagementPreviewConfig:
     roles: frozenset[str]
     static_directory: str | None = None
     browser_origin: str | None = None
+    guest_user_id: str | None = None
 
     def __post_init__(self):
         if type(self.conninfo) is not str or not self.conninfo:
@@ -185,6 +186,11 @@ class ManagementPreviewConfig:
             raise RuntimeError("EXACT_NAMESPACE_REQUIRED")
         TrustedManagementContext(
             self.user_id, self.environment, self.roles)
+        if self.guest_user_id is not None:
+            if type(self.guest_user_id) is not str or not self.guest_user_id:
+                raise RuntimeError("INVALID_GUEST_PRINCIPAL")
+            TrustedManagementContext(
+                self.guest_user_id, self.environment, frozenset({"USER"}))
         static_directory = _static_directory(self.static_directory)
         browser_origin = _browser_origin(self.browser_origin)
         if (static_directory is None) != (browser_origin is None):
@@ -197,12 +203,23 @@ class ManagementPreviewConfig:
         return TrustedManagementContext(
             self.user_id, self.environment, self.roles)
 
+    @property
+    def guest_principal(self):
+        if self.guest_user_id is None:
+            return None
+        return TrustedManagementContext(
+            self.guest_user_id, self.environment, frozenset({"USER"}))
+
     @classmethod
     def from_environment(cls):
         raw_roles = _required("A2FLOW_MANAGEMENT_ROLES").split(",")
         if any(not role for role in raw_roles) or len(set(raw_roles)) != len(raw_roles):
             raise RuntimeError(
                 "INVALID_HOST_CONFIGURATION:A2FLOW_MANAGEMENT_ROLES")
+        guest_user_id = os.environ.get("A2FLOW_MANAGEMENT_GUEST_USER_ID")
+        if guest_user_id == "":
+            raise RuntimeError(
+                "INVALID_HOST_CONFIGURATION:A2FLOW_MANAGEMENT_GUEST_USER_ID")
         return cls(
             conninfo=_required("A2FLOW_MANAGEMENT_DATABASE_URL"),
             database=_required("A2FLOW_MANAGEMENT_DATABASE_NAME"),
@@ -212,22 +229,23 @@ class ManagementPreviewConfig:
             roles=frozenset(raw_roles),
             static_directory=_required("A2FLOW_MANAGEMENT_STATIC_DIRECTORY"),
             browser_origin=_required("A2FLOW_MANAGEMENT_BROWSER_ORIGIN"),
+            guest_user_id=guest_user_id,
         )
 
 
 class _PreviewAuthentication:
     """Bearer for headless checks; HttpOnly session for the same-origin browser."""
 
-    def __init__(self, expected_token, principal, browser_origin):
-        if (type(expected_token) is not bytes
-                or not _TOKEN_MINIMUM <= len(expected_token) <= _TOKEN_LIMIT):
-            raise RuntimeError("INVALID_PREVIEW_TOKEN")
-        if type(principal) is not TrustedManagementContext:
-            raise RuntimeError("INVALID_PREVIEW_PRINCIPAL")
-        self._expected_token = expected_token
-        self._principal = principal
+    def __init__(self, token_pairs, browser_origin):
+        for token, principal in token_pairs:
+            if (type(token) is not bytes
+                    or not _TOKEN_MINIMUM <= len(token) <= _TOKEN_LIMIT):
+                raise RuntimeError("INVALID_PREVIEW_TOKEN")
+            if type(principal) is not TrustedManagementContext:
+                raise RuntimeError("INVALID_PREVIEW_PRINCIPAL")
+        self._token_pairs = tuple(token_pairs)
         self._browser_origin = browser_origin
-        self._session_state = (b"", 0.0)
+        self._session_state = (b"", 0.0, None)
 
     @property
     def browser_enabled(self):
@@ -264,10 +282,12 @@ class _PreviewAuthentication:
         value = authorizations[0]
         scheme, separator, provided = value.partition(b" ")
         if (separator != b" " or scheme.lower() != b"bearer" or not provided
-                or len(provided) > _TOKEN_LIMIT
-                or not hmac.compare_digest(provided, self._expected_token)):
+                or len(provided) > _TOKEN_LIMIT):
             raise ManagementError("PREVIEW_AUTHENTICATION_REQUIRED", 401)
-        return True
+        for token, principal in self._token_pairs:
+            if hmac.compare_digest(provided, token):
+                return principal
+        raise ManagementError("PREVIEW_AUTHENTICATION_REQUIRED", 401)
 
     def _session_cookie(self, scope):
         cookies = _headers(scope, b"cookie")
@@ -279,7 +299,7 @@ class _PreviewAuthentication:
             value = parsed[_SESSION_COOKIE].value.encode("ascii")
         except (CookieError, KeyError, UnicodeDecodeError, UnicodeEncodeError):
             return False
-        session, expires_at = self._session_state
+        session, expires_at, _ = self._session_state
         return (time.monotonic() < expires_at
                 and hmac.compare_digest(value, session))
 
@@ -287,16 +307,18 @@ class _PreviewAuthentication:
         return self.browser_enabled and self._session_cookie(scope)
 
     def login(self, supplied, scope):
-        authenticated = (self.browser_enabled and self._origin_allowed(scope)
-                         and type(supplied) is bytes
-                         and hmac.compare_digest(
-                             supplied, self._expected_token))
-        if authenticated:
-            self._session_state = (
-                secrets.token_urlsafe(32).encode("ascii"),
-                time.monotonic() + _SESSION_SECONDS,
-            )
-        return authenticated
+        if not (self.browser_enabled and self._origin_allowed(scope)
+                and type(supplied) is bytes):
+            return False
+        for token, principal in self._token_pairs:
+            if hmac.compare_digest(supplied, token):
+                self._session_state = (
+                    secrets.token_urlsafe(32).encode("ascii"),
+                    time.monotonic() + _SESSION_SECONDS,
+                    principal,
+                )
+                return True
+        return False
 
     def logout_allowed(self, scope):
         return self.browser_authenticated(scope) and self._origin_allowed(scope)
@@ -305,16 +327,20 @@ class _PreviewAuthentication:
         if not _loopback(scope):
             raise ManagementError("PRIVATE_PREVIEW_LOOPBACK_REQUIRED", 403)
         self._reject_client_identity(scope)
-        if self._bearer(scope):
-            return self._principal
+        bearer = self._bearer(scope)
+        if bearer is not False:
+            return bearer
         if not self.browser_authenticated(scope):
             raise ManagementError("PREVIEW_AUTHENTICATION_REQUIRED", 401)
         if scope.get("method") in _UNSAFE_METHODS and not self._origin_allowed(scope):
             raise ManagementError("PREVIEW_ORIGIN_REQUIRED", 403)
-        return self._principal
+        _, _, principal = self._session_state
+        if principal is None:
+            raise ManagementError("PREVIEW_AUTHENTICATION_REQUIRED", 401)
+        return principal
 
     def set_cookie(self, response):
-        session, expires_at = self._session_state
+        session, expires_at, _ = self._session_state
         if not session or time.monotonic() >= expires_at:
             raise RuntimeError("PREVIEW_SESSION_UNAVAILABLE")
         response.set_cookie(
@@ -328,7 +354,7 @@ class _PreviewAuthentication:
         )
 
     def delete_cookie(self, response):
-        self._session_state = (b"", 0.0)
+        self._session_state = (b"", 0.0, None)
         response.delete_cookie(
             _SESSION_COOKIE,
             httponly=True,
@@ -358,9 +384,9 @@ def _login_page(status=200):
         "padding:2rem}input,button{font:inherit;width:100%;padding:.7rem;"
         "margin:.4rem 0;box-sizing:border-box}</style>"
         "<h1>A2Flow private preview</h1>"
-        "<p>Enter the new task-owned preview token. It is exchanged for a "
-        "two-hour, process-local HttpOnly session and is never placed in the "
-        "UI bundle.</p>"
+        "<p>Enter the administrator token (editing) or the visitor token "
+        "(read-only). It is exchanged for a two-hour, process-local HttpOnly "
+        "session and is never placed in the UI bundle.</p>"
         + message
         + "<form method=post action='" + _LOGIN_PATH + "'>"
         "<label>Preview token<input type=password name=token required "
@@ -437,10 +463,16 @@ def _attach_browser(app, authentication, static_directory):
     app.mount("/", StaticFiles(directory=static_directory, html=True), name="preview-ui")
 
 
-def create_management_preview_host(config, *, validator, bearer_token):
+def create_management_preview_host(config, *, validator, bearer_token,
+                                   guest_token=None):
     """Build the protected ASGI Host without setup, seed, or connection attempts."""
     if type(config) is not ManagementPreviewConfig:
         raise RuntimeError("INVALID_MANAGEMENT_PREVIEW_CONFIG")
+    token_pairs = [(bearer_token, config.principal)]
+    if guest_token is not None:
+        if config.guest_principal is None:
+            raise RuntimeError("GUEST_PRINCIPAL_REQUIRED")
+        token_pairs.append((guest_token, config.guest_principal))
     repository = PostgresAssetRepository(
         config.conninfo,
         environment=config.environment,
@@ -453,8 +485,7 @@ def create_management_preview_host(config, *, validator, bearer_token):
         environment=config.environment,
         database=config.database,
     )
-    identity = _PreviewAuthentication(
-        bearer_token, config.principal, config.browser_origin)
+    identity = _PreviewAuthentication(token_pairs, config.browser_origin)
     assembly = create_management_app(
         reader=reader,
         drafts=drafts,
@@ -466,10 +497,12 @@ def create_management_preview_host(config, *, validator, bearer_token):
     return ManagementPreviewHost(config, reader, drafts, assembly.app)
 
 
-def create_management_preview_app(config, *, validator, bearer_token):
+def create_management_preview_app(config, *, validator, bearer_token,
+                                  guest_token=None):
     """Return only the ASGI app for programmatic Host assembly."""
     return create_management_preview_host(
-        config, validator=validator, bearer_token=bearer_token).app
+        config, validator=validator, bearer_token=bearer_token,
+        guest_token=guest_token).app
 
 
 def create_app_from_environment():
@@ -478,5 +511,10 @@ def create_app_from_environment():
     validator = _load_validator(
         _required("A2FLOW_MANAGEMENT_VALIDATOR_FACTORY"))
     token = _read_secret_file("A2FLOW_MANAGEMENT_AUTH_TOKEN_FILE")
+    guest_token = None
+    if os.environ.get("A2FLOW_MANAGEMENT_GUEST_TOKEN_FILE"):
+        guest_token = _read_secret_file(
+            "A2FLOW_MANAGEMENT_GUEST_TOKEN_FILE")
     return create_management_preview_app(
-        config, validator=validator, bearer_token=token)
+        config, validator=validator, bearer_token=token,
+        guest_token=guest_token)

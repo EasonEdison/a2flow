@@ -21,6 +21,7 @@ from deploy.management.app import (
 
 
 TOKEN = b"af11-private-preview-token-000000000001"
+GUEST_TOKEN = b"af11-private-preview-guest-000000000001"
 BROWSER_ORIGIN = "http://127.0.0.1:14176"
 
 
@@ -359,6 +360,61 @@ class ManagementPreviewHostTests(unittest.TestCase):
                             browser_origin=origin,
                         )
 
+
+    def test_admin_and_guest_tokens_bind_distinct_principals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "index.html").write_text("ui", encoding="utf-8")
+            config = ManagementPreviewConfig(
+                conninfo=self.config.conninfo,
+                database=self.config.database,
+                environment=self.config.environment,
+                namespace=self.config.namespace,
+                user_id="preview-admin",
+                roles=frozenset({"ADMIN"}),
+                static_directory=directory,
+                browser_origin=BROWSER_ORIGIN,
+                guest_user_id="preview-guest",
+            )
+            host = create_management_preview_host(
+                config, validator=bundle_validator(),
+                bearer_token=TOKEN, guest_token=GUEST_TOKEN)
+
+            async def run():
+                transport = httpx.ASGITransport(
+                    app=host.app, raise_app_exceptions=False)
+                async with httpx.AsyncClient(
+                        transport=transport, base_url=BROWSER_ORIGIN) as client:
+                    guest = await client.post(
+                        "/private-preview/login",
+                        data={"token": GUEST_TOKEN.decode("ascii")},
+                        headers={"Origin": BROWSER_ORIGIN},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(303, guest.status_code)
+                    session = await client.get("/management/session")
+                    self.assertEqual(200, session.status_code)
+                    payload = session.json()
+                    self.assertEqual("preview-guest", payload["userId"])
+                    self.assertFalse(payload["canAuthor"])
+                    await client.post(
+                        "/private-preview/logout",
+                        headers={"Origin": BROWSER_ORIGIN},
+                        follow_redirects=False,
+                    )
+                    admin = await client.post(
+                        "/private-preview/login",
+                        data={"token": TOKEN.decode("ascii")},
+                        headers={"Origin": BROWSER_ORIGIN},
+                        follow_redirects=False,
+                    )
+                    self.assertEqual(303, admin.status_code)
+                    session = await client.get("/management/session")
+                    self.assertEqual(200, session.status_code)
+                    payload = session.json()
+                    self.assertEqual("preview-admin", payload["userId"])
+                    self.assertTrue(payload["canAuthor"])
+
+            asyncio.run(run())
 
 if __name__ == "__main__":
     unittest.main()

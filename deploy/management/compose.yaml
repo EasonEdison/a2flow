@@ -56,12 +56,15 @@ services:
       A2FLOW_MANAGEMENT_USER_ID: ${A2FLOW_MANAGEMENT_USER_ID:-private-management-admin}
       A2FLOW_MANAGEMENT_ROLES: ADMIN
       A2FLOW_MANAGEMENT_AUTH_TOKEN_FILE: /run/secrets/management_auth_token
+      A2FLOW_MANAGEMENT_GUEST_TOKEN_FILE: /run/secrets/management_guest_token
+      A2FLOW_MANAGEMENT_GUEST_USER_ID: ${A2FLOW_MANAGEMENT_GUEST_USER_ID:-private-management-guest}
       A2FLOW_MANAGEMENT_STATIC_DIRECTORY: /opt/a2flow/static
       A2FLOW_MANAGEMENT_BROWSER_ORIGIN: ${A2FLOW_MANAGEMENT_BROWSER_ORIGIN:-http://127.0.0.1:${A2FLOW_MANAGEMENT_BROWSER_PORT:-14177}}
       A2FLOW_MANAGEMENT_LISTEN_PORT: ${A2FLOW_MANAGEMENT_HOST_PORT:-8766}
     secrets:
       - management_postgres_password
       - management_auth_token
+      - management_guest_token
     volumes:
       - postgres_socket:/run/postgresql
       - type: bind
@@ -125,6 +128,8 @@ secrets:
     file: ${A2FLOW_MANAGEMENT_SECRET_DIRECTORY:?set an absolute private secret directory}/management_postgres_password
   management_auth_token:
     file: ${A2FLOW_MANAGEMENT_SECRET_DIRECTORY:?set an absolute private secret directory}/management_auth_token
+  management_guest_token:
+    file: ${A2FLOW_MANAGEMENT_SECRET_DIRECTORY:?set an absolute private secret directory}/management_guest_token
 
 volumes:
   postgres_data:
