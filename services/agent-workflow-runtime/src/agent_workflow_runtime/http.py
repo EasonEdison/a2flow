@@ -172,7 +172,7 @@ class Action(Restart):
 
 def create_app(
     service, *, execution_capacity=2, read_capacity=2, stop_capacity=1,
-    read_timeout=3, unexpected_error_observer=None,
+    read_timeout=3, unexpected_error_observer=None, action_stream=False,
 ):
     """Host middleware must set scope['a2flow.trusted_context'] to TrustedContext.
 
@@ -249,10 +249,11 @@ def create_app(
         who = owner(request)
         return await execution.call(partial(service.restart, who, run_id, body.controlRequestId, body.inputs))
 
-    @app.post("/runtime/runs/{run_id}/nodes/{node_id}/actions")
-    async def action(request: Request, run_id: str, node_id: str, body: Action):
-        who = owner(request)
-        return await execution.call(partial(service.action, who, run_id, node_id, body.model_dump()))
+    if not action_stream:
+        @app.post("/runtime/runs/{run_id}/nodes/{node_id}/actions")
+        async def action(request: Request, run_id: str, node_id: str, body: Action):
+            who = owner(request)
+            return await execution.call(partial(service.action, who, run_id, node_id, body.model_dump()))
 
     from .progress_http import add_progress_routes
     add_progress_routes(app, service, read_capacity=read_capacity, read_timeout=read_timeout)

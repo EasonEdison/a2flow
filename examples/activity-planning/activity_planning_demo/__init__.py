@@ -1,4 +1,8 @@
-"""Real local demo operations. Confirmation is Action-only, never a model Tool."""
+"""Demo asset definitions only: zero executable business code.
+
+Business implementations live in service.py behind the platform
+BusinessService protocol; confirmation is Action-only, never a model Tool.
+"""
 from skillweave_contracts import TrustedContext
 from capability_registry import AdapterOperationDescriptor
 
@@ -22,81 +26,20 @@ PACKAGE_APPLICATION_KEYS = frozenset({PACKAGE_CHOOSE_APPLICATION_KEY,
                                       PACKAGE_SCHEDULE_APPLICATION_KEY,
                                       PACKAGE_DISPLAY_APPLICATION_KEY})
 MODEL_ABILITY_KEYS = frozenset({BUDGET_KEY})
-
-
-def _owner(owner):
-    if type(owner) is not TrustedContext:
-        raise ValueError("TRUSTED_CONTEXT_REQUIRED")
-
-
-def budget_activity(arguments, owner):
-    """Split a supplied minor-unit demo budget; does not obtain vendor quotes."""
-    _owner(owner)
-    if type(arguments) is not dict or set(arguments) != {"participants", "budgetMinor"}:
-        raise ValueError("INVALID_BUDGET_ARGUMENTS")
-    people, budget = arguments["participants"], arguments["budgetMinor"]
-    if type(people) is not int or not 1 <= people <= 100000:
-        raise ValueError("INVALID_PARTICIPANTS")
-    if type(budget) is not int or not 0 <= budget <= 10**12:
-        raise ValueError("INVALID_BUDGET")
-    quotient, remainder = divmod(budget, people)
-    return {"participants": people, "budgetMinor": budget,
-            "perPersonMinor": quotient, "remainderMinor": remainder}
-
-
-def select_activity(arguments, owner):
-    """Return a local confirmation after Runtime validates its saved option set.
-
-    This pure function cannot establish interaction authority. It must be bound
-    only to the configured Action executor and never model execute_ability.
-    """
-    _owner(owner)
-    if type(arguments) is not dict or set(arguments) != {"optionId", "confirmed"}:
-        raise ValueError("INVALID_SELECTION_ARGUMENTS")
-    if type(arguments["optionId"]) is not str or not 1 <= len(arguments["optionId"]) <= 128:
-        raise ValueError("INVALID_OPTION")
-    if arguments["confirmed"] is not True:
-        raise ValueError("CONFIRMATION_REQUIRED")
-    return {"selectedOptionId": arguments["optionId"], "confirmed": True}
-
-
-def choose_package_plan(arguments, owner):
-    """Save one card-bound choice; Runtime establishes interaction authority."""
-    _owner(owner)
-    if (type(arguments) is not dict or set(arguments) != {"optionId"}
-            or type(arguments["optionId"]) is not str
-            or not 1 <= len(arguments["optionId"]) <= 128):
-        raise ValueError("INVALID_SELECTION_ARGUMENTS")
-    return {"selectedOptionId": arguments["optionId"]}
-
-
-def confirm_package_schedule(arguments, owner):
-    """Save one card-bound schedule confirmation without external side effects."""
-    _owner(owner)
-    if (type(arguments) is not dict or set(arguments) != {"optionId", "confirmed"}
-            or type(arguments["optionId"]) is not str
-            or not 1 <= len(arguments["optionId"]) <= 128
-            or arguments["confirmed"] is not True):
-        raise ValueError("INVALID_CONFIRMATION_ARGUMENTS")
-    return {"selectedOptionId": arguments["optionId"], "confirmed": True}
-
-
-OPERATION_MAP = {
-    BUDGET_KEY: budget_activity,
-    CONFIRM_OPERATION: select_activity,
-    PACKAGE_SELECT_OPERATION: choose_package_plan,
-    PACKAGE_SCHEDULE_OPERATION: confirm_package_schedule,
-}
+ABILITY_DEFINITION_KEYS = (
+    BUDGET_KEY, CONFIRM_KEY, PACKAGE_SELECT_ABILITY_KEY,
+    PACKAGE_SCHEDULE_ABILITY_KEY,
+)
 
 
 class OperationCatalog:
     """Trusted allowlisted authored-operation metadata, no executable asset code."""
     def lookup(self, operation_ref):
         paths = {
-            BUDGET_KEY: frozenset({"/participants", "/budgetMinor"}),
-            CONFIRM_OPERATION: frozenset({"/optionId", "/confirmed"}),
-            PACKAGE_SELECT_OPERATION: frozenset({"/optionId"}),
-            PACKAGE_SCHEDULE_OPERATION: frozenset({"/optionId", "/confirmed"}),
+            "business-call:" + BUDGET_KEY: frozenset({"/participants", "/budgetMinor"}),
+            "business-call:" + CONFIRM_OPERATION: frozenset({"/optionId", "/confirmed"}),
+            "business-call:" + PACKAGE_SELECT_OPERATION: frozenset({"/optionId"}),
+            "business-call:" + PACKAGE_SCHEDULE_OPERATION: frozenset({"/optionId", "/confirmed"}),
         }
         if operation_ref not in paths:
             return None
@@ -147,7 +90,7 @@ def ability_definition(key):
     else:
         raise ValueError("UNKNOWN_DEMO_ABILITY")
     return {
-        "abilityKey": key, "adapterOperationRef": operation,
+        "abilityKey": key, "adapterOperationRef": "business-call:" + operation,
         "modelArgumentSchema": _object(arguments), "resolvedInputSchema": _object(arguments),
         "outputSchema": _object(output), "credentialRequirements": [],
         "inputBindings": [{"targetPath": "/" + name, "source": "MODEL_ARGUMENT",

@@ -11,25 +11,26 @@ from langsmith import tracing_context
 from a2flow_asset_store import AssetReader
 from a2flow_asset_store.records import canonical
 from activity_planning_demo import (
-    OPERATION_MAP,
     PACKAGE_CHOOSE_APPLICATION_KEY,
     PACKAGE_DISPLAY_APPLICATION_KEY,
     PACKAGE_SCHEDULE_ABILITY_KEY,
     PACKAGE_SCHEDULE_APPLICATION_KEY,
-    PACKAGE_SCHEDULE_OPERATION,
     PACKAGE_SELECT_ABILITY_KEY,
-    PACKAGE_SELECT_OPERATION,
     PACKAGE_WORKFLOW_KEY,
     ability_definition,
     application_data_validator,
     application_validator,
     bundle_validator,
 )
+from activity_planning_demo.service import ActivityPlanningService
 from activity_planning_demo.bundle import NAMESPACE, make_bundle
 from activity_planning_demo.package_bundle import make_package_bundle
 from agent_workflow_runtime.actions import ActionService
 from agent_workflow_runtime.assembly import build_engine
 from agent_workflow_runtime.asset_adapters import OperationSpec, RuntimeAssets
+from agent_workflow_runtime.business import (
+    BusinessRegistry, parse_business_call_ref, schema_validator,
+)
 from agent_workflow_runtime.langgraph_adapter import LangGraphContinuation
 from agent_workflow_runtime.lifecycle import RunLifecycle
 from agent_workflow_runtime.mvp_tools import build_tools, validators
@@ -64,42 +65,23 @@ class BundleRepository:
             raise AssertionError("unexpected namespace")
 
 
-def select_input(value):
-    return (type(value) is dict and set(value) == {"optionId"}
-            and type(value["optionId"]) is str)
-
-
-def select_result(value):
-    return (type(value) is dict and set(value) == {"selectedOptionId"}
-            and type(value["selectedOptionId"]) is str)
-
-
-def confirm_input(value):
-    return (type(value) is dict and set(value) == {"optionId", "confirmed"}
-            and type(value["optionId"]) is str and value["confirmed"] is True)
-
-
-def confirm_result(value):
-    return (type(value) is dict and set(value) == {"selectedOptionId", "confirmed"}
-            and type(value["selectedOptionId"]) is str and value["confirmed"] is True)
-
-
-def ability_profile(key):
-    expected = canonical(ability_definition(key))
-    return lambda value: canonical(value) == expected
-
-
 def operation_specs():
-    return {
-        PACKAGE_SELECT_OPERATION: OperationSpec(
-            OPERATION_MAP[PACKAGE_SELECT_OPERATION], select_input, select_result,
-            ability_profile(PACKAGE_SELECT_ABILITY_KEY), action_allowed=True,
-        ),
-        PACKAGE_SCHEDULE_OPERATION: OperationSpec(
-            OPERATION_MAP[PACKAGE_SCHEDULE_OPERATION], confirm_input, confirm_result,
-            ability_profile(PACKAGE_SCHEDULE_ABILITY_KEY), action_allowed=True,
-        ),
-    }
+    """Generic composition: specs assembled from authored definitions only."""
+    registry = BusinessRegistry({"activity-package": ActivityPlanningService()})
+    specs = {}
+    for key in (PACKAGE_SELECT_ABILITY_KEY, PACKAGE_SCHEDULE_ABILITY_KEY):
+        definition = ability_definition(key)
+        service, method = parse_business_call_ref(
+            definition["adapterOperationRef"])
+        expected = canonical(definition)
+        specs[definition["adapterOperationRef"]] = OperationSpec(
+            registry.dispatcher(service, method),
+            schema_validator(definition["resolvedInputSchema"]),
+            schema_validator(definition["outputSchema"]),
+            lambda value, expected=expected: canonical(value) == expected,
+            action_allowed=True,
+        )
+    return specs
 
 
 class Views:
@@ -139,7 +121,7 @@ class ThreeNodeDemoTest(unittest.TestCase):
         new_identities = {(asset["kind"], asset["key"], asset["versionId"])
                           for asset in bundle["assets"]}
         self.assertFalse(old_identities & new_identities)
-        self.assertEqual({"v1"}, {identity[2] for identity in new_identities})
+        self.assertEqual({"v1", "v2"}, {identity[2] for identity in new_identities})
         workflow = next(asset for asset in validated.assets if asset.kind == "WORKFLOW")
         self.assertEqual(PACKAGE_WORKFLOW_KEY, workflow.key)
         self.assertEqual(

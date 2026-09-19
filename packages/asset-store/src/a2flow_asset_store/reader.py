@@ -1,3 +1,4 @@
+import json
 """Single-snapshot environment-local resolution. Never invokes model or Tools."""
 from skill_registry import (
     CatalogPort, MaterialPort, SkillMaterial, TrustedResolutionEvidence,
@@ -143,7 +144,11 @@ class AssetReader(CatalogPort, MaterialPort):
         for state in bundle.serving:
             if state["kind"] == "WORKFLOW":
                 asset, _ = self._resolve(bundle, owner, "WORKFLOW", state["key"])
-                result.append({"definitionKey": asset.key, "inputSchema": {
+                definition = asset.definition if isinstance(
+                    asset.definition, dict) else {}
+                result.append({"definitionKey": asset.key,
+                               "name": definition.get("displayName") or asset.key,
+                               "inputSchema": {
                     "type": "object", "additionalProperties": False,
                     "required": ["requirement"], "properties": {"requirement": {
                         "type": "string", "minLength": 1, "maxLength": 2000}}}})

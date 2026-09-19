@@ -12,14 +12,18 @@ from agent_workflow_runtime import ActionService, LangGraphContinuation
 from a2flow_asset_store import AssetReader
 from a2flow_asset_store.records import canonical, digest
 from activity_planning_demo import (
-    APPLICATION_KEY, BUDGET_KEY, CONFIRM_KEY, CONFIRM_OPERATION,
-    OPERATION_MAP, ability_definition, application_validator, bundle_validator,
+    APPLICATION_KEY, BUDGET_KEY, CONFIRM_KEY,
+    ability_definition, application_validator, bundle_validator,
 )
+from activity_planning_demo.service import ActivityPlanningService
 from activity_planning_demo.bundle import NAMESPACE, make_bundle
 
 from agent_workflow_runtime.lifecycle import RunLifecycle
 from agent_workflow_runtime.assembly import build_engine
 from agent_workflow_runtime.asset_adapters import OperationSpec, RuntimeAssets
+from agent_workflow_runtime.business import (
+    BusinessRegistry, parse_business_call_ref, schema_validator,
+)
 from agent_workflow_runtime.models import ActionRejected, Interaction
 from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost, confirmed_context
 from agent_workflow_runtime.mvp_tools import build_tools, validators
@@ -53,46 +57,24 @@ class BundleRepository:
         return self.bundle
 
 
-def budget_input(value):
-    return (type(value) is dict and set(value) == {"participants", "budgetMinor"}
-            and type(value["participants"]) is int and value["participants"] >= 1
-            and type(value["budgetMinor"]) is int and value["budgetMinor"] >= 0)
-
-
-def budget_result(value):
-    return (type(value) is dict and set(value) == {
-        "participants", "budgetMinor", "perPersonMinor", "remainderMinor"}
-        and all(type(item) is int for item in value.values()))
-
-
-def confirm_input(value):
-    return (type(value) is dict and set(value) == {"optionId", "confirmed"}
-            and type(value["optionId"]) is str and value["confirmed"] is True)
-
-
-def confirm_result(value):
-    return (type(value) is dict and set(value) == {"selectedOptionId", "confirmed"}
-            and type(value["selectedOptionId"]) is str and value["confirmed"] is True)
-
-
-def ability_profile(key):
-    expected = canonical(ability_definition(key))
-    return lambda definition: canonical(definition) == expected
-
-
 def operation_specs():
-    return {
-        BUDGET_KEY: OperationSpec(
-            OPERATION_MAP[BUDGET_KEY], budget_input, budget_result,
-            ability_profile(BUDGET_KEY),
-            model_allowed=True,
-        ),
-        CONFIRM_OPERATION: OperationSpec(
-            OPERATION_MAP[CONFIRM_OPERATION], confirm_input, confirm_result,
-            ability_profile(CONFIRM_KEY),
-            action_allowed=True,
-        ),
-    }
+    """Generic composition: specs assembled from authored definitions only."""
+    registry = BusinessRegistry({"activity-planning": ActivityPlanningService()})
+    specs = {}
+    for key in (BUDGET_KEY, CONFIRM_KEY):
+        definition = ability_definition(key)
+        service, method = parse_business_call_ref(
+            definition["adapterOperationRef"])
+        expected = canonical(definition)
+        specs[definition["adapterOperationRef"]] = OperationSpec(
+            registry.dispatcher(service, method),
+            schema_validator(definition["resolvedInputSchema"]),
+            schema_validator(definition["outputSchema"]),
+            lambda value, expected=expected: canonical(value) == expected,
+            model_allowed=key == BUDGET_KEY,
+            action_allowed=key != BUDGET_KEY,
+        )
+    return specs
 
 
 class SeededRuntimeAssetsTest(unittest.TestCase):
@@ -192,7 +174,7 @@ class SeededRuntimeAssetsTest(unittest.TestCase):
             return {"confirmed": True}
 
         specs = operation_specs()
-        operation_ref = BUDGET_KEY if ability_key == BUDGET_KEY else CONFIRM_OPERATION
+        operation_ref = ability_definition(ability_key)["adapterOperationRef"]
         specs[operation_ref] = replace(specs[operation_ref], execute=execute)
         return (RuntimeAssets(
             reader, run, specs, resolved.definition, bound_node_id="plan",

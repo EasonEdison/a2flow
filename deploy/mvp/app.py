@@ -7,13 +7,17 @@ from pydantic import SecretStr
 from skillweave_contracts import TrustedContext
 
 from activity_planning_demo import (
-    BUDGET_KEY, CONFIRM_KEY, CONFIRM_OPERATION, OPERATION_MAP,
-    PACKAGE_SCHEDULE_ABILITY_KEY, PACKAGE_SCHEDULE_OPERATION,
-    PACKAGE_SELECT_ABILITY_KEY, PACKAGE_SELECT_OPERATION,
+    ABILITY_DEFINITION_KEYS, MODEL_ABILITY_KEYS,
     ability_definition, application_data_validator, application_validator,
     bundle_validator,
 )
+from activity_planning_demo.service import (
+    SERVICE_ACTIVITY_PACKAGE, SERVICE_ACTIVITY_PLANNING, ActivityPlanningService,
+)
 from agent_workflow_runtime.asset_adapters import OperationSpec
+from agent_workflow_runtime.business import (
+    BusinessRegistry, parse_business_call_ref, schema_validator,
+)
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
 
@@ -22,75 +26,40 @@ from .runtime_support import (
 )
 
 
-def budget_input(value):
-    return (type(value) is dict and set(value) == {"participants", "budgetMinor"}
-            and type(value["participants"]) is int and 1 <= value["participants"] <= 100000
-            and type(value["budgetMinor"]) is int and 0 <= value["budgetMinor"] <= 10**12)
+def business_registry():
+    """Business services wired once; the platform core never imports them."""
+    service = ActivityPlanningService()
+    return BusinessRegistry({
+        SERVICE_ACTIVITY_PLANNING: service,
+        SERVICE_ACTIVITY_PACKAGE: service,
+    })
 
 
-def budget_result(value):
-    if (type(value) is not dict or set(value) != {
-            "participants", "budgetMinor", "perPersonMinor", "remainderMinor"}):
-        return False
-    if any(type(value[key]) is not int for key in value):
-        return False
-    people, budget = value["participants"], value["budgetMinor"]
-    return (1 <= people <= 100000 and 0 <= budget <= 10**12
-            and (value["perPersonMinor"], value["remainderMinor"]) == divmod(budget, people))
-
-
-def confirmation_input(value):
-    return (type(value) is dict and set(value) == {"optionId", "confirmed"}
-            and type(value["optionId"]) is str and 1 <= len(value["optionId"]) <= 128
-            and value["confirmed"] is True)
-
-
-def confirmation_result(value):
-    return (type(value) is dict and set(value) == {"selectedOptionId", "confirmed"}
-            and type(value["selectedOptionId"]) is str
-            and 1 <= len(value["selectedOptionId"]) <= 128
-            and value["confirmed"] is True)
-
-
-def selection_input(value):
-    return (type(value) is dict and set(value) == {"optionId"}
-            and type(value["optionId"]) is str and 1 <= len(value["optionId"]) <= 128)
-
-
-def selection_result(value):
-    return (type(value) is dict and set(value) == {"selectedOptionId"}
-            and type(value["selectedOptionId"]) is str
-            and 1 <= len(value["selectedOptionId"]) <= 128)
-
-
-def ability_profile(key):
-    expected = canonical(ability_definition(key))
-    return lambda definition: canonical(definition) == expected
+_BUSINESS = business_registry()
 
 
 def operations():
-    return {
-        BUDGET_KEY: OperationSpec(
-            OPERATION_MAP[BUDGET_KEY], budget_input, budget_result,
-            ability_profile(BUDGET_KEY),
-            model_allowed=True,
-        ),
-        CONFIRM_OPERATION: OperationSpec(
-            OPERATION_MAP[CONFIRM_OPERATION], confirmation_input,
-            confirmation_result, ability_profile(CONFIRM_KEY),
-            action_allowed=True,
-        ),
-        PACKAGE_SELECT_OPERATION: OperationSpec(
-            OPERATION_MAP[PACKAGE_SELECT_OPERATION], selection_input,
-            selection_result, ability_profile(PACKAGE_SELECT_ABILITY_KEY),
-            action_allowed=True,
-        ),
-        PACKAGE_SCHEDULE_OPERATION: OperationSpec(
-            OPERATION_MAP[PACKAGE_SCHEDULE_OPERATION], confirmation_input,
-            confirmation_result, ability_profile(PACKAGE_SCHEDULE_ABILITY_KEY),
-            action_allowed=True,
-        ),
-    }
+    """Build OperationSpecs generically from authored ability definitions.
+
+    Every spec is assembled from the asset definition (business-call ref,
+    input/output schemas, canonical profile) plus bundle-level callability
+    metadata. No business logic lives here.
+    """
+    specs = {}
+    for key in ABILITY_DEFINITION_KEYS:
+        definition = ability_definition(key)
+        service, method = parse_business_call_ref(
+            definition["adapterOperationRef"])
+        expected = canonical(definition)
+        specs[definition["adapterOperationRef"]] = OperationSpec(
+            _BUSINESS.dispatcher(service, method),
+            schema_validator(definition["resolvedInputSchema"]),
+            schema_validator(definition["outputSchema"]),
+            lambda value, expected=expected: canonical(value) == expected,
+            model_allowed=key in MODEL_ABILITY_KEYS,
+            action_allowed=key not in MODEL_ABILITY_KEYS,
+        )
+    return specs
 
 
 environment = required("A2FLOW_ENVIRONMENT")

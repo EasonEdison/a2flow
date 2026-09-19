@@ -3,11 +3,14 @@ notifications. All dependencies are injected; create_app performs no I/O."""
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 import os
 import hmac
+import queue
 import re
+import threading
 import uuid
 from typing import Callable
 
@@ -56,6 +59,10 @@ class RunStart(BaseModel):
     input: dict[str, object] | str
 
 
+class RunRefCreate(BaseModel):
+    runId: str = Field(min_length=1, max_length=256)
+
+
 class InternalRunStart(BaseModel):
     userId: str = Field(min_length=1, max_length=128)
     workflowKey: str = Field(min_length=1, max_length=256)
@@ -83,6 +90,33 @@ class ScheduleUpdate(BaseModel):
     ruleJson: dict | None = None
     timezone: str | None = Field(default=None, max_length=64)
     inputText: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
+def _iterate_thread(sync_iter):
+    """Pump a blocking generator into an async stream from a worker thread."""
+    pending = queue.Queue()
+
+    def produce():
+        try:
+            for chunk in sync_iter:
+                pending.put(("chunk", chunk))
+            pending.put(("done", None))
+        except Exception as exc:  # noqa: BLE001
+            pending.put(("error", exc))
+
+    threading.Thread(target=produce, daemon=True).start()
+
+    async def consume():
+        while True:
+            kind, payload = await asyncio.to_thread(pending.get)
+            if kind == "chunk":
+                yield payload
+            elif kind == "error":
+                raise payload
+            else:
+                return
+
+    return consume()
 
 
 def _iso(value):
@@ -346,6 +380,21 @@ def create_app(
             stream(), media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"})
 
+    @app.post("/api/conversations/{conversation_id}/run-refs")
+    async def attach_run(
+            conversation_id: int, body: RunRefCreate,
+            identity: RequestIdentity = Depends(identity)):
+        owner = conversations.owner(conversation_id)
+        if owner is None or owner != identity.userId:
+            raise BsideError("NOT_FOUND", 404)
+        if not run_ownership.owned_by(identity.userId, body.runId):
+            raise BsideError("NOT_FOUND", 404)
+        row = messages.append(
+            conversation_id=conversation_id, role="assistant",
+            content={"text": "工作流已启动，等待你的确认。"},
+            ref_kind="run", ref_id=body.runId)
+        return {"id": row["id"]}
+
     # ---- workflows catalog ----
 
     @app.get("/api/workflows")
@@ -459,12 +508,26 @@ def create_app(
                          identity: RequestIdentity = Depends(identity)):
         _require_run_owner(run_id, identity.userId)
         runtime_run_id = _resolve_run_id(run_id)
-        return runtime_client.action(runtime_run_id, body.nodeId, {
-            "controlRequestId": uuid.uuid4().hex,
-            "inputs": body.inputs,
-            "interactionId": body.interactionId,
-            "actionName": body.actionName,
-        })
+        return StreamingResponse(
+            _iterate_thread(runtime_client.action_stream(
+                runtime_run_id, body.nodeId, {
+                    "controlRequestId": uuid.uuid4().hex,
+                    "inputs": body.inputs,
+                    "interactionId": body.interactionId,
+                    "actionName": body.actionName,
+                })),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"})
+
+    @app.get("/api/runs/{run_id}/surface")
+    async def run_surface(run_id: str,
+                          identity: RequestIdentity = Depends(identity)):
+        _require_run_owner(run_id, identity.userId)
+        runtime_run_id = _resolve_run_id(run_id)
+        return StreamingResponse(
+            _iterate_thread(runtime_client.surface_stream(runtime_run_id)),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"})
 
     # ---- schedules ----
 

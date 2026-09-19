@@ -1,14 +1,75 @@
 """MVP08 authenticated, same-origin host. No listener or implicit identity."""
 
+import asyncio
+import json
+import time
 from functools import partial
 from pathlib import Path
 
+from a2flow_asset_store.records import canonical
 from fastapi import Request
+from fastapi.responses import StreamingResponse
 from starlette.staticfiles import StaticFiles
 
-from .http import _Lane, create_app, error_response, bounded_response
+from .http import _Lane, Action, create_app, error_response, bounded_response
 from .models import ActionRejected
 from .service import require_owner
+
+ACTION_TAIL_SECONDS = 90.0
+SURFACE_IDLE_SECONDS = 300.0
+SURFACE_POLL_SECONDS = 1.5
+
+
+def _sse(payload: dict) -> str:
+    return ("data: " + json.dumps(payload, ensure_ascii=False,
+                                  separators=(",", ":")) + "\n\n")
+
+
+_SSE_KEEPALIVE = ": keepalive\n\n"
+
+
+class _IdleGuard:
+    """Emit SSE keepalive comments so idle streams survive proxy read timeouts."""
+
+    def __init__(self, seconds=15.0):
+        self.seconds = seconds
+        self.last = time.monotonic()
+
+    def event(self):
+        self.last = time.monotonic()
+
+    def keepalive(self):
+        if time.monotonic() - self.last >= self.seconds:
+            self.last = time.monotonic()
+            return _SSE_KEEPALIVE
+        return None
+
+
+def _terminal(view: dict) -> bool:
+    return view.get("lifecycle") in {"SUCCEEDED", "STOPPED"}
+
+
+def _as_view(result) -> dict | None:
+    """Lane calls return Response objects (bounded_response or 503/504/507 errors).
+
+    Successful reads wrap the JSON value in a Response; overloads are plain
+    error Responses with no view payload.
+    """
+    if isinstance(result, dict):
+        return result
+    body = getattr(result, "body", None)
+    if not body:
+        return None
+    try:
+        value = json.loads(body)
+    except (TypeError, ValueError, UnicodeError):
+        return None
+    return value if isinstance(value, dict) and "nodes" in value else None
+
+
+def _has_waiting(view: dict) -> bool:
+    return any(node.get("status") == "WAITING"
+               for node in view.get("nodes", []))
 
 
 class VerifiedIdentity:
@@ -33,18 +94,20 @@ class VerifiedIdentity:
 
 def create_mvp_app(
     service, views, workflow_catalog, identity_resolver, *, lifespan=None,
-    static_directory=None, read_capacity=2, read_timeout=3,
-    unexpected_error_observer=None,
+    static_directory=None, read_capacity=2, execution_capacity=2,
+    read_timeout=3, unexpected_error_observer=None,
 ):
     if not callable(identity_resolver):
         raise ValueError("VERIFIED_IDENTITY_RESOLVER_REQUIRED")
     app = create_app(
         service, read_capacity=read_capacity, read_timeout=read_timeout,
         unexpected_error_observer=unexpected_error_observer,
+        action_stream=True,
     )
     if lifespan is not None:
         app.router.lifespan_context = lifespan
     reads = _Lane(read_capacity)
+    execution = _Lane(execution_capacity)
 
     def options(request, *, paged=False):
         owner = require_owner(request.scope.get("a2flow.trusted_context"))
@@ -77,6 +140,83 @@ def create_mvp_app(
     async def workflows(request: Request):
         owner, after, limit = options(request, paged=True)
         return await reads.call(partial(workflow_catalog, owner, after=after, limit=limit), timeout=read_timeout)
+
+    @app.post("/runtime/runs/{run_id}/nodes/{node_id}/actions")
+    async def action_sse(request: Request, run_id: str, node_id: str,
+                         body: Action):
+        who, _, _ = options(request)
+        before = _as_view(await reads.call(
+            partial(views.view, who, run_id), timeout=read_timeout))
+        result = await execution.call(
+            partial(service.action, who, run_id, node_id, body.model_dump()))
+
+        async def stream():
+            yield _sse({"type": "init", "runId": run_id,
+                        "delivery": (result or {}).get("delivery", "RETURNED")})
+            after = _as_view(await reads.call(
+                partial(views.view, who, run_id), timeout=read_timeout))
+            deadline = time.monotonic() + ACTION_TAIL_SECONDS
+            if after is None:
+                yield _sse({"type": "error", "code": "VIEW_UNAVAILABLE"})
+            else:
+                yield _sse({"type": "surface", "view": after})
+                last = canonical(after)
+                guard = _IdleGuard()
+                while (time.monotonic() < deadline
+                        and not _has_waiting(after) and not _terminal(after)):
+                    await asyncio.sleep(SURFACE_POLL_SECONDS)
+                    after = _as_view(await reads.call(
+                        partial(views.view, who, run_id),
+                        timeout=read_timeout))
+                    if after is None:
+                        keepalive = guard.keepalive()
+                        if keepalive is not None:
+                            yield keepalive
+                        continue
+                    if canonical(after) != last:
+                        yield _sse({"type": "surface", "view": after})
+                        last = canonical(after)
+                        guard.event()
+            yield _sse({"type": "done"})
+
+        return StreamingResponse(
+            stream(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"})
+
+    @app.get("/runtime/runs/{run_id}/surface")
+    async def surface(request: Request, run_id: str):
+        who, _, _ = options(request)
+
+        async def stream():
+            view = _as_view(await reads.call(
+                partial(views.view, who, run_id), timeout=read_timeout))
+            if view is None:
+                yield _sse({"type": "error", "code": "VIEW_UNAVAILABLE"})
+                yield _sse({"type": "done"})
+                return
+            yield _sse({"type": "snapshot", "view": view})
+            last = canonical(view)
+            guard = _IdleGuard()
+            deadline = time.monotonic() + SURFACE_IDLE_SECONDS
+            while time.monotonic() < deadline and not _terminal(view):
+                await asyncio.sleep(SURFACE_POLL_SECONDS)
+                view = _as_view(await reads.call(
+                    partial(views.view, who, run_id),
+                    timeout=read_timeout))
+                if view is None:
+                    keepalive = guard.keepalive()
+                    if keepalive is not None:
+                        yield keepalive
+                    continue
+                if canonical(view) != last:
+                    yield _sse({"type": "surface", "view": view})
+                    last = canonical(view)
+                    guard.event()
+            yield _sse({"type": "done"})
+
+        return StreamingResponse(
+            stream(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"})
 
     if static_directory is not None:
         directory = Path(static_directory).resolve(strict=True)

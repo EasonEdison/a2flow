@@ -37,6 +37,11 @@ class RuntimeClient(Protocol):
 
     def view(self, run_id: str) -> dict: ...
 
+    def action_stream(self, run_id: str, node_id: str,
+                      payload: dict) -> "object": ...
+
+    def surface_stream(self, run_id: str) -> "object": ...
+
 
 class HttpRuntimeClient:
     """Minimal JSON client over the reviewed runtime control interface."""
@@ -83,6 +88,51 @@ class HttpRuntimeClient:
     def view(self, run_id: str) -> dict:
         quoted = urllib.parse.quote(run_id, safe="")
         return self._request("GET", "/runtime/runs/" + quoted + "/view")
+
+    def action_stream(self, run_id: str, node_id: str, payload: dict):
+        """POST the action and yield the runtime SSE chunks verbatim."""
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self._base + "/runtime/runs/" + urllib.parse.quote(run_id, safe="")
+            + "/nodes/" + urllib.parse.quote(node_id, safe="") + "/actions",
+            data=data, method="POST")
+        request.add_header("Accept", "text/event-stream")
+        request.add_header("Content-Type", "application/json")
+        return self._stream(request)
+
+    def surface_stream(self, run_id: str):
+        """Subscribe to snapshot + surface updates for one run."""
+        request = urllib.request.Request(
+            self._base + "/runtime/runs/" + urllib.parse.quote(run_id, safe="")
+            + "/surface")
+        request.add_header("Accept", "text/event-stream")
+        return self._stream(request)
+
+    def _stream(self, request):
+        try:
+            response = urllib.request.urlopen(request, timeout=180.0)
+        except urllib.error.HTTPError as error:
+            self._raise_http_error(error)
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            raise RemoteRuntimeError("RUNTIME_UNREACHABLE", 502) from None
+
+        def chunks():
+            try:
+                for raw in response:
+                    yield raw.decode("utf-8")
+            finally:
+                response.close()
+        return chunks()
+
+    def _raise_http_error(self, error):
+        code = "RUNTIME_REJECTED"
+        try:
+            payload = json.load(error)
+            code = payload.get("error", {}).get("code", code)
+        except Exception:
+            pass
+        status = _STATUS_BY_CODE.get(code, 502)
+        raise RemoteRuntimeError(code, status) from None
 
     def stop(self, run_id: str, control_request_id: str) -> dict:
         return self._request(

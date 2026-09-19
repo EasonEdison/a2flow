@@ -36,7 +36,7 @@ def _interactive(key, action_name, ability_key, label, *, confirmed):
                                    "compareBeforeAction": True,
                                    "onMismatch": "RESET_REQUIRED"},
         "actionPolicies": [{"actionName": action_name, "sourceComponentId": "submit",
-                            "abilityReleaseRef": ability_key + "@v1",
+                            "abilityReleaseRef": ability_key + "@v2",
                             "successPolicyRef": "confirmed" if confirmed else "validSelection",
                             "completeInteractionOnSuccess": True,
                             "controlRequestDedupeOnly": True,

@@ -74,15 +74,29 @@ class BundleValidator:
             if not result.is_valid or result.metadata.ability_key != key:
                 raise AssetError("INVALID_ABILITY")
         elif kind == "WORKFLOW":
-            closed(definition, {"definitionKey", "entryNodeId", "nodes"})
+            if (set(definition) - {"definitionKey", "displayName",
+                                   "entryNodeId", "nodes"}
+                    or not {"definitionKey", "entryNodeId", "nodes"}
+                    <= set(definition)):
+                raise AssetError("UNSUPPORTED_WORKFLOW")
             nodes = definition["nodes"]
             if (definition["definitionKey"] != key or type(nodes) is not list
                     or not 2 <= len(nodes) <= 8):
                 raise AssetError("UNSUPPORTED_WORKFLOW")
+            if definition.get("displayName") is not None and (
+                not isinstance(definition["displayName"], str)
+                or not 1 <= len(definition["displayName"]) <= 200):
+                raise AssetError("INVALID_WORKFLOW_DISPLAY_NAME")
             for node in nodes:
-                closed(node, {"nodeId", "skillKey"})
+                if (set(node) - {"nodeId", "skillKey", "displayName"}
+                        or not {"nodeId", "skillKey"} <= set(node)):
+                    raise AssetError("UNSUPPORTED_WORKFLOW")
                 parse_identifier(node["nodeId"])
                 parse_skill_key(node["skillKey"])
+                if node.get("displayName") is not None and (
+                    not isinstance(node["displayName"], str)
+                    or not 1 <= len(node["displayName"]) <= 200):
+                    raise AssetError("INVALID_WORKFLOW_DISPLAY_NAME")
             if (len({node["nodeId"] for node in nodes}) != len(nodes)
                     or definition["entryNodeId"] != nodes[0]["nodeId"]):
                 raise AssetError("INVALID_WORKFLOW_ENTRY")

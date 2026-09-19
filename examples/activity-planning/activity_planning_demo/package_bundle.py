@@ -24,11 +24,11 @@ def make_package_bundle(environment):
         raise ValueError("INVALID_ENVIRONMENT")
     assets = []
 
-    def add(kind, key, definition, dependencies=()):
+    def add(kind, key, definition, dependencies=(), version="v1"):
         value = {
             "kind": kind, "key": key,
             "assetId": kind.lower() + "-" + key.replace("/", "-"),
-            "versionId": "v1", "definition": definition,
+            "versionId": version, "definition": definition,
             "dependencies": [{"kind": item_kind, "key": item_key}
                              for item_kind, item_key in dependencies],
         }
@@ -36,7 +36,7 @@ def make_package_bundle(environment):
 
     add("COMPONENT", PACKAGE_COMPONENT_KEY, package_component_definition())
     for key in (PACKAGE_SELECT_ABILITY_KEY, PACKAGE_SCHEDULE_ABILITY_KEY):
-        add("ABILITY", key, ability_definition(key))
+        add("ABILITY", key, ability_definition(key), version="v2")
     for key in sorted(PACKAGE_APPLICATION_KEYS):
         ability = {
             PACKAGE_CHOOSE_APPLICATION_KEY: PACKAGE_SELECT_ABILITY_KEY,
@@ -45,7 +45,8 @@ def make_package_bundle(environment):
         dependencies = [("COMPONENT", PACKAGE_COMPONENT_KEY)]
         if ability is not None:
             dependencies.append(("ABILITY", ability))
-        add("APPLICATION", key, package_application_definition(key), dependencies)
+        add("APPLICATION", key, package_application_definition(key),
+            dependencies, version="v2" if ability is not None else "v1")
 
     root = Path(__file__).resolve().parent.parent
     skills = (
@@ -68,21 +69,25 @@ def make_package_bundle(environment):
             }[directory]),
         ))
     nodes = [
-        {"nodeId": "choose_plan", "skillKey": "activity-package/choose-plan"},
-        {"nodeId": "confirm_schedule", "skillKey": "activity-package/confirm-schedule"},
-        {"nodeId": "show_activity_package", "skillKey": "activity-package/show-package"},
+        {"nodeId": "choose_plan", "skillKey": "activity-package/choose-plan",
+         "displayName": "选择活动方案"},
+        {"nodeId": "confirm_schedule", "skillKey": "activity-package/confirm-schedule",
+         "displayName": "确认执行安排"},
+        {"nodeId": "show_activity_package", "skillKey": "activity-package/show-package",
+         "displayName": "展示最终活动包"},
     ]
     add("WORKFLOW", PACKAGE_WORKFLOW_KEY, {
         "definitionKey": PACKAGE_WORKFLOW_KEY,
+        "displayName": "活动策划助手",
         "entryNodeId": nodes[0]["nodeId"], "nodes": nodes,
-    }, tuple(("SKILL", node["skillKey"]) for node in nodes))
+    }, tuple(("SKILL", node["skillKey"]) for node in nodes), version="v2")
     return {
         "format": "AF-MVP-08-ASSETS-1", "namespace": NAMESPACE,
         "environment": environment, "assets": assets,
         "serving": [{
             "kind": asset["kind"], "key": asset["key"],
-            "current": "v1" if environment == "PRT" else None,
-            "stable": "v1" if environment == "ONLINE" else None,
+            "current": asset["versionId"] if environment == "PRT" else None,
+            "stable": asset["versionId"] if environment == "ONLINE" else None,
             "gray": None, "grayUserIds": [],
         } for asset in assets],
     }

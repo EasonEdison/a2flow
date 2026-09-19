@@ -269,6 +269,14 @@ class RunOwnershipRepository:
                 "WHERE control_id = %s AND run_id IS NULL",
                 (run_id, control_id))
 
+    def owned_by(self, user_id: str, control_id: str) -> bool:
+        with self._factory() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM run_ownership "
+                "WHERE user_id = %s AND control_id = %s",
+                (user_id, control_id)).fetchone()
+        return row is not None
+
     def owner(self, control_id: str) -> str | None:
         with self._factory() as connection:
             row = connection.execute(

@@ -104,7 +104,8 @@ def compose_workflow(
         raise ActionRejected("WORKFLOW_CONTEXT_LOADER_REQUIRED")
     progress = None
     for node in nodes:
-        if set(node) != {"nodeId", "skillKey"}:
+        if (set(node) - {"nodeId", "skillKey", "displayName"}
+                or not {"nodeId", "skillKey"} <= set(node)):
             raise ActionRejected("UNSUPPORTED_WORKFLOW_DEFINITION")
         agent = agents[node["nodeId"]]
         if not isinstance(agent, RunGraphBinding) or agent.lifecycle is not lifecycle:

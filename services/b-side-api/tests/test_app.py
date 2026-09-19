@@ -205,6 +205,10 @@ class FakeRunOwnership:
                 for key, row in self.rows.items()
                 if row["user_id"] == user_id]
 
+    def owned_by(self, user_id, control_id):
+        row = self.rows.get(control_id)
+        return row is not None and row["user_id"] == user_id
+
     def owner(self, control_id):
         row = self.rows.get(control_id)
         return row["user_id"] if row is not None else None
@@ -236,6 +240,16 @@ class FakeRuntimeClient:
     def action(self, run_id, node_id, payload):
         self.calls.append(("action", run_id, node_id, payload))
         return {"ok": True}
+
+    def action_stream(self, run_id, node_id, payload):
+        self.calls.append(("action", run_id, node_id, payload))
+        yield "data: {\"type\": \"init\", \"runId\": \"" + run_id + "\"}\n\n"
+        yield "data: {\"type\": \"surface\", \"view\": {\"runId\": \"" + run_id + "\", \"title\": \"活动策划\", \"lifecycle\": \"RUNNING\", \"nodes\": [], \"cards\": [], \"outputs\": [], \"availability\": \"AVAILABLE\"}}\n\n"
+        yield "data: {\"type\": \"done\"}\n\n"
+
+    def surface_stream(self, run_id):
+        yield "data: {\"type\": \"snapshot\", \"view\": {\"runId\": \"" + run_id + "\", \"title\": \"活动策划\", \"lifecycle\": \"RUNNING\", \"nodes\": [], \"cards\": [], \"outputs\": [], \"availability\": \"AVAILABLE\"}}\n\n"
+        yield "data: {\"type\": \"done\"}\n\n"
 
     def view(self, run_id):
         self.calls.append(("view", run_id))
@@ -711,3 +725,42 @@ class ChatSseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunRefTests(unittest.TestCase):
+    async def _flow(self):
+        harness = Harness()
+        async with await harness.client() as client:
+            registered = await client.post(
+                "/api/auth/register",
+                json={"username": "runref-01", "password": "password-9"},
+                headers=ORIGIN_HEADERS)
+            self.assertEqual(200, registered.status_code)
+            created = await client.post(
+                "/api/conversations", json={"title": "会话"},
+                headers=ORIGIN_HEADERS)
+            conversation_id = created.json()["id"]
+            started = await client.post(
+                "/api/runs",
+                json={"workflowKey": "activity-package-demo",
+                      "input": {"requirement": "策划"}},
+                headers=ORIGIN_HEADERS)
+            self.assertEqual(200, started.status_code)
+            control_id = started.json()["controlRequestId"]
+            attached = await client.post(
+                f"/api/conversations/{conversation_id}/run-refs",
+                json={"runId": control_id}, headers=ORIGIN_HEADERS)
+            self.assertEqual(200, attached.status_code)
+            missing = await client.post(
+                f"/api/conversations/{conversation_id}/run-refs",
+                json={"runId": "not-owned"}, headers=ORIGIN_HEADERS)
+            self.assertEqual(404, missing.status_code)
+            history = await client.get(
+                f"/api/conversations/{conversation_id}/messages")
+            rows = history.json()["messages"]
+            self.assertEqual(1, len(rows))
+            self.assertEqual("run", rows[0]["refKind"])
+            self.assertEqual(control_id, rows[0]["refId"])
+
+    def test_run_refs(self):
+        asyncio.run(self._flow())

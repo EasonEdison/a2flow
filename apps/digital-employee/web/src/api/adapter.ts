@@ -302,12 +302,6 @@ export function recordLine(execution: string, record: ProgressRecord): RecordLin
   };
 }
 
-const chineseNodeTitles: Record<string, string> = {
-  choose_plan: '活动方案选择',
-  confirm_schedule: '执行安排确认',
-  show_activity_package: '最终活动包',
-};
-
 export function toView(
   wire: WireView,
   records: Record<string, RecordLine[]>,
@@ -330,7 +324,7 @@ export function toView(
         }
         return {
           id: node.nodeId,
-          title: chineseNodeTitles[node.nodeId] ?? node.title,
+          title: node.title,
           status: status(node.status),
           summary: node.summary ?? undefined,
           records: records[node.nodeId] ?? [],

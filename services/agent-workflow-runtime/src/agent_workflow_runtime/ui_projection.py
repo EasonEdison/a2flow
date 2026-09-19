@@ -48,10 +48,12 @@ def initial_view(run, definition, effective_versions):
         raise ActionRejected("WORKFLOW_VERSION_REQUIRED")
     return bounded({
         "schemaVersion": "mvp08.1", "runId": run.run_id,
-        "definitionKey": run.definition_key, "title": run.definition_key,
+        "definitionKey": run.definition_key,
+        "title": definition.get("displayName") or run.definition_key,
         "definitionVersion": workflow_versions[0], "createdAt": now(),
-        "nodes": [{"nodeId": node["nodeId"], "title": node["skillKey"], "order": index,
-                   "status": "PENDING", "summary": None}
+        "nodes": [{"nodeId": node["nodeId"],
+                   "title": node.get("displayName") or node["skillKey"],
+                   "order": index, "status": "PENDING", "summary": None}
                   for index, node in enumerate(definition["nodes"])],
         "cards": [], "outputs": [], "availability": "AVAILABLE",
     })

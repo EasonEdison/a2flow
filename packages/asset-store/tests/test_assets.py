@@ -6,8 +6,9 @@ import unittest
 from a2flow_asset_store import AssetError, AssetReader, PostgresAssetRepository
 from a2flow_asset_store.records import canonical, digest
 from activity_planning_demo import (
-    bundle_validator, budget_activity, select_activity, MODEL_ABILITY_KEYS, CONFIRM_KEY,
+    bundle_validator, MODEL_ABILITY_KEYS, CONFIRM_KEY,
 )
+from activity_planning_demo.service import budget_activity, select_activity
 from activity_planning_demo.bundle import make_bundle, NAMESPACE
 from skillweave_contracts import TrustedContext
 from skill_registry import (
@@ -425,7 +426,7 @@ class AssetTests(unittest.TestCase):
         self.assertEqual(2, len(result.definition["nodes"]))
         ability = reader.resolve_ability("activity-planning.budget", TrustedContext("u1", "PRT"))
         self.assertEqual("v1", ability.version_id)
-        self.assertEqual("activity-planning.budget", ability.operation_ref)
+        self.assertEqual("business-call:activity-planning.budget", ability.operation_ref)
 
 
 if __name__ == "__main__":

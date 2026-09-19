@@ -59,8 +59,6 @@ type Row = Record<string, unknown>;
 const textOf = (value: unknown): string => (typeof value === 'string' ? value : '');
 const idOf = (value: unknown): string => (typeof value === 'number' ? String(value) : textOf(value));
 
-const workflowLabel = (key: string): string => (key === 'activity-package-demo' ? '活动策划助手' : key);
-
 const inputHintOf = (schema: unknown): string => {
   const props = (schema as { properties?: { requirement?: { description?: unknown } } } | null | undefined)?.properties;
   return typeof props?.requirement?.description === 'string'
@@ -76,6 +74,12 @@ const contentText = (content: unknown): string => {
   }
   return '';
 };
+
+const refEvent = (row: Row): ChatEvent | undefined => (
+  row.refKind === 'run' && row.refId
+    ? { type: 'interaction_required', runId: textOf(row.refId) }
+    : undefined
+);
 
 const contentEvent = (content: unknown): ChatEvent | undefined => {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return undefined;
@@ -98,6 +102,33 @@ const cadenceOf = (row: Row): string => {
       : rule.every === '1d' ? '每天'
         : rule.every === '1w' ? '每周' : textOf(rule.every);
   return typeof rule.at === 'string' && rule.at ? `${base} ${rule.at}` : base;
+};
+
+const readSurfaceStream = async (response: Response, onSurface: (view: RunView) => void) => {
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let split;
+      while ((split = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, split);
+        buffer = buffer.slice(split + 2);
+        const line = block.split('\n').find((item) => item.startsWith('data:'));
+        if (!line) continue;
+        const item = JSON.parse(line.slice(5).trim()) as { type: string; view?: Row };
+        if ((item.type === 'surface' || item.type === 'snapshot') && item.view && Array.isArray(item.view.nodes)) {
+          onSurface(toView(parseView(item.view), {}));
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 };
 
 export const productApi = {
@@ -123,7 +154,7 @@ export const productApi = {
     const payload = await api<{ messages?: Row[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`);
     return {
       items: (payload.messages ?? []).map((row) => {
-        const event = contentEvent(row.content);
+        const event = contentEvent(row.content) ?? refEvent(row);
         return {
           id: idOf(row.id),
           role: row.role === 'user' ? 'user' as const : 'assistant' as const,
@@ -158,7 +189,7 @@ export const productApi = {
     return {
       items: (payload.workflows ?? []).map((row) => {
         const key = textOf(row.definitionKey);
-        return { key, name: workflowLabel(key), description: '', inputHint: inputHintOf(row.inputSchema) };
+        return { key, name: textOf(row.name) || key, description: '', inputHint: inputHintOf(row.inputSchema) };
       }),
     };
   },
@@ -184,13 +215,44 @@ export const productApi = {
     if (!Array.isArray(payload.nodes)) {
       return { id, title: '运行准备中', lifecycle: 'RUNNING', nodes: [] };
     }
-    return toView(parseView(payload), {});
+    const view = toView(parseView(payload), {});
+    // The b-side API addresses runs by control id; keep it as the product id.
+    return { ...view, id };
   },
+  attachRun: (conversationId: string, runId: string) => api(`/api/conversations/${encodeURIComponent(conversationId)}/run-refs`, body({ runId })),
   startRun: async (workflowKey: string, input: string): Promise<{ runId: string }> => {
     const payload = await api<{ controlRequestId?: unknown }>('/api/runs', body({ workflowKey, input }));
     return { runId: textOf(payload.controlRequestId) };
   },
-  runAction: (id: string, nodeId: string, interactionId: string, actionName: string, value: string, confirmed: boolean) => api(`/api/runs/${encodeURIComponent(id)}/actions`, body({ nodeId, interactionId, actionName, inputs: { optionId: value, ...(confirmed ? { confirmed: true } : {}) } })),
+  runAction: async (id: string, nodeId: string, interactionId: string, actionName: string, value: string, confirmed: boolean, onSurface: (view: RunView) => void) => {
+    const response = await fetch(`/api/runs/${encodeURIComponent(id)}/actions`, {
+      ...body({ nodeId, interactionId, actionName, inputs: { optionId: value, ...(confirmed ? { confirmed: true } : {}) } }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const error = new Error('操作失败') as ApiError;
+      error.code = 'REQUEST_FAILED';
+      try {
+        const payload = JSON.parse(await response.text()) as { error?: { code?: string } };
+        if (payload?.error?.code) error.code = payload.error.code;
+      } catch {
+        /* non-JSON body */
+      }
+      throw error;
+    }
+    await readSurfaceStream(response, (view) => onSurface({ ...view, id }));
+  },
+  subscribeSurface: async (id: string, onSurface: (view: RunView) => void, signal?: AbortSignal) => {
+    const response = await fetch(`/api/runs/${encodeURIComponent(id)}/surface`, {
+      credentials: 'same-origin', cache: 'no-store', signal,
+    });
+    if (!response.ok) {
+      const error = new Error('订阅失败') as ApiError;
+      error.code = 'REQUEST_FAILED';
+      throw error;
+    }
+    await readSurfaceStream(response, (view) => onSurface({ ...view, id }));
+  },
   stopRun: (id: string) => api(`/api/runs/${encodeURIComponent(id)}/stop`, body({})),
   schedules: async (): Promise<{ items: Schedule[] }> => {
     const payload = await api<{ schedules?: Row[] }>('/api/schedules');
@@ -198,7 +260,7 @@ export const productApi = {
       items: (payload.schedules ?? []).map((row) => ({
         id: idOf(row.id),
         workflowKey: textOf(row.workflowKey),
-        workflowName: workflowLabel(textOf(row.workflowKey)),
+        workflowName: textOf(row.workflowKey),
         input: textOf(row.inputText),
         cadence: cadenceOf(row),
         enabled: row.enabled === true,
