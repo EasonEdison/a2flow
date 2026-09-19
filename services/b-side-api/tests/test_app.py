@@ -32,12 +32,14 @@ class FakeUsers:
     def __init__(self):
         self.rows = {}
 
-    def create(self, *, user_id, username, password_hash, role="USER"):
+    def create(self, *, username, password_hash, role="USER"):
         if any(row["username"] == username for row in self.rows.values()):
             raise BsideError("USERNAME_TAKEN", 409)
+        user_id = str(len(self.rows) + 1)
         self.rows[user_id] = {
             "user_id": user_id, "username": username,
             "password_hash": password_hash, "role": role}
+        return user_id
 
     def find_by_username(self, username):
         for row in self.rows.values():
@@ -303,7 +305,7 @@ class AuthFlowTests(unittest.TestCase):
             session = await client.get("/api/auth/session")
             payload = session.json()
             self.assertEqual(200, session.status_code)
-            self.assertTrue(payload["userId"].startswith("u_"))
+            self.assertTrue(re.fullmatch(r"[1-9][0-9]*", payload["userId"]), payload["userId"])
             self.assertEqual("alice-01", payload["username"])
             self.assertEqual("USER", payload["role"])
             duplicate = await client.post(
@@ -651,7 +653,7 @@ class ChatSseTests(unittest.TestCase):
                 ["text_delta", "text_delta", "workflow_confirm", "done"],
                 [event["type"] for event in events])
             self.assertEqual(
-                [("u_", conversation_id, "帮我策划一场活动")],
+                [(user_id, conversation_id, "帮我策划一场活动")],
                 [(call[0][:2], call[1], call[2]) for call in runner.calls])
             history = await client.get(
                 f"/api/conversations/{conversation_id}/messages")

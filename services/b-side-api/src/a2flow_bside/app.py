@@ -8,7 +8,6 @@ import json
 import os
 import hmac
 import re
-import secrets
 import uuid
 from typing import Callable
 
@@ -213,9 +212,8 @@ def create_app(
             raise BsideError("INVALID_USERNAME", 400)
         if len(body.password) < 8:
             raise BsideError("INVALID_PASSWORD", 400)
-        user_id = "u_" + secrets.token_urlsafe(12)
-        users.create(
-            user_id=user_id, username=body.username,
+        user_id = users.create(
+            username=body.username,
             password_hash=auth.hash_password(body.password, pepper=pepper))
         response = JSONResponse(
             {"userId": user_id, "username": body.username, "role": "USER"})

@@ -24,14 +24,25 @@ class UsersRepository:
     def __init__(self, connection_factory: Callable):
         self._factory = connection_factory
 
-    def create(self, *, user_id: str, username: str, password_hash: str,
-               role: str = "USER") -> None:
+    def create(self, *, username: str, password_hash: str,
+               role: str = "USER") -> str:
+        """Insert and return the numeric user id (string form).
+
+        The platform contracts require user identifiers to be strings; the
+        database identity is the bigserial id, exposed as its decimal text.
+        """
         with self._factory() as connection:
             try:
+                row = connection.execute(
+                    "SELECT nextval(pg_get_serial_sequence('users', 'id')) "
+                    "AS user_id"
+                ).fetchone()
+                user_id = str(row["user_id"])
                 connection.execute(
-                    "INSERT INTO users (user_id, username, password_hash, role) "
-                    "VALUES (%s, %s, %s, %s)",
-                    (user_id, username, password_hash, role))
+                    "INSERT INTO users (id, user_id, username, password_hash, role) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (int(user_id), user_id, username, password_hash, role))
+                return user_id
             except UniqueViolation:
                 raise BsideError("USERNAME_TAKEN", 409) from None
 
