@@ -52,7 +52,7 @@ class MessageSend(BaseModel):
 
 class RunStart(BaseModel):
     workflowKey: str = Field(min_length=1, max_length=256)
-    input: dict[str, object]
+    input: dict[str, object] | str
 
 
 class RunAction(BaseModel):
@@ -343,7 +343,26 @@ def create_app(
     async def start_run(body: RunStart,
                         identity: RequestIdentity = Depends(identity)):
         control_id = uuid.uuid4().hex
-        runtime_client.start(control_id, body.workflowKey, body.input)
+        inputs = body.input
+        if isinstance(inputs, str):
+            # Scheduled runs carry a plain prompt; wrap it into the
+            # workflow's single required string property when it has one.
+            entry = next(
+                (item for item in workflow_catalog(identity.userId)
+                 if item.get("definitionKey") == body.workflowKey),
+                None,
+            )
+            if entry is None:
+                raise BsideError("WORKFLOW_NOT_FOUND", 404)
+            schema = entry.get("inputSchema") or {}
+            required = schema.get("required") or []
+            properties = schema.get("properties") or {}
+            if (len(required) == 1
+                    and properties.get(required[0], {}).get("type") == "string"):
+                inputs = {required[0]: inputs}
+            else:
+                raise BsideError("INVALID_INPUT", 400)
+        runtime_client.start(control_id, body.workflowKey, inputs)
         run_ownership.create(
             control_id=control_id, user_id=identity.userId,
             workflow_key=body.workflowKey)
