@@ -8,6 +8,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from .lifecycle import RunStoppedControl
 from .models import ActionRejected
+from .events import NODE_WAITING, RUN_FAILED
 
 
 _CURRENT_WORKFLOW_NODE = ContextVar("a2flow_current_workflow_node", default=None)
@@ -215,6 +216,11 @@ class ControlledRunRunner:
             return self.lifecycle.snapshot(owner, run.run_id)
         except BaseException as error:
             try:
+                self.lifecycle.publish_event(
+                    RUN_FAILED, run, payload={"reason": type(error).__name__})
+            except Exception:
+                error.add_note("RUN_FAILURE_EVENT_PUBLISH_UNCONFIRMED")
+            try:
                 self.lifecycle.control_status(owner, control_id, "UNCONFIRMED")
             except Exception:
                 error.add_note("RUN_CONTROL_RECEIPT_SAVE_UNCONFIRMED")
@@ -247,10 +253,17 @@ class ControlledRunRunner:
             # interrupt means waiting, not a successful completed run.
             self.lifecycle.raise_observed_fatal(run.owner, run.run_id)
             self.lifecycle.assert_active(run.owner, run.run_id)
-            if not result.get("__interrupt__") and not graph.get_state(
+            pending = tuple(graph.get_state(
                 {"configurable": {"thread_id": run.thread_id}}
-            ).next:
+            ).next or ())
+            if not result.get("__interrupt__") and not pending:
                 self.lifecycle.succeed(run.owner, run.run_id)
+            else:
+                for node_id in pending:
+                    if isinstance(node_id, str):
+                        self.lifecycle.publish_event(
+                            NODE_WAITING, run, payload={"nodeId": node_id},
+                        )
             return result
         except RunStoppedControl as signal:
             self.lifecycle.raise_observed_fatal(run.owner, run.run_id)

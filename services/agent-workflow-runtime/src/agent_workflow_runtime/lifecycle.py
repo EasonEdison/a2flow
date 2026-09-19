@@ -9,6 +9,9 @@ from uuid import uuid4
 
 from skillweave_contracts import TrustedContext, TrustedInvocationContext
 from .models import ActionRejected, json_copy
+from .events import (
+    DomainEvent, EventSink, NullSink, RUN_FINISHED, RUN_STARTED, RUN_STOPPED,
+)
 
 
 class RunStoppedControl(BaseException):
@@ -108,10 +111,19 @@ def actual_json(value):
 
 
 class RunLifecycle:
-    def __init__(self, repository: RunLifecyclePort):
+    def __init__(self, repository: RunLifecyclePort, *, event_sink: EventSink | None = None):
         self.repository = repository
+        self.event_sink = event_sink if event_sink is not None else NullSink()
         self._fatal_lock = Lock()
         self._fatals = {}
+
+    def publish_event(self, event_type, run, *, payload=None):
+        """Publish one trusted boundary event. A failing sink propagates;
+        the RUN_FAILED call site alone keeps failures from masking its cause."""
+        self.event_sink.publish(DomainEvent.create(
+            event_type, run.run_id, run.definition_key,
+            run.owner.user_id, run.owner.environment, payload=payload,
+        ))
 
     def observe_fatal(self, owner, run_id, error):
         if isinstance(error, RunStoppedControl) or isinstance(error, Exception):
@@ -239,6 +251,7 @@ class RunLifecycle:
                     raise ActionRejected("RUN_ALREADY_TERMINAL")
                 if run.status != "STOPPED":
                     self.repository.put_run(replace(run, status="STOPPED", revision=run.revision + 1))
+                    self.publish_event(RUN_STOPPED, run)
                 self.repository.put_control(owner, RunControl(control_id, payload, run_id, "RETURNED"))
         # The response never equates STOPPED to "all in-flight work has finished".
         return self.snapshot(owner, run_id)
@@ -259,6 +272,7 @@ class RunLifecycle:
             run = self.repository.get_run(owner, run_id)
             self._active(run)
             self.repository.put_run(replace(run, status="SUCCEEDED", revision=run.revision + 1))
+            self.publish_event(RUN_FINISHED, run)
 
     def allocate(self, owner, control_id, definition_key, inputs, entry_node_id, resolve_versions,
                  *, stopped_run_id=None):
@@ -287,6 +301,7 @@ class RunLifecycle:
                             canonical(inputs), versions, control_id)
             self.repository.put_run(run)
             self.repository.put_control(owner, RunControl(control_id, payload, run.run_id))
+            self.publish_event(RUN_STARTED, run, payload={"entryNodeId": entry_node_id})
             return run, True
 
     def control_status(self, owner, control_id, status):

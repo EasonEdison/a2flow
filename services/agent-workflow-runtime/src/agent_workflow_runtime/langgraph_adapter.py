@@ -49,6 +49,9 @@ class LangGraphContinuation:
         interrupt_id = next(iter(matches))
         command = Command(resume={interrupt_id: {"controlRequestId": control_request_id}})
         if self.lifecycle is not None:
+            from .events import NODE_UNBLOCKED
+            self.lifecycle.publish_event(
+                NODE_UNBLOCKED, run, payload={"nodeId": scope.node_id})
             from .native_control import ControlledRunRunner
             return ControlledRunRunner(self.lifecycle, None, None).invoke(run, self.graph, command)
         return self.graph.invoke(

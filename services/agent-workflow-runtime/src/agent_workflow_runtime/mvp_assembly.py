@@ -103,7 +103,7 @@ class MvpRuntimeHost:
         application_validator, operation_specs, model_factory, identity_resolver,
         model_reference="deepseek-v4-flash", static_directory=None,
         checkpointer_factory=None, unexpected_error_observer=None,
-        application_data_validator=None,
+        application_data_validator=None, event_sink=None,
     ):
         if not callable(identity_resolver):
             raise ValueError("VERIFIED_IDENTITY_RESOLVER_REQUIRED")
@@ -128,7 +128,7 @@ class MvpRuntimeHost:
         )
         self.reader = AssetReader(self.asset_repository, namespace)
         self.run_repository = PostgresRunRepository(conninfo)
-        self.lifecycle = RunLifecycle(self.run_repository)
+        self.lifecycle = RunLifecycle(self.run_repository, event_sink=event_sink)
         self.interactions = PostgresInteractionRepository(conninfo)
         self.projection = PostgresProjection(conninfo)
         self.progress_repository = PostgresProgress(conninfo)
