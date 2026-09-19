@@ -101,11 +101,31 @@ def create_app_from_environment():
     chat_model_factory = DeepSeekModelFactory(
         _chat_model_configuration, _chat_model_secret)
 
+    def _chat_system_prompt():
+        catalog_lines = []
+        workflows = reader.list_workflows(TrustedContext.from_mapping({
+            "userId": "*", "environment": config.environment}))
+        for item in workflows:
+            catalog_lines.append(
+                "- 工作流 " + str(item.get("definitionKey")))
+        for item in reader.list_skills(TrustedContext.from_mapping({
+                "userId": "*", "environment": config.environment})):
+            catalog_lines.append(
+                "- 技能 " + str(item.get("skillKey")))
+        return (
+            "你是 A2Flow 数字员工助手。\n"
+            "可用工作流与技能（调用时使用确切 key）：\n"
+            + "\n".join(catalog_lines) + "\n"
+            "用户想运行某个工作流时，调用 propose_workflow_run 提出确认提案，"
+            "不要自行启动；其他任务可用 use_skill 调用技能。"
+        )
+
     chat_runner = ChatLoopRunner(
         model_factory=chat_model_factory,
         model_reference="deepseek-v4-flash",
         environment=config.environment,
         reader=reader,
+        system_prompt=_chat_system_prompt(),
     )
 
     def _password_dsn():
