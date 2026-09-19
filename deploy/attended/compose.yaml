@@ -52,12 +52,13 @@ services:
       A2FLOW_DATABASE_PORT: "5432"
       A2FLOW_DATABASE_NAME: ${A2FLOW_ATTENDED_DB_NAME:-a2flow_attended}
       A2FLOW_DATABASE_USER: ${A2FLOW_ATTENDED_DB_USER:-a2flow_attended}
-      A2FLOW_POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      A2FLOW_POSTGRES_PASSWORD_FILE: /run/secrets/app_postgres_password
       A2FLOW_ENVIRONMENT: PRT
       A2FLOW_ASSET_NAMESPACE: ${A2FLOW_ASSET_NAMESPACE:-a2flow-mvp-activity-planning}
       A2FLOW_USER_ID: ${A2FLOW_USER_ID:-private-attended-user}
     secrets:
       - postgres_password
+      - app_postgres_password
     volumes:
       - postgres_socket:/run/postgresql
     command: ["seed"]
@@ -161,6 +162,8 @@ services:
 secrets:
   postgres_password:
     file: ${A2FLOW_ATTENDED_SECRET_DIRECTORY:?set an absolute private secret directory}/postgres_password
+  app_postgres_password:
+    file: ${A2FLOW_ATTENDED_SECRET_DIRECTORY:?set an absolute private secret directory}/app_postgres_password
 
 volumes:
   postgres_data:
