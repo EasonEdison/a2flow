@@ -103,13 +103,14 @@ def create_app_from_environment():
 
     def _chat_system_prompt():
         catalog_lines = []
-        workflows = reader.list_workflows(TrustedContext.from_mapping({
-            "userId": "*", "environment": config.environment}))
-        for item in workflows:
+        catalog_owner = TrustedContext.from_mapping({
+            "userId": os.environ.get("A2FLOW_USER_ID", "private-attended-user"),
+            "environment": config.environment,
+        })
+        for item in reader.list_workflows(catalog_owner):
             catalog_lines.append(
                 "- 工作流 " + str(item.get("definitionKey")))
-        for item in reader.list_skills(TrustedContext.from_mapping({
-                "userId": "*", "environment": config.environment})):
+        for item in reader.list_skills(catalog_owner):
             catalog_lines.append(
                 "- 技能 " + str(item.get("skillKey")))
         return (
