@@ -87,10 +87,7 @@ def create_app_from_environment():
             "model_id": "deepseek-v4-flash",
             "credential_ref": "env:DEEPSEEK_API_KEY",
             "timeout_seconds": 30.0,
-            "options": {
-                "thinking": "enabled", "reasoning_effort": "low",
-                "max_tokens": 4096,
-            },
+            "options": {"thinking": "disabled", "max_tokens": 4096},
         }
 
     def _chat_model_secret(reference, current_owner):
