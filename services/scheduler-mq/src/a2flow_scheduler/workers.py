@@ -190,7 +190,12 @@ def trigger_due_schedules(
         next_future, skipped = schedule_rules.advance_from(rule, next_at, now)
         db.execute(
             _SCHEDULE_ADVANCE_SQL,
-            (next_future, next_at, next_future is not None, schedule_id),
+            (
+                next_future if next_future is not None else next_at,
+                next_at,
+                next_future is not None,
+                schedule_id,
+            ),
         )
         if skipped:
             db.execute(

@@ -166,7 +166,7 @@ class TriggerDueSchedulesTests(unittest.TestCase):
             notifications=__import__("a2flow_scheduler.notifications", fromlist=["x"]),
         )
         self.assertEqual(1, fired)
-        self.assertIsNone(db.calls[1][1][0])
+        self.assertEqual(dt.datetime(2026, 9, 19, 9, 30, tzinfo=UTC), db.calls[1][1][0])
         self.assertFalse(db.calls[1][1][2])  # disabled after consumption
 
 
