@@ -95,6 +95,22 @@ def _iso(value):
     return value
 
 
+def _history_text(row: dict) -> str:
+    """Flatten a persisted message content blob into chat history text."""
+    content = row.get("content")
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, dict):
+        text = str(content.get("text") or "")
+        for event in content.get("events") or []:
+            if isinstance(event, dict) and event.get("type") == "workflow_confirm":
+                text += ("\n（已发起确认提案：" + str(event.get("workflowKey"))
+                         + "，标题：" + str(event.get("title")) + "）")
+    else:
+        text = str(content)
+    return text[:4000]
+
+
 def _schedule_json(row: dict) -> dict:
     return {
         "id": row["id"],
@@ -289,6 +305,10 @@ def create_app(
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
             raise BsideError("NOT_FOUND", 404)
+        history = [
+            (row["role"], _history_text(row))
+            for row in messages.list_for(conversation_id)
+        ][-30:]
         messages.append(
             conversation_id=conversation_id, role="user",
             content={"text": body.text})
@@ -299,7 +319,8 @@ def create_app(
             try:
                 async for event in chat_runner.iterate(
                         user_id=identity.userId,
-                        conversation_id=conversation_id, text=body.text):
+                        conversation_id=conversation_id, text=body.text,
+                        history=history):
                     event_type = event.get("type") if isinstance(
                         event, dict) else None
                     if event_type == "text_delta":

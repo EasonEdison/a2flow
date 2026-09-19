@@ -18,4 +18,6 @@ from typing import Any, AsyncIterator, Protocol
 
 class ChatRunner(Protocol):
     async def iterate(self, *, user_id: str, conversation_id: int,
-                      text: str) -> AsyncIterator[dict[str, Any]]: ...
+                      text: str,
+                      history: list[tuple[str, str]] = (),
+                      ) -> AsyncIterator[dict[str, Any]]: ...

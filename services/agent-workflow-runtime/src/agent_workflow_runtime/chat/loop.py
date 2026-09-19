@@ -55,6 +55,7 @@ class ChatLoop:
         emitter: ChatEmitter | None = None,
         system_prompt: str | None = None,
         tools: list | None = None,
+        history: list | None = None,
     ) -> None:
         require_owner(owner)
         if type(conversation_id) is not str or not conversation_id:
@@ -70,7 +71,11 @@ class ChatLoop:
         self._emitter = emitter if emitter is not None else ListEmitter()
         self._system_prompt = system_prompt
         self._tools = tools
-        self._history: list = []
+        self._history: list = [
+            (HumanMessage(content=str(text))
+             if role == "user" else AIMessage(content=str(text)))
+            for role, text in (history or [])[-40:]
+        ]
 
     @property
     def history(self) -> list:

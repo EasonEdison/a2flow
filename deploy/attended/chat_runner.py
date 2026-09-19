@@ -31,7 +31,8 @@ class ChatLoopRunner:
         self._system_prompt = system_prompt
 
     async def iterate(
-        self, *, user_id: str, conversation_id: int, text: str
+        self, *, user_id: str, conversation_id: int, text: str,
+        history: list = (),
     ) -> AsyncIterator[dict[str, Any]]:
         from skillweave_contracts import TrustedContext
 
@@ -54,6 +55,7 @@ class ChatLoopRunner:
             control_request_id=f"chat-{conversation_id}-{user_id}",
             emitter=emitter,
             system_prompt=self._system_prompt,
+            history=list(history),
         )
         try:
             await asyncio.to_thread(loop.turn, text)

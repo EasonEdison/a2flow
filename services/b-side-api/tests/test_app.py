@@ -251,8 +251,8 @@ class FakeChatRunner:
         self.events = list(events or [])
         self.calls = []
 
-    async def iterate(self, *, user_id, conversation_id, text):
-        self.calls.append((user_id, conversation_id, text))
+    async def iterate(self, *, user_id, conversation_id, text, history=()):
+        self.calls.append((user_id, conversation_id, text, list(history)))
         for event in self.events:
             yield event
 
@@ -659,8 +659,8 @@ class ChatSseTests(unittest.TestCase):
                 ["text_delta", "text_delta", "workflow_confirm", "done"],
                 [event["type"] for event in events])
             self.assertEqual(
-                [(user_id, conversation_id, "帮我策划一场活动")],
-                [(call[0][:2], call[1], call[2]) for call in runner.calls])
+                [(user_id, conversation_id, "帮我策划一场活动", [])],
+                [(call[0], call[1], call[2], call[3]) for call in runner.calls])
             history = await client.get(
                 f"/api/conversations/{conversation_id}/messages")
             rows = history.json()["messages"]
