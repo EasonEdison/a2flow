@@ -4,6 +4,7 @@ notifications. All dependencies are injected; create_app performs no I/O."""
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 import secrets
 import uuid
@@ -11,10 +12,11 @@ from typing import Callable
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import auth
+from .chat_runner import ChatRunner
 from .errors import BsideError, RemoteRuntimeError
 from .identity import (
     SESSION_COOKIE,
@@ -42,6 +44,10 @@ class LoginRequest(BaseModel):
 
 class ConversationCreate(BaseModel):
     title: str | None = Field(default=None, max_length=200)
+
+
+class MessageSend(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
 
 
 class RunStart(BaseModel):
@@ -108,6 +114,7 @@ def create_app(
     notifications,
     run_ownership,
     runtime_client: RuntimeClient,
+    chat_runner: ChatRunner,
     workflow_catalog: Callable[[str], list[dict]],
     pepper: str,
     browser_origin: str,
@@ -266,6 +273,49 @@ def create_app(
              "content": row["content"], "refKind": row["ref_kind"],
              "refId": row["ref_id"], "createdAt": _iso(row["created_at"])}
             for row in messages.list_for(conversation_id)]}
+
+    @app.post("/api/conversations/{conversation_id}/messages")
+    async def send_message(
+            conversation_id: int, body: MessageSend,
+            identity: RequestIdentity = Depends(identity)):
+        owner = conversations.owner(conversation_id)
+        if owner is None or owner != identity.userId:
+            raise BsideError("NOT_FOUND", 404)
+        messages.append(
+            conversation_id=conversation_id, role="user",
+            content={"text": body.text})
+
+        async def stream():
+            text_parts = []
+            structured = []
+            try:
+                async for event in chat_runner.iterate(
+                        user_id=identity.userId,
+                        conversation_id=conversation_id, text=body.text):
+                    event_type = event.get("type") if isinstance(
+                        event, dict) else None
+                    if event_type == "text_delta":
+                        text_parts.append(str(event.get("text", "")))
+                    elif event_type in {
+                            "workflow_confirm", "interaction_required"}:
+                        structured.append(event)
+                    yield ("data: " + json.dumps(event, ensure_ascii=False)
+                           + "\n\n")
+            except Exception:
+                yield ("data: " + json.dumps(
+                    {"type": "error", "code": "CHAT_UNAVAILABLE"},
+                    ensure_ascii=False) + "\n\n")
+            finally:
+                content = {"text": "".join(text_parts)}
+                if structured:
+                    content["events"] = structured
+                messages.append(
+                    conversation_id=conversation_id, role="assistant",
+                    content=content)
+
+        return StreamingResponse(
+            stream(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"})
 
     # ---- workflows catalog ----
 

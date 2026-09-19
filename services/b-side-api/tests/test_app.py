@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime as dt
+import json
 import re
 import unittest
 
@@ -91,9 +92,22 @@ class FakeConversations:
 class FakeMessages:
     def __init__(self):
         self.rows = []
+        self.next_id = 1
+
+    def append(self, *, conversation_id, role, content, ref_kind=None,
+               ref_id=None):
+        row = {"id": self.next_id, "conversation_id": conversation_id,
+               "role": role, "content": content, "ref_kind": ref_kind,
+               "ref_id": ref_id, "created_at": NOW}
+        self.next_id += 1
+        self.rows.append(row)
+        return dict(row)
 
     def list_for(self, conversation_id, limit=200):
-        return [dict(row) for row in self.rows
+        return [{"id": row["id"], "role": row["role"],
+                 "content": row["content"], "ref_kind": row["ref_kind"],
+                 "ref_id": row["ref_id"], "created_at": row["created_at"]}
+                for row in self.rows
                 if row["conversation_id"] == conversation_id][:limit]
 
 
@@ -219,6 +233,19 @@ class FakeRuntimeClient:
         return {"ok": True}
 
 
+class FakeChatRunner:
+    """Scripted runner; records calls and replays a fixed event sequence."""
+
+    def __init__(self, events=None):
+        self.events = list(events or [])
+        self.calls = []
+
+    async def iterate(self, *, user_id, conversation_id, text):
+        self.calls.append((user_id, conversation_id, text))
+        for event in self.events:
+            yield event
+
+
 def catalog(user_id):
     return [{"definitionKey": "activity-package-demo",
              "inputSchema": {"type": "object",
@@ -238,6 +265,7 @@ class Harness:
             "notifications": FakeNotifications(),
             "run_ownership": FakeRunOwnership(),
             "runtime_client": FakeRuntimeClient(),
+            "chat_runner": FakeChatRunner(),
             "workflow_catalog": catalog, "pepper": PEPPER,
             "browser_origin": ORIGIN, "environment": "PRT",
             "session_seconds": 7200, "now": self.clock,
@@ -582,6 +610,92 @@ class RunProxyTests(unittest.TestCase):
 
     def test_run_proxy(self):
         asyncio.run(self._flow())
+
+
+class ChatSseTests(unittest.TestCase):
+    async def _flow(self):
+        runner = FakeChatRunner([
+            {"type": "text_delta", "text": "好的，"},
+            {"type": "text_delta", "text": "我帮你跑。"},
+            {"type": "workflow_confirm",
+             "workflowKey": "activity-package-demo",
+             "title": "活动策划"},
+            {"type": "done"},
+        ])
+        harness = Harness(chat_runner=runner)
+        async with await harness.client() as client:
+            registered = await client.post(
+                "/api/auth/register",
+                json={"username": "chat-01", "password": "password-9"},
+                headers=ORIGIN_HEADERS)
+            user_id = registered.json()["userId"]
+            created = await client.post(
+                "/api/conversations", json={"title": "会话"},
+                headers=ORIGIN_HEADERS)
+            conversation_id = created.json()["id"]
+            sent = await client.post(
+                f"/api/conversations/{conversation_id}/messages",
+                json={"text": "帮我策划一场活动"},
+                headers=ORIGIN_HEADERS)
+            self.assertEqual(200, sent.status_code)
+            self.assertIn("text/event-stream", sent.headers["content-type"])
+            body = sent.text
+            lines = [line for line in body.split("\n") if line]
+            events = [
+                json.loads(line[len("data: "):])
+                for line in lines if line.startswith("data: ")]
+            self.assertEqual(
+                ["text_delta", "text_delta", "workflow_confirm", "done"],
+                [event["type"] for event in events])
+            self.assertEqual(
+                [("u_", conversation_id, "帮我策划一场活动")],
+                [(call[0][:2], call[1], call[2]) for call in runner.calls])
+            history = await client.get(
+                f"/api/conversations/{conversation_id}/messages")
+            rows = history.json()["messages"]
+            self.assertEqual(["user", "assistant"],
+                             [row["role"] for row in rows])
+            self.assertEqual("好的，我帮你跑。",
+                             rows[1]["content"]["text"])
+            self.assertEqual(
+                "activity-package-demo",
+                rows[1]["content"]["events"][0]["workflowKey"])
+            empty = await client.post(
+                f"/api/conversations/{conversation_id}/messages",
+                json={"text": ""}, headers=ORIGIN_HEADERS)
+            self.assertEqual(400, empty.status_code)
+            self.assertEqual(user_id, registered.json()["userId"])
+
+    def test_chat_sse_flow(self):
+        asyncio.run(self._flow())
+
+    async def _flow_guards(self):
+        harness = Harness()
+        async with await harness.client() as client:
+            unauthorized = await client.post(
+                "/api/conversations/1/messages",
+                json={"text": "hi"}, headers=ORIGIN_HEADERS)
+            self.assertEqual(401, unauthorized.status_code)
+            await client.post(
+                "/api/auth/register",
+                json={"username": "chat-a", "password": "password-1"},
+                headers=ORIGIN_HEADERS)
+            other = await client.post(
+                "/api/conversations", json={"title": "a"},
+                headers=ORIGIN_HEADERS)
+            conversation_id = other.json()["id"]
+            await client.post("/api/auth/logout", headers=ORIGIN_HEADERS)
+            await client.post(
+                "/api/auth/register",
+                json={"username": "chat-b", "password": "password-1"},
+                headers=ORIGIN_HEADERS)
+            cross = await client.post(
+                f"/api/conversations/{conversation_id}/messages",
+                json={"text": "hi"}, headers=ORIGIN_HEADERS)
+            self.assertEqual(404, cross.status_code)
+
+    def test_chat_sse_guards(self):
+        asyncio.run(self._flow_guards())
 
 
 if __name__ == "__main__":

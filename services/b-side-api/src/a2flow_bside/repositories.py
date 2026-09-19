@@ -107,6 +107,18 @@ class MessagesRepository:
     def __init__(self, connection_factory: Callable):
         self._factory = connection_factory
 
+    def append(self, *, conversation_id: int, role: str, content: dict,
+               ref_kind: str | None = None,
+               ref_id: str | None = None) -> dict:
+        with self._factory() as connection:
+            row = connection.execute(
+                "INSERT INTO messages (conversation_id, role, content, "
+                "ref_kind, ref_id) VALUES (%s, %s, %s::jsonb, %s, %s) "
+                "RETURNING id, role, content, ref_kind, ref_id, created_at",
+                (conversation_id, role, json.dumps(content), ref_kind,
+                 ref_id)).fetchone()
+        return dict(row)
+
     def list_for(self, conversation_id: int, limit: int = 200) -> list[dict]:
         with self._factory() as connection:
             rows = connection.execute(
