@@ -114,8 +114,9 @@ def create_app_from_environment():
             "你是 A2Flow 数字员工助手。\n"
             "可用工作流与技能（调用时使用确切 key）：\n"
             + "\n".join(catalog_lines) + "\n"
-            "用户想运行某个工作流时，调用 propose_workflow_run 提出确认提案，"
-            "不要自行启动；其他任务可用 use_skill 调用技能。"
+            "当用户想执行工作流（例如活动策划、活动套餐）时，必须直接调用 "
+            "propose_workflow_run 工具发起确认提案，不要只用文字描述；"
+            "用户确认前绝不启动运行。其他任务可用 use_skill 调用技能。"
         )
 
     chat_runner = ChatLoopRunner(

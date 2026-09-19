@@ -68,6 +68,28 @@ const inputHintOf = (schema: unknown): string => {
     : '输入工作流执行内容';
 };
 
+const contentText = (content: unknown): string => {
+  if (typeof content === 'string') return content;
+  if (content && typeof content === 'object' && !Array.isArray(content)) {
+    const text = (content as { text?: unknown }).text;
+    if (typeof text === 'string') return text;
+  }
+  return '';
+};
+
+const contentEvent = (content: unknown): ChatEvent | undefined => {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return undefined;
+  const events = (content as { events?: unknown }).events;
+  if (!Array.isArray(events)) return undefined;
+  const confirm = events.find((item) => item && typeof item === 'object'
+    && (item as Row).type === 'workflow_confirm' && (item as Row).workflowKey);
+  if (confirm) return { type: 'workflow_confirm', workflowKey: textOf((confirm as Row).workflowKey), title: textOf((confirm as Row).title) || '工作流' };
+  const interaction = events.find((item) => item && typeof item === 'object'
+    && (item as Row).type === 'interaction_required' && (item as Row).runId);
+  if (interaction) return { type: 'interaction_required', runId: textOf((interaction as Row).runId) };
+  return undefined;
+};
+
 const cadenceOf = (row: Row): string => {
   if (row.ruleType === 'once') return '一次性执行';
   const rule = (row.ruleJson ?? {}) as { every?: unknown; at?: unknown };
@@ -100,12 +122,16 @@ export const productApi = {
   messages: async (id: string): Promise<{ items: Message[] }> => {
     const payload = await api<{ messages?: Row[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`);
     return {
-      items: (payload.messages ?? []).map((row) => ({
-        id: idOf(row.id),
-        role: row.role === 'user' ? 'user' as const : 'assistant' as const,
-        text: textOf(row.content),
-        createdAt: textOf(row.createdAt),
-      })),
+      items: (payload.messages ?? []).map((row) => {
+        const event = contentEvent(row.content);
+        return {
+          id: idOf(row.id),
+          role: row.role === 'user' ? 'user' as const : 'assistant' as const,
+          text: contentText(row.content),
+          createdAt: textOf(row.createdAt),
+          ...(event ? { event } : {}),
+        };
+      }),
     };
   },
   sendMessage: async (id: string, text: string, onText: (text: string) => void) => {
