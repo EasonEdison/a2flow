@@ -155,6 +155,7 @@ def create_app(
     @app.middleware("http")
     async def bside_guard(request: Request, call_next):
         if request.url.path.startswith("/api"):
+            internal = request.url.path.startswith("/api/internal/")
             try:
                 if request.query_params:
                     raise BsideError("QUERY_PARAMETERS_NOT_ALLOWED", 400)
@@ -164,14 +165,15 @@ def create_app(
                         "x-a2flow-roles", "x-a2flow-user-id", "x-environment",
                         "x-role", "x-roles", "x-user-id"}:
                     raise BsideError("IDENTITY_FIELDS_NOT_ALLOWED", 400)
-                if request.method in _UNSAFE_METHODS:
+                if request.method in _UNSAFE_METHODS and not internal:
                     require_origin(request.headers, browser_origin)
             except BsideError as error:
                 return JSONResponse({"error": {"code": error.code}},
                                     status_code=error.status)
-            request.scope["a2flow.bside.identity"] = resolve_identity(
-                request.cookies.get(SESSION_COOKIE), sessions=sessions,
-                now=clock)
+            if not internal:
+                request.scope["a2flow.bside.identity"] = resolve_identity(
+                    request.cookies.get(SESSION_COOKIE), sessions=sessions,
+                    now=clock)
         return await call_next(request)
 
     @app.exception_handler(BsideError)
