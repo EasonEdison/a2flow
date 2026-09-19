@@ -13,22 +13,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /opt/a2flow
 
-COPY experiments/runtime-phase1/requirements.lock /tmp/runtime-constraints.lock
+COPY experiments/runtime-phase1/requirements.lock /tmp/runtime-requirements.lock
+COPY deploy/mvp/model-requirements.lock /tmp/model-requirements.lock
 COPY deploy/mvp/listener-requirements.lock /tmp/listener-requirements.lock
 COPY services/agent-workflow-runtime/requirements-http.txt /tmp/runtime-http.txt
 COPY services/management-api/requirements-http.txt /tmp/management-http.txt
 COPY services/b-side-api/requirements-http.txt /tmp/bside-http.txt
-RUN python -m pip install --no-cache-dir \
-        -c /tmp/runtime-constraints.lock \
-        -r /tmp/listener-requirements.lock \
-        annotated-doc==0.0.5 anyio==4.15.1 pydantic==2.13.5 \
-        psycopg==3.3.5 psycopg-binary==3.3.5 typing_extensions==4.16.0 \
+RUN python -m pip install --no-cache-dir -r /tmp/runtime-requirements.lock \
+    && python -m pip install --no-cache-dir -r /tmp/model-requirements.lock \
     && python -m pip install --no-cache-dir --no-deps --require-hashes \
         -r /tmp/runtime-http.txt \
     && python -m pip install --no-cache-dir --no-deps --require-hashes \
         -r /tmp/management-http.txt \
     && python -m pip install --no-cache-dir --no-deps --require-hashes \
         -r /tmp/bside-http.txt \
+    && python -m pip install --no-cache-dir -r /tmp/listener-requirements.lock \
+    && python -m pip install --no-cache-dir \
+        -c /tmp/runtime-requirements.lock \
+        annotated-doc==0.0.5 anyio==4.15.1 pydantic==2.13.5 \
+        psycopg==3.3.5 psycopg-binary==3.3.5 typing_extensions==4.16.0 \
     && rm -f /tmp/*.lock /tmp/*.txt
 
 COPY packages/contracts packages/contracts
