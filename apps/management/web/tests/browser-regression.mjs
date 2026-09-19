@@ -79,6 +79,10 @@ async function createHarness(browser, options = {}) {
     const pathname = decodeURIComponent(url.pathname);
     const reply = (value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
     if (pathname === '/management/session') return reply({ userId: `${options.environment?.toLowerCase() ?? 'prt'}-${options.canAuthor === false ? 'reader' : 'admin'}`, environment: options.environment ?? 'PRT', registeredKinds: kinds, canAuthor: options.canAuthor !== false });
+    if (pathname === '/private-preview/logout') {
+      requests.push({ type: 'logout' });
+      return reply({ ok: true });
+    }
     if (pathname.startsWith('/management/assets/')) {
       const kind = pathname.split('/')[3];
       const key = pathname.split('/').slice(4, -1).join('/') || `demo/${kind.toLowerCase()}`;
@@ -261,11 +265,18 @@ async function createHarness(browser, options = {}) {
     return route.fulfill({ status: 200, contentType: file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html', body: fs.readFileSync(file) });
   });
   await page.goto('http://localhost/');
-  await page.getByRole('heading', { name: '保留版本', exact: true }).waitFor();
+  if (!options.stayOnList) await page.locator('.asset-card').first().click();
+  if (!options.stayOnList) await page.getByRole('heading', { name: '保留版本', exact: true }).waitFor();
   const button = (name) => page.getByRole('button', { name, exact: true });
   const selectKind = async (kind) => {
     await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
-    await page.getByRole('heading', { name: `${kind.toUpperCase()} · demo/${kind.toLowerCase()}`, exact: true }).waitFor();
+    const heading = page.getByRole('heading', { name: `${kind.toUpperCase()} · demo/${kind.toLowerCase()}`, exact: true });
+    if (await heading.count() === 0) {
+      const card = page.locator('.asset-card').filter({ has: page.locator('.asset-identifier', { hasText: `demo/${kind.toLowerCase()}` }) }).first();
+      await card.waitFor();
+      await card.click();
+    }
+    await heading.waitFor();
   };
   const finish = async (expectedStatuses = []) => {
     assert.equal(await page.locator('vite-error-overlay').count(), 0);
@@ -375,6 +386,7 @@ async function runSkillWorkbench(browser) {
   assert.match(saved.resources[0].contentDigest, /^sha256:[0-9a-f]{64}$/);
   assert.equal(saved.resources[1].logicalPath, 'notes/new.txt');
   await page.reload();
+  await page.locator('.asset-card').filter({ has: page.locator('.asset-identifier', { hasText: 'demo/skill' }) }).first().click();
   await preview.getByRole('heading', { name: 'Updated', exact: true }).waitFor();
   await button('完整 JSON').click();
   const reloadedDraft = JSON.parse(await page.getByLabel('结构化草稿 JSON').inputValue());
@@ -678,8 +690,7 @@ async function assertLocked(page) {
   for (let index = 0; index < count; index += 1) assert.equal(await controls.nth(index).isDisabled(), true);
   const nav = page.getByRole('navigation', { name: '资产类型' }).getByRole('button');
   for (let index = 0; index < await nav.count(); index += 1) assert.equal(await nav.nth(index).isDisabled(), true);
-  assert.equal(await page.getByRole('searchbox', { name: '搜索当前资产类型' }).isDisabled(), true);
-  assert.equal(await page.locator('.asset-row').first().isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: '退出', exact: true }).isDisabled(), true);
 }
 
 async function runBusyAndPublication(browser, environment) {
@@ -827,7 +838,11 @@ async function runReader(browser, environment) {
   const { page, requests, draftReads, finish } = harness;
   for (const kind of kinds) {
     await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
-    await page.getByRole('heading', { name: `${kind} fixture`, exact: true }).waitFor();
+    const detailHeading = page.getByRole('heading', { name: `${kind} fixture`, exact: true });
+    if (await detailHeading.count() === 0) {
+      await page.locator('.asset-card').filter({ has: page.locator('.asset-identifier', { hasText: `demo/${kind.toLowerCase()}` }) }).first().click();
+    }
+    await detailHeading.waitFor();
   }
   assert.equal(await page.getByRole('button', { name: '保存草稿', exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '新建', exact: true }).count(), 0);
@@ -842,6 +857,7 @@ async function runCreateDraftFlows(browser) {
   const { page, requests, button, selectKind, finish } = harness;
   for (const kind of kinds) {
     await selectKind(kind);
+    await button('返回').click();
     await button('新建').click();
     const dialog = page.getByRole('dialog', { name: `新建 ${kind}` });
     const key = `new/${kind.toLowerCase()}`;
@@ -855,9 +871,10 @@ async function runCreateDraftFlows(browser) {
     await page.getByText('该资产尚无已发布版本，无法比较。', { exact: true }).waitFor();
     await page.reload();
     await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
-    await page.getByText(key, { exact: true }).click();
+    await page.locator('.asset-card').filter({ has: page.locator('.asset-identifier', { hasText: key }) }).click();
     await page.getByText('仅草稿', { exact: true }).first().waitFor();
   }
+  await button('返回').click();
   await button('新建').click();
   await page.getByRole('dialog').getByRole('textbox', { name: '不可变 Key' }).fill('demo/workflow');
   await page.getByRole('dialog').getByRole('button', { name: '创建草稿' }).click();
@@ -874,6 +891,7 @@ async function runFirstPublishFlows(browser, environment) {
   const { page, requests, listReads, button, selectKind, finish } = harness;
   for (const kind of kinds) {
     await selectKind(kind);
+    await button('返回').click();
     await button('新建').click();
     const key = `first/${environment.toLowerCase()}/${kind.toLowerCase()}`;
     const dialog = page.getByRole('dialog', { name: `新建 ${kind}` });
@@ -923,7 +941,7 @@ async function runFirstPublishFlows(browser, environment) {
     assert.equal(listReads.filter((item) => item === kind).length >= 2, true);
     await page.reload();
     await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
-    await page.getByText(key, { exact: true }).click();
+    await page.locator('.asset-card').filter({ has: page.locator('.asset-identifier', { hasText: key }) }).click();
     await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
     assert.equal(await page.getByText('仅草稿', { exact: true }).count(), 0);
   }
@@ -1271,8 +1289,40 @@ async function runDependencyMissingAndReader(browser) {
   await reader.finish();
 }
 
+async function runManagementShellRedesign(browser) {
+  const admin = await createHarness(browser, { stayOnList: true });
+  const { page, finish } = admin;
+  await page.getByRole('banner').getByText('A2Flow 管理台', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('navigation', { name: '资产类型' }).count(), 1);
+  assert.equal(await page.locator('.asset-card').count(), 1);
+  assert.equal(await page.getByRole('button', { name: '新建', exact: true }).count(), 1);
+  for (const kind of kinds) {
+    await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
+    await page.locator('.asset-card').first().waitFor();
+    assert.equal(await page.locator('.asset-card').count() >= 1, true);
+    assert.equal(await page.locator('.asset-card').first().getByText('查看详情', { exact: true }).count(), 1);
+  }
+  await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: /Skill/i }).click();
+  await page.locator('.asset-card').first().click();
+  await page.getByRole('heading', { name: 'SKILL · demo/skill', exact: true }).waitFor();
+  await page.getByLabel('描述').fill('shell redesign draft');
+  await page.getByRole('button', { name: '返回', exact: true }).click();
+  await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: /Ability/i }).click();
+  await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: /Skill/i }).click();
+  await page.locator('.asset-card').first().click();
+  assert.equal(await page.getByLabel('描述').inputValue(), 'shell redesign draft');
+  await finish();
+
+  const reader = await createHarness(browser, { canAuthor: false, stayOnList: true });
+  await reader.page.locator('.asset-card').first().waitFor();
+  assert.equal(await reader.page.getByRole('button', { name: '新建', exact: true }).count(), 0);
+  assert.equal(await reader.page.getByText('访客', { exact: true }).count(), 1);
+  await reader.finish();
+}
+
 const browser = await chromium.launch({ headless: true, executablePath: chromePath });
 try {
+  await runManagementShellRedesign(browser);
   await runDependencyPanel(browser);
   await runDependencyLineageGraph(browser);
   await runDependencyPendingRaces(browser);

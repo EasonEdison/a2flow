@@ -59,6 +59,9 @@ export const managementApi = {
   session(signal?: AbortSignal) {
     return request<ManagementSession>('/management/session', {}, signal);
   },
+  logout() {
+    return request<{ ok: boolean }>('/private-preview/logout', { method: 'POST' });
+  },
   list(kind: AssetKind, signal?: AbortSignal) {
     return request<AssetSummary[]>(assetPath(kind), {}, signal);
   },

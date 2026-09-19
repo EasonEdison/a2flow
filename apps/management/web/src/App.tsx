@@ -56,10 +56,28 @@ function errorText(error: unknown): string {
 
 function Logo() {
   return (
-    <div className="logo" aria-label="A2Flow">
+    <div className="logo" aria-label="A2Flow 管理台">
       <span className="logo-mark">A2</span>
-      <span>Flow</span>
+      <span>A2Flow 管理台</span>
     </div>
+  );
+}
+
+function TopBar({ session, busy, onLogout }: {
+  session: ManagementSession;
+  busy: boolean;
+  onLogout: () => void;
+}) {
+  return (
+    <header className="top-bar">
+      <Logo />
+      <div className="top-bar-session">
+        <span className="environment-badge">{session.environment}</span>
+        <span className={session.canAuthor ? 'role-badge admin' : 'role-badge'}>{session.canAuthor ? '管理员' : '访客'}</span>
+        <span className="top-bar-user">{session.userId}</span>
+        <button type="button" className="logout-button" disabled={busy} onClick={onLogout}>退出</button>
+      </div>
+    </header>
   );
 }
 
@@ -105,108 +123,103 @@ function ShellSidebar({
 }) {
   return (
     <aside className="shell-sidebar">
-      <Logo />
+      <p className="sidebar-label">资产管理</p>
       <KindNav kinds={session.registeredKinds} active={activeKind} onChange={onKindChange} disabled={disabled} />
-      <div className="session-card">
-        <div className="avatar" aria-hidden="true">{session.userId.slice(0, 2).toUpperCase()}</div>
-        <div>
-          <strong>{session.userId}</strong>
-          <span>{session.environment} · {session.canAuthor ? '管理员' : '只读用户'}</span>
-        </div>
-      </div>
     </aside>
   );
 }
 
 function AssetList({
   kind,
+  environment,
   assets,
   query,
   onQueryChange,
-  selectedKey,
   buffers,
   loading,
   error,
   onSelect,
   onCreate,
+  onRetry,
   canAuthor,
   disabled,
 }: {
   kind: AssetKind;
+  environment: ManagementSession['environment'];
   assets: AssetSummary[];
   query: string;
   onQueryChange: (query: string) => void;
-  selectedKey: string | null;
   buffers: Buffers;
   loading: boolean;
   error: string | null;
   onSelect: (key: string) => void;
   onCreate: () => void;
+  onRetry: () => void;
   canAuthor: boolean;
   disabled: boolean;
 }) {
-  const filteredAssets = useMemo(() => filterAssets(assets, query), [assets, query]);
-  const hasQuery = query.trim().length > 0;
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PUBLISHED' | 'DRAFT'>('ALL');
+  const searchedAssets = useMemo(() => filterAssets(assets, query), [assets, query]);
+  const filteredAssets = useMemo(() => searchedAssets.filter((asset) => (
+    statusFilter === 'ALL' || (statusFilter === 'DRAFT' ? asset.draftOnly : !asset.draftOnly)
+  )), [searchedAssets, statusFilter]);
+  const publishedCount = assets.filter((asset) => !asset.draftOnly).length;
+  const draftCount = assets.length - publishedCount;
+  const hasFilter = query.trim().length > 0 || statusFilter !== 'ALL';
 
   return (
     <section className="asset-rail" aria-label={KIND_COPY[kind].label + ' 列表'}>
       <header className="rail-header">
         <div>
-          <p className="section-label">资产目录</p>
-          <h1>{KIND_COPY[kind].label}</h1>
+          <h1>{KIND_COPY[kind].label} 管理</h1>
+          <p className="guidance">{KIND_COPY[kind].guidance}</p>
         </div>
-        <div className="rail-actions"><span className="count" aria-label={`匹配 ${filteredAssets.length} 项，共 ${assets.length} 项`}>
-          {filteredAssets.length}/{assets.length}
-        </span>{canAuthor ? <button type="button" className="secondary-button" disabled={disabled} onClick={onCreate}>新建</button> : null}</div>
+        {canAuthor ? <button type="button" className="primary-button create-button" disabled={disabled} onClick={onCreate}>新建</button> : null}
       </header>
-      <p className="guidance">{KIND_COPY[kind].guidance}</p>
-      <div className="asset-search">
-        <label htmlFor="asset-search">搜索当前资产类型</label>
-        <div className="asset-search-control">
-          <input
-            id="asset-search"
-            type="search"
-            value={query}
-            disabled={disabled}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="按名称或标识符搜索"
-          />
-          <button type="button" disabled={disabled || !query} onClick={() => onQueryChange('')}>
-            清除
-          </button>
+      <div className="filter-card">
+        <div className="segment-group" aria-label="环境筛选">
+          {(['PRT', 'ONLINE'] as const).map((value) => <button key={value} type="button" className={environment === value ? 'active' : ''} disabled={disabled || environment !== value}>{value}<span>{environment === value ? assets.length : 0}</span></button>)}
         </div>
-        <span className="search-count" aria-live="polite">匹配 {filteredAssets.length} 项，共 {assets.length} 项</span>
+        <div className="segment-group" aria-label="状态筛选">
+          <button type="button" className={statusFilter === 'ALL' ? 'active' : ''} disabled={disabled} onClick={() => setStatusFilter('ALL')}>全部<span>{assets.length}</span></button>
+          <button type="button" className={statusFilter === 'PUBLISHED' ? 'active' : ''} disabled={disabled} onClick={() => setStatusFilter('PUBLISHED')}>已发布<span>{publishedCount}</span></button>
+          <button type="button" className={statusFilter === 'DRAFT' ? 'active' : ''} disabled={disabled} onClick={() => setStatusFilter('DRAFT')}>已保存草稿<span>{draftCount}</span></button>
+        </div>
+        <div className="asset-search">
+          <label htmlFor="asset-search">搜索当前资产类型</label>
+          <div className="asset-search-control">
+            <input id="asset-search" type="search" value={query} disabled={disabled} onChange={(event) => onQueryChange(event.target.value)} placeholder="按名称或标识符搜索" />
+            <button type="button" disabled={disabled || !query} onClick={() => onQueryChange('')}>清除</button>
+          </div>
+          <span className="search-count" aria-live="polite">匹配 {filteredAssets.length} 项，共 {assets.length} 项</span>
+        </div>
       </div>
-      {loading ? <div className="rail-state">正在加载列表…</div> : null}
-      {error ? <div className="rail-state error">{error}</div> : null}
-      {!loading && !error && assets.length === 0 ? (
-        <div className="rail-state">当前环境没有已发布资产。</div>
-      ) : null}
-      {!loading && !error && assets.length > 0 && hasQuery && filteredAssets.length === 0 ? (
-        <div className="rail-state no-match">没有匹配的资产，请调整搜索条件。</div>
-      ) : null}
-      <div className="asset-items">
+      {loading ? <div className="asset-card-grid loading-grid" aria-label="正在加载列表">{Array.from({ length: 8 }, (_, index) => <div className="asset-card skeleton-card" key={index}><span /><span /><span /></div>)}</div> : null}
+      {error ? <div className="list-state-card error"><strong>列表加载失败</strong><p>{error}</p><button type="button" className="secondary-button" onClick={onRetry}>重试</button></div> : null}
+      {!loading && !error && filteredAssets.length === 0 ? <div className="list-state-card"><strong>{assets.length === 0 ? '暂无资产' : '没有匹配的资产'}</strong><p>{hasFilter ? '请调整搜索或筛选条件。' : '当前环境暂无可浏览资产。'}</p></div> : null}
+      {!loading && !error ? <div className="asset-items asset-card-grid">
         {filteredAssets.map((asset) => {
           const key = assetKeyOf(asset);
-          const dirty = buffers[bufferId(kind, key)]?.dirty;
+          const buffer = buffers[bufferId(kind, key)];
+          const dirty = buffer?.dirty;
+          const revision = asset.draftRevision ?? buffer?.revision;
+          const status = dirty ? '未保存修改' : asset.draftOnly ? '已保存草稿' : '已发布';
           return (
-            <button
-              type="button"
-              className={selectedKey === key ? 'asset-row selected' : 'asset-row'}
-              disabled={disabled}
-              key={key}
-              onClick={() => onSelect(key)}
-            >
-              <span className="asset-key">{asset.name ?? key}</span>
-              <span className="asset-meta">
-                {asset.draftOnly ? '仅草稿' : asset.versionId ?? key}
-                {dirty ? <i title="有未保存修改">未保存</i> : null}
+            <button type="button" className="asset-row asset-card" disabled={disabled} key={key} onClick={() => onSelect(key)}>
+              <span className="asset-card-heading"><strong className="asset-key">{asset.name ?? key}</strong><i className={asset.draftOnly ? 'status-badge draft' : dirty ? 'status-badge retained' : 'status-badge published'}>{status}</i></span>
+              <code className="asset-identifier">{key}</code>
+              <span className="asset-description">{asset.description ?? '暂无描述'}</span>
+              <span className="asset-kv-grid">
+                <span><small>版本</small><b>{asset.versionId ?? '—'}</b></span>
+                <span><small>环境</small><b>{environment}</b></span>
+                <span><small>{revision ? '修订号' : '引用数'}</small><b>{revision ? `#${revision}` : '—'}</b></span>
+                <span><small>状态</small><b>{status}</b></span>
               </span>
-              {asset.description ? <span className="asset-description">{asset.description}</span> : null}
+              <span className="asset-card-footer"><i className="type-badge">{kind}</i><span><span>查看详情</span> <span aria-hidden="true">→</span></span></span>
             </button>
           );
         })}
-      </div>
+      </div> : null}
     </section>
   );
 }
@@ -697,6 +710,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
+  const [listRefresh, setListRefresh] = useState(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<JsonObject | null>(null);
   const [assetLoading, setAssetLoading] = useState(false);
@@ -787,10 +801,7 @@ function App() {
     managementApi.list(kind, controller.signal).then((items) => {
       if (controller.signal.aborted) return;
       setAssets(items);
-      setSelectedKey((current) => {
-        if (current && items.some((item) => assetKeyOf(item) === current)) return current;
-        return items[0] ? assetKeyOf(items[0]) : null;
-      });
+      setSelectedKey((current) => current && items.some((item) => assetKeyOf(item) === current) ? current : null);
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) {
         setAssets([]);
@@ -801,7 +812,7 @@ function App() {
       if (!controller.signal.aborted) setListLoading(false);
     });
     return () => controller.abort();
-  }, [kind]);
+  }, [kind, listRefresh]);
 
   const selectedSummary = useMemo(
     () => assets.find((asset) => assetKeyOf(asset) === selectedKey) ?? null,
@@ -872,6 +883,18 @@ function App() {
   const pendingFields = activeBufferId ? pendingBuffers[activeBufferId] ?? createPendingFieldState() : createPendingFieldState();
   const pendingResources = activeBufferId ? pendingResourceBuffers[activeBufferId] ?? {} : {};
   const previewState = activeBufferId ? previewBuffers[activeBufferId] ?? initialApplicationPreviewState() : initialApplicationPreviewState();
+
+  async function logout() {
+    setActionBusy(true);
+    setActionMessage(null);
+    try {
+      await managementApi.logout();
+      window.location.assign('/private-preview/login');
+    } catch (error) {
+      setActionMessage(errorText(error));
+      setActionBusy(false);
+    }
+  }
 
   async function createDraft(keyName: string) {
     if (!kind) return;
@@ -1168,68 +1191,60 @@ function App() {
 
   return (
     <div className="app-shell">
+      <TopBar session={session} busy={actionBusy} onLogout={() => void logout()} />
       <ShellSidebar
         session={session}
         activeKind={kind}
         onKindChange={changeKind}
         disabled={actionBusy}
       />
-      {kind ? (
-        <AssetList
-          kind={kind}
-          assets={assets}
-          query={searchQuery}
-          onQueryChange={setSearchQuery}
-          selectedKey={selectedKey}
-          buffers={buffers}
-          loading={listLoading}
-          error={listError}
-          onSelect={setSelectedKey}
-          onCreate={() => { setCreateError(null); setCreateOpen(true); }}
-          canAuthor={session.canAuthor}
-          disabled={actionBusy}
-        />
-      ) : null}
       <main className="content">
         {!selectedKey || !kind ? (
-          <div className="empty-content">
-            <h2>选择一个资产</h2>
-            <p>从左侧目录打开已发布版本与管理草稿。</p>
-          </div>
+          kind ? <AssetList
+            kind={kind}
+            environment={session.environment}
+            assets={assets}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            buffers={buffers}
+            loading={listLoading}
+            error={listError}
+            onSelect={setSelectedKey}
+            onCreate={() => { setCreateError(null); setCreateOpen(true); }}
+            onRetry={() => setListRefresh((value) => value + 1)}
+            canAuthor={session.canAuthor}
+            disabled={actionBusy}
+          /> : <div className="empty-content"><h2>暂无资产类型</h2></div>
         ) : (
-          <>
+          <div className="detail-view">
+            <button type="button" className="back-button" aria-label="返回" disabled={actionBusy} onClick={() => setSelectedKey(null)}>← 返回</button>
             <header className="content-header">
               <div>
-                <p className="section-label">{KIND_COPY[kind].label} · {session.environment}</p>
-                <h1>{selectedSummary?.name ?? selectedKey}</h1>
-                <p>{selectedKey}</p>
+                <div className="detail-title-row">
+                  <h1>{selectedSummary?.name ?? selectedKey}</h1>
+                  <span className={selectedSummary?.draftOnly ? 'status-badge draft' : 'status-badge published'}>{selectedSummary?.draftOnly ? '已保存草稿' : '已发布'}</span>
+                </div>
+                <p>{kind} · {selectedKey} · {selectedSummary?.versionId ?? '暂无版本'} · {session.environment}</p>
               </div>
               <div className="header-status">
-                <span className="published-status">{selectedSummary?.draftOnly ? '仅草稿' : '已发布版本'}</span>
-                <span className={session.canAuthor ? 'role-status admin' : 'role-status'}>
-                  {session.canAuthor ? '可编辑草稿' : '只读'}
-                </span>
+                <span className={session.canAuthor ? 'role-status admin' : 'role-status'}>{session.canAuthor ? '可编辑草稿' : '只读'}</span>
               </div>
             </header>
+            <section className="detail-card basic-info-card">
+              <div className="card-heading"><h2>基础信息</h2><span>资产当前标识与发布状态</span></div>
+              <dl>
+                <div><dt>Key</dt><dd>{selectedKey}</dd></div>
+                <div><dt>版本</dt><dd>{selectedSummary?.versionId ?? '—'}</dd></div>
+                <div><dt>环境</dt><dd>{session.environment}</dd></div>
+                <div><dt>状态</dt><dd>{selectedSummary?.draftOnly ? '已保存草稿' : '已发布'}</dd></div>
+                <div><dt>修订</dt><dd>{buffer ? `#${buffer.revision}` : selectedSummary?.draftRevision ? `#${selectedSummary.draftRevision}` : '—'}</dd></div>
+              </dl>
+            </section>
             {assetLoading ? <div className="workspace-state">正在读取资产…</div> : null}
             {assetError ? <div className="notice error">{assetError}</div> : null}
             {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) ? (
               <>
                 {detail ? <JsonBlock value={detail} label="当前已发布详情" /> : <section className="readonly-panel"><strong>仅草稿</strong><p>尚无已发布版本；不会显示虚构版本或历史。</p></section>}
-                {history ? <HistoryPanel history={history} canAuthor={session.canAuthor && history.versions.length > 0} busy={actionBusy}
-                  onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} /> : null}
-                {history ? <ComparisonPanel key={`${kind}:${selectedKey}`} kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length + Object.keys(pendingResources).length} /> : null}
-                <DependencyPanel
-                  graph={dependencyState?.graph ?? null}
-                  loading={dependencyState?.loading ?? false}
-                  error={dependencyState?.error ?? null}
-                  stale={dependencyState?.stale ?? false}
-                  staleReason={dependencyState?.staleReason ?? null}
-                  canAuthor={session.canAuthor}
-                  unsaved={Boolean(buffer?.dirty || Object.keys(pendingFields).length || Object.keys(pendingResources).length)}
-                  onRefresh={() => void refreshDependencies()}
-                  onNavigate={(referenceKind, keyName) => { setKind(referenceKind); setSearchQuery(''); setSelectedKey(keyName); setHistory(null); setDetail(null); setAssets([]); }}
-                />
                 {session.canAuthor && history ? (
                   <AuthorWorkspace
                     session={session}
@@ -1253,8 +1268,7 @@ function App() {
                     onPendingResourcesChange={(pending) => {
                       if (!activeBufferId) return;
                       setPendingResourceBuffers((current) => ({ ...current, [activeBufferId]: pending }));
-                      setDependencyState((current) => staleDependencyState(
-                        current, 'UNSAVED_LOCAL_EDITS_EXCLUDED'));
+                      setDependencyState((current) => staleDependencyState(current, 'UNSAVED_LOCAL_EDITS_EXCLUDED'));
                     }}
                     onPreviewStateChange={(state) => { if (activeBufferId) setPreviewBuffers((current) => ({ ...current, [activeBufferId]: state })); }}
                     onNavigateReference={(referenceKind, keyName) => { setKind(referenceKind); setSearchQuery(''); setSelectedKey(keyName); setHistory(null); setDetail(null); setAssets([]); }}
@@ -1266,19 +1280,26 @@ function App() {
                     onPublish={publishPrepared}
                     onTargetChange={() => { setPlan(null); setSuccessMessage(null); }}
                   />
-                ) : (
-                  <section className="readonly-panel">
-                    <strong>当前会话为只读</strong>
-                    <p>你可以浏览已发布资产，但不能读取、保存或验证管理草稿。</p>
-                  </section>
-                )}
+                ) : <section className="readonly-panel"><strong>当前会话为只读</strong><p>你可以浏览已发布资产，但不能读取、保存或验证管理草稿。</p></section>}
+                <DependencyPanel
+                  graph={dependencyState?.graph ?? null}
+                  loading={dependencyState?.loading ?? false}
+                  error={dependencyState?.error ?? null}
+                  stale={dependencyState?.stale ?? false}
+                  staleReason={dependencyState?.staleReason ?? null}
+                  canAuthor={session.canAuthor}
+                  unsaved={Boolean(buffer?.dirty || Object.keys(pendingFields).length || Object.keys(pendingResources).length)}
+                  onRefresh={() => void refreshDependencies()}
+                  onNavigate={(referenceKind, keyName) => { setKind(referenceKind); setSearchQuery(''); setSelectedKey(keyName); setHistory(null); setDetail(null); setAssets([]); }}
+                />
+                {history ? <HistoryPanel history={history} canAuthor={session.canAuthor && history.versions.length > 0} busy={actionBusy} onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} /> : null}
+                {history ? <ComparisonPanel key={`${kind}:${selectedKey}`} kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length + Object.keys(pendingResources).length} /> : null}
               </>
             ) : null}
-          </>
+          </div>
         )}
       </main>
-      {createOpen && kind ? <CreateDialog kind={kind} busy={actionBusy} error={createError}
-        onCancel={() => setCreateOpen(false)} onCreate={(keyName) => void createDraft(keyName)} /> : null}
+      {createOpen && kind ? <CreateDialog kind={kind} busy={actionBusy} error={createError} onCancel={() => setCreateOpen(false)} onCreate={(keyName) => void createDraft(keyName)} /> : null}
     </div>
   );
 }
