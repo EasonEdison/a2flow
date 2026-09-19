@@ -266,17 +266,23 @@ async function createHarness(browser, options = {}) {
   });
   await page.goto('http://localhost/');
   if (!options.stayOnList) await page.locator('.asset-card').first().click();
-  if (!options.stayOnList) await page.getByRole('heading', { name: '保留版本', exact: true }).waitFor();
+  if (!options.stayOnList) await page.getByRole('tab', { name: options.canAuthor === false ? '基础信息' : '编辑', selected: true }).waitFor();
   const button = (name) => page.getByRole('button', { name, exact: true });
+  const selectTab = async (name) => {
+    const tab = page.getByRole('tab', { name, exact: true });
+    await tab.click();
+    assert.equal(await tab.getAttribute('aria-selected'), 'true');
+  };
   const selectKind = async (kind) => {
     await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
-    const heading = page.getByRole('heading', { name: `${kind.toUpperCase()} · demo/${kind.toLowerCase()}`, exact: true });
-    if (await heading.count() === 0) {
+    const detailMeta = page.locator('.content-header p').filter({ hasText: `${kind.toUpperCase()} · demo/${kind.toLowerCase()}` });
+    if (await detailMeta.count() === 0) {
       const card = page.locator('.asset-card').filter({ has: page.locator('.asset-identifier', { hasText: `demo/${kind.toLowerCase()}` }) }).first();
       await card.waitFor();
       await card.click();
     }
-    await heading.waitFor();
+    await detailMeta.waitFor();
+    await page.getByRole('tablist', { name: '详情分区' }).waitFor();
   };
   const finish = async (expectedStatuses = []) => {
     assert.equal(await page.locator('vite-error-overlay').count(), 0);
@@ -284,7 +290,7 @@ async function createHarness(browser, options = {}) {
     assert.deepEqual(expectedHttpErrors.map((text) => Number(text.match(/(400|404|409|503)/)[1])), expectedStatuses);
     await context.close();
   };
-  return { context, page, requests, documents, serverDocuments, revisions, draftReads, listReads, button, selectKind, finish };
+  return { context, page, requests, documents, serverDocuments, revisions, draftReads, listReads, button, selectTab, selectKind, finish };
 }
 
 async function assertNoEditRoundtrips(harness) {
@@ -697,7 +703,7 @@ async function runBusyAndPublication(browser, environment) {
   const saveGate = deferred();
   const publishGate = deferred();
   const harness = await createHarness(browser, { environment, validation: { valid: true, issues: [], normalized: clone(drafts.SKILL) }, gates: { save: saveGate, publish: publishGate } });
-  const { page, requests, button, finish } = harness;
+  const { page, requests, button, selectTab, finish } = harness;
   await page.getByLabel('描述').fill('busy save');
   void button('保存草稿').click();
   await saveGate.started;
@@ -737,17 +743,20 @@ async function runBusyAndPublication(browser, environment) {
   assert.equal(publish.payload.target.versionId, `${environment.toLowerCase()}-v2`);
   assert.deepEqual(publish.payload.candidate, save.payload.document);
 
+  await selectTab('版本历史');
   const rollbackV0 = page.locator('.version-row').filter({ hasText: 'v0' }).getByRole('button', { name: '回滚配置到此版本', exact: true });
   page.once('dialog', (dialog) => dialog.dismiss());
   await rollbackV0.click();
   assert.equal(requests.filter((item) => item.type === 'rollback').length, 0);
   page.once('dialog', (dialog) => dialog.accept());
   await rollbackV0.click();
+  await selectTab('编辑');
   await page.getByText(/配置回滚完成/).waitFor();
   const rollback = requests.find((item) => item.type === 'rollback');
   assert.equal(rollback.payload.expectedServingDigest, digest);
   assert.deepEqual(rollback.payload.target, { environment, versionId: 'v0', channel: environment === 'PRT' ? 'CURRENT' : 'STABLE', grayUserIds: [] });
 
+  await selectTab('编辑');
   await button('验证已保存草稿').click();
   await version.fill(`${environment.toLowerCase()}-v3`);
   await button('准备未发布候选').click();
@@ -854,7 +863,7 @@ async function runReader(browser, environment) {
 
 async function runCreateDraftFlows(browser) {
   const harness = await createHarness(browser);
-  const { page, requests, button, selectKind, finish } = harness;
+  const { page, requests, button, selectKind, selectTab, finish } = harness;
   for (const kind of kinds) {
     await selectKind(kind);
     await button('返回').click();
@@ -867,11 +876,14 @@ async function runCreateDraftFlows(browser) {
     await button('新建').click();
     await page.getByRole('dialog', { name: `新建 ${kind}` }).getByRole('textbox', { name: '不可变 Key' }).fill(key);
     await page.getByRole('dialog', { name: `新建 ${kind}` }).getByRole('button', { name: '创建草稿' }).click();
+    await selectTab('基础信息');
     await page.getByText('仅草稿', { exact: true }).first().waitFor();
+    await selectTab('版本历史');
     await page.getByText('该资产尚无已发布版本，无法比较。', { exact: true }).waitFor();
     await page.reload();
     await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
     await page.locator('.asset-card').filter({ has: page.locator('.asset-identifier', { hasText: key }) }).click();
+    await selectTab('基础信息');
     await page.getByText('仅草稿', { exact: true }).first().waitFor();
   }
   await button('返回').click();
@@ -888,7 +900,7 @@ async function runFirstPublishFlows(browser, environment) {
     environment,
     validation: { valid: true, issues: [] },
   });
-  const { page, requests, listReads, button, selectKind, finish } = harness;
+  const { page, requests, listReads, button, selectKind, selectTab, finish } = harness;
   for (const kind of kinds) {
     await selectKind(kind);
     await button('返回').click();
@@ -897,7 +909,9 @@ async function runFirstPublishFlows(browser, environment) {
     const dialog = page.getByRole('dialog', { name: `新建 ${kind}` });
     await dialog.getByRole('textbox', { name: '不可变 Key' }).fill(key);
     await dialog.getByRole('button', { name: '创建草稿' }).click();
+    await selectTab('版本历史');
     await page.getByText('该资产尚无已发布版本，无法比较。', { exact: true }).waitFor();
+    await selectTab('编辑');
     await button('完整 JSON').click();
     await page.getByLabel('结构化草稿 JSON').fill(JSON.stringify(drafts[kind]));
     await button('保存草稿').click();
@@ -914,7 +928,9 @@ async function runFirstPublishFlows(browser, environment) {
       page.once('dialog', (dialogEvent) => dialogEvent.accept());
       await button('确认并显式发布').click();
       await page.getByText('INVALID_ONLINE_TARGET · HTTP 400', { exact: true }).waitFor();
+      await selectTab('基础信息');
       assert.equal(await page.getByText('仅草稿', { exact: true }).count() > 0, true);
+      await selectTab('编辑');
       await page.getByLabel('目标通道').selectOption('STABLE');
       await button('准备未发布候选').click();
       await page.getByText('候选已准备，但尚未发布', { exact: true }).waitFor();
@@ -932,17 +948,22 @@ async function runFirstPublishFlows(browser, environment) {
     });
     page.once('dialog', (dialogEvent) => dialogEvent.accept());
     await button('确认并显式发布').click();
+    await selectTab('版本历史');
     await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
     const publish = requests.filter((item) => item.type === 'publish' && item.kind === kind && item.key === key).at(-1);
     assert.equal(publish.payload.expectedServingDigest, emptyServingDigest);
     assert.deepEqual(publish.payload.candidate, drafts[kind]);
+    await selectTab('基础信息');
     assert.equal(await page.getByText('仅草稿', { exact: true }).count(), 0);
+    await selectTab('版本历史');
     await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
     assert.equal(listReads.filter((item) => item === kind).length >= 2, true);
     await page.reload();
     await page.getByRole('navigation', { name: '资产类型' }).getByRole('button', { name: new RegExp(kind, 'i') }).click();
     await page.locator('.asset-card').filter({ has: page.locator('.asset-identifier', { hasText: key }) }).click();
+    await selectTab('版本历史');
     await page.locator('.version-row').filter({ hasText: versionId }).waitFor();
+    await selectTab('基础信息');
     assert.equal(await page.getByText('仅草稿', { exact: true }).count(), 0);
   }
   await page.screenshot({ path: path.join(output, `${environment.toLowerCase()}-first-publication-desktop.png`), fullPage: false });
@@ -951,18 +972,22 @@ async function runFirstPublishFlows(browser, environment) {
 
 async function runComparisonAndReferenceCoverage(browser) {
   const harness = await createHarness(browser);
-  const { page, requests, button, selectKind, finish } = harness;
+  const { page, requests, button, selectKind, selectTab, finish } = harness;
+  await selectTab('版本历史');
   await button('比较当前草稿').click();
   await page.getByText('没有差异。', { exact: true }).waitFor();
   assert.equal(requests.filter((item) => item.type === 'compare').length, 1);
+  await selectTab('编辑');
   await page.getByLabel('描述').fill('changed comparison value');
   assert.equal(requests.filter((item) => item.type === 'compare').length, 1);
+  await selectTab('版本历史');
   await page.getByText('比较内容已过时，请显式刷新后再查看当前 canonical 草稿。', { exact: true }).waitFor();
   await button('刷新过时比较').click();
   await page.getByText('/metadata/description', { exact: true }).waitFor();
   await page.getByLabel('比较右侧').selectOption('v0');
   await page.getByText('没有差异。', { exact: true }).waitFor();
 
+  await selectTab('编辑');
   await selectKind('Workflow');
   await page.getByLabel('Skill key').first().selectOption('demo/skill');
   assert.equal(await page.getByLabel('Skill key').first().inputValue(), 'demo/skill');
@@ -982,10 +1007,13 @@ async function runComparisonAndReferenceCoverage(browser) {
 async function runDeferredComparison(browser) {
   const compareGate = deferred();
   const harness = await createHarness(browser, { gates: { compare: compareGate }, distinctVersions: true });
-  const { page, requests, button, selectKind, finish } = harness;
+  const { page, requests, button, selectKind, selectTab, finish } = harness;
+  await selectTab('版本历史');
   void button('比较当前草稿').click();
   await compareGate.started;
+  await selectTab('编辑');
   await page.getByLabel('描述').fill('edited while comparing');
+  await selectTab('版本历史');
   compareGate.release();
   await page.getByText('比较内容已过时，请显式刷新后再查看当前 canonical 草稿。', { exact: true }).waitFor();
   assert.equal(requests.filter((item) => item.type === 'compare').length, 1);
@@ -993,7 +1021,9 @@ async function runDeferredComparison(browser) {
   await page.getByText('/metadata/description', { exact: true }).waitFor();
   assert.equal(await page.getByText(/比较内容已过时/).count(), 0);
   for (const kind of kinds) {
+    await selectTab('编辑');
     await selectKind(kind);
+    await selectTab('版本历史');
     await page.getByLabel('比较右侧').selectOption('v0');
     await page.getByText('/fixtureVersion', { exact: true }).waitFor();
   }
@@ -1002,9 +1032,10 @@ async function runDeferredComparison(browser) {
 
 async function runFourKindComparisons(browser) {
   const harness = await createHarness(browser, { distinctVersions: true });
-  const { page, requests, button, selectKind, finish } = harness;
+  const { page, requests, button, selectKind, selectTab, finish } = harness;
   for (const kind of kinds) {
     await selectKind(kind);
+    await selectTab('版本历史');
     await button('比较当前草稿').click();
     await page.getByText('没有差异。', { exact: true }).waitFor();
     assert.equal(requests.filter((item) => item.type === 'compare' && item.kind === kind).length, 1);
@@ -1017,11 +1048,13 @@ async function runFourKindComparisons(browser) {
 async function runDeferredAssetSwitch(browser) {
   const compareGate = deferred();
   const harness = await createHarness(browser, { gates: { compare: compareGate } });
-  const { page, button, selectKind, finish } = harness;
+  const { page, button, selectKind, selectTab, finish } = harness;
+  await selectTab('版本历史');
   void button('比较当前草稿').click();
   await compareGate.started;
   await selectKind('Workflow');
   compareGate.release();
+  await selectTab('编辑');
   await page.getByRole('heading', { name: 'WORKFLOW · demo/workflow', exact: true }).waitFor();
   assert.equal(await page.locator('.diff-view').count(), 0);
   assert.equal(await page.getByText(/比较内容已过时/).count(), 0);
@@ -1030,7 +1063,8 @@ async function runDeferredAssetSwitch(browser) {
 
 async function runComparisonErrorSwitch(browser) {
   const harness = await createHarness(browser, { compareErrorOnce: true });
-  const { page, button, finish } = harness;
+  const { page, button, selectTab, finish } = harness;
+  await selectTab('版本历史');
   await button('比较当前草稿').click();
   await page.getByText('COMPARISON_UNAVAILABLE · HTTP 503', { exact: true }).waitFor();
   await page.getByLabel('比较右侧').selectOption('v0');
@@ -1154,12 +1188,15 @@ async function runApplicationPreviewIsolation(browser) {
 
 async function runDependencyPanel(browser) {
   const harness = await createHarness(browser);
-  const { page, finish } = harness;
+  const { page, selectTab, finish } = harness;
+  await selectTab('依赖与血缘');
   const panel = page.getByRole('region', { name: '依赖与发布检查' });
   await panel.waitFor();
   await panel.getByText('ABILITY · demo.lookup', { exact: true }).waitFor();
   assert.equal(await panel.getByText('当前依赖证据完整', { exact: true }).count(), 1);
+  await selectTab('编辑');
   await page.getByLabel('描述').fill('unsaved dependency edit');
+  await selectTab('依赖与血缘');
   await panel.getByText('未保存本地编辑已排除', { exact: true }).waitFor();
   await panel.getByText('检查结果已过期', { exact: true }).waitFor();
   await page.screenshot({ path: path.join(output, 'dependency-panel-desktop.png'), fullPage: true });
@@ -1190,7 +1227,8 @@ async function runDependencyLineageGraph(browser) {
     historyScope: 'current-selection-and-explicit-retained-references',
   };
   const harness = await createHarness(browser, { dependencyGraph });
-  const { page, finish } = harness;
+  const { page, selectTab, finish } = harness;
+  await selectTab('依赖与血缘');
   const dependencyPanel = page.getByRole('region', { name: '依赖与发布检查' });
   const panel = page.getByRole('region', { name: '资产血缘图' });
   await panel.waitFor();
@@ -1212,10 +1250,14 @@ async function runDependencyLineageGraph(browser) {
   await missingRow.getByRole('button', { name: /ABILITY · missing.ability/ }).click();
   assert.equal(await panel.getByRole('button', { name: '查看资产详情', exact: true }).count(), 0);
   assert.equal(await panel.getByRole('button', { name: '查看目标详情', exact: true }).count(), 0);
+  await selectTab('编辑');
   await page.getByLabel('描述').fill('preserve while exploring lineage');
+  await selectTab('依赖与血缘');
   await dependencyPanel.getByText('检查结果已过期', { exact: true }).waitFor();
   await panel.getByRole('button', { name: '重置视图', exact: true }).click();
+  await selectTab('编辑');
   assert.equal(await page.getByLabel('描述').inputValue(), 'preserve while exploring lineage');
+  await selectTab('依赖与血缘');
   await page.screenshot({ path: path.join(output, 'lineage-graph-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
@@ -1223,6 +1265,7 @@ async function runDependencyLineageGraph(browser) {
   await finish();
 
   const reader = await createHarness(browser, { dependencyGraph, canAuthor: false, viewport: { width: 390, height: 844 } });
+  await reader.selectTab('依赖与血缘');
   const readerPanel = reader.page.getByRole('region', { name: '资产血缘图' });
   await readerPanel.waitFor();
   assert.equal(await readerPanel.getByLabel('证据来源').locator('option[value="saved-draft"]').count(), 0);
@@ -1235,10 +1278,11 @@ async function runDependencyPendingRaces(browser) {
   {
     const dependencyGate = deferred();
     const harness = await createHarness(browser, { gates: { dependencies: dependencyGate } });
-    const { page, finish } = harness;
+    const { page, selectTab, finish } = harness;
     const panel = page.getByRole('region', { name: '依赖与发布检查' });
     await dependencyGate.started;
     await page.getByLabel('描述').fill('edited while dependency pending');
+    await selectTab('依赖与血缘');
     await panel.getByText('检查结果已过期', { exact: true }).waitFor();
     dependencyGate.release();
     await panel.getByText('UNSAVED_LOCAL_EDITS_EXCLUDED', { exact: true }).waitFor();
@@ -1249,12 +1293,13 @@ async function runDependencyPendingRaces(browser) {
   {
     const dependencyGate = deferred();
     const harness = await createHarness(browser, { gates: { dependencies: dependencyGate } });
-    const { page, button, finish } = harness;
+    const { page, button, selectTab, finish } = harness;
     const panel = page.getByRole('region', { name: '依赖与发布检查' });
     await dependencyGate.started;
     await page.getByLabel('描述').fill('saved while dependency pending');
     await button('保存草稿').click();
     await page.getByText('已同步', { exact: true }).waitFor();
+    await selectTab('依赖与血缘');
     dependencyGate.release();
     await panel.getByText('SAVED_DRAFT_CHANGED', { exact: true }).waitFor();
     assert.equal(await panel.getByText('未保存本地编辑已排除', { exact: true }).count(), 0);
@@ -1264,13 +1309,15 @@ async function runDependencyPendingRaces(browser) {
   {
     const dependencyGate = deferred();
     const harness = await createHarness(browser, { gates: { dependencies: dependencyGate } });
-    const { page, selectKind, finish } = harness;
+    const { page, selectKind, selectTab, finish } = harness;
     await dependencyGate.started;
     await selectKind('Ability');
     dependencyGate.release();
+    await selectTab('依赖与血缘');
     const panel = page.getByRole('region', { name: '依赖与发布检查' });
     await panel.getByText('当前依赖证据完整', { exact: true }).waitFor();
     assert.equal(await panel.getByText('ABILITY · demo.lookup', { exact: true }).count(), 0);
+    await selectTab('编辑');
     assert.equal(await page.getByRole('heading', { name: 'ABILITY · demo/ability', exact: true }).count(), 1);
     await finish();
   }
@@ -1278,14 +1325,44 @@ async function runDependencyPendingRaces(browser) {
 
 async function runDependencyMissingAndReader(browser) {
   const missing = await createHarness(browser, { missingDependency: true });
+  await missing.selectTab('依赖与血缘');
   const missingPanel = missing.page.getByRole('region', { name: '依赖与发布检查' });
   await missingPanel.getByText('检查不完整，不能判定为可发布', { exact: true }).waitFor();
   await missingPanel.getByText('MISSING_DEPENDENCY', { exact: true }).first().waitFor();
   await missing.finish();
   const reader = await createHarness(browser, { canAuthor: false });
+  await reader.selectTab('依赖与血缘');
   const readerPanel = reader.page.getByRole('region', { name: '依赖与发布检查' });
   await readerPanel.waitFor();
   assert.equal(await readerPanel.getByRole('heading', { name: '已保存草稿诊断', exact: true }).count(), 0);
+  await reader.finish();
+}
+
+async function runDetailTabs(browser) {
+  const admin = await createHarness(browser);
+  const { page, selectKind, selectTab, finish } = admin;
+  const labels = ['基础信息', '编辑', '依赖与血缘', '版本历史'];
+  const tablist = page.getByRole('tablist', { name: '详情分区' });
+  await tablist.waitFor();
+  assert.equal(await tablist.getByRole('tab').count(), labels.length);
+  assert.equal(await tablist.getByRole('tab', { name: '编辑', exact: true }).getAttribute('aria-selected'), 'true');
+  for (const kind of kinds) {
+    await selectKind(kind);
+    assert.deepEqual(await tablist.getByRole('tab').allTextContents(), labels);
+  }
+  await selectKind('Skill');
+  await page.getByLabel('描述').fill('tab preserved draft');
+  await selectTab('依赖与血缘');
+  await page.getByRole('region', { name: '依赖与发布检查' }).waitFor();
+  await selectTab('编辑');
+  assert.equal(await page.getByLabel('描述').inputValue(), 'tab preserved draft');
+  await finish();
+
+  const reader = await createHarness(browser, { canAuthor: false });
+  const readerTablist = reader.page.getByRole('tablist', { name: '详情分区' });
+  await readerTablist.waitFor();
+  assert.equal(await readerTablist.getByRole('tab', { name: '基础信息', exact: true }).getAttribute('aria-selected'), 'true');
+  assert.deepEqual(await readerTablist.getByRole('tab').allTextContents(), labels);
   await reader.finish();
 }
 
@@ -1322,6 +1399,7 @@ async function runManagementShellRedesign(browser) {
 
 const browser = await chromium.launch({ headless: true, executablePath: chromePath });
 try {
+  await runDetailTabs(browser);
   await runManagementShellRedesign(browser);
   await runDependencyPanel(browser);
   await runDependencyLineageGraph(browser);

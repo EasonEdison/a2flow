@@ -678,6 +678,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 @keyframes skeleton { to { background-position: -200% 0; } }
 
 .detail-view { display: flex; flex-direction: column; gap: 16px; }
+.detail-tabs { display: flex; max-width: 100%; overflow-x: auto; border-bottom: 1px solid var(--line); background: #fff; }
+.detail-tabs button { position: relative; flex: 0 0 auto; border: 0; padding: 13px 18px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.detail-tabs button:hover { color: var(--description); }
+.detail-tabs button.active { color: var(--primary); font-weight: 600; }
+.detail-tabs button.active::after { position: absolute; right: 18px; bottom: -1px; left: 18px; height: 2px; background: var(--primary); content: ""; }
+.detail-tab-panel { display: none; }
+.detail-tab-panel.active { display: block; }
+.detail-tab-panel > * + * { margin-top: 16px; }
 .back-button { align-self: flex-start; border: 0; padding: 4px 0; background: transparent; color: var(--description); font-size: 13px; }
 .back-button:hover:not(:disabled) { color: var(--primary); }
 .content-header { align-items: flex-start; margin: 0; }

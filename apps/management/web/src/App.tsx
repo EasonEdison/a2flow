@@ -38,6 +38,14 @@ type Buffers = Record<string, DraftBuffer>;
 type PendingBuffers = Record<string, PendingFields>;
 type PendingResourceBuffers = Record<string, PendingResourceEdits>;
 type PreviewBuffers = Record<string, ApplicationPreviewState>;
+type DetailTab = 'BASIC' | 'EDIT' | 'DEPENDENCIES' | 'HISTORY';
+
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+  { id: 'BASIC', label: '基础信息' },
+  { id: 'EDIT', label: '编辑' },
+  { id: 'DEPENDENCIES', label: '依赖与血缘' },
+  { id: 'HISTORY', label: '版本历史' },
+];
 
 function errorText(error: unknown): string {
   if (error instanceof ManagementApiError) {
@@ -730,6 +738,7 @@ function App() {
   const [references, setReferences] = useState<ReferenceCatalog>({ loading: false, errors: {}, assets: {}, histories: {} });
   const [referenceRefresh, setReferenceRefresh] = useState(0);
   const [dependencyState, setDependencyState] = useState<DependencyViewState | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>('BASIC');
   const dependencyIdentity = session && kind && selectedKey
     ? `${session.userId}:${session.environment}:${kind}:${selectedKey}`
     : null;
@@ -818,6 +827,11 @@ function App() {
     () => assets.find((asset) => assetKeyOf(asset) === selectedKey) ?? null,
     [assets, selectedKey],
   );
+
+  useEffect(() => {
+    if (!selectedKey) return;
+    setDetailTab(session?.canAuthor ? 'EDIT' : 'BASIC');
+  }, [selectedKey, session?.canAuthor]);
 
   useEffect(() => {
     if (!session || !kind || !selectedKey) {
@@ -1230,22 +1244,56 @@ function App() {
                 <span className={session.canAuthor ? 'role-status admin' : 'role-status'}>{session.canAuthor ? '可编辑草稿' : '只读'}</span>
               </div>
             </header>
-            <section className="detail-card basic-info-card">
-              <div className="card-heading"><h2>基础信息</h2><span>资产当前标识与发布状态</span></div>
-              <dl>
-                <div><dt>Key</dt><dd>{selectedKey}</dd></div>
-                <div><dt>版本</dt><dd>{selectedSummary?.versionId ?? '—'}</dd></div>
-                <div><dt>环境</dt><dd>{session.environment}</dd></div>
-                <div><dt>状态</dt><dd>{selectedSummary?.draftOnly ? '已保存草稿' : '已发布'}</dd></div>
-                <div><dt>修订</dt><dd>{buffer ? `#${buffer.revision}` : selectedSummary?.draftRevision ? `#${selectedSummary.draftRevision}` : '—'}</dd></div>
-              </dl>
-            </section>
-            {assetLoading ? <div className="workspace-state">正在读取资产…</div> : null}
-            {assetError ? <div className="notice error">{assetError}</div> : null}
-            {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) ? (
-              <>
-                {detail ? <JsonBlock value={detail} label="当前已发布详情" /> : <section className="readonly-panel"><strong>仅草稿</strong><p>尚无已发布版本；不会显示虚构版本或历史。</p></section>}
-                {session.canAuthor && history ? (
+            <div className="detail-tabs" role="tablist" aria-label="详情分区">
+              {DETAIL_TABS.map((tab) => (
+                <button
+                  type="button"
+                  role="tab"
+                  id={`detail-tab-${tab.id.toLowerCase()}`}
+                  aria-controls={`detail-panel-${tab.id.toLowerCase()}`}
+                  aria-selected={detailTab === tab.id}
+                  className={detailTab === tab.id ? 'active' : ''}
+                  key={tab.id}
+                  onClick={() => setDetailTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div
+              className={detailTab === 'BASIC' ? 'detail-tab-panel active' : 'detail-tab-panel'}
+              role="tabpanel"
+              id="detail-panel-basic"
+              aria-labelledby="detail-tab-basic"
+              aria-hidden={detailTab !== 'BASIC'}
+            >
+              <section className="detail-card basic-info-card">
+                <div className="card-heading"><h2>基础信息</h2><span>资产当前标识与发布状态</span></div>
+                <dl>
+                  <div><dt>Key</dt><dd>{selectedKey}</dd></div>
+                  <div><dt>版本</dt><dd>{selectedSummary?.versionId ?? '—'}</dd></div>
+                  <div><dt>环境</dt><dd>{session.environment}</dd></div>
+                  <div><dt>状态</dt><dd>{selectedSummary?.draftOnly ? '已保存草稿' : '已发布'}</dd></div>
+                  <div><dt>修订</dt><dd>{buffer ? `#${buffer.revision}` : selectedSummary?.draftRevision ? `#${selectedSummary.draftRevision}` : '—'}</dd></div>
+                </dl>
+              </section>
+              {assetLoading ? <div className="workspace-state">正在读取资产…</div> : null}
+              {assetError ? <div className="notice error">{assetError}</div> : null}
+              {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly)
+                ? detail
+                  ? <JsonBlock value={detail} label="当前已发布详情" />
+                  : <section className="readonly-panel"><strong>仅草稿</strong><p>尚无已发布版本；不会显示虚构版本或历史。</p></section>
+                : null}
+            </div>
+            <div
+              className={detailTab === 'EDIT' ? 'detail-tab-panel active' : 'detail-tab-panel'}
+              role="tabpanel"
+              id="detail-panel-edit"
+              aria-labelledby="detail-tab-edit"
+              aria-hidden={detailTab !== 'EDIT'}
+            >
+              {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) ? (
+                session.canAuthor && history ? (
                   <AuthorWorkspace
                     session={session}
                     kind={kind}
@@ -1280,7 +1328,17 @@ function App() {
                     onPublish={publishPrepared}
                     onTargetChange={() => { setPlan(null); setSuccessMessage(null); }}
                   />
-                ) : <section className="readonly-panel"><strong>当前会话为只读</strong><p>你可以浏览已发布资产，但不能读取、保存或验证管理草稿。</p></section>}
+                ) : <section className="readonly-panel"><strong>当前会话为只读</strong><p>你可以浏览已发布资产，但不能读取、保存或验证管理草稿。</p></section>
+              ) : null}
+            </div>
+            <div
+              className={detailTab === 'DEPENDENCIES' ? 'detail-tab-panel active' : 'detail-tab-panel'}
+              role="tabpanel"
+              id="detail-panel-dependencies"
+              aria-labelledby="detail-tab-dependencies"
+              aria-hidden={detailTab !== 'DEPENDENCIES'}
+            >
+              {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) ? (
                 <DependencyPanel
                   graph={dependencyState?.graph ?? null}
                   loading={dependencyState?.loading ?? false}
@@ -1292,10 +1350,22 @@ function App() {
                   onRefresh={() => void refreshDependencies()}
                   onNavigate={(referenceKind, keyName) => { setKind(referenceKind); setSearchQuery(''); setSelectedKey(keyName); setHistory(null); setDetail(null); setAssets([]); }}
                 />
-                {history ? <HistoryPanel history={history} canAuthor={session.canAuthor && history.versions.length > 0} busy={actionBusy} onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} /> : null}
-                {history ? <ComparisonPanel key={`${kind}:${selectedKey}`} kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length + Object.keys(pendingResources).length} /> : null}
-              </>
-            ) : null}
+              ) : null}
+            </div>
+            <div
+              className={detailTab === 'HISTORY' ? 'detail-tab-panel active' : 'detail-tab-panel'}
+              role="tabpanel"
+              id="detail-panel-history"
+              aria-labelledby="detail-tab-history"
+              aria-hidden={detailTab !== 'HISTORY'}
+            >
+              {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) && history ? (
+                <>
+                  <HistoryPanel history={history} canAuthor={session.canAuthor && history.versions.length > 0} busy={actionBusy} onRefresh={() => void refreshPublishedState()} onRollback={rollbackVersion} />
+                  <ComparisonPanel key={`${kind}:${selectedKey}`} kind={kind} keyName={selectedKey} history={history} buffer={session.canAuthor ? buffer : undefined} pendingCount={Object.keys(pendingFields).length + Object.keys(pendingResources).length} />
+                </>
+              ) : null}
+            </div>
           </div>
         )}
       </main>
