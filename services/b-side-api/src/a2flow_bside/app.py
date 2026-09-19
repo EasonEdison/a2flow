@@ -415,7 +415,15 @@ def create_app(
     async def run_detail(run_id: str,
                          identity: RequestIdentity = Depends(identity)):
         _require_run_owner(run_id, identity.userId)
-        return runtime_client.control(run_id)
+        receipt = runtime_client.control(run_id)
+        runtime_run_id = receipt.get("runId") if isinstance(receipt, dict) \
+            else None
+        if runtime_run_id:
+            try:
+                return runtime_client.view(runtime_run_id)
+            except RemoteRuntimeError:
+                pass
+        return receipt
 
     @app.post("/api/runs/{run_id}/stop")
     async def stop_run(run_id: str,

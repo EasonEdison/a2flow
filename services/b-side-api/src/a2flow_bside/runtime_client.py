@@ -35,6 +35,8 @@ class RuntimeClient(Protocol):
 
     def action(self, run_id: str, node_id: str, payload: dict) -> dict: ...
 
+    def view(self, run_id: str) -> dict: ...
+
 
 class HttpRuntimeClient:
     """Minimal JSON client over the reviewed runtime control interface."""
@@ -77,6 +79,10 @@ class HttpRuntimeClient:
     def control(self, control_id: str) -> dict:
         quoted = urllib.parse.quote(control_id, safe="")
         return self._request("GET", "/runtime/controls/" + quoted)
+
+    def view(self, run_id: str) -> dict:
+        quoted = urllib.parse.quote(run_id, safe="")
+        return self._request("GET", "/runtime/runs/" + quoted + "/view")
 
     def stop(self, run_id: str, control_request_id: str) -> dict:
         return self._request(

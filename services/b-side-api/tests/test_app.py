@@ -237,6 +237,12 @@ class FakeRuntimeClient:
         self.calls.append(("action", run_id, node_id, payload))
         return {"ok": True}
 
+    def view(self, run_id):
+        self.calls.append(("view", run_id))
+        return {"runId": run_id, "title": "活动策划", "lifecycle": "RUNNING",
+                "nodes": [], "cards": [], "outputs": [],
+                "availability": "AVAILABLE"}
+
 
 class FakeChatRunner:
     """Scripted runner; records calls and replays a fixed event sequence."""

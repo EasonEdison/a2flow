@@ -8,7 +8,7 @@ import type { InteractiveCard, RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
 type Page = 'chat' | 'workflows' | 'schedules' | 'notifications';
-const runLabels: Record<string, string> = { RUNNING: '运行中', WAITING: '等待确认', SUCCEEDED: '已完成', STOPPED: '已停止', FAILED: '失败' };
+const runLabels: Record<string, string> = { RUNNING: '运行中', WAITING: '等待确认', SUCCEEDED: '已完成', STOPPED: '已停止', FAILED: '失败', SUBMITTED: '已提交' };
 const notificationLabels: Record<string, string> = { WAITING: '等待确认', COMPLETED: '完成', STOPPED: '停止', FAILED: '失败', SYSTEM: '系统' };
 
 function Login({ onSession }: { onSession: (session: Session) => void }) {
@@ -55,7 +55,7 @@ function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
   if (!run) return <div className="loading">正在加载运行…</div>;
   return <section className="run-detail">
     <div className="section-heading">{onBack ? <button className="secondary" onClick={onBack}>返回</button> : null}<div><h2>{run.title}</h2><p>{run.requirement}</p></div><span className={`status ${run.lifecycle.toLowerCase()}`}>{runLabels[run.lifecycle] ?? run.lifecycle}</span>{['RUNNING', 'WAITING'].includes(run.lifecycle) ? <button className="quiet danger" onClick={async () => { if (!confirm('停止后无法恢复，确认停止？')) return; await productApi.stopRun(run.id); await refresh(); }}>停止运行</button> : null}</div>
-    <div className="nodes">{run.nodes.map((node, index) => <NodeCard key={node.id} node={node} index={index} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, card.interactionId, card.actionName, value, card.confirmed); await refresh(); } finally { setBusy(false); } }} />)}</div>
+    <div className="nodes">{run.nodes.map((node, index) => <NodeCard key={node.id} node={node} index={index} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed); await refresh(); } finally { setBusy(false); } }} />)}</div>
   </section>;
 }
 
@@ -92,12 +92,17 @@ function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
   const [items, setItems] = useState<Schedule[]>([]);
   const [workflowKey, setWorkflowKey] = useState(initialWorkflow);
   const [input, setInput] = useState('');
-  const [cadenceType, setCadenceType] = useState('daily');
-  const [interval, setInterval] = useState('30');
+  const [cadenceType, setCadenceType] = useState<'minutes' | 'daily' | 'weekly' | 'once'>('daily');
+  const [interval, setInterval] = useState('15');
   const load = useCallback(async () => setItems((await productApi.schedules()).items), []);
   useEffect(() => { void Promise.all([productApi.workflows(), productApi.schedules()]).then(([catalog, schedules]) => { setWorkflows(catalog.items); setItems(schedules.items); setWorkflowKey((value) => value || catalog.items[0]?.key || ''); }); }, []);
-  const cadence = cadenceType === 'minutes' ? `每 ${interval} 分钟` : cadenceType === 'daily' ? '每天 09:00' : cadenceType === 'weekly' ? '每周一 09:00' : '一次性执行';
-  return <section><div className="page-title"><h1>定时管理</h1><p>为工作流设置周期或一次性自动执行。</p></div><section className="schedule-form card"><h2>创建定时任务</h2><form onSubmit={async (event) => { event.preventDefault(); await productApi.createSchedule({ workflowKey, input, cadence }); setInput(''); await load(); }}><label htmlFor="schedule-workflow">工作流</label><select id="schedule-workflow" value={workflowKey} onChange={(event) => setWorkflowKey(event.target.value)}>{workflows.map((item) => <option value={item.key} key={item.key}>{item.name}</option>)}</select><label htmlFor="cadence">执行周期</label><select id="cadence" value={cadenceType} onChange={(event) => setCadenceType(event.target.value)}><option value="minutes">每 N 分钟</option><option value="daily">每天</option><option value="weekly">每周</option><option value="once">一次性</option></select>{cadenceType === 'minutes' ? <><label htmlFor="interval">分钟间隔</label><input id="interval" type="number" min="5" value={interval} onChange={(event) => setInterval(event.target.value)} /></> : null}<label htmlFor="schedule-input">执行输入</label><textarea id="schedule-input" value={input} onChange={(event) => setInput(event.target.value)} required placeholder="输入工作流执行内容" /><button className="primary">创建定时任务</button></form></section><div className="schedule-list">{items.length ? items.map((item) => <article className="card" key={item.id}><div><h2>{item.workflowName}</h2><p>{item.input}</p><small>{item.cadence} · 下次运行 {new Date(item.nextRunAt).toLocaleString()}</small></div><label className="switch"><input role="switch" type="checkbox" checked={item.enabled} onChange={async (event) => { await productApi.toggleSchedule(item.id, event.target.checked); await load(); }} /><span>{item.enabled ? '已启用' : '已停用'}</span></label><button className="quiet danger" onClick={async () => { await productApi.deleteSchedule(item.id); await load(); }}>删除</button></article>) : <div className="empty-card">暂无定时任务</div>}</div></section>;
+  const scheduleRule = (): { ruleType: string; ruleJson: Record<string, string> } => {
+    if (cadenceType === 'minutes') return { ruleType: 'period', ruleJson: { every: Number(interval) >= 60 ? '1h' : '15m' } };
+    if (cadenceType === 'daily') return { ruleType: 'period', ruleJson: { every: '1d', at: '09:00' } };
+    if (cadenceType === 'weekly') return { ruleType: 'period', ruleJson: { every: '1w', at: '09:00' } };
+    return { ruleType: 'once', ruleJson: { at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() } };
+  };
+  return <section><div className="page-title"><h1>定时管理</h1><p>为工作流设置周期或一次性自动执行。</p></div><section className="schedule-form card"><h2>创建定时任务</h2><form onSubmit={async (event) => { event.preventDefault(); await productApi.createSchedule({ workflowKey, input, ...scheduleRule() }); setInput(''); await load(); }}><label htmlFor="schedule-workflow">工作流</label><select id="schedule-workflow" value={workflowKey} onChange={(event) => setWorkflowKey(event.target.value)}>{workflows.map((item) => <option value={item.key} key={item.key}>{item.name}</option>)}</select><label htmlFor="cadence">执行周期</label><select id="cadence" value={cadenceType} onChange={(event) => setCadenceType(event.target.value as 'minutes' | 'daily' | 'weekly' | 'once')}><option value="minutes">每 N 分钟</option><option value="daily">每天</option><option value="weekly">每周</option><option value="once">一次性（24 小时后）</option></select>{cadenceType === 'minutes' ? <><label htmlFor="interval">分钟间隔</label><input id="interval" type="number" min="15" value={interval} onChange={(event) => setInterval(event.target.value)} /></> : null}<label htmlFor="schedule-input">执行输入</label><textarea id="schedule-input" value={input} onChange={(event) => setInput(event.target.value)} required placeholder="输入工作流执行内容" /><button className="primary">创建定时任务</button></form></section><div className="schedule-list">{items.length ? items.map((item) => <article className="card" key={item.id}><div><h2>{item.workflowName}</h2><p>{item.input}</p><small>{item.cadence} · 下次运行 {new Date(item.nextRunAt).toLocaleString()}</small></div><label className="switch"><input role="switch" type="checkbox" checked={item.enabled} onChange={async (event) => { await productApi.toggleSchedule(item.id, event.target.checked); await load(); }} /><span>{item.enabled ? '已启用' : '已停用'}</span></label><button className="quiet danger" onClick={async () => { await productApi.deleteSchedule(item.id); await load(); }}>删除</button></article>) : <div className="empty-card">暂无定时任务</div>}</div></section>;
 }
 
 function NotificationPage({ items, refresh, onRun }: { items: Notification[]; refresh: () => Promise<void>; onRun: (id: string) => void }) {

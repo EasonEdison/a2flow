@@ -1,3 +1,5 @@
+import { parseView } from './api/contracts';
+import { toView } from './api/adapter';
 import type { RunView } from './presentation';
 
 export type Session = { userId: string; username: string; role: string };
@@ -52,14 +54,60 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 const body = (value: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(value) });
 
+type Row = Record<string, unknown>;
+
+const textOf = (value: unknown): string => (typeof value === 'string' ? value : '');
+const idOf = (value: unknown): string => (typeof value === 'number' ? String(value) : textOf(value));
+
+const workflowLabel = (key: string): string => (key === 'activity-package-demo' ? '活动策划助手' : key);
+
+const inputHintOf = (schema: unknown): string => {
+  const props = (schema as { properties?: { requirement?: { description?: unknown } } } | null | undefined)?.properties;
+  return typeof props?.requirement?.description === 'string'
+    ? props.requirement.description
+    : '输入工作流执行内容';
+};
+
+const cadenceOf = (row: Row): string => {
+  if (row.ruleType === 'once') return '一次性执行';
+  const rule = (row.ruleJson ?? {}) as { every?: unknown; at?: unknown };
+  const base = rule.every === '15m' ? '每 15 分钟'
+    : rule.every === '1h' ? '每小时'
+      : rule.every === '1d' ? '每天'
+        : rule.every === '1w' ? '每周' : textOf(rule.every);
+  return typeof rule.at === 'string' && rule.at ? `${base} ${rule.at}` : base;
+};
+
 export const productApi = {
   session: () => api<Session>('/api/auth/session'),
   login: (username: string, password: string) => api<Session>('/api/auth/login', body({ username, password })),
   register: (username: string, password: string) => api<Session>('/api/auth/register', body({ username, password })),
   logout: () => api('/api/auth/logout', body({})),
-  conversations: () => api<{ items: Conversation[] }>('/api/conversations'),
-  createConversation: () => api<Conversation>('/api/conversations', body({})),
-  messages: (id: string) => api<{ items: Message[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`),
+  conversations: async (): Promise<{ items: Conversation[] }> => {
+    const payload = await api<{ conversations?: Row[] }>('/api/conversations');
+    return {
+      items: (payload.conversations ?? []).map((row) => ({
+        id: idOf(row.id),
+        title: textOf(row.title) || '新会话',
+        updatedAt: textOf(row.createdAt),
+      })),
+    };
+  },
+  createConversation: async (): Promise<Conversation> => {
+    const row = await api<Row>('/api/conversations', body({}));
+    return { id: idOf(row.id), title: textOf(row.title) || '新会话', updatedAt: textOf(row.createdAt) };
+  },
+  messages: async (id: string): Promise<{ items: Message[] }> => {
+    const payload = await api<{ messages?: Row[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`);
+    return {
+      items: (payload.messages ?? []).map((row) => ({
+        id: idOf(row.id),
+        role: row.role === 'user' ? 'user' as const : 'assistant' as const,
+        text: textOf(row.content),
+        createdAt: textOf(row.createdAt),
+      })),
+    };
+  },
   sendMessage: async (id: string, text: string, onText: (text: string) => void) => {
     const response = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`, { ...body({ text }), headers: { 'Content-Type': 'application/json' } });
     if (!response.ok) {
@@ -73,22 +121,81 @@ export const productApi = {
       const line = block.split('\n').find((item) => item.startsWith('data:'));
       if (!line) continue;
       const item = JSON.parse(line.slice(5).trim()) as { type: string; text?: string; workflowKey?: string; title?: string; runId?: string };
-      if (item.type === 'text' && item.text) onText(item.text);
+      if (item.type === 'text_delta' && item.text) onText(item.text);
       if (item.type === 'workflow_confirm' && item.workflowKey && item.title) event = { type: 'workflow_confirm', workflowKey: item.workflowKey, title: item.title };
       if (item.type === 'interaction_required' && item.runId) event = { type: 'interaction_required', runId: item.runId };
     }
     return event;
   },
-  workflows: () => api<{ items: Workflow[] }>('/api/workflows'),
-  runs: () => api<{ items: RunItem[] }>('/api/runs'),
-  run: (id: string) => api<RunView>(`/api/runs/${encodeURIComponent(id)}`),
-  startRun: (workflowKey: string, input: string) => api<{ runId: string }>('/api/runs', body({ workflowKey, input })),
-  runAction: (id: string, interactionId: string, actionName: string, value: string, confirmed: boolean) => api(`/api/runs/${encodeURIComponent(id)}/actions`, body({ interactionId, actionName, input: { optionId: value, ...(confirmed ? { confirmed: true } : {}) } })),
+  workflows: async (): Promise<{ items: Workflow[] }> => {
+    const payload = await api<{ workflows?: Row[] }>('/api/workflows');
+    return {
+      items: (payload.workflows ?? []).map((row) => {
+        const key = textOf(row.definitionKey);
+        return { key, name: workflowLabel(key), description: '', inputHint: inputHintOf(row.inputSchema) };
+      }),
+    };
+  },
+  runs: async (): Promise<{ items: RunItem[] }> => {
+    const payload = await api<{ runs?: Row[] }>('/api/runs');
+    return {
+      items: (payload.runs ?? []).map((row) => {
+        const view = (row.view ?? null) as Row | null;
+        const bound = Boolean(view && view.runId);
+        return {
+          id: textOf(row.controlRequestId),
+          workflowKey: textOf(row.workflowKey),
+          title: bound ? textOf(view?.title) || textOf(row.workflowKey) : textOf(row.workflowKey),
+          status: bound ? 'RUNNING' : 'SUBMITTED',
+          input: '',
+          createdAt: textOf(row.createdAt),
+        };
+      }),
+    };
+  },
+  run: async (id: string): Promise<RunView> => {
+    const payload = await api<Row>(`/api/runs/${encodeURIComponent(id)}`);
+    if (!Array.isArray(payload.nodes)) {
+      return { id, title: '运行准备中', lifecycle: 'RUNNING', nodes: [] };
+    }
+    return toView(parseView(payload), {});
+  },
+  startRun: async (workflowKey: string, input: string): Promise<{ runId: string }> => {
+    const payload = await api<{ controlRequestId?: unknown }>('/api/runs', body({ workflowKey, input }));
+    return { runId: textOf(payload.controlRequestId) };
+  },
+  runAction: (id: string, nodeId: string, interactionId: string, actionName: string, value: string, confirmed: boolean) => api(`/api/runs/${encodeURIComponent(id)}/actions`, body({ nodeId, interactionId, actionName, inputs: { optionId: value, ...(confirmed ? { confirmed: true } : {}) } })),
   stopRun: (id: string) => api(`/api/runs/${encodeURIComponent(id)}/stop`, body({})),
-  schedules: () => api<{ items: Schedule[] }>('/api/schedules'),
-  createSchedule: (value: { workflowKey: string; input: string; cadence: string }) => api<Schedule>('/api/schedules', body(value)),
+  schedules: async (): Promise<{ items: Schedule[] }> => {
+    const payload = await api<{ schedules?: Row[] }>('/api/schedules');
+    return {
+      items: (payload.schedules ?? []).map((row) => ({
+        id: idOf(row.id),
+        workflowKey: textOf(row.workflowKey),
+        workflowName: workflowLabel(textOf(row.workflowKey)),
+        input: textOf(row.inputText),
+        cadence: cadenceOf(row),
+        enabled: row.enabled === true,
+        nextRunAt: textOf(row.nextRunAt),
+      })),
+    };
+  },
+  createSchedule: (value: { workflowKey: string; input: string; ruleType: string; ruleJson: Record<string, string> }) => api<Schedule>('/api/schedules', body({ workflowKey: value.workflowKey, inputText: value.input, ruleType: value.ruleType, ruleJson: value.ruleJson })),
   toggleSchedule: (id: string, enabled: boolean) => api<Schedule>(`/api/schedules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ enabled }), headers: { 'Content-Type': 'application/json' } }),
   deleteSchedule: (id: string) => api(`/api/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  notifications: () => api<{ items: Notification[] }>('/api/notifications'),
+  notifications: async (): Promise<{ items: Notification[] }> => {
+    const payload = await api<{ notifications?: Row[] }>('/api/notifications');
+    return {
+      items: (payload.notifications ?? []).map((row) => ({
+        id: idOf(row.id),
+        type: textOf(row.kind) || 'SYSTEM',
+        title: textOf(row.title),
+        relatedType: textOf(row.refType) || undefined,
+        relatedId: textOf(row.refId) || undefined,
+        read: row.read === true,
+        createdAt: textOf(row.createdAt),
+      })),
+    };
+  },
   readNotification: (id: string) => api(`/api/notifications/${encodeURIComponent(id)}/read`, body({})),
 };
