@@ -3,10 +3,12 @@ FROM ${PYTHON_IMAGE}
 
 ARG A2FLOW_UID=1000
 ARG A2FLOW_GID=1000
+ARG PIP_INDEX_URL=https://pypi.org/simple
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
     PYTHONPATH=/opt/a2flow/packages/contracts/src:/opt/a2flow/packages/asset-store/src:/opt/a2flow/services/skill-registry/src:/opt/a2flow/services/capability-registry/src:/opt/a2flow/services/a2ui-composer/src:/opt/a2flow/services/workflow-composer/src:/opt/a2flow/services/management-api/src:/opt/a2flow/examples/activity-planning
 
 WORKDIR /opt/a2flow
