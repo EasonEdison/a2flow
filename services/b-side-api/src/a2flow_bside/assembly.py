@@ -50,7 +50,15 @@ def _load_validator(reference: str):
     return validator
 
 
-def create_app_from_environment():
+class _UnavailableChatRunner:
+    """Fail-closed placeholder: chat is unavailable until wired by the
+    deployment composition (deploy.attended.bside_app)."""
+
+    async def iterate(self, *, user_id, conversation_id, text):
+        yield {"type": "error", "code": "CHAT_RUNNER_NOT_WIRED"}
+
+
+def create_app_from_environment(*, chat_runner=None):
     """Uvicorn factory; every value is explicit protected configuration."""
     config = BsideConfig.from_environment()
     validator = _load_validator(
@@ -86,6 +94,7 @@ def create_app_from_environment():
         pepper=config.pepper,
         browser_origin=config.browser_origin,
         environment=config.environment,
+        chat_runner=chat_runner if chat_runner is not None else _UnavailableChatRunner(),
         session_seconds=config.session_seconds,
     )
 
