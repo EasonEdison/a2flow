@@ -29,7 +29,9 @@ from a2flow_bside.repositories import (
 )
 from a2flow_bside.runtime_client import HttpRuntimeClient
 
-from deploy.mvp import app as mvp
+from pydantic import SecretStr
+
+from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 
 from .chat_runner import ChatLoopRunner
 
@@ -76,8 +78,31 @@ def create_app_from_environment():
             "userId": user_id, "environment": config.environment})
         return [dict(item) for item in reader.list_workflows(owner)]
 
+    def _chat_model_configuration(reference, current_owner):
+        # The bside session layer already verified the owner; chat accepts any
+        # trusted principal instead of the runtime host fixed identity.
+        if reference != "deepseek-v4-flash":
+            raise RuntimeError("MODEL_CONFIGURATION_NOT_FOUND")
+        return {
+            "model_id": "deepseek-v4-flash",
+            "credential_ref": "env:DEEPSEEK_API_KEY",
+            "timeout_seconds": 30.0,
+            "options": {
+                "thinking": "enabled", "reasoning_effort": "low",
+                "max_tokens": 4096,
+            },
+        }
+
+    def _chat_model_secret(reference, current_owner):
+        if reference != "env:DEEPSEEK_API_KEY":
+            raise RuntimeError("MODEL_CREDENTIAL_UNAVAILABLE")
+        return SecretStr(os.environ["DEEPSEEK_API_KEY"])
+
+    chat_model_factory = DeepSeekModelFactory(
+        _chat_model_configuration, _chat_model_secret)
+
     chat_runner = ChatLoopRunner(
-        model_factory=mvp.model_factory,
+        model_factory=chat_model_factory,
         model_reference="deepseek-v4-flash",
         environment=config.environment,
         reader=reader,
