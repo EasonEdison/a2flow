@@ -22,6 +22,10 @@ def _event_sink():
     dsn = os.environ.get("A2FLOW_EVENT_QUEUE_DATABASE_URL")
     if not dsn:
         return None
+    secret_path = os.environ.get("A2FLOW_EVENT_QUEUE_PASSWORD_FILE")
+    if secret_path:
+        with open(secret_path, "r", encoding="utf-8") as stream:
+            dsn = psycopg.conninfo.make_conninfo(dsn, password=stream.read().strip())
     connection = psycopg.connect(dsn, autocommit=True)
     return PostgresEventSink(connection)
 

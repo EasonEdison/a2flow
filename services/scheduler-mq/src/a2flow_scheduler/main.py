@@ -103,7 +103,12 @@ class SchedulerSettings:
 def _connect(settings: SchedulerSettings):
     import psycopg
 
-    return psycopg.connect(settings.database_url, autocommit=True)
+    dsn = settings.database_url
+    secret_path = os.environ.get("A2FLOW_SCHEDULER_POSTGRES_PASSWORD_FILE")
+    if secret_path:
+        with open(secret_path, "r", encoding="utf-8") as stream:
+            dsn = psycopg.conninfo.make_conninfo(dsn, password=stream.read().strip())
+    return psycopg.connect(dsn, autocommit=True)
 
 
 def _build_lark(settings: SchedulerSettings):

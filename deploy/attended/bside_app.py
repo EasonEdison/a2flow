@@ -82,8 +82,17 @@ def create_app_from_environment():
         reader=reader,
     )
 
+    def _password_dsn():
+        secret_path = os.environ.get("A2FLOW_BSIDE_POSTGRES_PASSWORD_FILE")
+        if not secret_path:
+            return config.conninfo
+        with open(secret_path, "r", encoding="utf-8") as stream:
+            password = stream.read().strip()
+        return psycopg.conninfo.make_conninfo(config.conninfo, password=password)
+
+    conninfo = _password_dsn()
     connection_factory = lambda: psycopg.connect(
-        config.conninfo, connect_timeout=5,
+        conninfo, connect_timeout=5,
         options="-c statement_timeout=10000 -c lock_timeout=5000",
         application_name="a2flow-b-side-api",
     )
