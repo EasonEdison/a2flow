@@ -39,6 +39,7 @@ services:
       args:
         A2FLOW_UID: ${A2FLOW_ATTENDED_UID:?set the numeric owner of the secret files}
         A2FLOW_GID: ${A2FLOW_ATTENDED_GID:?set the numeric group of the secret files}
+        PIP_INDEX_URL: ${A2FLOW_PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
     profiles: ["tools"]
     network_mode: none
     user: "${A2FLOW_ATTENDED_UID}:${A2FLOW_ATTENDED_GID}"
@@ -72,6 +73,7 @@ services:
       args:
         A2FLOW_UID: ${A2FLOW_ATTENDED_UID:?set the numeric owner of the secret files}
         A2FLOW_GID: ${A2FLOW_ATTENDED_GID:?set the numeric group of the secret files}
+        PIP_INDEX_URL: ${A2FLOW_PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
     network_mode: host
     user: "${A2FLOW_ATTENDED_UID}:${A2FLOW_ATTENDED_GID}"
     depends_on:
@@ -106,6 +108,7 @@ services:
       args:
         A2FLOW_UID: ${A2FLOW_ATTENDED_UID:?set the numeric owner of the secret files}
         A2FLOW_GID: ${A2FLOW_ATTENDED_GID:?set the numeric group of the secret files}
+        PIP_INDEX_URL: ${A2FLOW_PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
     network_mode: host
     user: "${A2FLOW_ATTENDED_UID}:${A2FLOW_ATTENDED_GID}"
     depends_on:
@@ -139,6 +142,7 @@ services:
       args:
         A2FLOW_UID: ${A2FLOW_ATTENDED_UID:?set the numeric owner of the secret files}
         A2FLOW_GID: ${A2FLOW_ATTENDED_GID:?set the numeric group of the secret files}
+        PIP_INDEX_URL: ${A2FLOW_PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
     network_mode: host
     user: "${A2FLOW_ATTENDED_UID}:${A2FLOW_ATTENDED_GID}"
     depends_on:
