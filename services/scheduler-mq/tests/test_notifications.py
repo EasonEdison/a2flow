@@ -47,6 +47,17 @@ class NotificationPlanTests(unittest.TestCase):
         self.assertIsNotNone(plan)
         self.assertIn("未知工作流", plan[2])
 
+    def test_waiting_uses_node_id_fallback(self):
+        plan = notifications.notification_plan(
+            {
+                "event_type": "NODE_WAITING",
+                "workflow_key": "wf/demo",
+                "payload": {"nodeId": "node-test"},
+            }
+        )
+        self.assertIsNotNone(plan)
+        self.assertIn("node-test", plan[2])
+
 
 class RateCapTests(unittest.TestCase):
     def test_hour_bucket_stable_within_hour(self):

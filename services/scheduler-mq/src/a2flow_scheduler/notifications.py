@@ -37,7 +37,8 @@ def notification_plan(
         return None
     title_template, body_template = _KIND_COPY[kind]
     workflow = event.get("workflow_key") or "未知工作流"
-    node = (event.get("payload") or {}).get("node_title") or "未命名节点"
+    payload = event.get("payload") or {}
+    node = payload.get("node_title") or payload.get("nodeId") or "未命名节点"
     title = title_template
     body = body_template.format(workflow=workflow, node=node)
     return kind, title, body
