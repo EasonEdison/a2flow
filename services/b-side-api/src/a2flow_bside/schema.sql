@@ -85,3 +85,5 @@ CREATE TABLE IF NOT EXISTS run_ownership (
 );
 CREATE INDEX IF NOT EXISTS run_ownership_user
     ON run_ownership(user_id, created_at DESC);
+ALTER TABLE run_ownership ADD COLUMN IF NOT EXISTS run_id text;
+CREATE INDEX IF NOT EXISTS run_ownership_run ON run_ownership(run_id);

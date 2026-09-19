@@ -77,8 +77,16 @@ def run_event_consumer_iteration(
         QUEUE_DOMAIN_EVENTS, limit=claim_limit, lease_seconds=lease_seconds
     ):
         try:
+            def _owner(run_id):
+                row = conn.execute(
+                    "SELECT user_id FROM run_ownership WHERE run_id = %s",
+                    (run_id,),
+                ).fetchall()
+                return row[0][0] if row else None
+
             workers.handle_domain_event(
-                item.payload, db=conn, lark=lark, notifications=notifications
+                item.payload, db=conn, lark=lark,
+                notifications=notifications, owner_resolver=_owner,
             )
             queue.complete(item.item_id)
             processed += 1

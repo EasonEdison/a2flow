@@ -245,11 +245,18 @@ class RunOwnershipRepository:
     def list_for(self, user_id: str, limit: int = 50) -> list[dict]:
         with self._factory() as connection:
             rows = connection.execute(
-                "SELECT control_id, workflow_key, created_at "
+                "SELECT control_id, workflow_key, created_at, run_id "
                 "FROM run_ownership WHERE user_id = %s "
                 "ORDER BY created_at DESC LIMIT %s",
                 (user_id, limit)).fetchall()
         return [dict(row) for row in rows]
+
+    def bind_run_id(self, control_id: str, run_id: str) -> None:
+        with self._factory() as connection:
+            connection.execute(
+                "UPDATE run_ownership SET run_id = %s "
+                "WHERE control_id = %s AND run_id IS NULL",
+                (run_id, control_id))
 
     def owner(self, control_id: str) -> str | None:
         with self._factory() as connection:

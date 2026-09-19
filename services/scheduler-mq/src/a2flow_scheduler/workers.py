@@ -105,6 +105,7 @@ def handle_domain_event(
     db,
     lark: LarkSender,
     notifications,
+    owner_resolver=None,
 ) -> None:
     """Consume one domain event: wait-state bookkeeping + notifications."""
     event_type = event.get("event_type", "")
@@ -128,6 +129,10 @@ def handle_domain_event(
         return
     kind, title, body = plan
     user_id = event.get("user_id") or ""
+    if owner_resolver is not None and event.get("run_id"):
+        resolved = owner_resolver(event.get("run_id"))
+        if resolved:
+            user_id = resolved
     event_id = event.get("event_id") or ""
     count = db.execute(_HOURLY_COUNT_SQL, (user_id,)).fetchall()[0][0]
     if notifications.within_cap(count):

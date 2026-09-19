@@ -362,6 +362,9 @@ def create_app(
                 item["view"] = runtime_client.control(row["control_id"])
             except RemoteRuntimeError:
                 item["view"] = None
+            if item["view"] and item["view"].get("runId"):
+                run_ownership.bind_run_id(
+                    row["control_id"], item["view"]["runId"])
                 item["unavailable"] = True
             items.append(item)
         return {"runs": items}

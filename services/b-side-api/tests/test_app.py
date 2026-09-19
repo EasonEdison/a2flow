@@ -194,6 +194,9 @@ class FakeRunOwnership:
             "user_id": user_id, "workflow_key": workflow_key,
             "created_at": NOW}
 
+    def bind_run_id(self, control_id, run_id):
+        return None
+
     def list_for(self, user_id, limit=50):
         return [{"control_id": key, "workflow_key": row["workflow_key"],
                  "created_at": row["created_at"]}
