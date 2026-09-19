@@ -12,6 +12,7 @@ import importlib
 import re
 
 import psycopg
+from psycopg.rows import dict_row
 
 from skillweave_contracts import TrustedContext
 
@@ -77,7 +78,7 @@ def create_app_from_environment(*, chat_runner=None):
         return [dict(item) for item in reader.list_workflows(owner)]
 
     connection_factory = lambda: psycopg.connect(
-        config.conninfo, connect_timeout=5,
+        config.conninfo, row_factory=dict_row, connect_timeout=5,
         options="-c statement_timeout=10000 -c lock_timeout=5000",
         application_name="a2flow-b-side-api")
 
