@@ -1,0 +1,167 @@
+name: ${A2FLOW_ATTENDED_PROJECT_NAME:-a2flow-attended}
+
+services:
+  postgres:
+    image: public.ecr.aws/docker/library/postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6
+    network_mode: none
+    environment:
+      POSTGRES_DB: ${A2FLOW_ATTENDED_DB_NAME:-a2flow_attended}
+      POSTGRES_USER: ${A2FLOW_ATTENDED_DB_USER:-a2flow_attended}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    command:
+      - postgres
+      - -c
+      - listen_addresses=
+      - -c
+      - unix_socket_directories=/run/postgresql
+      - -c
+      - unix_socket_permissions=0777
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_socket:/run/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -h /run/postgresql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  seed:
+    image: ${A2FLOW_ATTENDED_IMAGE:-a2flow-attended:af13}
+    build:
+      context: ../..
+      dockerfile: deploy/attended/Dockerfile
+      args:
+        A2FLOW_UID: ${A2FLOW_ATTENDED_UID:?set the numeric owner of the secret files}
+        A2FLOW_GID: ${A2FLOW_ATTENDED_GID:?set the numeric group of the secret files}
+    profiles: ["tools"]
+    network_mode: none
+    user: "${A2FLOW_ATTENDED_UID}:${A2FLOW_ATTENDED_GID}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &attended_environment
+      A2FLOW_ATTENDED_DATABASE_URL: postgresql://${A2FLOW_ATTENDED_DB_USER:-a2flow_attended}@/a2flow_attended?host=/run/postgresql
+      A2FLOW_DATABASE_URL: postgresql://${A2FLOW_ATTENDED_DB_USER:-a2flow_attended}@/a2flow_attended?host=/run/postgresql
+      A2FLOW_DATABASE_HOST: /run/postgresql
+      A2FLOW_DATABASE_PORT: "5432"
+      A2FLOW_DATABASE_NAME: ${A2FLOW_ATTENDED_DB_NAME:-a2flow_attended}
+      A2FLOW_DATABASE_USER: ${A2FLOW_ATTENDED_DB_USER:-a2flow_attended}
+      A2FLOW_POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      A2FLOW_ENVIRONMENT: PRT
+      A2FLOW_ASSET_NAMESPACE: ${A2FLOW_ASSET_NAMESPACE:-a2flow-mvp-activity-planning}
+      A2FLOW_USER_ID: ${A2FLOW_USER_ID:-private-attended-user}
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_socket:/run/postgresql
+    command: ["seed"]
+    restart: "no"
+
+  runtime:
+    image: ${A2FLOW_ATTENDED_IMAGE:-a2flow-attended:af13}
+    build:
+      context: ../..
+      dockerfile: deploy/attended/Dockerfile
+      args:
+        A2FLOW_UID: ${A2FLOW_ATTENDED_UID:?set the numeric owner of the secret files}
+        A2FLOW_GID: ${A2FLOW_ATTENDED_GID:?set the numeric group of the secret files}
+    network_mode: host
+    user: "${A2FLOW_ATTENDED_UID}:${A2FLOW_ATTENDED_GID}"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      <<: *attended_environment
+      A2FLOW_EVENT_QUEUE_DATABASE_URL: postgresql://${A2FLOW_ATTENDED_DB_USER:-a2flow_attended}@/a2flow_attended?host=/run/postgresql
+      DEEPSEEK_API_KEY: ${A2FLOW_ATTENDED_DEEPSEEK_KEY}
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_socket:/run/postgresql
+    command: ["serve-runtime"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/session',timeout=2).read(1)"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  bside:
+    image: ${A2FLOW_ATTENDED_IMAGE:-a2flow-attended:af13}
+    build:
+      context: ../..
+      dockerfile: deploy/attended/Dockerfile
+      args:
+        A2FLOW_UID: ${A2FLOW_ATTENDED_UID:?set the numeric owner of the secret files}
+        A2FLOW_GID: ${A2FLOW_ATTENDED_GID:?set the numeric group of the secret files}
+    network_mode: host
+    user: "${A2FLOW_ATTENDED_UID}:${A2FLOW_ATTENDED_GID}"
+    depends_on:
+      runtime:
+        condition: service_started
+    environment:
+      <<: *attended_environment
+      A2FLOW_BSIDE_DATABASE_URL: postgresql://${A2FLOW_ATTENDED_DB_USER:-a2flow_attended}@/a2flow_attended?host=/run/postgresql
+      A2FLOW_BSIDE_DATABASE_NAME: ${A2FLOW_ATTENDED_DB_NAME:-a2flow_attended}
+      A2FLOW_BSIDE_ENVIRONMENT: PRT
+      A2FLOW_BSIDE_ASSET_NAMESPACE: ${A2FLOW_ASSET_NAMESPACE:-a2flow-mvp-activity-planning}
+      A2FLOW_BSIDE_VALIDATOR_FACTORY: ${A2FLOW_BSIDE_VALIDATOR_FACTORY:-activity_planning_demo:bundle_validator}
+      A2FLOW_BSIDE_PEPPER: ${A2FLOW_BSIDE_PEPPER:?set an owner-only pepper value}
+      A2FLOW_BSIDE_BROWSER_ORIGIN: ${A2FLOW_BSIDE_BROWSER_ORIGIN:?set the exact browser origin}
+      A2FLOW_BSIDE_SESSION_SECONDS: ${A2FLOW_BSIDE_SESSION_SECONDS:-7200}
+      A2FLOW_BSIDE_RUNTIME_URL: http://127.0.0.1:8765
+      DEEPSEEK_API_KEY: ${A2FLOW_ATTENDED_DEEPSEEK_KEY}
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_socket:/run/postgresql
+    command: ["serve-bside"]
+    restart: unless-stopped
+
+  scheduler:
+    image: ${A2FLOW_ATTENDED_IMAGE:-a2flow-attended:af13}
+    build:
+      context: ../..
+      dockerfile: deploy/attended/Dockerfile
+      args:
+        A2FLOW_UID: ${A2FLOW_ATTENDED_UID:?set the numeric owner of the secret files}
+        A2FLOW_GID: ${A2FLOW_ATTENDED_GID:?set the numeric group of the secret files}
+    network_mode: host
+    user: "${A2FLOW_ATTENDED_UID}:${A2FLOW_ATTENDED_GID}"
+    depends_on:
+      bside:
+        condition: service_started
+    environment:
+      <<: *attended_environment
+      A2FLOW_SCHEDULER_DATABASE_URL: postgresql://${A2FLOW_ATTENDED_DB_USER:-a2flow_attended}@/a2flow_attended?host=/run/postgresql
+      A2FLOW_SCHEDULER_BSIDE_URL: http://127.0.0.1:8767
+      A2FLOW_SCHEDULER_TRIGGER_SECONDS: ${A2FLOW_SCHEDULER_TRIGGER_SECONDS:-30}
+      A2FLOW_SCHEDULER_MONITOR_SECONDS: ${A2FLOW_SCHEDULER_MONITOR_SECONDS:-300}
+      A2FLOW_WAIT_TIMEOUT_HOURS: ${A2FLOW_WAIT_TIMEOUT_HOURS:-24}
+      A2FLOW_LARK_WEBHOOK_URL: ${A2FLOW_LARK_WEBHOOK_URL:-}
+      A2FLOW_LARK_SECRET: ${A2FLOW_LARK_SECRET:-}
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_socket:/run/postgresql
+    command: ["scheduler"]
+    restart: unless-stopped
+
+secrets:
+  postgres_password:
+    file: ${A2FLOW_ATTENDED_SECRET_DIRECTORY:?set an absolute private secret directory}/postgres_password
+
+volumes:
+  postgres_data:
+  postgres_socket:
