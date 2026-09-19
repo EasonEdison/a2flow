@@ -131,12 +131,10 @@ def _browser_origin(value):
             or parts.username is not None or parts.password is not None
             or parts.path not in {"", "/"} or parts.query or parts.fragment):
         raise RuntimeError("INVALID_MANAGEMENT_BROWSER_ORIGIN")
-    try:
-        if not ipaddress.ip_address(parts.hostname).is_loopback:
-            raise RuntimeError("INVALID_MANAGEMENT_BROWSER_ORIGIN")
-    except ValueError:
-        if parts.hostname != "localhost":
-            raise RuntimeError("INVALID_MANAGEMENT_BROWSER_ORIGIN") from None
+    # Loopback remains the safe private-preview default; a public origin is
+    # allowed only as an explicit operator configuration and should terminate
+    # TLS in front (the preview token and session cookie otherwise travel in
+    # plaintext). The exact-origin check below still rejects cross-site calls.
     origin = parts.scheme + "://" + parts.netloc
     if value not in {origin, origin + "/"}:
         raise RuntimeError("INVALID_MANAGEMENT_BROWSER_ORIGIN")

@@ -37,10 +37,12 @@ Set these outside the repository:
   token. Generate a new preview token; never copy an existing credential.
 - `A2FLOW_MANAGEMENT_STATIC_DIRECTORY`: absolute path to the already-built
   `apps/management/web/dist`, including `index.html`.
-- `A2FLOW_MANAGEMENT_BROWSER_ORIGIN`: exact loopback browser origin used through
-  the SSH tunnel, for example `http://127.0.0.1:14176`. It is never inferred
-  from a request Host header and is required for login and unsafe cookie-backed
-  API requests.
+- `A2FLOW_MANAGEMENT_BROWSER_ORIGIN`: exact browser origin for login and unsafe
+  cookie-backed API requests, for example `http://127.0.0.1:14176` for an SSH
+  tunnel or `http://47.110.84.69` behind a front proxy. It is never inferred
+  from a request Host header. Loopback is the safe private-preview default; a
+  public origin is an explicit operator decision and must terminate TLS in
+  front or accept plaintext token/session risk.
 
 There are no defaults for database, namespace, identity, roles, validator, or
 authentication or browser origin. `create_app_from_environment()` fails before

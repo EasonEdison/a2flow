@@ -317,9 +317,32 @@ class ManagementPreviewHostTests(unittest.TestCase):
                             RuntimeError, "SECRET_FILE_UNAVAILABLE"):
                         create_app_from_environment()
 
-    def test_browser_origin_must_be_explicit_loopback(self):
+    def test_browser_origin_accepts_loopback_and_explicit_public(self):
+        accepted = {
+            "http://127.0.0.1:14176": "http://127.0.0.1:14176",
+            "http://127.0.0.1:14176/": "http://127.0.0.1:14176",
+            "http://47.110.84.69": "http://47.110.84.69",
+            "https://management.example.com": "https://management.example.com",
+        }
+        for origin, normalized in accepted.items():
+            with self.subTest(origin=origin):
+                with tempfile.TemporaryDirectory() as directory:
+                    Path(directory, "index.html").write_text("ui", encoding="utf-8")
+                    config = ManagementPreviewConfig(
+                        conninfo=self.config.conninfo,
+                        database=self.config.database,
+                        environment=self.config.environment,
+                        namespace=self.config.namespace,
+                        user_id=self.config.user_id,
+                        roles=self.config.roles,
+                        static_directory=directory,
+                        browser_origin=origin,
+                    )
+                    self.assertEqual(normalized, config.browser_origin)
+
+    def test_browser_origin_rejects_path_and_userinfo(self):
         for origin in (
-                "https://management.example.com", "http://127.0.0.1:14176/path"):
+                "http://127.0.0.1:14176/path", "http://user:pass@127.0.0.1:14176"):
             with self.subTest(origin=origin):
                 with tempfile.TemporaryDirectory() as directory:
                     Path(directory, "index.html").write_text("ui", encoding="utf-8")

@@ -8,6 +8,13 @@ cross-VM host-mounted Unix sockets are not verified. The Host uses host networki
 solely so Uvicorn can bind `127.0.0.1:8766` and the existing ASGI loopback check
 continues to see a loopback server address. No provider/Runtime service is packaged.
 
+Optional public access: keep Uvicorn bound to loopback and terminate a front
+proxy (e.g. Nginx) in front, pointing `A2FLOW_MANAGEMENT_BROWSER_ORIGIN` at the
+public origin, e.g. `http://47.110.84.69`. This is an explicit operator
+decision: the preview token and session cookie travel in plaintext over plain
+HTTP unless TLS terminates at the proxy. The exact-origin check, strong token,
+HttpOnly SameSite=Strict cookie and loopback server bind remain enforced.
+
 Build `apps/management/web/dist` with its lockfile before Compose. Copy
 `compose.env.example` outside the repository and set absolute artifact/secret
 paths. Create three fresh files: identical random database passwords in
