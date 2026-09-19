@@ -122,6 +122,7 @@ services:
       A2FLOW_BSIDE_BROWSER_ORIGIN: ${A2FLOW_BSIDE_BROWSER_ORIGIN:?set the exact browser origin}
       A2FLOW_BSIDE_SESSION_SECONDS: ${A2FLOW_BSIDE_SESSION_SECONDS:-7200}
       A2FLOW_BSIDE_RUNTIME_URL: http://127.0.0.1:8765
+      A2FLOW_BSIDE_INTERNAL_TOKEN: ${A2FLOW_ATTENDED_INTERNAL_TOKEN:?set an owner-only internal token}
       DEEPSEEK_API_KEY: ${A2FLOW_ATTENDED_DEEPSEEK_KEY}
     secrets:
       - postgres_password
@@ -152,6 +153,7 @@ services:
       A2FLOW_WAIT_TIMEOUT_HOURS: ${A2FLOW_WAIT_TIMEOUT_HOURS:-24}
       A2FLOW_LARK_WEBHOOK_URL: ${A2FLOW_LARK_WEBHOOK_URL:-}
       A2FLOW_LARK_SECRET: ${A2FLOW_LARK_SECRET:-}
+      A2FLOW_SCHEDULER_INTERNAL_TOKEN: ${A2FLOW_ATTENDED_INTERNAL_TOKEN:?set an owner-only internal token}
     secrets:
       - postgres_password
     volumes:

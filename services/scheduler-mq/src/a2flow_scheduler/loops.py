@@ -6,6 +6,8 @@ PostgreSQL advisory xact lock so multiple instances never double-fire.
 
 from __future__ import annotations
 
+import os
+
 import datetime as dt
 from typing import Any
 
@@ -49,8 +51,9 @@ def run_workflow_consumer_iteration(
     ):
         payload = item.payload
         try:
-            http.post(
-                "/api/runs",
+            http.post_internal(
+                "/api/internal/runs",
+                token=os.environ.get("A2FLOW_SCHEDULER_INTERNAL_TOKEN") or "",
                 json={
                     "workflowKey": payload.get("workflow_key"),
                     "input": payload.get("input", ""),

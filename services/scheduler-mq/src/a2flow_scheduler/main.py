@@ -33,12 +33,24 @@ class BsideHttpClient:
         self._timeout = timeout
         self._opener = opener or urllib.request.urlopen
 
+    def post_internal(self, path: str, *, token: str, json: dict) -> dict:
+        body = jsonlib.dumps(json, ensure_ascii=False).encode("utf-8")
+        request = urllib.request.Request(
+            self._base + path, data=body, method="POST"
+        )
+        request.add_header("Content-Type", "application/json")
+        request.add_header("x-a2flow-internal-token", token)
+        return self._execute(request)
+
     def post(self, path: str, *, json: dict) -> dict:
         body = jsonlib.dumps(json, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
             self._base + path, data=body, method="POST"
         )
         request.add_header("Content-Type", "application/json")
+        return self._execute(request)
+
+    def _execute(self, request) -> dict:
         try:
             with self._opener(request, timeout=self._timeout) as response:
                 status = getattr(response, "status", None) or response.code

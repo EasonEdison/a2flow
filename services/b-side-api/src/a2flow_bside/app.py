@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
+import hmac
 import re
 import secrets
 import uuid
@@ -51,6 +53,12 @@ class MessageSend(BaseModel):
 
 
 class RunStart(BaseModel):
+    workflowKey: str = Field(min_length=1, max_length=256)
+    input: dict[str, object] | str
+
+
+class InternalRunStart(BaseModel):
+    userId: str = Field(min_length=1, max_length=128)
     workflowKey: str = Field(min_length=1, max_length=256)
     input: dict[str, object] | str
 
@@ -339,34 +347,49 @@ def create_app(
             raise BsideError("RUN_NOT_RESOLVED", 409)
         return run_id
 
+    def _resolve_inputs(workflow_key: str, user_id: str, raw_input):
+        if not isinstance(raw_input, str):
+            return raw_input
+        # Scheduled runs carry a plain prompt; wrap it into the workflow's
+        # single required string property when it has one.
+        entry = next(
+            (item for item in workflow_catalog(user_id)
+             if item.get("definitionKey") == workflow_key),
+            None,
+        )
+        if entry is None:
+            raise BsideError("WORKFLOW_NOT_FOUND", 404)
+        schema = entry.get("inputSchema") or {}
+        required = schema.get("required") or []
+        properties = schema.get("properties") or {}
+        if (len(required) == 1
+                and properties.get(required[0], {}).get("type") == "string"):
+            return {required[0]: raw_input}
+        raise BsideError("INVALID_INPUT", 400)
+
+    def _start_for(user_id: str, workflow_key: str, raw_input) -> dict:
+        control_id = uuid.uuid4().hex
+        inputs = _resolve_inputs(workflow_key, user_id, raw_input)
+        runtime_client.start(control_id, workflow_key, inputs)
+        run_ownership.create(
+            control_id=control_id, user_id=user_id,
+            workflow_key=workflow_key)
+        return {"controlRequestId": control_id, "status": "SUBMITTED"}
+
     @app.post("/api/runs")
     async def start_run(body: RunStart,
                         identity: RequestIdentity = Depends(identity)):
-        control_id = uuid.uuid4().hex
-        inputs = body.input
-        if isinstance(inputs, str):
-            # Scheduled runs carry a plain prompt; wrap it into the
-            # workflow's single required string property when it has one.
-            entry = next(
-                (item for item in workflow_catalog(identity.userId)
-                 if item.get("definitionKey") == body.workflowKey),
-                None,
-            )
-            if entry is None:
-                raise BsideError("WORKFLOW_NOT_FOUND", 404)
-            schema = entry.get("inputSchema") or {}
-            required = schema.get("required") or []
-            properties = schema.get("properties") or {}
-            if (len(required) == 1
-                    and properties.get(required[0], {}).get("type") == "string"):
-                inputs = {required[0]: inputs}
-            else:
-                raise BsideError("INVALID_INPUT", 400)
-        runtime_client.start(control_id, body.workflowKey, inputs)
-        run_ownership.create(
-            control_id=control_id, user_id=identity.userId,
-            workflow_key=body.workflowKey)
-        return {"controlRequestId": control_id, "status": "SUBMITTED"}
+        return _start_for(identity.userId, body.workflowKey, body.input)
+
+    @app.post("/api/internal/runs")
+    async def internal_start(request: Request, body: InternalRunStart):
+        token = os.environ.get("A2FLOW_BSIDE_INTERNAL_TOKEN")
+        if not token:
+            raise BsideError("INTERNAL_API_DISABLED", 503)
+        provided = request.headers.get("x-a2flow-internal-token") or ""
+        if not hmac.compare_digest(provided, token):
+            raise BsideError("INTERNAL_TOKEN_REQUIRED", 401)
+        return _start_for(body.userId, body.workflowKey, body.input)
 
     @app.get("/api/runs")
     async def list_runs(identity: RequestIdentity = Depends(identity)):

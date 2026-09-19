@@ -59,6 +59,9 @@ class FakeHttp:
         self.posts = []
         self.fail_paths = set(fail_paths)
 
+    def post_internal(self, path, *, token, json):
+        return self.post(path, json=json)
+
     def post(self, path, *, json):
         self.posts.append((path, json))
         if path in self.fail_paths:
@@ -122,7 +125,7 @@ class RunWorkflowConsumerTests(unittest.TestCase):
             conn=FakeDB(), queue=queue, http=http
         )
         self.assertEqual(1, processed)
-        self.assertEqual("/api/runs", http.posts[0][0])
+        self.assertEqual("/api/internal/runs", http.posts[0][0])
         self.assertEqual("wf/demo", http.posts[0][1]["workflowKey"])
         self.assertEqual([1], queue.completed)
 
@@ -135,7 +138,7 @@ class RunWorkflowConsumerTests(unittest.TestCase):
                 )
             ]
         )
-        http = FakeHttp(fail_paths={"/api/runs"})
+        http = FakeHttp(fail_paths={"/api/internal/runs"})
         processed = loops.run_workflow_consumer_iteration(
             conn=FakeDB(), queue=queue, http=http
         )
