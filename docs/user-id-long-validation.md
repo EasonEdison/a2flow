@@ -16,6 +16,7 @@ Offline checks on the coordinated source:
 | Scheduler | 37 passed |
 | Management deployment assembly | 12 passed |
 | Runtime phase-one experiments | 56 collected, 55 passed, 1 opt-in case skipped |
+| Runtime (synthetic model traffic) | 234 collected, 211 passed, 23 opt-in cases skipped |
 
 Disposable PostgreSQL checks: four conversation/schema tests and three personal
 memory tests passed. A conversation uses `9223372036854775807`, survives a new
