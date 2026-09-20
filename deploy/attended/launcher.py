@@ -20,6 +20,7 @@ def main() -> None:
         uvicorn.run(
             "deploy.attended.runtime_app:create_app_from_environment",
             host="127.0.0.1", port=8765, factory=True, log_level="info",
+            proxy_headers=False,
         )
     elif command == "serve-bside":
         uvicorn.run(

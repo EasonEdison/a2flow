@@ -12,9 +12,12 @@ from __future__ import annotations
 import os
 
 import psycopg
+from pydantic import SecretStr
 
 from agent_workflow_runtime.event_sink_postgres import PostgresEventSink
 from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
+from agent_workflow_runtime.internal_identity import private_identity
+from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from deploy.mvp import app as mvp
 
 
@@ -33,6 +36,30 @@ def _event_sink():
 def create_app_from_environment():
     """Uvicorn factory: reviewed mvp assembly + optional queue event sink."""
     sink = _event_sink()
+    def configuration(reference, owner):
+        if reference != "deepseek-v4-flash" or owner.environment != mvp.environment:
+            raise RuntimeError("MODEL_CONFIGURATION_NOT_FOUND")
+        return {
+            "model_id": reference, "credential_ref": "env:DEEPSEEK_API_KEY",
+            "timeout_seconds": 30.0,
+            "options": {"thinking": "enabled", "reasoning_effort": "low",
+                        "max_tokens": 4096},
+        }
+
+    def secret(reference, owner):
+        if reference != "env:DEEPSEEK_API_KEY" or owner.environment != mvp.environment:
+            raise RuntimeError("MODEL_CREDENTIAL_UNAVAILABLE")
+        return SecretStr(mvp.required("DEEPSEEK_API_KEY"))
+
+    class ModelFactory:
+        def create(self, reference, owner):
+            if owner.environment != mvp.environment:
+                raise RuntimeError("MODEL_CONFIGURATION_NOT_FOUND")
+            if mvp.compose_mode:
+                # Keep the configured shared request budget for every principal.
+                return mvp.BoundedDeepSeekFactory(owner).create(reference, owner)
+            return DeepSeekModelFactory(configuration, secret).create(reference, owner)
+
     host = MvpRuntimeHost(
         conninfo=mvp.conninfo,
         database=mvp.required("A2FLOW_DATABASE_NAME"),
@@ -43,8 +70,8 @@ def create_app_from_environment():
         bundle_validator=mvp.bundle_validator(),
         application_validator=mvp.application_validator,
         operation_specs=mvp.operations(),
-        model_factory=mvp.model_factory,
-        identity_resolver=lambda scope: mvp.owner,
+        model_factory=ModelFactory(),
+        identity_resolver=private_identity(mvp.environment),
         application_data_validator=mvp.application_data_validator,
         static_directory=os.environ.get("A2FLOW_STATIC_DIRECTORY"),
         unexpected_error_observer=mvp.error_observer,

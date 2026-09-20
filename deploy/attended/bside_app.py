@@ -98,12 +98,8 @@ def create_app_from_environment():
     chat_model_factory = DeepSeekModelFactory(
         _chat_model_configuration, _chat_model_secret)
 
-    def _chat_system_prompt():
+    def _chat_system_prompt(catalog_owner):
         catalog_lines = []
-        catalog_owner = TrustedContext.from_mapping({
-            "userId": os.environ.get("A2FLOW_USER_ID", "private-attended-user"),
-            "environment": config.environment,
-        })
         for item in reader.list_workflows(catalog_owner):
             catalog_lines.append(
                 "- 工作流 " + str(item.get("definitionKey")))
@@ -124,7 +120,7 @@ def create_app_from_environment():
         model_reference="deepseek-v4-flash",
         environment=config.environment,
         reader=reader,
-        system_prompt=_chat_system_prompt(),
+        system_prompt=_chat_system_prompt,
     )
 
     def _password_dsn():

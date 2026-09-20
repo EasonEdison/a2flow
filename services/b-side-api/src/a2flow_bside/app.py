@@ -410,8 +410,11 @@ def create_app(
         if recorded != owner_user:
             raise BsideError("NOT_FOUND", 404)
 
-    def _resolve_run_id(control_id: str) -> str:
-        view = runtime_client.control(control_id)
+    def _runtime(user_id: str):
+        return runtime_client.for_user(user_id, environment)
+
+    def _resolve_run_id(control_id: str, user_id: str) -> str:
+        view = _runtime(user_id).control(control_id)
         run_id = view.get("runId") or view.get("run_id")
         if not isinstance(run_id, str) or not run_id:
             raise BsideError("RUN_NOT_RESOLVED", 409)
@@ -440,7 +443,7 @@ def create_app(
     def _start_for(user_id: str, workflow_key: str, raw_input) -> dict:
         control_id = uuid.uuid4().hex
         inputs = _resolve_inputs(workflow_key, user_id, raw_input)
-        runtime_client.start(control_id, workflow_key, inputs)
+        _runtime(user_id).start(control_id, workflow_key, inputs)
         run_ownership.create(
             control_id=control_id, user_id=user_id,
             workflow_key=workflow_key)
@@ -471,13 +474,12 @@ def create_app(
                 "createdAt": _iso(row["created_at"]),
             }
             try:
-                item["view"] = runtime_client.control(row["control_id"])
+                item["view"] = _runtime(identity.userId).control(row["control_id"])
             except RemoteRuntimeError:
                 item["view"] = None
             if item["view"] and item["view"].get("runId"):
                 run_ownership.bind_run_id(
                     row["control_id"], item["view"]["runId"])
-                item["unavailable"] = True
             items.append(item)
         return {"runs": items}
 
@@ -485,12 +487,12 @@ def create_app(
     async def run_detail(run_id: str,
                          identity: RequestIdentity = Depends(identity)):
         _require_run_owner(run_id, identity.userId)
-        receipt = runtime_client.control(run_id)
+        receipt = _runtime(identity.userId).control(run_id)
         runtime_run_id = receipt.get("runId") if isinstance(receipt, dict) \
             else None
         if runtime_run_id:
             try:
-                return runtime_client.view(runtime_run_id)
+                return _runtime(identity.userId).view(runtime_run_id)
             except RemoteRuntimeError:
                 pass
         return receipt
@@ -499,17 +501,17 @@ def create_app(
     async def stop_run(run_id: str,
                        identity: RequestIdentity = Depends(identity)):
         _require_run_owner(run_id, identity.userId)
-        runtime_run_id = _resolve_run_id(run_id)
-        return runtime_client.stop(
+        runtime_run_id = _resolve_run_id(run_id, identity.userId)
+        return _runtime(identity.userId).stop(
             runtime_run_id, uuid.uuid4().hex)
 
     @app.post("/api/runs/{run_id}/actions")
     async def run_action(run_id: str, body: RunAction,
                          identity: RequestIdentity = Depends(identity)):
         _require_run_owner(run_id, identity.userId)
-        runtime_run_id = _resolve_run_id(run_id)
+        runtime_run_id = _resolve_run_id(run_id, identity.userId)
         return StreamingResponse(
-            _iterate_thread(runtime_client.action_stream(
+            _iterate_thread(_runtime(identity.userId).action_stream(
                 runtime_run_id, body.nodeId, {
                     "controlRequestId": uuid.uuid4().hex,
                     "inputs": body.inputs,
@@ -523,9 +525,9 @@ def create_app(
     async def run_surface(run_id: str,
                           identity: RequestIdentity = Depends(identity)):
         _require_run_owner(run_id, identity.userId)
-        runtime_run_id = _resolve_run_id(run_id)
+        runtime_run_id = _resolve_run_id(run_id, identity.userId)
         return StreamingResponse(
-            _iterate_thread(runtime_client.surface_stream(runtime_run_id)),
+            _iterate_thread(_runtime(identity.userId).surface_stream(runtime_run_id)),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"})
 

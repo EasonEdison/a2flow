@@ -46,6 +46,8 @@ class ChatLoopRunner:
             "userId": user_id, "environment": self._environment,
         })
         emitter = ListEmitter()
+        prompt = (await asyncio.to_thread(self._system_prompt, owner)
+                  if callable(self._system_prompt) else self._system_prompt)
         loop = ChatLoop(
             model_factory=self._model_factory,
             model_reference=self._model_reference,
@@ -54,7 +56,7 @@ class ChatLoopRunner:
             reader=self._reader,
             control_request_id=f"chat-{conversation_id}-{user_id}",
             emitter=emitter,
-            system_prompt=self._system_prompt,
+            system_prompt=prompt,
             history=list(history),
         )
         try:

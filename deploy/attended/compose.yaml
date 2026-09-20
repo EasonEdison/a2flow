@@ -93,7 +93,7 @@ services:
         - CMD
         - python
         - -c
-        - "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/session',timeout=2).read(1)"
+        - "import socket;socket.create_connection(('127.0.0.1',8765),timeout=2).close()"
       interval: 10s
       timeout: 3s
       retries: 12

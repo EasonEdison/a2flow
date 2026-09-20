@@ -219,6 +219,9 @@ class FakeRuntimeClient:
         self.calls = []
         self.controls = {}
 
+    def for_user(self, user_id, environment):
+        return self
+
     def start(self, control_request_id, definition_key, inputs):
         self.calls.append(("start", control_request_id, definition_key, inputs))
         self.controls[control_request_id] = {

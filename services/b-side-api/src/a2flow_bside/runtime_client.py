@@ -8,6 +8,7 @@ b-side run_ownership table before any call is forwarded.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -26,6 +27,8 @@ _STATUS_BY_CODE = {
 
 
 class RuntimeClient(Protocol):
+    def for_user(self, user_id: str, environment: str) -> "RuntimeClient": ...
+
     def start(self, control_request_id: str, definition_key: str,
               inputs: dict) -> dict: ...
 
@@ -46,14 +49,33 @@ class RuntimeClient(Protocol):
 class HttpRuntimeClient:
     """Minimal JSON client over the reviewed runtime control interface."""
 
-    def __init__(self, base_url: str, timeout: float = 10.0):
+    def __init__(self, base_url: str, timeout: float = 10.0, *,
+                 user_id: str | None = None, environment: str | None = None):
         self._base = base_url.rstrip("/")
         self._timeout = timeout
+        self._user_id = user_id
+        self._environment = environment
+
+    def for_user(self, user_id: str, environment: str) -> "HttpRuntimeClient":
+        # A new client per invocation: never mutate a shared client's identity.
+        if (type(user_id) is not str
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", user_id)
+                or environment not in {"PRT", "ONLINE"}):
+            raise ValueError("TRUSTED_CONTEXT_REQUIRED")
+        return HttpRuntimeClient(self._base, self._timeout,
+                                 user_id=user_id, environment=environment)
+
+    def _identify(self, request):
+        if self._user_id is None or self._environment is None:
+            raise ValueError("TRUSTED_CONTEXT_REQUIRED")
+        request.add_header("X-A2Flow-User-Id", self._user_id)
+        request.add_header("X-A2Flow-Environment", self._environment)
 
     def _request(self, method: str, path: str, body: dict | None = None) -> dict:
         data = json.dumps(body).encode("utf-8") if body is not None else None
         request = urllib.request.Request(
             self._base + path, data=data, method=method)
+        self._identify(request)
         request.add_header("Accept", "application/json")
         if data is not None:
             request.add_header("Content-Type", "application/json")
@@ -109,6 +131,7 @@ class HttpRuntimeClient:
         return self._stream(request)
 
     def _stream(self, request):
+        self._identify(request)
         try:
             response = urllib.request.urlopen(request, timeout=180.0)
         except urllib.error.HTTPError as error:
