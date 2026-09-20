@@ -275,3 +275,25 @@ asset namespace shared by M, Chat and Runtime. It does not migrate or replace ol
 databases. Seed installs prerequisite examples only; real UI publication and
 subsequent Chat rendering must be verified independently before claiming the
 end-to-end deployment works.
+
+### Real PRT acceptance (2026-09-20)
+
+The parallel composition was deployed from reviewed source `8144ac2` with the
+Compose-only mount fix `61f62a6`. No previous database was migrated or deleted.
+In an actual Chromium browser, the M editor created a component catalog with
+Column/Text and published v1. An Application referencing ChoicePicker/Button
+was rejected with `APPLICATION_COMPONENT_NOT_REGISTERED`. Publishing all four
+members as catalog v2 allowed the same Application to publish as v3, with an
+edited button label. These were UI save/validate/publish requests, not SQL edits.
+
+A real DeepSeek v4 flash Chat turn invoked use_skill and render_application,
+showing the edited M-authored label. Its Action reached the installed example
+business adapter and persisted COMPLETED revision2. Reload retained the selected
+option and read-only controls; PostgreSQL readback confirmed Application v3,
+the new catalog, and one FINISHED Action request. Desktop1440x1000 and
+mobile390x844 had no page errors or horizontal overflow. The unauthenticated
+session check returned the expected401 before registration.
+
+The adapter is a real in-process example backend, not an external production
+business integration. Layout and bindings remain the bounded four-component
+profile; this does not establish arbitrary A2UI or uploaded renderer support.
