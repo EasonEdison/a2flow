@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE INDEX IF NOT EXISTS messages_conversation_id_id
+    ON messages(conversation_id, id);
+
 CREATE TABLE IF NOT EXISTS workflow_schedules (
     id bigserial PRIMARY KEY,
     user_id text NOT NULL,

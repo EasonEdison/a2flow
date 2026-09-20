@@ -37,7 +37,8 @@ class ChatLoop:
     def __init__(
         self, *, model_factory, model_reference, owner, conversation_id,
         reader, control_request_id, emitter=None, system_prompt=None,
-        tools=None, history=None,
+        tools=None, history=None, checkpointer=None, thread_id=None,
+        history_loader=None,
     ):
         require_owner(owner)
         if type(conversation_id) is not str or not conversation_id:
@@ -53,6 +54,11 @@ class ChatLoop:
         self._emitter = emitter if emitter is not None else ListEmitter()
         self._system_prompt = system_prompt
         self._tools = tools
+        if (checkpointer is None) != (thread_id is None):
+            raise ValueError("CHECKPOINT_AND_THREAD_REQUIRED_TOGETHER")
+        self._checkpointer = checkpointer
+        self._thread_id = thread_id
+        self._history_loader = history_loader
         self._history = [
             HumanMessage(content=str(text)) if role == "user"
             else AIMessage(content=str(text)) for role, text in (history or [])
@@ -81,6 +87,7 @@ class ChatLoop:
                 harness_profile_key=model.configuration.harness_profile_key,
                 context_schema=TrustedInvocationContext,
                 system_prompt=self._system_prompt,
+                checkpointer=self._checkpointer,
             )
             context = TrustedInvocationContext(
                 trusted_context=self._owner,
@@ -89,15 +96,31 @@ class ChatLoop:
                 ),
                 control_request_id=self._control_request_id,
             )
-            messages = self._history + [HumanMessage(content=user_text.strip())]
+            config = {"recursion_limit": 64, "configurable": {
+                "thread_id": self._thread_id or str(uuid4()),
+            }}
+            previous = self._history
+            if self._checkpointer is not None:
+                snapshot = graph.get_state(config)
+                if snapshot.next:
+                    raise ChatLoopError("INCOMPLETE_PREVIOUS_TURN")
+                if snapshot.values:
+                    previous = snapshot.values.get("messages", [])
+                    initial = []
+                else:
+                    previous = (self._history_loader() if self._history_loader
+                                else self._history)
+                    initial = previous
+            else:
+                initial = previous
+            messages = initial + [HumanMessage(content=user_text.strip())]
             seen_calls = {
-                call["id"] for message in self._history
+                call["id"] for message in previous
                 for call in getattr(message, "tool_calls", ())
             }
             for mode, event in graph.stream(
                 {"messages": messages}, context=context,
-                config={"recursion_limit": 64,
-                        "configurable": {"thread_id": str(uuid4())}},
+                config=config,
                 stream_mode=["messages", "values"],
             ):
                 if mode == "messages":

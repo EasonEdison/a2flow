@@ -29,6 +29,9 @@ def main() -> None:
             script = files(package).joinpath(resource).read_text(encoding="utf-8")
             connection.execute(script)
     print("attended schemas applied")
+    from agent_workflow_runtime.chat.persistence import ConversationStore
+    ConversationStore(dsn).setup()
+    print("conversation checkpoint schema applied")
 
 
 if __name__ == "__main__":

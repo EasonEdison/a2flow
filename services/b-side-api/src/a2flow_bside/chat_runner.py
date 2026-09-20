@@ -19,5 +19,5 @@ from typing import Any, AsyncIterator, Protocol
 class ChatRunner(Protocol):
     async def iterate(self, *, user_id: str, conversation_id: int,
                       text: str,
-                      history: list[tuple[str, str]] = (),
+                      turn_id: str,
                       ) -> AsyncIterator[dict[str, Any]]: ...

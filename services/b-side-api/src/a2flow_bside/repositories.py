@@ -139,6 +139,20 @@ class MessagesRepository:
                 (conversation_id, limit)).fetchall()
         return [dict(row) for row in rows]
 
+    def legacy_history(self, user_id: str, conversation_id: int,
+                       before_id: int) -> list[dict]:
+        """One-time migration input, not a second live model history source."""
+        with self._factory() as connection:
+            rows = connection.execute(
+                "SELECT m.id,m.role,m.content FROM messages m "
+                "JOIN conversations c ON c.id=m.conversation_id "
+                "WHERE c.user_id=%s AND c.id=%s AND m.id<%s "
+                "AND m.role IN ('user','assistant') "
+                "AND NOT (m.content ? 'delivery') ORDER BY m.id",
+                (user_id, conversation_id, before_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
 
 class SchedulesRepository:
     _COLUMNS = frozenset({

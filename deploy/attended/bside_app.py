@@ -115,14 +115,6 @@ def create_app_from_environment():
             "用户确认前绝不启动运行。其他任务可用 use_skill 调用技能。"
         )
 
-    chat_runner = ChatLoopRunner(
-        model_factory=chat_model_factory,
-        model_reference="deepseek-v4-flash",
-        environment=config.environment,
-        reader=reader,
-        system_prompt=_chat_system_prompt,
-    )
-
     def _password_dsn():
         secret_path = os.environ.get("A2FLOW_BSIDE_POSTGRES_PASSWORD_FILE")
         if not secret_path:
@@ -137,12 +129,40 @@ def create_app_from_environment():
         options="-c statement_timeout=10000 -c lock_timeout=5000",
         application_name="a2flow-b-side-api",
     )
+    from agent_workflow_runtime.chat.persistence import ConversationStore
+    from langchain_core.messages import AIMessage, HumanMessage
+    import json
+
+    message_repository = MessagesRepository(connection_factory)
+
+    def legacy_history(user_id, conversation_id, before_id):
+        rows = message_repository.legacy_history(user_id, conversation_id, before_id)
+        result = []
+        for row in rows:
+            content = row["content"]
+            # Preserve legacy visible content, but never invent historical tool calls.
+            text = (content.get("text", "") if isinstance(content, dict)
+                    else str(content))
+            if isinstance(content, dict) and content.get("events"):
+                text += "\nLegacy display events: " + json.dumps(
+                    content["events"], ensure_ascii=False)
+            cls = HumanMessage if row["role"] == "user" else AIMessage
+            result.append(cls(content=text, id=f"legacy-{row['id']}"))
+        return result
+
+    chat_runner = ChatLoopRunner(
+        model_factory=chat_model_factory, model_reference="deepseek-v4-flash",
+        environment=config.environment, reader=reader,
+        system_prompt=_chat_system_prompt,
+        conversation_store=ConversationStore(conninfo),
+        history_loader=legacy_history,
+    )
 
     return create_app(
         users=UsersRepository(connection_factory),
         sessions=SessionsRepository(connection_factory),
         conversations=ConversationsRepository(connection_factory),
-        messages=MessagesRepository(connection_factory),
+        messages=message_repository,
         schedules=SchedulesRepository(connection_factory),
         notifications=NotificationsRepository(connection_factory),
         run_ownership=RunOwnershipRepository(connection_factory),

@@ -142,6 +142,31 @@ def tool_call_chunk(index, call_id, name, args_text):
 
 
 class PlainTextTurnTests(unittest.TestCase):
+    def test_checkpoint_rebuild_imports_legacy_only_once(self):
+        from langgraph.checkpoint.memory import InMemorySaver
+        from langchain_core.messages import HumanMessage, AIMessage
+        saver = InMemorySaver()
+        imports = []
+        def legacy():
+            imports.append(True)
+            return [HumanMessage(content="old"), AIMessage(content="old reply")]
+        def turn(text, reply):
+            model = FakeModel([AIMessageChunk(content=reply)])
+            loop = ChatLoop(
+                model_factory=FakeFactory([model]), model_reference="deepseek-v4-flash",
+                owner=OWNER, conversation_id="conv1",
+                reader=FakeMaterialPort(skill_material()), control_request_id=text,
+                checkpointer=saver, thread_id="server-owned-thread",
+                history_loader=legacy,
+            )
+            loop.turn(text)
+            return loop
+        turn("first", "first reply")
+        second = turn("second", "second reply")
+        self.assertEqual([True], imports)
+        self.assertEqual(["old", "old reply", "first", "first reply", "second", "second reply"],
+                         [m.content for m in second.history])
+
     def test_plain_reply_streams_deltas_and_done(self):
         emitter = ListEmitter()
         factory = FakeFactory(
