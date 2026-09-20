@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   A2UI_COMPONENT_TYPES,
   addComponent,
@@ -73,11 +73,12 @@ function PropertyPanel({ document, component, index, paths, disabled, pendingFie
   </section>;
 }
 
-export function A2UIWorkbench({ document, surface, disabled, previewState, pendingFields, onPreviewStateChange, onChange, onPendingChange, onApplyPending, onDiscardPending, getPendingConflict }: {
+export function A2UIWorkbench({ document, surface, disabled, previewState, componentCatalog, pendingFields, onPreviewStateChange, onChange, onPendingChange, onApplyPending, onDiscardPending, getPendingConflict }: {
   document: JsonObject;
   surface: JsonObject;
   disabled: boolean;
   previewState: ApplicationPreviewState;
+  componentCatalog: { key: string; loading: boolean; error: string | null; members: string[] };
   pendingFields: PendingFields;
   onPreviewStateChange: (state: ApplicationPreviewState) => void;
   onChange: (document: JsonObject) => void;
@@ -89,6 +90,12 @@ export function A2UIWorkbench({ document, surface, disabled, previewState, pendi
   const analysis = useMemo(() => analyzeSurface(surface), [surface]);
   const paths = useMemo(() => schemaPaths(surface.inputSchema), [surface.inputSchema]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const supportedCatalogMembers = useMemo(() => componentCatalog.members.filter((name) => A2UI_COMPONENT_TYPES.includes(name)), [componentCatalog.members]);
+  const unsupportedCatalogMembers = useMemo(() => componentCatalog.members.filter((name) => !A2UI_COMPONENT_TYPES.includes(name)), [componentCatalog.members]);
+  const [componentToAdd, setComponentToAdd] = useState('');
+  useEffect(() => {
+    setComponentToAdd((current) => supportedCatalogMembers.includes(current) ? current : supportedCatalogMembers[0] ?? '');
+  }, [supportedCatalogMembers]);
   const [previewIssues, setPreviewIssues] = useState<SurfaceIssue[]>([]);
   const [simulatedEvent, setSimulatedEvent] = useState<Record<string, unknown> | null>(null);
   const selected = Array.isArray(surface.components) && isEditableRecord(surface.components[selectedIndex]) ? surface.components[selectedIndex] : null;
@@ -128,10 +135,14 @@ export function A2UIWorkbench({ document, surface, disabled, previewState, pendi
   }
   return <section className="a2ui-workbench" aria-label="A2UI authoring workbench">
     <header className="a2ui-workbench-heading"><div><p className="section-label">Local safe workbench</p><h3>A2UI 组件与预览</h3></div><span>SIMULATED / LOCAL</span></header>
+    {componentCatalog.loading ? <div className="notice warning"><strong>正在读取已发布组件目录</strong><span>{componentCatalog.key}；加载完成前不能新增组件。</span></div> : null}
+    {componentCatalog.error ? <div className="notice error"><strong>组件目录不可用，已失败关闭新增入口</strong><span>{componentCatalog.error}</span></div> : null}
+    {!componentCatalog.loading && !componentCatalog.error && supportedCatalogMembers.length === 0 ? <div className="notice warning"><strong>当前已发布目录没有可用组件</strong><span>请先在组件中心修改草稿，经验证并显式发布新版本。</span></div> : null}
+    {unsupportedCatalogMembers.length ? <div className="notice error"><strong>目录含有当前宿主未实现的成员</strong><span>{unsupportedCatalogMembers.join(', ')} 不会出现在新增列表中。</span></div> : null}
     <IssueList issues={[...analysis.issues, ...policyIssues, ...previewIssues, ...renderedIssues]} onFocus={focusIssue} />
     <div className="a2ui-author-grid">
       <section className="a2ui-component-tree" aria-label="组件层级">
-        <div className="a2ui-panel-title"><strong>组件层级与数组顺序</strong><select aria-label="新增组件类型" defaultValue="Text" disabled={disabled}>{A2UI_COMPONENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select><button type="button" className="secondary-button" disabled={disabled || !Array.isArray(surface.components) || surface.components.length >= 128} onClick={(event) => { const select = event.currentTarget.previousElementSibling as HTMLSelectElement; replaceSurface(addComponent(surface, select.value)); }}>添加</button></div>
+        <div className="a2ui-panel-title"><strong>组件层级与数组顺序</strong><select aria-label="新增组件类型" value={componentToAdd} disabled={disabled || componentCatalog.loading || Boolean(componentCatalog.error) || supportedCatalogMembers.length === 0} onChange={(event) => setComponentToAdd(event.target.value)}>{supportedCatalogMembers.map((type) => <option key={type}>{type}</option>)}</select><button type="button" className="secondary-button" disabled={disabled || componentCatalog.loading || Boolean(componentCatalog.error) || !componentToAdd || !Array.isArray(surface.components) || surface.components.length >= 128} onClick={() => replaceSurface(addComponent(surface, componentToAdd))}>添加</button></div>
         <ol>{analysis.nodes.map((node) => <li key={`${node.index}-${String(node.id)}`} className={selectedIndex === node.index ? 'selected' : ''}><button type="button" onClick={() => setSelectedIndex(node.index)}>{String(node.id ?? '(invalid id)')} · {String(node.component ?? '(invalid type)')}</button><small>{node.path}{node.children.length ? ` → ${node.children.join(', ')}` : ''}</small><div className="row-actions"><button type="button" aria-label={`上移组件 ${String(node.id)}`} disabled={disabled || node.index === 0} onClick={() => { replaceSurface(moveComponent(surface, node.index, -1)); setSelectedIndex(Math.max(0, node.index - 1)); }}>上移</button><button type="button" aria-label={`下移组件 ${String(node.id)}`} disabled={disabled || node.index === analysis.nodes.length - 1} onClick={() => { replaceSurface(moveComponent(surface, node.index, 1)); setSelectedIndex(Math.min(analysis.nodes.length - 1, node.index + 1)); }}>下移</button><button type="button" aria-label={`移除组件 ${String(node.id)}`} disabled={disabled} onClick={() => { replaceSurface(removeComponent(surface, node.index)); setSelectedIndex(0); }}>移除</button></div></li>)}</ol>
       </section>
       {selected ? <PropertyPanel document={document} component={selected} index={selectedIndex} paths={paths} disabled={disabled} pendingFields={pendingFields} onUpdate={(path, value) => replaceSurface(updateComponentProperty(surface, selectedIndex, path, value))} onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending} getPendingConflict={getPendingConflict} /> : <section className="a2ui-property-panel"><p>选择可编辑组件；异常行保持只读并可在完整 JSON 中处理。</p></section>}

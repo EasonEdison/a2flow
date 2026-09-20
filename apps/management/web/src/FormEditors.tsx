@@ -6,6 +6,7 @@ import { AbilityEditor } from './AbilityEditor';
 import { ApplicationEditor } from './ApplicationEditor';
 import { SkillEditor } from './SkillEditor';
 import { WorkflowEditor } from './WorkflowEditor';
+import { ComponentEditor } from './ComponentEditor';
 
 export function FormEditor({ kind, text, disabled, pendingFields, pendingResources, assetId, revision, references, onNavigateReference, previewState, onPreviewStateChange, onEdit, onPendingChange, onApplyPending, onDiscardPending, onPendingResourcesChange, getPendingConflict }: {
   kind: AssetKind; text: string; disabled: boolean; pendingFields: PendingFields; pendingResources: PendingResourceEdits; assetId: string; revision: number; references: ReferenceCatalog; onNavigateReference?: (kind: AssetKind, key: string) => void; previewState?: ApplicationPreviewState; onPreviewStateChange?: (state: ApplicationPreviewState) => void; onEdit: (text: string) => void;
@@ -18,5 +19,6 @@ export function FormEditor({ kind, text, disabled, pendingFields, pendingResourc
   if (kind === 'SKILL') return <SkillEditor {...props} />;
   if (kind === 'ABILITY') return <AbilityEditor {...props} />;
   if (kind === 'APPLICATION') return <ApplicationEditor {...props} />;
-  return <WorkflowEditor {...props} />;
+  if (kind === 'WORKFLOW') return <WorkflowEditor {...props} />;
+  return <ComponentEditor {...props} />;
 }

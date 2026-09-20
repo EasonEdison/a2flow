@@ -94,14 +94,16 @@ function KindNav({
   active,
   onChange,
   disabled,
+  label = '资产类型',
 }: {
   kinds: AssetKind[];
   active: AssetKind | null;
   onChange: (kind: AssetKind) => void;
   disabled: boolean;
+  label?: string;
 }) {
   return (
-    <nav className="kind-nav" aria-label="资产类型">
+    <nav className="kind-nav" aria-label={label}>
       {kinds.map((kind) => (
         <button
           className={kind === active ? 'kind-link active' : 'kind-link'}
@@ -132,7 +134,11 @@ function ShellSidebar({
   return (
     <aside className="shell-sidebar">
       <p className="sidebar-label">资产管理</p>
-      <KindNav kinds={session.registeredKinds} active={activeKind} onChange={onKindChange} disabled={disabled} />
+      <KindNav kinds={session.registeredKinds.filter((kind) => kind !== 'COMPONENT')} active={activeKind} onChange={onKindChange} disabled={disabled} />
+      {session.registeredKinds.includes('COMPONENT') ? <>
+        <p className="sidebar-label component-center-label">组件中心</p>
+        <KindNav kinds={['COMPONENT']} active={activeKind} onChange={onKindChange} disabled={disabled} label="组件中心" />
+      </> : null}
     </aside>
   );
 }

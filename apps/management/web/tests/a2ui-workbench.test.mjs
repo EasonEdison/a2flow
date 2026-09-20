@@ -10,6 +10,7 @@ import {
   createPreview,
   simulateAction,
 } from '../src/a2ui-workbench.js';
+import { inspectPublishedComponentCatalog } from '../src/component-catalog-state.js';
 
 const surface = {
   surfaceKey: 'demo',
@@ -157,4 +158,27 @@ test('schema issue paths escape JSON Pointer segments and disclose partial valid
   const result = validateSample(document, { 'a/b~c': 1, nested: {} });
   assert.ok(result.issues.some((item) => item.code === 'SAMPLE_TYPE' && item.path === '/inputSchema/properties/a~1b~0c' && item.samplePath === '/a~1b~0c'));
   assert.ok(result.issues.some((item) => item.code === 'PARTIAL_SCHEMA_VALIDATION'));
+});
+
+test('reads members from the selected published component catalog definition', () => {
+  assert.deepEqual(inspectPublishedComponentCatalog({
+    definition: {
+      catalogKey: 'catalog/v1',
+      protocolProfileRef: 'a2ui/v1',
+      components: ['Column', 'Text', 'ChoicePicker', 'Button'],
+    },
+    dependencies: [],
+  }, 'catalog/v1'), {
+    ok: true,
+    catalogKey: 'catalog/v1',
+    protocolProfileRef: 'a2ui/v1',
+    components: ['Column', 'Text', 'ChoicePicker', 'Button'],
+  });
+});
+
+test('fails closed for a missing, mismatched, malformed, or duplicate catalog', () => {
+  assert.equal(inspectPublishedComponentCatalog(null, 'catalog/v1').ok, false);
+  assert.equal(inspectPublishedComponentCatalog({ definition: { catalogKey: 'other', protocolProfileRef: 'a2ui/v1', components: [] } }, 'catalog/v1').ok, false);
+  assert.equal(inspectPublishedComponentCatalog({ definition: { catalogKey: 'catalog/v1', protocolProfileRef: 'a2ui/v1', components: ['Text', 1] } }, 'catalog/v1').ok, false);
+  assert.equal(inspectPublishedComponentCatalog({ definition: { catalogKey: 'catalog/v1', protocolProfileRef: 'a2ui/v1', components: ['Text', 'Text'] } }, 'catalog/v1').ok, false);
 });

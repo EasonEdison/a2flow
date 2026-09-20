@@ -1,5 +1,5 @@
-export type AssetKind = 'SKILL' | 'ABILITY' | 'APPLICATION' | 'WORKFLOW';
-export type DependencyKind = AssetKind | 'COMPONENT';
+export type AssetKind = 'SKILL' | 'ABILITY' | 'APPLICATION' | 'WORKFLOW' | 'COMPONENT';
+export type DependencyKind = AssetKind;
 export type Environment = 'PRT' | 'ONLINE';
 export type JsonObject = Record<string, unknown>;
 
@@ -193,6 +193,11 @@ export const KIND_COPY: Record<AssetKind, { label: string; short: string; guidan
     label: 'Application',
     short: 'AP',
     guidance: '检查界面定义、交互 Action 与依赖；此处不扩展任意组件运行时。',
+  },
+  COMPONENT: {
+    label: '组件目录',
+    short: 'CP',
+    guidance: '管理可发布的 A2UI 组件目录；目录只能注册宿主已实现的组件，不会上传或执行自定义 JavaScript。',
   },
   WORKFLOW: {
     label: 'Workflow',

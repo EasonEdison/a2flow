@@ -295,6 +295,13 @@ code, pre { font-family: var(--mono); }
 .binding-columns { display: grid; grid-template-columns: 1fr 1fr; min-width: 0; }
 .binding-catalog, .binding-current { min-width: 0; padding: 13px; }.binding-current { border-left: 1px solid var(--line); background: #fbfcfc; }
 .binding-catalog > label { display: flex; flex-direction: column; gap: 6px; color: #495d57; font-size: 10px; font-weight: 700; }
+.component-center-label { margin-top: 24px; }
+.component-implementation-list { display: grid; gap: 10px; }
+.component-implementation { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfc; }
+.component-implementation input { margin-top: 3px; }
+.component-implementation > span { display: grid; gap: 5px; min-width: 0; }
+.component-implementation small { color: var(--muted); }
+.component-implementation code { overflow-wrap: anywhere; color: #34584e; font-size: 11px; }
 .binding-catalog input { width: 100%; min-width: 0; border: 1px solid #cfdcd8; border-radius: 7px; padding: 9px 10px; background: #fff; }
 .binding-list { display: grid; gap: 8px; margin-top: 10px; }
 .binding-card { display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; }
