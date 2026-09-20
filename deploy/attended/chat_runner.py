@@ -24,6 +24,7 @@ class ChatLoopRunner:
         reader,
         conversation_store,
         history_loader,
+        personal_memory=None,
         system_prompt: str | None = None,
     ) -> None:
         self._model_factory = model_factory
@@ -32,6 +33,7 @@ class ChatLoopRunner:
         self._reader = reader
         self._conversation_store = conversation_store
         self._history_loader = history_loader
+        self._personal_memory = personal_memory
         self._system_prompt = system_prompt
 
     async def iterate(
@@ -64,6 +66,7 @@ class ChatLoopRunner:
                     control_request_id=f"chat-{turn_id}",
                     emitter=emitter, system_prompt=prompt,
                     checkpointer=saver, thread_id=thread_id,
+                    personal_memory=self._personal_memory,
                     history_loader=lambda: self._history_loader(
                         user_id, conversation_id, int(turn_id)),
                 )

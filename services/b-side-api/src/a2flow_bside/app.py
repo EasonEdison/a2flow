@@ -17,7 +17,7 @@ from typing import Callable
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from . import auth
 from .chat_runner import ChatRunner
@@ -34,6 +34,19 @@ from .scheduling import ScheduleRuleError, next_run_after, parse_rule
 
 _USERNAME = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+class MemoryEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class MemorySettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    revision: int = Field(ge=0)
+    enabled: bool
+    entries: list[MemoryEntry] = Field(max_length=20)
 
 
 class RegisterRequest(BaseModel):
@@ -162,6 +175,8 @@ def create_app(
     environment: str,
     session_seconds: int,
     now: Callable[[], dt.datetime] | None = None,
+    memory_view=None,
+    memory_replace=None,
 ):
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
     dummy_hash = auth.hash_password("dummy-timing-password", pepper=pepper)
@@ -184,6 +199,19 @@ def create_app(
                                samesite="strict",
                                secure=browser_origin.startswith("https://"),
                                path="/")
+
+    @app.get("/api/memory")
+    async def read_memory(identity: RequestIdentity = Depends(identity)):
+        if memory_view is None:
+            raise BsideError("MEMORY_UNAVAILABLE", 503)
+        return await asyncio.to_thread(memory_view, identity.userId)
+
+    @app.put("/api/memory")
+    async def update_memory(body: MemorySettings,
+                            identity: RequestIdentity = Depends(identity)):
+        if memory_replace is None:
+            raise BsideError("MEMORY_UNAVAILABLE", 503)
+        return await asyncio.to_thread(memory_replace, identity.userId, body.model_dump())
 
     @app.middleware("http")
     async def bside_guard(request: Request, call_next):

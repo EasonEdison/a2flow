@@ -19,7 +19,7 @@
 
 ## Not yet delivered
 
-- Shared PostgreSQL Store memory and view/delete/disable controls.
+- Memory settings UI and Workflow-node read-only preference integration.
 - Conversation-scoped ability execution and Application interactions.
 - A bounded native-event-to-SSE bridge: the attended adapter still buffers a turn.
 
@@ -59,3 +59,26 @@ request ledger or a business exactly-once guarantee.
 The B-side transcript is still a display projection, not the model history.
 Transcript delivery-status reconciliation and incremental SSE remain follow-up
 work. This change does not make disconnect/reconnect streaming durable.
+
+## Personal preference memory (backend slice)
+
+The attended initializer creates native LangGraph PostgresStore tables.
+Preferences live in that Store, scoped by environment/user/default profile;
+there is no second memory database or automatic extraction service.
+
+- GET /api/memory returns the authenticated user's revision, enabled flag and entries.
+- PUT /api/memory replaces that document using the last read revision. An entry
+  contains id and text; omitting an entry deletes it. Stale revisions return409.
+- The default is disabled. Users explicitly add preferences and enable reading.
+  Disabled entries can still be viewed or deleted in settings.
+- At most20 entries,1000 characters each,8000 total characters. IDs are restricted
+  to letters/digits/underscore/hyphen. Strict bodies reject userId/environment.
+- Chat uses SDK middleware to re-read the current settings at each model call.
+  These preferences are labeled user data, not policy or business facts; they
+  are not appended as graph history messages. No model memory-write Tool or
+  generic filesystem access is enabled in this slice.
+
+Deleting/disabling affects subsequent memory reads. It cannot recall an already
+dispatched model request or erase content quoted in older chat replies. The
+settings UI, Workflow-node integration, and user-requested in-chat memory writes
+are not delivered yet. No production database migration/deployment is implied.

@@ -134,6 +134,25 @@ def create_app_from_environment():
     import json
 
     message_repository = MessagesRepository(connection_factory)
+    from agent_workflow_runtime.personal_memory import PersonalMemory, MemoryConflict
+    from a2flow_bside.errors import BsideError
+    personal_memory = PersonalMemory(conninfo)
+
+    def memory_owner(user_id):
+        return TrustedContext.from_mapping({
+            "userId": user_id, "environment": config.environment,
+        })
+
+    def memory_view(user_id):
+        return personal_memory.view(memory_owner(user_id))
+
+    def memory_replace(user_id, settings):
+        try:
+            return personal_memory.replace(memory_owner(user_id), **settings)
+        except MemoryConflict as exc:
+            raise BsideError("MEMORY_REVISION_CONFLICT", 409) from exc
+        except ValueError as exc:
+            raise BsideError("INVALID_MEMORY_SETTINGS", 400) from exc
 
     def legacy_history(user_id, conversation_id, before_id):
         rows = message_repository.legacy_history(user_id, conversation_id, before_id)
@@ -156,6 +175,7 @@ def create_app_from_environment():
         system_prompt=_chat_system_prompt,
         conversation_store=ConversationStore(conninfo),
         history_loader=legacy_history,
+        personal_memory=personal_memory,
     )
 
     return create_app(
@@ -163,6 +183,8 @@ def create_app_from_environment():
         sessions=SessionsRepository(connection_factory),
         conversations=ConversationsRepository(connection_factory),
         messages=message_repository,
+        memory_view=memory_view,
+        memory_replace=memory_replace,
         schedules=SchedulesRepository(connection_factory),
         notifications=NotificationsRepository(connection_factory),
         run_ownership=RunOwnershipRepository(connection_factory),

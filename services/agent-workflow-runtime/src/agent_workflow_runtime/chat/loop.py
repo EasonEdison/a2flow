@@ -38,7 +38,7 @@ class ChatLoop:
         self, *, model_factory, model_reference, owner, conversation_id,
         reader, control_request_id, emitter=None, system_prompt=None,
         tools=None, history=None, checkpointer=None, thread_id=None,
-        history_loader=None,
+        history_loader=None, personal_memory=None,
     ):
         require_owner(owner)
         if type(conversation_id) is not str or not conversation_id:
@@ -59,6 +59,7 @@ class ChatLoop:
         self._checkpointer = checkpointer
         self._thread_id = thread_id
         self._history_loader = history_loader
+        self._personal_memory = personal_memory
         self._history = [
             HumanMessage(content=str(text)) if role == "user"
             else AIMessage(content=str(text)) for role, text in (history or [])
@@ -80,6 +81,9 @@ class ChatLoop:
                 conversation_id=self._conversation_id,
                 control_request_id=self._control_request_id,
             )
+            from ..personal_memory import PersonalMemoryMiddleware
+            middleware = ([PersonalMemoryMiddleware(self._personal_memory, self._owner)]
+                          if self._personal_memory is not None else [])
             graph = build_agent(
                 model, tools,
                 {"use_skill": UseSkillModelArgs.model_validate,
@@ -88,6 +92,7 @@ class ChatLoop:
                 context_schema=TrustedInvocationContext,
                 system_prompt=self._system_prompt,
                 checkpointer=self._checkpointer,
+                middleware=middleware,
             )
             context = TrustedInvocationContext(
                 trusted_context=self._owner,
