@@ -73,7 +73,7 @@ def create_app_from_environment():
     )
     reader = AssetReader(repository, config.namespace)
 
-    def workflow_catalog(user_id: str):
+    def workflow_catalog(user_id: int):
         owner = TrustedContext.from_mapping({
             "userId": user_id, "environment": config.environment})
         return [dict(item) for item in reader.list_workflows(owner)]

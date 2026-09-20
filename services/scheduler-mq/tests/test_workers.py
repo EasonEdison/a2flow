@@ -57,7 +57,7 @@ def event(event_type, **overrides):
         "event_id": "evt-1",
         "event_type": event_type,
         "run_id": "run-1",
-        "user_id": "u1",
+        "user_id": "1001",
         "workflow_key": "wf/demo",
         "environment": "PRT",
         "occurred_at": "2026-09-19T10:00:00+00:00",
@@ -90,9 +90,9 @@ class HandleDomainEventTests(unittest.TestCase):
         workers.handle_domain_event(
             event("NODE_WAITING"), db=db, lark=None,
             notifications=__import__("a2flow_scheduler.notifications", fromlist=["x"]),
-            owner_resolver=lambda run_id: "u-real-owner",
+            owner_resolver=lambda run_id: 1002,
         )
-        self.assertEqual("u-real-owner", db.calls[2][1][0])
+        self.assertEqual(1002, db.calls[2][1][0])
 
     def test_terminal_event_clears_wait_and_notifies(self):
         db = FakeDB(rows_by_index={1: [(0,)]})
@@ -120,13 +120,13 @@ class HandleDomainEventTests(unittest.TestCase):
             notifications=__import__("a2flow_scheduler.notifications", fromlist=["x"]),
         )
         self.assertEqual("system", db.calls[2][1][1])
-        self.assertTrue(lark.sends[0][1].startswith("cap:u1:"))
+        self.assertTrue(lark.sends[0][1].startswith("cap:1001:"))
 
 
 class TriggerDueSchedulesTests(unittest.TestCase):
     def test_due_period_schedule_advances_enqueues_and_records_skips(self):
         row = (
-            1, "u1", "wf/demo", "PRT", "period",
+            1, 1001, "wf/demo", "PRT", "period",
             {"every": "15m"}, "Asia/Shanghai", "输入文本",
             dt.datetime(2026, 9, 19, 9, 0, tzinfo=UTC),
             dt.datetime(2026, 9, 19, 9, 0, tzinfo=UTC),
@@ -145,7 +145,7 @@ class TriggerDueSchedulesTests(unittest.TestCase):
         self.assertEqual(1, len(queue.items))
         queue_name, payload, dedup = queue.items[0]
         self.assertEqual("run_workflow", queue_name)
-        self.assertEqual("u1", payload["user_id"])
+        self.assertEqual("1001", payload["user_id"])
         self.assertEqual("输入文本", payload["input"])
         self.assertTrue(dedup.startswith("run:1:"))
         self.assertIn("错过 4 个执行窗口", db.calls[2][1][3])
@@ -153,7 +153,7 @@ class TriggerDueSchedulesTests(unittest.TestCase):
 
     def test_consumed_once_disables(self):
         row = (
-            2, "u1", "wf/demo", "PRT", "once",
+            2, 1001, "wf/demo", "PRT", "once",
             {"at": "2026-09-19T09:30:00+00:00"}, "Asia/Shanghai", "输入",
             dt.datetime(2026, 9, 19, 9, 30, tzinfo=UTC),
             dt.datetime(2026, 9, 19, 9, 0, tzinfo=UTC),
@@ -172,7 +172,7 @@ class TriggerDueSchedulesTests(unittest.TestCase):
 
 class WaitTimeoutTests(unittest.TestCase):
     def test_overdue_waits_are_stopped_and_notified(self):
-        row = ("run-9", "u1", "wf/demo")
+        row = ("run-9", 1001, "wf/demo")
         db = FakeDB(rows_by_index={0: [row]})
         http = FakeHttp()
         stopped = workers.monitor_wait_timeouts(

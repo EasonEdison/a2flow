@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 from .events import DomainEvent
+from skillweave_contracts.user_id import user_id_to_wire
 
 QUEUE_DOMAIN_EVENTS = "domain_events"
 
@@ -20,7 +21,7 @@ def _to_dict(event: DomainEvent) -> dict:
         "event_type": event.event_type,
         "run_id": event.run_id,
         "workflow_key": event.workflow_key,
-        "user_id": event.user_id,
+        "user_id": user_id_to_wire(event.user_id),
         "environment": event.environment,
         "occurred_at": event.occurred_at.isoformat(),
         "payload": dict(event.payload),

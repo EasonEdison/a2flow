@@ -34,7 +34,7 @@ class ContractSubsetCompatibilityTest(unittest.TestCase):
                 continue
             checked += 1
             payload = json.loads(
-                (FIXTURE_ROOT / case["fixture"]).read_text(encoding="utf-8")
+                (FIXTURE_ROOT / case['fixture']).read_text(encoding="utf-8")
             )
             with self.subTest(name=case["name"]):
                 if case["expectedValid"]:

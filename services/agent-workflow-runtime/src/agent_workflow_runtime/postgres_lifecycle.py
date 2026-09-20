@@ -16,14 +16,14 @@ from .postgres import lock_key
 
 DDL = (
     """CREATE TABLE IF NOT EXISTS runtime_runs (
-        user_id TEXT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
+        user_id BIGINT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
         thread_id TEXT NOT NULL UNIQUE, document JSONB NOT NULL,
         PRIMARY KEY (user_id, environment, run_id))""",
     """CREATE TABLE IF NOT EXISTS runtime_run_controls (
-        user_id TEXT NOT NULL, environment TEXT NOT NULL, control_id TEXT NOT NULL,
+        user_id BIGINT NOT NULL, environment TEXT NOT NULL, control_id TEXT NOT NULL,
         document JSONB NOT NULL, PRIMARY KEY (user_id, environment, control_id))""",
     """CREATE TABLE IF NOT EXISTS runtime_operation_facts (
-        user_id TEXT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
+        user_id BIGINT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
         operation_id TEXT NOT NULL, document JSONB NOT NULL,
         PRIMARY KEY (user_id, environment, run_id, operation_id),
         FOREIGN KEY (user_id, environment, run_id) REFERENCES runtime_runs)""",

@@ -74,7 +74,7 @@ class ModelContentTest(unittest.TestCase):
             content="an", id="stream-id", additional_kwargs={"reasoning_content": "rea"},
             tool_call_chunks=[
                 {"name": "lookup", "args": '{"x":', "id": "c-1", "index": 0},
-                {"name": "other", "args": '{"y":', "id": "c-2", "index": 1},
+                {"name": '1004', "args": '{"y":', "id": "c-2", "index": 1},
             ],
         )
         second = AIMessageChunk(

@@ -15,7 +15,7 @@ from .service import identifier, require_owner
 
 DDL = (
     """CREATE TABLE IF NOT EXISTS runtime_capture_heads (
-        user_id TEXT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
+        user_id BIGINT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
         node_id TEXT NOT NULL, execution_id TEXT NOT NULL,
         catalog_seq BIGINT NOT NULL DEFAULT 0, last_seq BIGINT NOT NULL DEFAULT 0,
         node_operation_id TEXT, sealed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -28,7 +28,7 @@ DDL = (
         ON runtime_capture_heads(user_id, environment, run_id, catalog_seq)
         WHERE execution_id <> ''""",
     """CREATE TABLE IF NOT EXISTS runtime_display_records (
-        user_id TEXT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
+        user_id BIGINT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
         node_id TEXT NOT NULL, execution_id TEXT NOT NULL, seq BIGINT NOT NULL,
         batch_id TEXT NOT NULL, batch_digest TEXT NOT NULL, batch_index INTEGER NOT NULL,
         document JSONB NOT NULL,

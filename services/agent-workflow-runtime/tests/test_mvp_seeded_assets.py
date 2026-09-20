@@ -148,7 +148,7 @@ class SeededRuntimeAssetsTest(unittest.TestCase):
         )
         config = self.assets.action(interaction, "confirm_activity")
         self.assertTrue(config.validate_input({"optionId": "a", "confirmed": True}))
-        self.assertFalse(config.validate_input({"optionId": "foreign", "confirmed": True}))
+        self.assertFalse(config.validate_input({"optionId": '1003', "confirmed": True}))
 
     def test_missing_confirmed_context_fails_closed(self):
         with self.assertRaisesRegex(ActionRejected, "PREDECESSOR_CONTEXT_UNAVAILABLE"):

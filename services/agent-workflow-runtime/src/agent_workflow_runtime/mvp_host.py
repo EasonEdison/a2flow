@@ -14,6 +14,7 @@ from starlette.staticfiles import StaticFiles
 from .http import _Lane, Action, create_app, error_response, bounded_response
 from .models import ActionRejected
 from .service import require_owner
+from skillweave_contracts.user_id import user_id_to_wire
 
 ACTION_TAIL_SECONDS = 90.0
 SURFACE_IDLE_SECONDS = 300.0
@@ -124,7 +125,7 @@ def create_mvp_app(
     @app.get("/runtime/session")
     async def session(request: Request):
         owner, _, _ = options(request)
-        return bounded_response({"userId": owner.user_id, "environment": owner.environment})
+        return bounded_response({"userId": user_id_to_wire(owner.user_id), "environment": owner.environment})
 
     @app.get("/runtime/runs")
     async def runs(request: Request):

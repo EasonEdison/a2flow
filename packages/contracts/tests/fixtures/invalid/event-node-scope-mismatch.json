@@ -5,7 +5,7 @@
   "eventType": "NODE_RESULT_RECORDED",
   "occurredAt": "2026-09-07T00:00:04Z",
   "trustedContext": {
-    "userId": "user_demo_001",
+    "userId": "1001",
     "environment": "ONLINE"
   },
   "resultRef": {

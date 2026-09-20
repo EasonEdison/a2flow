@@ -35,7 +35,7 @@ class PublicationServiceTests(unittest.TestCase):
         repository = Repository()
         service = PublicationService(repository, "activity-planning")
         context = TrustedManagementContext(
-            "admin-1", "ONLINE", frozenset({"ADMIN"}))
+            101, "ONLINE", frozenset({"ADMIN"}))
         target = PublicationTarget("ONLINE", "v2", "STABLE")
 
         operations = (

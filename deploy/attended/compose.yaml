@@ -56,7 +56,7 @@ services:
       A2FLOW_POSTGRES_PASSWORD_FILE: /run/secrets/app_postgres_password
       A2FLOW_ENVIRONMENT: PRT
       A2FLOW_ASSET_NAMESPACE: ${A2FLOW_ASSET_NAMESPACE:-a2flow-mvp-activity-planning}
-      A2FLOW_USER_ID: ${A2FLOW_USER_ID:-private-attended-user}
+      A2FLOW_USER_ID: ${A2FLOW_USER_ID:-101}
     secrets:
       - postgres_password
       - app_postgres_password

@@ -21,7 +21,7 @@ class MemoryApiTests(unittest.TestCase):
             self.assertEqual(401, (await client.get("/api/memory")).status_code)
             registration = await client.post("/api/auth/register", headers=ORIGIN_HEADERS,
                 json={"username": "memory-user", "password": "password-memory"})
-            user = registration.json()["userId"]
+            user = int(registration.json()["userId"])
             response = await client.get("/api/memory")
             self.assertEqual(200, response.status_code)
             settings = {"revision": 0, "enabled": True,

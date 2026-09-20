@@ -143,10 +143,10 @@ class WorkflowLoaderTest(unittest.TestCase):
                 {"nodeId": run.entry_node_id, "skillKey": "one"},
                 {"nodeId": run.entry_node_id, "skillKey": "two"},
             ]}, {run.entry_node_id: agent}),
-            ({"entryNodeId": "other", "nodes": [
-                {"nodeId": "other", "skillKey": "one"},
+            ({"entryNodeId": '1004', "nodes": [
+                {"nodeId": '1004', "skillKey": "one"},
                 {"nodeId": "copy", "skillKey": "two"},
-            ]}, {"other": agent, "copy": agent}),
+            ]}, {'1004': agent, "copy": agent}),
         )
         for definition, agents in cases:
             with self.subTest(definition=definition), self.assertRaisesRegex(

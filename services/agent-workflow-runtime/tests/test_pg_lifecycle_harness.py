@@ -41,11 +41,11 @@ class PgLifecycleHarnessTest(unittest.TestCase):
         def service(case, run, life, **kwargs):
             self.assertEqual(old.run_id, kwargs["forbidden"])
             return repo, config, ActionService(repo, config, executor, None, lifecycle=life)
-        with patch.object(worker, "DEFINITION", old.definition_key), \
-             patch.object(worker, "conninfo", return_value="unused-offline"), \
-             patch.object(worker, "NoOldRunRepository", return_value=runs), \
-             patch.object(worker.NoOldSaver, "from_conn_string", return_value=nullcontext(MemorySaver())), \
-             patch.object(worker, "service_for", side_effect=service), \
+        with patch.object(worker, "DEFINITION", old.definition_key),\
+             patch.object(worker, "conninfo", return_value="unused-offline"),\
+             patch.object(worker, "NoOldRunRepository", return_value=runs),\
+             patch.object(worker.NoOldSaver, "from_conn_string", return_value=nullcontext(MemorySaver())),\
+             patch.object(worker, "service_for", side_effect=service),\
              patch.object(worker, "event", side_effect=lambda case, name, amount=1: calls.update({name: amount})):
             options = {"source": old.run_id, "old_thread": old.thread_id}
             first = worker.main("restart", "offline", options)

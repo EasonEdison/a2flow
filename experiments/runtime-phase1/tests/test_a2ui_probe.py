@@ -58,7 +58,7 @@ class A2uiProbeTest(unittest.TestCase):
             {
                 "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
                 "trustedContext": {
-                    "userId": "synthetic-user",
+                    "userId": '1007',
                     "environment": "PRT",
                 },
                 "invocationScope": {

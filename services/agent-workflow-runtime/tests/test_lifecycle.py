@@ -25,7 +25,7 @@ class LifecycleTest(unittest.TestCase):
         self.owner = self.run.owner
 
     def test_no_card_stop_is_durable_authorized_and_never_success(self):
-        for owner in (TrustedContext("wrong-user", "PRT"), TrustedContext(self.owner.user_id, "ONLINE")):
+        for owner in (TrustedContext(1012, "PRT"), TrustedContext(self.owner.user_id, "ONLINE")):
             with self.assertRaises(ActionRejected):
                 self.lifecycle.stop(owner, self.run.run_id, "stop")
         stopped = self.lifecycle.stop(self.owner, self.run.run_id, "stop")

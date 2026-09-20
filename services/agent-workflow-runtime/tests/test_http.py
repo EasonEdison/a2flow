@@ -77,7 +77,7 @@ class HttpTest(unittest.IsolatedAsyncioTestCase):
         waiting = (await self.start()).json()
         run_id = waiting["runId"]
         card = waiting["interactions"]["items"][0]
-        for owner in (None, TrustedContext("other-user", "PRT"), TrustedContext("test-user", "ONLINE")):
+        for owner in (None, TrustedContext(1005, "PRT"), TrustedContext(1008, "ONLINE")):
             async with self.client_for(owner) as client:
                 response = await client.get(f"/runtime/runs/{run_id}")
                 self.assertEqual(401 if owner is None else 404, response.status_code)
@@ -85,9 +85,9 @@ class HttpTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(401 if owner is None else 404, response.status_code)
         async with self.client_for(None) as client:
             forged = await client.get(f"/runtime/runs/{run_id}",
-                                      headers={"x-user-id": "test-user", "x-environment": "PRT"})
+                                      headers={"x-user-id": '1008', "x-environment": "PRT"})
             self.assertEqual(401, forged.status_code)
-        forged = await self.action(run_id, card["interactionId"], userId="test-user")
+        forged = await self.action(run_id, card["interactionId"], userId='1008')
         self.assertEqual(400, forged.status_code)
         self.assertEqual(404, (await self.action("missing", card["interactionId"])).status_code)
         self.assertEqual(404, (await self.action(run_id, "missing")).status_code)

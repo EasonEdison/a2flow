@@ -22,8 +22,8 @@ class Runtime04WindowTest(unittest.TestCase):
 
     def test_cleanup_and_log_checks_receive_same_exact_af04_spec_after_failure(self):
         for failure in (RuntimeError("owned process failure"), ProcessLookupError()):
-            with patch.object(shared, "stop_owned_group", side_effect=failure) as stop, \
-                 patch.object(shared, "credential_log_check") as logs, \
+            with patch.object(shared, "stop_owned_group", side_effect=failure) as stop,\
+                 patch.object(shared, "credential_log_check") as logs,\
                  patch.object(shared, "cleanup") as cleanup:
                 with self.assertRaises(type(failure)):
                     shared.finish_window(None, "marker", ["synthetic"], window=window.SPEC)
@@ -47,7 +47,7 @@ class Runtime04WindowTest(unittest.TestCase):
                 run.assert_not_called()
 
     def test_cli_passes_exact_spec_and_verifies_source_again_after_cleanup(self):
-        with patch.object(window, "verify_source", return_value="a" * 40) as verify, \
+        with patch.object(window, "verify_source", return_value="a" * 40) as verify,\
              patch.object(shared, "run_window") as run, redirect_stdout(io.StringIO()):
             self.assertEqual(0, window.main(["--authorized-window", "--expected-source-sha", "a" * 40]))
         run.assert_called_once_with(window=window.SPEC)

@@ -27,7 +27,7 @@ class PostgresEventSinkTests(unittest.TestCase):
         connection = FakeConnection()
         sink = PostgresEventSink(connection)
         event = DomainEvent.create(
-            "RUN_FINISHED", "run-1", "wf/demo", "u1", "PRT",
+            "RUN_FINISHED", "run-1", "wf/demo", 1009, "PRT",
             payload={"nodeId": "n1"},
         )
         sink.publish(event)
@@ -39,7 +39,7 @@ class PostgresEventSinkTests(unittest.TestCase):
         payload = json.loads(params[1])
         self.assertEqual("run-1", payload["run_id"])
         self.assertEqual("wf/demo", payload["workflow_key"])
-        self.assertEqual("u1", payload["user_id"])
+        self.assertEqual('1009', payload["user_id"])
         self.assertEqual("PRT", payload["environment"])
         self.assertEqual({"nodeId": "n1"}, payload["payload"])
         self.assertEqual(str(event.event_id), params[2])

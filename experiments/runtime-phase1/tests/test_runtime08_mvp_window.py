@@ -69,22 +69,22 @@ class Runtime08WindowTest(unittest.TestCase):
                 ({window.MODEL_KEY_FILE_ENV: str(link)}, "MODEL_KEY_FILE_UNSAFE"),
                 ({}, "MODEL_KEY_FILE_REQUIRED"),
             ):
-                with self.subTest(code=code), patch.dict(os.environ, values, clear=True), \
+                with self.subTest(code=code), patch.dict(os.environ, values, clear=True),\
                         self.assertRaisesRegex(RuntimeError, code):
                     window.verified_model_key_file()
 
     def test_custom_window_budget_stops_on_time_or_data(self):
         volume = "/task-owned-volume"
-        with patch.object(shared, "memory", return_value=(1024 * 1024, 0)), \
-             patch.object(shared.time, "monotonic", return_value=301), \
+        with patch.object(shared, "memory", return_value=(1024 * 1024, 0)),\
+             patch.object(shared.time, "monotonic", return_value=301),\
              self.assertRaisesRegex(RuntimeError, "resource/time"):
             shared.check_budget(0, 0, volume, window=window.SPEC)
 
         spec = replace(window.SPEC, max_seconds=900, max_data_kib=10)
-        with patch.object(shared, "memory", return_value=(1024 * 1024, 0)), \
-             patch.object(shared.time, "monotonic", return_value=1), \
+        with patch.object(shared, "memory", return_value=(1024 * 1024, 0)),\
+             patch.object(shared.time, "monotonic", return_value=1),\
              patch.object(shared, "command",
-                          return_value=SimpleNamespace(stdout="11 /task-owned-volume\n")), \
+                          return_value=SimpleNamespace(stdout="11 /task-owned-volume\n")),\
              self.assertRaisesRegex(RuntimeError, "data size"):
             shared.check_budget(0, 0, volume, window=spec)
 
@@ -109,13 +109,13 @@ class Runtime08WindowTest(unittest.TestCase):
     def test_authorized_path_checks_key_and_source_around_shared_window(self):
         source = "a" * 40
         key = Path("/private/model-key")
-        with patch.object(window, "verify_source", return_value=source) as verify, \
-             patch.object(window, "verified_model_key_file", return_value=key) as key_check, \
+        with patch.object(window, "verify_source", return_value=source) as verify,\
+             patch.object(window, "verified_model_key_file", return_value=key) as key_check,\
              patch.object(window, "prepare_evidence",
-                          return_value=window.EVIDENCE_FILE) as prepare, \
-             patch.object(shared, "run_window") as run, \
-             patch.object(shared, "append_evidence") as append, \
-             patch.dict(os.environ, {}, clear=True), \
+                          return_value=window.EVIDENCE_FILE) as prepare,\
+             patch.object(shared, "run_window") as run,\
+             patch.object(shared, "append_evidence") as append,\
+             patch.dict(os.environ, {}, clear=True),\
              redirect_stdout(io.StringIO()):
             self.assertEqual(0, window.main([
                 "--authorized-window",
@@ -131,8 +131,8 @@ class Runtime08WindowTest(unittest.TestCase):
         self.assertEqual(2, verify.call_count)
 
     def test_cleanup_is_exact_and_needs_no_key_or_source(self):
-        with patch.object(shared, "cleanup") as cleanup, \
-             patch.object(shared, "run_window") as run, \
+        with patch.object(shared, "cleanup") as cleanup,\
+             patch.object(shared, "run_window") as run,\
              patch.dict(os.environ, {}, clear=True):
             self.assertEqual(0, window.main(["--cleanup"]))
         cleanup.assert_called_once_with(window=window.SPEC)
@@ -150,8 +150,8 @@ class Runtime08WindowTest(unittest.TestCase):
             with patch.object(
                     shared, "stop_owned_group",
                     side_effect=RuntimeError("synthetic-secret-must-not-persist"),
-            ), patch.object(shared, "credential_log_check"), \
-                    patch.object(shared, "cleanup") as cleanup, \
+            ), patch.object(shared, "credential_log_check"),\
+                    patch.object(shared, "cleanup") as cleanup,\
                     self.assertRaisesRegex(RuntimeError, "synthetic-secret"):
                 shared.finish_window(None, "marker", ["not-written"], window=spec)
             cleanup.assert_called_once_with(window=spec)

@@ -3,7 +3,7 @@
   "controlRequestId": "control_demo_005",
   "commandType": "RETRY_A2UI_NODE",
   "trustedContext": {
-    "userId": "user_demo_001",
+    "userId": "1001",
     "environment": "ONLINE"
   },
   "target": {

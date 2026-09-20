@@ -10,7 +10,7 @@ _DDL = (
     "CREATE TABLE IF NOT EXISTS a2flow_management_drafts "
     "(namespace TEXT NOT NULL, kind TEXT NOT NULL, asset_key TEXT NOT NULL, "
     "revision BIGINT NOT NULL CHECK(revision > 0), document BYTEA NOT NULL, "
-    "digest TEXT NOT NULL, updated_by TEXT NOT NULL, "
+    "digest TEXT NOT NULL, updated_by BIGINT NOT NULL, "
     "PRIMARY KEY(namespace,kind,asset_key))",
 )
 

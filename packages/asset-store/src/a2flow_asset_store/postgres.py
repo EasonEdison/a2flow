@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 import hashlib
 import json
+from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 
 from .records import AssetError, KINDS, MAX_ASSETS, MAX_BYTES, canonical, digest
 from .validation import environment, namespace
@@ -145,7 +146,7 @@ class PostgresAssetRepository:
                     if old is None:
                         inserts.append(asset.identity)
                     old_assets[asset.identity] = value
-                for state in desired.serving:
+                for state in json.loads(desired.serving_data):
                     identity = state["kind"], state["key"]
                     old = old_states.get(identity)
                     if old is not None and canonical(old) != canonical(state):
@@ -163,7 +164,7 @@ class PostgresAssetRepository:
                                 "(namespace,kind,asset_key,version_id,document,digest) VALUES(%s,%s,%s,%s,%s,%s)",
                                 (ns, asset.kind, asset.key, asset.version_id, asset.data, asset.content_digest))
                     previous_keys = {(s["kind"], s["key"]) for s in existing["serving"]}
-                    for state in desired.serving:
+                    for state in json.loads(desired.serving_data):
                         if (state["kind"], state["key"]) not in previous_keys:
                             connection.execute(
                                 "INSERT INTO a2flow_asset_serving(namespace,kind,asset_key,document) VALUES(%s,%s,%s,%s)",
@@ -217,7 +218,9 @@ class PostgresAssetRepository:
                     raise AssetError("ASSET_NOT_FOUND")
                 return {
                     "kind": kind, "key": key, "versions": versions,
-                    "serving": state,
+                    "serving": {**state, "grayUserIds": [
+                        user_id_to_wire(user_id_from_wire(user))
+                        for user in state["grayUserIds"]]},
                     "servingDigest": self._serving_digest(state),
                 }
 
@@ -275,7 +278,13 @@ class PostgresAssetRepository:
         if target["environment"] != self.environment or target["versionId"] != version_id:
             raise AssetError("DESTINATION_MISMATCH")
         gray_users = target["grayUserIds"]
-        if type(gray_users) is not list or len(gray_users) != len(set(gray_users)):
+        if type(gray_users) is not list or len(gray_users) > 1024:
+            raise AssetError("INVALID_GRAY_USERS")
+        try:
+            gray_users = [user_id_to_wire(user_id_from_wire(user)) for user in gray_users]
+        except ValueError:
+            raise AssetError("INVALID_GRAY_USERS") from None
+        if len(gray_users) != len(set(gray_users)):
             raise AssetError("INVALID_GRAY_USERS")
         with self._connection() as connection:
             with connection.transaction():
@@ -388,6 +397,8 @@ class PostgresAssetRepository:
         """Check selected Application ability pins for every routing cohort."""
         states = {(item["kind"], item["key"]): item
                   for item in document["serving"]}
+        states = {key: {**state, "grayUserIds": [user_id_from_wire(user)
+                   for user in state["grayUserIds"]]} for key, state in states.items()}
         assets = {(item["kind"], item["key"], item["versionId"]): item
                   for item in document["assets"]}
         users = {None}
@@ -427,6 +438,6 @@ class PostgresAssetRepository:
             if canonical(actual.get(asset.identity)) != canonical(expected):
                 raise AssetError("READBACK_DIGEST_MISMATCH")
         states = {(s["kind"], s["key"]): s for s in observed["serving"]}
-        for state in desired.serving:
+        for state in json.loads(desired.serving_data):
             if canonical(states.get((state["kind"], state["key"]))) != canonical(state):
                 raise AssetError("READBACK_SERVING_MISMATCH")

@@ -45,7 +45,7 @@ class ManagementPreviewHostTests(unittest.TestCase):
             database="a2flow",
             environment="PRT",
             namespace="a2flow-mvp-activity-planning",
-            user_id="preview-admin",
+            user_id=101,
             roles=frozenset({"ADMIN"}),
         )
         self.host = create_management_preview_host(
@@ -94,7 +94,7 @@ class ManagementPreviewHostTests(unittest.TestCase):
             "/management/session", token=TOKEN.decode("ascii"))
         self.assertEqual(200, response.status_code, response.text)
         self.assertEqual({
-            "userId": "preview-admin",
+            "userId": "101",
             "environment": "PRT",
             "registeredKinds": ["ABILITY", "APPLICATION", "SKILL", "WORKFLOW"],
             "canAuthor": True,
@@ -288,7 +288,7 @@ class ManagementPreviewHostTests(unittest.TestCase):
                 "A2FLOW_MANAGEMENT_DATABASE_NAME": self.config.database,
                 "A2FLOW_MANAGEMENT_ENVIRONMENT": self.config.environment,
                 "A2FLOW_MANAGEMENT_ASSET_NAMESPACE": self.config.namespace,
-                "A2FLOW_MANAGEMENT_USER_ID": self.config.user_id,
+                "A2FLOW_MANAGEMENT_USER_ID": str(self.config.user_id),
                 "A2FLOW_MANAGEMENT_ROLES": "ADMIN",
                 "A2FLOW_MANAGEMENT_VALIDATOR_FACTORY": (
                     "activity_planning_demo:bundle_validator"),
@@ -369,11 +369,11 @@ class ManagementPreviewHostTests(unittest.TestCase):
                 database=self.config.database,
                 environment=self.config.environment,
                 namespace=self.config.namespace,
-                user_id="preview-admin",
+                user_id=101,
                 roles=frozenset({"ADMIN"}),
                 static_directory=directory,
                 browser_origin=BROWSER_ORIGIN,
-                guest_user_id="preview-guest",
+                guest_user_id=102,
             )
             host = create_management_preview_host(
                 config, validator=bundle_validator(),
@@ -394,7 +394,7 @@ class ManagementPreviewHostTests(unittest.TestCase):
                     session = await client.get("/management/session")
                     self.assertEqual(200, session.status_code)
                     payload = session.json()
-                    self.assertEqual("preview-guest", payload["userId"])
+                    self.assertEqual("102", payload["userId"])
                     self.assertFalse(payload["canAuthor"])
                     await client.post(
                         "/private-preview/logout",
@@ -411,7 +411,7 @@ class ManagementPreviewHostTests(unittest.TestCase):
                     session = await client.get("/management/session")
                     self.assertEqual(200, session.status_code)
                     payload = session.json()
-                    self.assertEqual("preview-admin", payload["userId"])
+                    self.assertEqual("101", payload["userId"])
                     self.assertTrue(payload["canAuthor"])
 
             asyncio.run(run())

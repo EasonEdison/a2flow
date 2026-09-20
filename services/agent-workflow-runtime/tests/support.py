@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 def context():
     return TrustedInvocationContext.from_mapping({
         "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
-        "trustedContext": {"userId": "test-user", "environment": "PRT"},
+        "trustedContext": {"userId": '1008', "environment": "PRT"},
         "invocationScope": {"kind": "WORKFLOW", "runId": "run-test", "nodeId": "node-test"},
         "controlRequestId": "original-render-request",
     })

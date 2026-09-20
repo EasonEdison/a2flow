@@ -6,6 +6,8 @@ PostgreSQL advisory xact lock so multiple instances never double-fire.
 
 from __future__ import annotations
 
+from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
+
 import os
 
 import datetime as dt
@@ -57,7 +59,7 @@ def run_workflow_consumer_iteration(
                 json={
                     "workflowKey": payload.get("workflow_key"),
                     "input": payload.get("input", ""),
-                    "userId": payload.get("user_id"),
+                    "userId": user_id_to_wire(user_id_from_wire(payload.get("user_id"))),
                 },
             )
             queue.complete(item.item_id)

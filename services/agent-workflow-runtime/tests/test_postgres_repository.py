@@ -127,7 +127,7 @@ class SerializationTest(unittest.TestCase):
             {"node_waiting": True},
             {"resume_started": True},
             {"display_json": json.dumps({**card, "actions": [{}]})},
-            {"display_json": json.dumps({**card, "nodeId": "other"})},
+            {"display_json": json.dumps({**card, "nodeId": '1004'})},
         ):
             with self.subTest(change=change), self.assertRaisesRegex(
                 ActionRejected, "INVALID_STORED_RECORD",

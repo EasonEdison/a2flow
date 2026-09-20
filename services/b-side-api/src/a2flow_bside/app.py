@@ -17,7 +17,8 @@ from typing import Callable
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
+from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 
 from . import auth
 from .chat_runner import ChatRunner
@@ -77,9 +78,14 @@ class RunRefCreate(BaseModel):
 
 
 class InternalRunStart(BaseModel):
-    userId: str = Field(min_length=1, max_length=128)
+    userId: int
     workflowKey: str = Field(min_length=1, max_length=256)
     input: dict[str, object] | str
+
+    @field_validator("userId", mode="before")
+    @classmethod
+    def parse_user_id(cls, value):
+        return user_id_from_wire(value)
 
 
 class RunAction(BaseModel):
@@ -169,7 +175,7 @@ def create_app(
     run_ownership,
     runtime_client: RuntimeClient,
     chat_runner: ChatRunner,
-    workflow_catalog: Callable[[str], list[dict]],
+    workflow_catalog: Callable[[int], list[dict]],
     pepper: str,
     browser_origin: str,
     environment: str,
@@ -257,7 +263,7 @@ def create_app(
         return JSONResponse({"error": {"code": "INTERNAL_ERROR"}},
                             status_code=500)
 
-    def _issue_session(response: JSONResponse, user_id: str) -> str:
+    def _issue_session(response: JSONResponse, user_id: int) -> str:
         token = auth.new_session_token()
         sessions.create(
             token_sha256=auth.hash_session_token(token),
@@ -278,7 +284,7 @@ def create_app(
             username=body.username,
             password_hash=auth.hash_password(body.password, pepper=pepper))
         response = JSONResponse(
-            {"userId": user_id, "username": body.username, "role": "USER"})
+            {"userId": user_id_to_wire(user_id), "username": body.username, "role": "USER"})
         _issue_session(response, user_id)
         return response
 
@@ -292,7 +298,7 @@ def create_app(
                 body.password, record["password_hash"], pepper=pepper):
             raise BsideError("INVALID_CREDENTIALS", 401)
         response = JSONResponse({
-            "userId": record["user_id"],
+            "userId": user_id_to_wire(record["user_id"]),
             "username": record["username"],
             "role": record["role"],
         })
@@ -310,7 +316,7 @@ def create_app(
 
     @app.get("/api/auth/session")
     async def session(identity: RequestIdentity = Depends(identity)):
-        return {"userId": identity.userId, "username": identity.username,
+        return {"userId": user_id_to_wire(identity.userId), "username": identity.username,
                 "role": identity.role}
 
     # ---- conversations ----
@@ -418,17 +424,17 @@ def create_app(
         if recorded != owner_user:
             raise BsideError("NOT_FOUND", 404)
 
-    def _runtime(user_id: str):
+    def _runtime(user_id: int):
         return runtime_client.for_user(user_id, environment)
 
-    def _resolve_run_id(control_id: str, user_id: str) -> str:
+    def _resolve_run_id(control_id: str, user_id: int) -> str:
         view = _runtime(user_id).control(control_id)
         run_id = view.get("runId") or view.get("run_id")
         if not isinstance(run_id, str) or not run_id:
             raise BsideError("RUN_NOT_RESOLVED", 409)
         return run_id
 
-    def _resolve_inputs(workflow_key: str, user_id: str, raw_input):
+    def _resolve_inputs(workflow_key: str, user_id: int, raw_input):
         if not isinstance(raw_input, str):
             return raw_input
         # Scheduled runs carry a plain prompt; wrap it into the workflow's
@@ -448,7 +454,7 @@ def create_app(
             return {required[0]: raw_input}
         raise BsideError("INVALID_INPUT", 400)
 
-    def _start_for(user_id: str, workflow_key: str, raw_input) -> dict:
+    def _start_for(user_id: int, workflow_key: str, raw_input) -> dict:
         control_id = uuid.uuid4().hex
         inputs = _resolve_inputs(workflow_key, user_id, raw_input)
         _runtime(user_id).start(control_id, workflow_key, inputs)

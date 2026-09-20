@@ -5,7 +5,7 @@
   "eventType": "VERSION_MISMATCH_BLOCKED",
   "occurredAt": "2026-09-07T00:00:05Z",
   "trustedContext": {
-    "userId": "user_demo_001",
+    "userId": "1001",
     "environment": "ONLINE"
   },
   "runRef": {

@@ -2,6 +2,7 @@
 import base64
 import binascii
 import re
+from skillweave_contracts.user_id import user_id_from_wire
 
 from skill_registry import PackageEntry, PackageEntryDescriptor, validate_package_entries
 from skillweave_contracts import parse_identifier, parse_skill_key
@@ -176,9 +177,11 @@ class BundleValidator:
             users = state["grayUserIds"]
             if type(users) is not list or len(users) > 1024:
                 raise AssetError("INVALID_GRAY_USERS")
-            for user in users:
-                parse_identifier(user)
-            if len(users) != len(set(users)):
+            try:
+                decoded_users = [user_id_from_wire(user) for user in users]
+            except ValueError:
+                raise AssetError("INVALID_GRAY_USERS") from None
+            if len(users) != len(set(decoded_users)):
                 raise AssetError("INVALID_GRAY_USERS")
             if expected_environment == "PRT":
                 if not state["current"] or state["stable"] is not None or state["gray"] is not None or users:

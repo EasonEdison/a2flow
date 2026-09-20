@@ -11,8 +11,8 @@ class PrivateIdentityTest(unittest.TestCase):
 
     def test_real_users_and_environment(self):
         resolve = private_identity("PRT")
-        self.assertEqual(resolve(self.scope()).user_id, "101")
-        self.assertEqual(resolve(self.scope(b"102")).user_id, "102")
+        self.assertEqual(resolve(self.scope()).user_id, 101)
+        self.assertEqual(resolve(self.scope(b"102")).user_id, 102)
         with self.assertRaises(ActionRejected):
             resolve(self.scope(env=b"ONLINE"))
 

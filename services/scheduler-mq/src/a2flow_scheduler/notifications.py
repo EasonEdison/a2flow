@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 from typing import Any
+from skillweave_contracts.user_id import require_user_id
 
 # event_type -> notification kind; events not listed produce no notification.
 EVENT_TO_KIND = {
@@ -44,8 +45,9 @@ def notification_plan(
     return kind, title, body
 
 
-def hour_bucket(user_id: str, moment: dt.datetime) -> str:
+def hour_bucket(user_id: int, moment: dt.datetime) -> str:
     """Idempotent merge key for the hourly rate cap."""
+    require_user_id(user_id)
     return f"cap:{user_id}:{moment:%Y%m%d%H}"
 
 
@@ -54,7 +56,7 @@ def within_cap(existing_this_hour: int) -> bool:
 
 
 def cap_exceeded_plan(
-    user_id: str, moment: dt.datetime, overflow_count: int
+    user_id: int, moment: dt.datetime, overflow_count: int
 ) -> tuple[str, str, str, str]:
     """One merged summary notification per hour bucket once the cap is hit."""
     title = "通知较多，已为你合并"

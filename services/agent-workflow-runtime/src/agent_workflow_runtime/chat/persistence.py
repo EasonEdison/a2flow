@@ -19,7 +19,7 @@ from ..service import require_owner
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agent_conversations (
     environment text NOT NULL,
-    user_id text NOT NULL,
+    user_id BIGINT NOT NULL,
     conversation_id text NOT NULL,
     thread_id text NOT NULL UNIQUE,
     state text NOT NULL CHECK (state IN ('READY', 'RUNNING', 'FAILED')),

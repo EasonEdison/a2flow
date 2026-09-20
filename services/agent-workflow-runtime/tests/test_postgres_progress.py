@@ -66,7 +66,7 @@ class PostgresProgressTest(unittest.TestCase):
         return PostgresProgress("synthetic-unused", connection_factory=connect)
 
     def binding(self):
-        return {"userId": "test-user", "environment": "PRT", "runId": "run-test",
+        return {"userId": '1008', "environment": "PRT", "runId": "run-test",
                 "nodeId": "node-test", "executionId": SEGMENT, "nodeOperationId": "node-operation"}
 
     def head(self, last=0, **changes):
@@ -83,7 +83,7 @@ class PostgresProgressTest(unittest.TestCase):
         self.assertTrue(self.connection.closed and self.connection.committed)
         self.assertIn("READ ONLY", self.connection.calls[0][0])
         for _, params in self.connection.calls[1:]:
-            self.assertEqual(("test-user", "PRT", "run-test"), params[:3])
+            self.assertEqual((1008, "PRT", "run-test"), params[:3])
 
     def test_future_and_cross_segment_cursors_fail_closed(self):
         repo = self.repo([{"run_id": "run-test"}, self.head(1)])

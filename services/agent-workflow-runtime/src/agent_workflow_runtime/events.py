@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
 from uuid import UUID, uuid4
+from skillweave_contracts.user_id import require_user_id
 
 RUN_STARTED = "RUN_STARTED"
 NODE_WAITING = "NODE_WAITING"
@@ -27,10 +28,13 @@ class DomainEvent:
     event_type: str
     run_id: str
     workflow_key: str
-    user_id: str
+    user_id: int
     environment: str
     occurred_at: datetime
     payload: dict
+
+    def __post_init__(self):
+        require_user_id(self.user_id)
 
     @classmethod
     def create(cls, event_type, run_id, workflow_key, user_id, environment, *,

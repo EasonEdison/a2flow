@@ -37,7 +37,7 @@ class ChatLoopRunner:
         self._system_prompt = system_prompt
 
     async def iterate(
-        self, *, user_id: str, conversation_id: int, text: str,
+        self, *, user_id: int, conversation_id: int, text: str,
         turn_id: str,
     ) -> AsyncIterator[dict[str, Any]]:
         from skillweave_contracts import TrustedContext

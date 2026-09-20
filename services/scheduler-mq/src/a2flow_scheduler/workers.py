@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 from typing import Any, Protocol
+from skillweave_contracts.user_id import require_user_id, user_id_from_wire, user_id_to_wire
 
 from a2flow_bside import scheduling as schedule_rules
 
@@ -119,7 +120,7 @@ def handle_domain_event(
             _WAIT_UPSERT_SQL,
             (
                 run_id,
-                event.get("user_id", ""),
+                user_id_from_wire(event.get("user_id")),
                 event.get("workflow_key", ""),
                 _parse_ts(event.get("occurred_at") or ""),
                 dt.datetime.now(dt.timezone.utc),
@@ -132,14 +133,14 @@ def handle_domain_event(
     if plan is None:
         return
     kind, title, body = plan
-    user_id = event.get("user_id") or ""
+    user_id = user_id_from_wire(event.get("user_id"))
     if owner_resolver is not None and event.get("run_id"):
         resolved = owner_resolver(event.get("run_id"))
-        if not resolved:
+        if resolved is None:
             # Ownership is bound shortly after a run starts; retry later
             # instead of notifying the runtime's fixed principal.
             raise OwnerNotResolved(event.get("run_id"))
-        user_id = resolved
+        user_id = require_user_id(resolved)
     event_id = event.get("event_id") or ""
     count = db.execute(_HOURLY_COUNT_SQL, (user_id,)).fetchall()[0][0]
     if notifications.within_cap(count):
@@ -181,6 +182,7 @@ def trigger_due_schedules(
         next_run_at,
         created_at,
     ) in rows:
+        require_user_id(user_id)
         rule = schedule_rules.parse_rule(
             rule_type, rule_json, timezone, created_at
         )
@@ -214,7 +216,7 @@ def trigger_due_schedules(
         queue.enqueue(
             "run_workflow",
             {
-                "user_id": user_id,
+                "user_id": user_id_to_wire(user_id),
                 "workflow_key": workflow_key,
                 "environment": environment,
                 "input": input_text,
@@ -239,6 +241,7 @@ def monitor_wait_timeouts(
     rows = db.execute(_OVERDUE_WAITS_SQL, (deadline, claim_limit)).fetchall()
     stopped = 0
     for run_id, user_id, workflow_key in rows:
+        require_user_id(user_id)
         http.post(f"/api/runs/{run_id}/stop", json={})
         db.execute(
             _NOTIFY_INSERT_SQL,

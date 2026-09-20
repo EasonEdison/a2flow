@@ -5,7 +5,8 @@ from typing import Annotated, Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, BeforeValidator
+from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 
 from .contracts import (
     ManagementError, PublicationTarget, TrustedManagementContext, identifier,
@@ -33,7 +34,7 @@ class Target(_Closed):
     environment: str
     versionId: str = Field(min_length=1, max_length=256)
     channel: str
-    grayUserIds: list[str] = Field(default_factory=list, max_length=1024)
+    grayUserIds: list[Annotated[int, BeforeValidator(user_id_from_wire)]] = Field(default_factory=list, max_length=1024)
 
 
 class PreparePublication(_Closed):
@@ -156,7 +157,7 @@ def create_app(service, *, identity_resolver, publications=None, dependencies=No
     def session(request: Request):
         who = require_reader(context(request))
         return _response({
-            "userId": who.user_id,
+            "userId": user_id_to_wire(who.user_id),
             "environment": who.environment,
             "registeredKinds": list(service.kinds),
             "canAuthor": "ADMIN" in who.roles,
@@ -211,7 +212,7 @@ def create_app(service, *, identity_resolver, publications=None, dependencies=No
             "target": {"environment": target.environment,
                        "versionId": target.version_id,
                        "channel": target.channel,
-                       "grayUserIds": list(target.gray_user_ids)},
+                       "grayUserIds": [user_id_to_wire(user) for user in target.gray_user_ids]},
             "status": "VALIDATION_FAILED",
             "published": False,
         }

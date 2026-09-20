@@ -71,7 +71,7 @@ class ViewFunctionsTest(unittest.TestCase):
         view = self.value()
         _, _, run = fixture()
         item = Interaction(
-            run.context("foreign"), "one", "application", "v1", run.thread_id,
+            run.context('1003'), "one", "application", "v1", run.thread_id,
             (("WORKFLOW:demo", "v1"),),
         )
         with self.assertRaisesRegex(ActionRejected, "PROJECTION_UNAVAILABLE"):
@@ -98,7 +98,7 @@ class HostTest(unittest.IsolatedAsyncioTestCase):
         app = create_mvp_app(object(), views, lambda *_: [], lambda scope: context().trusted_context)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             result = await client.get("/runtime/session", headers={"X-User-Id": "attacker"})
-            self.assertEqual({"userId": "test-user", "environment": "PRT"}, result.json())
+            self.assertEqual({"userId": '1008', "environment": "PRT"}, result.json())
             result = await client.get("/runtime/session?userId=attacker")
             self.assertEqual(400, result.status_code)
 

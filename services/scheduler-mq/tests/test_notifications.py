@@ -63,15 +63,15 @@ class RateCapTests(unittest.TestCase):
     def test_hour_bucket_stable_within_hour(self):
         moment = dt.datetime(2026, 9, 19, 14, 30, tzinfo=UTC)
         self.assertEqual(
-            notifications.hour_bucket("u1", moment),
+            notifications.hour_bucket(1001, moment),
             notifications.hour_bucket(
-                "u1", dt.datetime(2026, 9, 19, 14, 59, tzinfo=UTC)
+                1001, dt.datetime(2026, 9, 19, 14, 59, tzinfo=UTC)
             ),
         )
         self.assertNotEqual(
-            notifications.hour_bucket("u1", moment),
+            notifications.hour_bucket(1001, moment),
             notifications.hour_bucket(
-                "u1", dt.datetime(2026, 9, 19, 15, 1, tzinfo=UTC)
+                1001, dt.datetime(2026, 9, 19, 15, 1, tzinfo=UTC)
             ),
         )
 
@@ -83,11 +83,11 @@ class RateCapTests(unittest.TestCase):
     def test_cap_exceeded_plan(self):
         moment = dt.datetime(2026, 9, 19, 14, 30, tzinfo=UTC)
         kind, title, body, dedup = notifications.cap_exceeded_plan(
-            "u1", moment, overflow_count=7
+            1001, moment, overflow_count=7
         )
         self.assertEqual("system", kind)
         self.assertIn("7", body)
-        self.assertEqual("cap:u1:2026091914", dedup)
+        self.assertEqual("cap:1001:2026091914", dedup)
 
 
 if __name__ == "__main__":

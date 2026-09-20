@@ -77,7 +77,7 @@ class UseSkillContractCompatibilityTest(unittest.TestCase):
         context = TrustedInvocationContext(
             contract_revision="SW-CONTRACTS-P1-CANDIDATE.1",
             trusted_context=TrustedContext(
-                user_id="user-123",
+                user_id=123,
                 environment="PRT",
             ),
             invocation_scope=InvocationScope(

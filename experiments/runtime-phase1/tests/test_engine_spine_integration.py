@@ -56,7 +56,7 @@ def workflow_context() -> TrustedInvocationContext:
         {
             "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
             "trustedContext": {
-                "userId": "fixture-user-prt",
+                "userId": '1002',
                 "environment": "PRT",
             },
             "invocationScope": {

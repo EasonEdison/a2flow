@@ -85,9 +85,9 @@ class AssetsTest(unittest.TestCase):
     def test_action_validates_saved_options_and_strict_boolean(self):
         config = self.assets.action(self.item, "confirm")
         self.assertTrue(config.validate_input({"optionId": "allowed", "confirmed": True}))
-        for inputs in ({"optionId": "foreign", "confirmed": True},
+        for inputs in ({"optionId": '1003', "confirmed": True},
                        {"optionId": "allowed", "confirmed": 1},
-                       {"optionId": "allowed", "confirmed": True, "userId": "foreign"}):
+                       {"optionId": "allowed", "confirmed": True, "userId": '1003'}):
             self.assertFalse(config.validate_input(inputs))
         self.assertEqual(VERSIONS, config.effective_versions)
         self.assertTrue(config.completes_interaction)

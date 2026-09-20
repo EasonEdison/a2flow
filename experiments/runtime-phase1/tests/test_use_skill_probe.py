@@ -87,7 +87,7 @@ class UseSkillProbeTest(unittest.TestCase):
             {
                 "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
                 "trustedContext": {
-                    "userId": "synthetic-user",
+                    "userId": '1007',
                     "environment": "PRT",
                 },
                 "invocationScope": {
@@ -362,7 +362,7 @@ class UseSkillProbeTest(unittest.TestCase):
         self.assertIsInstance(tool_message, ToolMessage)
         self.assertEqual(EXPECTED_CONTENT, json.loads(tool_message.content))
         self.assertEqual(EXPECTED_SERVER_ARTIFACT, tool_message.artifact)
-        self.assertNotIn("synthetic-user", tool_message.content)
+        self.assertNotIn('1007', tool_message.content)
         self.assertEqual(
             [("demo/evidence-first-brief", self.context)],
             self.resolver.calls,

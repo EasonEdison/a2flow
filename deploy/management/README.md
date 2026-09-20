@@ -30,7 +30,7 @@ Set these outside the repository:
   current MVP fixture uses `a2flow-mvp-activity-planning`.
 - `A2FLOW_MANAGEMENT_VALIDATOR_FACTORY`: trusted operator factory; the existing
   four-kind MVP assets use `activity_planning_demo:bundle_validator`.
-- `A2FLOW_MANAGEMENT_USER_ID`: fixed authenticated preview principal.
+- `A2FLOW_MANAGEMENT_USER_ID`: fixed authenticated preview principal, encoded as canonical signed 64-bit decimal text (for example `101`). The optional guest principal uses the same format. IDs are integers inside the service and decimal strings in browser JSON.
 - `A2FLOW_MANAGEMENT_ROLES`: `ADMIN`, `USER`, or the comma-separated exact set.
 - `A2FLOW_MANAGEMENT_AUTH_TOKEN_FILE`: absolute regular file owned by the Host
   process identity, mode `0600` or stricter, containing one 32–4096 byte ASCII

@@ -88,7 +88,7 @@ class RequestAndContextTests(unittest.TestCase):
     def test_trusted_invocation_context_preserves_server_only_scope(self):
         payload = {
             "contractRevision": CONTRACT_REVISION,
-            "trustedContext": {"userId": "user_1", "environment": "PRT"},
+            "trustedContext": {"userId": '1011', "environment": "PRT"},
             "invocationScope": {
                 "kind": "WORKFLOW",
                 "conversationId": "conversation_1",
@@ -124,7 +124,7 @@ class RequestAndContextTests(unittest.TestCase):
     def test_workflow_scope_rejects_explicit_null_conversation_id(self):
         payload = {
             "contractRevision": CONTRACT_REVISION,
-            "trustedContext": {"userId": "user_1", "environment": "ONLINE"},
+            "trustedContext": {"userId": '1011', "environment": "ONLINE"},
             "invocationScope": {
                 "kind": "WORKFLOW",
                 "conversationId": None,
@@ -290,7 +290,7 @@ class SchemaAndDispatchTests(unittest.TestCase):
         self.assertTrue(released_cases)
         for case in released_cases:
             with self.subTest(name=case["name"]):
-                with (contracts_root / "tests" / case["fixture"]).open(encoding="utf-8") as handle:
+                with (contracts_root / "tests" / case['fixture']).open(encoding="utf-8") as handle:
                     payload = json.load(handle)
                 try:
                     parse_definition(case["definition"], payload)

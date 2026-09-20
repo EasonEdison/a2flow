@@ -20,13 +20,13 @@ from .serialization import decode, encode, request_document
 
 DDL = (
     """CREATE TABLE IF NOT EXISTS runtime_interactions (
-        user_id TEXT NOT NULL, environment TEXT NOT NULL,
+        user_id BIGINT NOT NULL, environment TEXT NOT NULL,
         run_id TEXT NOT NULL, node_id TEXT NOT NULL, interaction_id TEXT NOT NULL,
         document JSONB NOT NULL,
         PRIMARY KEY (user_id, environment, run_id, node_id, interaction_id)
     )""",
     """CREATE TABLE IF NOT EXISTS runtime_controls (
-        user_id TEXT NOT NULL, environment TEXT NOT NULL,
+        user_id BIGINT NOT NULL, environment TEXT NOT NULL,
         run_id TEXT NOT NULL, node_id TEXT NOT NULL, interaction_id TEXT NOT NULL,
         control_request_id TEXT NOT NULL, request JSONB NOT NULL, document JSONB NOT NULL,
         PRIMARY KEY (user_id, environment, run_id, node_id, interaction_id, control_request_id),

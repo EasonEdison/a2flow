@@ -139,9 +139,9 @@ class PostgresIntegrationTests(unittest.TestCase):
             "test_four_kind_http_drafts_prepare_and_user_denial")
         repository, drafts = self.repository("PRT", database, namespace)
         admin = TrustedManagementContext(
-            "accept-admin", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         user = TrustedManagementContext(
-            "accept-reader", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
         app = self.app(repository, drafts, admin, namespace)
         before = repository.read(namespace)
 
@@ -200,7 +200,7 @@ class PostgresIntegrationTests(unittest.TestCase):
             "test_concurrent_create_same_key_is_atomic_conflict")
         repository, drafts = self.repository("PRT", database, namespace)
         admin = TrustedManagementContext(
-            "accept-admin", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         app = self.app(repository, drafts, admin, namespace)
         path = self.path("SKILL", "new/concurrent", "/draft")
 
@@ -224,7 +224,7 @@ class PostgresIntegrationTests(unittest.TestCase):
             "test_first_edit_of_imported_asset_creates_draft")
         repository, drafts = self.repository("PRT", database, namespace)
         admin = TrustedManagementContext(
-            "accept-admin", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         app = self.app(repository, drafts, admin, namespace)
         key = self.keys["SKILL"]
         path = self.path("SKILL", key, "/draft")
@@ -279,7 +279,7 @@ class PostgresIntegrationTests(unittest.TestCase):
                 (namespace, "SKILL", key, skill["versionId"], raw,
                  skill["contentDigest"]))
             candidate = ManagedDraft.create(
-                "SKILL", key, 0, {"metadata": {}}, "accept-admin")
+                "SKILL", key, 0, {"metadata": {}}, 101)
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(
                     lambda: (started.set(), waiting_drafts.create(namespace, candidate))[1])
@@ -311,7 +311,7 @@ class PostgresIntegrationTests(unittest.TestCase):
             "test_four_kind_immutable_publication_serving_cas_and_rollback")
         repository, drafts = self.repository("PRT", database, namespace)
         identity = TrustedManagementContext(
-            "accept-admin", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         app = self.app(repository, drafts, identity, namespace)
         source = make_bundle("PRT")
 
@@ -369,16 +369,16 @@ class PostgresIntegrationTests(unittest.TestCase):
         history = online.publication_history(namespace, "SKILL", key)
         gray_target = {
             "environment": "ONLINE", "versionId": "accept-gray-v2",
-            "channel": "GRAY", "grayUserIds": ["accept-gray-user"],
+            "channel": "GRAY", "grayUserIds": [103],
         }
         online.publish_candidate(
             namespace, "SKILL", key, candidate, gray_target,
             history["servingDigest"])
         reader = AssetReader(online, namespace)
         gray = reader.resolve_asset(
-            "SKILL", key, TrustedContext("accept-gray-user", "ONLINE"))
+            "SKILL", key, TrustedContext(103, "ONLINE"))
         stable = reader.resolve_asset(
-            "SKILL", key, TrustedContext("accept-stable-user", "ONLINE"))
+            "SKILL", key, TrustedContext(104, "ONLINE"))
         self.assertEqual(("accept-gray-v2", "ONLINE_GRAY"),
                          (gray["versionId"], gray["selection"]))
         self.assertEqual(("v1", "ONLINE_STABLE"),
@@ -397,7 +397,7 @@ class PostgresIntegrationTests(unittest.TestCase):
         self.assertEqual("v1", rolled_back["serving"]["stable"])
         with self.assertRaises(Exception):
             reader.resolve_asset(
-                "SKILL", key, TrustedContext("accept-gray-user", "PRT"))
+                "SKILL", key, TrustedContext(103, "PRT"))
 
     def test_dependency_invalid_publication_is_atomic_for_each_environment(self):
         for environment in ("PRT", "ONLINE"):

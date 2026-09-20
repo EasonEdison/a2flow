@@ -2,7 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS users (
     id bigserial PRIMARY KEY,
-    user_id text UNIQUE NOT NULL,
+    user_id bigint UNIQUE NOT NULL,
     username text UNIQUE NOT NULL,
     password_hash text NOT NULL,
     role text NOT NULL DEFAULT 'USER',
@@ -12,14 +12,14 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS sessions (
     token_sha256 text PRIMARY KEY,
-    user_id text NOT NULL REFERENCES users(user_id),
+    user_id bigint NOT NULL REFERENCES users(user_id),
     expires_at timestamptz NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
     id bigserial PRIMARY KEY,
-    user_id text NOT NULL,
+    user_id bigint NOT NULL,
     title text,
     created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -39,7 +39,7 @@ CREATE INDEX IF NOT EXISTS messages_conversation_id_id
 
 CREATE TABLE IF NOT EXISTS workflow_schedules (
     id bigserial PRIMARY KEY,
-    user_id text NOT NULL,
+    user_id bigint NOT NULL,
     workflow_key text NOT NULL,
     environment text NOT NULL,
     rule_type text NOT NULL,
@@ -67,7 +67,7 @@ CREATE INDEX IF NOT EXISTS queue_items_claim
 
 CREATE TABLE IF NOT EXISTS notifications (
     id bigserial PRIMARY KEY,
-    user_id text NOT NULL,
+    user_id bigint NOT NULL,
     kind text NOT NULL,
     title text NOT NULL,
     body text NOT NULL,
@@ -82,7 +82,7 @@ CREATE INDEX IF NOT EXISTS notifications_user
 
 CREATE TABLE IF NOT EXISTS run_ownership (
     control_id text PRIMARY KEY,
-    user_id text NOT NULL REFERENCES users(user_id),
+    user_id bigint NOT NULL REFERENCES users(user_id),
     workflow_key text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
 );

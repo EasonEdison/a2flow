@@ -3,6 +3,8 @@ import unittest
 from unittest.mock import patch
 
 from a2flow_bside.runtime_client import HttpRuntimeClient
+from a2flow_bside.app import InternalRunStart
+from a2flow_bside.identity import RequestIdentity
 
 
 class Response:
@@ -29,7 +31,7 @@ class RuntimeIdentityTest(unittest.TestCase):
             seen.append(dict((k.lower(), v) for k, v in request.header_items()))
             return Response()
         root = HttpRuntimeClient("http://127.0.0.1:8765")
-        alice, bob = root.for_user("101", "PRT"), root.for_user("102", "ONLINE")
+        alice, bob = root.for_user(101, "PRT"), root.for_user(102, "ONLINE")
         with patch("urllib.request.urlopen", open_request):
             alice.start("control", "workflow", {})
             bob.control("control")
@@ -45,6 +47,28 @@ class RuntimeIdentityTest(unittest.TestCase):
 
     def test_invalid_identity_is_not_a_header_injection(self):
         root = HttpRuntimeClient("http://127.0.0.1:8765")
-        for user, env in (("101\r\nCookie:x", "PRT"), ("101", "other"), ("", "PRT")):
+        for user, env in (("101\r\nCookie:x", "PRT"), (101, "other"), ("", "PRT"),
+                          ("101", "PRT"), (True, "PRT"), (2**63, "PRT")):
             with self.assertRaises(ValueError):
                 root.for_user(user, env)
+
+    def test_long_id_transport_is_lossless_and_internal_identity_is_strict(self):
+        maximum = 2**63 - 1
+        request = InternalRunStart(userId=str(maximum), workflowKey="workflow", input={})
+        self.assertIs(type(request.userId), int)
+        self.assertEqual(maximum, request.userId)
+        identity = RequestIdentity(maximum, "alice", "USER")
+        self.assertEqual(maximum, identity.userId)
+        client = HttpRuntimeClient("http://localhost").for_user(maximum, "PRT")
+        seen = []
+        def open_request(request, **kwargs):
+            seen.append(dict((k.lower(), v) for k, v in request.header_items()))
+            return Response()
+        with patch("urllib.request.urlopen", open_request):
+            client.control("control")
+        self.assertEqual(str(maximum), seen[0]["x-a2flow-user-id"])
+        for value in (True, 1.0, "alice", "01", " 1", str(2**63)):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                InternalRunStart(userId=value, workflowKey="workflow", input={})
+        with self.assertRaises(ValueError):
+            RequestIdentity("1", "alice", "USER")

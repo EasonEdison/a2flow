@@ -17,10 +17,10 @@ VIEW_LIMIT = 192 * 1024
 NODE_STATES = frozenset({"PENDING", "RUNNING", "WAITING", "SUCCEEDED", "UNCONFIRMED", "STOPPED"})
 DDL = (
     """CREATE TABLE IF NOT EXISTS runtime_mvp_catalog (
-       user_id TEXT NOT NULL, environment TEXT NOT NULL, last_seq BIGINT NOT NULL DEFAULT 0,
+       user_id BIGINT NOT NULL, environment TEXT NOT NULL, last_seq BIGINT NOT NULL DEFAULT 0,
        PRIMARY KEY(user_id,environment), CHECK(last_seq >= 0))""",
     """CREATE TABLE IF NOT EXISTS runtime_mvp_views (
-       user_id TEXT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
+       user_id BIGINT NOT NULL, environment TEXT NOT NULL, run_id TEXT NOT NULL,
        catalog_seq BIGINT NOT NULL, revision BIGINT NOT NULL DEFAULT 0,
        document JSONB NOT NULL,
        PRIMARY KEY(user_id,environment,run_id),

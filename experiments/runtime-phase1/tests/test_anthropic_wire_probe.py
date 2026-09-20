@@ -64,7 +64,7 @@ class AnthropicWireProbeTest(unittest.TestCase):
             context: TrustedInvocationContext,
         ) -> dict[str, object]:
             self.assertEqual(SKILL_KEY, skill_key)
-            self.assertEqual("synthetic-user", context.trusted_context.user_id)
+            self.assertEqual(1007, context.trusted_context.user_id)
             return {
                 "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
                 "content": {
@@ -113,7 +113,7 @@ class AnthropicWireProbeTest(unittest.TestCase):
                 {
                     "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
                     "trustedContext": {
-                        "userId": "synthetic-user",
+                        "userId": '1007',
                         "environment": "PRT",
                     },
                     "invocationScope": {

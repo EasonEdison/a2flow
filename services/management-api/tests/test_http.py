@@ -18,7 +18,7 @@ class Feature(ManagementFeature):
     def __init__(self):
         self.document = {"name": "demo"}
         self.draft = ManagedDraft.create(
-            "SKILL", "demo/skill", 1, self.document, "admin-1")
+            "SKILL", "demo/skill", 1, self.document, 101)
 
     def list_published(self, context):
         return ({"key": "demo/skill"},)
@@ -109,10 +109,10 @@ class HttpTests(unittest.TestCase):
 
     def test_user_browses_but_cannot_write_even_with_spoofed_headers(self):
         self.identity["value"] = TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
         response = self.call(
             "GET", "/management/assets/SKILL/demo%2Fskill",
-            headers={"x-role": "ADMIN", "x-user-id": "admin-1"})
+            headers={"x-role": "ADMIN", "x-user-id": "101"})
         self.assertEqual(200, response.status_code)
         self.assertEqual("demo/skill", response.json()["key"])
         response = self.call(
@@ -124,7 +124,7 @@ class HttpTests(unittest.TestCase):
 
     def test_admin_draft_validate_and_prepare_is_not_publish(self):
         self.identity["value"] = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         saved = self.call(
             "PUT", "/management/assets/SKILL/demo%2Fskill/draft",
             json={"expectedRevision": 1, "document": {"name": "changed"}})
@@ -144,7 +144,7 @@ class HttpTests(unittest.TestCase):
     def test_history_read_and_explicit_admin_publish_rollback(self):
         digest_value = "sha256:" + "0" * 64
         self.identity["value"] = TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
         history = self.call(
             "GET", "/management/assets/SKILL/demo%2Fskill/versions")
         self.assertEqual(200, history.status_code)
@@ -157,7 +157,7 @@ class HttpTests(unittest.TestCase):
             json=body)
         self.assertEqual(403, denied.status_code)
         self.identity["value"] = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         published = self.call(
             "POST", "/management/assets/SKILL/demo%2Fskill/publications",
             json=body)
@@ -171,12 +171,12 @@ class HttpTests(unittest.TestCase):
 
     def test_admin_creates_encoded_draft_and_user_is_denied(self):
         self.identity["value"] = TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
         denied = self.call(
             "POST", "/management/assets/SKILL/new%2Fskill/draft")
         self.assertEqual(403, denied.status_code)
         self.identity["value"] = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         created = self.call(
             "POST", "/management/assets/SKILL/new%2Fskill/draft")
         self.assertEqual(200, created.status_code)
@@ -209,7 +209,7 @@ class HttpTests(unittest.TestCase):
                         "businessCompensated": False}
 
         self.identity["value"] = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         publications = StatefulPublications()
         app = create_app(
             ManagementService([self.feature]),
@@ -247,24 +247,24 @@ class HttpTests(unittest.TestCase):
 
     def test_retained_version_requires_exact_version_without_latest_fallback(self):
         self.identity["value"] = TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
         response = self.call(
             "GET", "/management/assets/SKILL/demo%2Fskill/versions/v1")
         self.assertEqual(200, response.status_code)
         self.assertEqual("v1", response.json()["versionId"])
         self.assertEqual(
-            ("version", "user-1", "SKILL", "demo/skill", "v1"),
+            ("version", 102, "SKILL", "demo/skill", "v1"),
             self.publications.calls[-1])
 
     def test_comparison_documents_use_the_same_authored_representation(self):
         self.identity["value"] = TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
         denied = self.call(
             "POST", "/management/assets/SKILL/demo%2Fskill/comparison-documents",
             json={"document": {"name": "draft"}})
         self.assertEqual(403, denied.status_code)
         self.identity["value"] = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         draft = self.call(
             "POST", "/management/assets/SKILL/demo%2Fskill/comparison-documents",
             json={"document": {"name": "draft"}})
@@ -280,7 +280,7 @@ class HttpTests(unittest.TestCase):
                     "ASSET_NOT_FOUND", 404)
 
         self.identity["value"] = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         app = create_app(
             ManagementService([self.feature]),
             identity_resolver=lambda scope: self.identity["value"],
@@ -293,7 +293,7 @@ class HttpTests(unittest.TestCase):
 
     def test_cross_environment_and_validation_errors_are_4xx(self):
         self.identity["value"] = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         response = self.call(
             "POST", "/management/assets/SKILL/demo%2Fskill/publication-plans",
             json={"expectedRevision": 1, "target": {
@@ -307,7 +307,7 @@ class HttpTests(unittest.TestCase):
 
     def test_body_and_query_are_bounded(self):
         self.identity["value"] = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         response = self.call(
             "PUT", "/management/assets/SKILL/demo%2Fskill/draft",
             content=b"x" * (BODY_LIMIT + 1),
@@ -318,7 +318,7 @@ class HttpTests(unittest.TestCase):
 
     def test_slow_sync_service_does_not_block_event_loop(self):
         self.identity["value"] = TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
         original = self.feature.list_published
 
         def slow(context):

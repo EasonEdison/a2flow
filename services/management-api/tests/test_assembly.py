@@ -94,7 +94,7 @@ class DraftRows:
 class AssemblyTests(unittest.TestCase):
     def setUp(self):
         self.identity = {"value": TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))}
+            102, "PRT", frozenset({"USER"}))}
         self.repository = BundleRepository()
         self.reader = AssetReader(self.repository, NAMESPACE)
         self.drafts = MemoryDraftRepository("PRT")
@@ -111,14 +111,14 @@ class AssemblyTests(unittest.TestCase):
             headers={"x-role": "ADMIN", "x-environment": "ONLINE"})
         self.assertEqual(200, response.status_code)
         self.assertEqual({
-            "userId": "user-1", "environment": "PRT",
+            "userId": "102", "environment": "PRT",
             "registeredKinds": ["ABILITY", "APPLICATION", "SKILL", "WORKFLOW"],
             "canAuthor": False,
         }, response.json())
 
     def test_session_rejects_identity_for_another_environment(self):
         self.identity["value"] = TrustedManagementContext(
-            "user-1", "ONLINE", frozenset({"USER"}))
+            102, "ONLINE", frozenset({"USER"}))
         response = self.call("GET", "/management/session")
         self.assertEqual(403, response.status_code)
         self.assertEqual(
@@ -157,7 +157,7 @@ class AssemblyTests(unittest.TestCase):
             "not-a-real-dsn", environment="PRT", database="asset_prt",
             connection_factory=database.connect)
         draft = ManagedDraft.create(
-            "SKILL", "existing/skill", 0, {"metadata": {}}, "admin")
+            "SKILL", "existing/skill", 0, {"metadata": {}}, 101)
         saved = repository.save(NAMESPACE, draft, 0)
         self.assertEqual(1, saved.revision)
         statements = [sql for sql, _ in database.calls]
@@ -172,7 +172,7 @@ class AssemblyTests(unittest.TestCase):
             "not-a-real-dsn", environment="PRT", database="asset_prt",
             connection_factory=database.connect)
         draft = ManagedDraft.create(
-            "SKILL", "new/skill", 0, {"metadata": {}}, "admin")
+            "SKILL", "new/skill", 0, {"metadata": {}}, 101)
         with self.assertRaisesRegex(ManagementError, "ASSET_ALREADY_EXISTS"):
             repository.create(NAMESPACE, draft)
         statements = [sql for sql, _ in database.calls]
@@ -190,7 +190,7 @@ class AssemblyTests(unittest.TestCase):
             "not-a-real-dsn", environment="PRT", database="asset_prt",
             connection_factory=database.connect)
         draft = ManagedDraft.create(
-            "SKILL", "new/skill", 0, {"metadata": {}}, "admin")
+            "SKILL", "new/skill", 0, {"metadata": {}}, 101)
         saved = repository.create(NAMESPACE, draft)
         self.assertEqual(1, saved.revision)
         ordered = [

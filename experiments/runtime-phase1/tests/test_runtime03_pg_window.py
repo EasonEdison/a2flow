@@ -18,15 +18,15 @@ class WindowCleanupTest(unittest.TestCase):
         for failure in (RuntimeError("owned worker residual"), ProcessLookupError(),
                         subprocess.TimeoutExpired("owned-worker", 5)):
             with self.subTest(failure=type(failure).__name__):
-                with patch.object(window, "stop_owned_group", side_effect=failure), \
-                     patch.object(window, "credential_log_check") as logs, \
+                with patch.object(window, "stop_owned_group", side_effect=failure),\
+                     patch.object(window, "credential_log_check") as logs,\
                      patch.object(window, "cleanup") as cleanup:
                     with self.assertRaises(type(failure)):
                         window.finish_window(Mock(), "owned-marker", ["synthetic"])
                     logs.assert_called_once()
                     cleanup.assert_called_once()
-        with patch.object(window, "stop_owned_group"), \
-             patch.object(window, "credential_log_check", side_effect=RuntimeError()), \
+        with patch.object(window, "stop_owned_group"),\
+             patch.object(window, "credential_log_check", side_effect=RuntimeError()),\
              patch.object(window, "cleanup") as cleanup:
             with self.assertRaises(RuntimeError):
                 window.finish_window(None, "owned-marker", ["synthetic"])
@@ -35,7 +35,7 @@ class WindowCleanupTest(unittest.TestCase):
     def test_exited_parent_still_checks_group_and_tolerates_exit_race(self):
         child = Mock(pid=12345)
         child.poll.return_value = 0
-        with patch.object(window, "group_members", side_effect=[[12346], []]) as members, \
+        with patch.object(window, "group_members", side_effect=[[12346], []]) as members,\
              patch.object(window.os, "killpg", side_effect=ProcessLookupError()) as kill:
             window.stop_owned_group(child, "unique-marker")
         kill.assert_called_once_with(12345, window.signal.SIGTERM)
@@ -45,7 +45,7 @@ class WindowCleanupTest(unittest.TestCase):
     def test_two_communicate_timeouts_report_residual(self):
         child = Mock(pid=12345)
         child.communicate.side_effect = subprocess.TimeoutExpired("owned", 5)
-        with patch.object(window, "group_members", return_value=[12345]), \
+        with patch.object(window, "group_members", return_value=[12345]),\
              patch.object(window.os, "killpg") as kill:
             with self.assertRaisesRegex(RuntimeError, "OWNED_TEST_PROCESS_RESIDUAL"):
                 window.stop_owned_group(child, "unique-marker")
@@ -74,10 +74,10 @@ class WindowCleanupTest(unittest.TestCase):
                 if delete:
                     real_remove(socket)
 
-            with patch.object(window, "PRIVATE", private), \
-                 patch.object(window, "inspect", return_value=None), \
-                 patch.object(window.shutil, "rmtree", side_effect=remove), \
-                 patch.object(window, "command", side_effect=privileged) as command, \
+            with patch.object(window, "PRIVATE", private),\
+                 patch.object(window, "inspect", return_value=None),\
+                 patch.object(window.shutil, "rmtree", side_effect=remove),\
+                 patch.object(window, "command", side_effect=privileged) as command,\
                  redirect_stdout(io.StringIO()):
                 if delete:
                     window.cleanup()
@@ -99,8 +99,8 @@ class WindowCleanupTest(unittest.TestCase):
         for raw, passed in (("safe log", True), ("synthetic-secret-A", False),
                             ("synthetic-secret-B", False)):
             output = io.StringIO()
-            with patch.object(window, "inspect", return_value=target), \
-                 patch.object(window, "docker", return_value=SimpleNamespace(returncode=0, stdout=raw, stderr="")), \
+            with patch.object(window, "inspect", return_value=target),\
+                 patch.object(window, "docker", return_value=SimpleNamespace(returncode=0, stdout=raw, stderr="")),\
                  redirect_stdout(output):
                 if passed:
                     window.credential_log_check(["synthetic-secret-A", "synthetic-secret-B"])

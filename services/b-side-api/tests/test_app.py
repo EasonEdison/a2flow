@@ -35,7 +35,7 @@ class FakeUsers:
     def create(self, *, username, password_hash, role="USER"):
         if any(row["username"] == username for row in self.rows.values()):
             raise BsideError("USERNAME_TAKEN", 409)
-        user_id = str(len(self.rows) + 1)
+        user_id = len(self.rows) + 1
         self.rows[user_id] = {
             "user_id": user_id, "username": username,
             "password_hash": password_hash, "role": role}
@@ -560,13 +560,13 @@ class NotificationTests(unittest.TestCase):
                 "/api/auth/register",
                 json={"username": "note-01", "password": "password-7"},
                 headers=ORIGIN_HEADERS)
-            user_id = registered.json()["userId"]
+            user_id = int(registered.json()["userId"])
             notes = harness.components["notifications"]
             notes.add(user_id=user_id, kind="waiting", title="待确认",
                       body="工作流 X 需要确认", ref_type="run", ref_id="c1")
             notes.add(user_id=user_id, kind="finished", title="完成",
                       body="工作流 Y 完成", read=True)
-            notes.add(user_id="u-other", kind="finished", title="他人",
+            notes.add(user_id=1002, kind="finished", title="他人",
                       body="不该可见")
             listed = await client.get("/api/notifications")
             rows = listed.json()["notifications"]
@@ -656,7 +656,7 @@ class ChatSseTests(unittest.TestCase):
                 "/api/auth/register",
                 json={"username": "chat-01", "password": "password-9"},
                 headers=ORIGIN_HEADERS)
-            user_id = registered.json()["userId"]
+            user_id = int(registered.json()["userId"])
             created = await client.post(
                 "/api/conversations", json={"title": "会话"},
                 headers=ORIGIN_HEADERS)
@@ -692,7 +692,7 @@ class ChatSseTests(unittest.TestCase):
                 f"/api/conversations/{conversation_id}/messages",
                 json={"text": ""}, headers=ORIGIN_HEADERS)
             self.assertEqual(400, empty.status_code)
-            self.assertEqual(user_id, registered.json()["userId"])
+            self.assertEqual(str(user_id), registered.json()["userId"])
 
     def test_chat_sse_flow(self):
         asyncio.run(self._flow())

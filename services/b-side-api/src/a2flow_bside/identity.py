@@ -10,6 +10,7 @@ import datetime as dt
 import hmac
 from dataclasses import dataclass
 from typing import Callable
+from skillweave_contracts.user_id import require_user_id
 
 from . import auth
 from .errors import BsideError
@@ -26,9 +27,12 @@ _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 @dataclass(frozen=True)
 class RequestIdentity:
-    userId: str
+    userId: int
     username: str
     role: str
+
+    def __post_init__(self):
+        require_user_id(self.userId)
 
 
 def parse_session_token(cookie_value: str | None) -> str | None:

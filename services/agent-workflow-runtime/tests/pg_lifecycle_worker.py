@@ -236,7 +236,7 @@ def main(mode, case, options):
         return {"runId": run.run_id, "threadId": run.thread_id, "fresh": fresh}
     run_id = options["run_id"]
     if mode == "stop":
-        owner = replace(OWNER, user_id="wrong-user") if options.get("wrong_owner") else OWNER
+        owner = replace(OWNER, user_id=1012) if options.get("wrong_owner") else OWNER
         if options.get("wrong_environment"):
             owner = replace(owner, environment="ONLINE")
         if options.get("race"):

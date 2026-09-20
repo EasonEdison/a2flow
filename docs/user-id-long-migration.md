@@ -7,9 +7,11 @@ values are rejected. Transport decoding does not authenticate a caller.
 
 ## Delivery status
 
-The shared require_user_id/user_id_from_wire/user_id_to_wire codec and read-only
-column preflight are delivered. Existing TrustedContext and application consumers
-are NOT switched yet. This additive batch is not a completed Long migration.
+Shared trusted contexts, Runtime ownership, B sessions, scheduler principals,
+management principals and asset gray selectors now use integers internally.
+Browser responses, HTTP headers and serialized trusted contexts use decimal
+strings. Original stored asset payloads remain unchanged during decoding,
+preserving their digest. Fresh user identity columns use BIGINT.
 
 Run python -m deploy.attended.user_id_preflight with an explicitly selected
 A2FLOW_USER_ID_AUDIT_DSN. The tool sets a read-only transaction and prints counts,
@@ -17,17 +19,14 @@ not identity values or credentials. It never performs DDL or changes records.
 Only canonical decimal values are considered convertible; no automatic mapping
 is invented for old named identities. The report is not deployment approval.
 
-Remaining coordinated batches:
+## Existing data: explicitly out of scope
 
-1. Switch shared trusted contexts, schemas, Skill/ability authorization and gray
-   lists together, including fixtures and immutable payload/version handling.
-2. Switch B sessions, Runtime ingress, scheduler and management principals; keep
-   browser/header wire strings explicit at those boundaries.
-3. Review existing ownership in columns, JSON records, native checkpoints and
-   native Store namespaces. Supply a reviewed migration for foreign keys and
-   BIGINT columns; nonnumeric identities require an explicit mapping decision.
-4. Verify old-run access, restart behavior, user isolation and gray selection in
-   a disposable copy before any live migration or deployment.
+No old-data migration is requested. This change supplies fresh-schema DDL only:
+CREATE TABLE IF NOT EXISTS does not convert existing columns. No existing
+database was audited or modified for this task. Deploying to an old-schema
+database is not supported by this change; select a compatible deployment target
+in a separately agreed deployment step. Validation uses synthetic fixtures and
+a disposable PostgreSQL instance. Source integration is not deployment proof.
 
 Do not silently reset checkpoints, remap owners, merge leading-zero identities,
 delete old memory namespaces, or deploy partially switched producers/consumers.

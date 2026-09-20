@@ -49,13 +49,13 @@ class DomainEventTests(unittest.TestCase):
     def test_create_fills_identity_fields_and_copies_payload(self):
         payload = {"nodeId": "node-test"}
         event = DomainEvent.create(
-            RUN_STARTED, "run-1", "sample.definition", "test-user", "PRT",
+            RUN_STARTED, "run-1", "sample.definition", 1008, "PRT",
             payload=payload,
         )
         self.assertEqual(RUN_STARTED, event.event_type)
         self.assertEqual("run-1", event.run_id)
         self.assertEqual("sample.definition", event.workflow_key)
-        self.assertEqual("test-user", event.user_id)
+        self.assertEqual(1008, event.user_id)
         self.assertEqual("PRT", event.environment)
         self.assertIsInstance(event.event_id, UUID)
         self.assertIsNotNone(event.occurred_at.tzinfo)
@@ -63,8 +63,8 @@ class DomainEventTests(unittest.TestCase):
         self.assertEqual({"nodeId": "node-test"}, event.payload)
 
     def test_event_ids_are_unique_and_null_sink_is_noop(self):
-        first = DomainEvent.create(RUN_STARTED, "r", "w", "u", "PRT")
-        second = DomainEvent.create(RUN_STARTED, "r", "w", "u", "PRT")
+        first = DomainEvent.create(RUN_STARTED, "r", "w", 101, "PRT")
+        second = DomainEvent.create(RUN_STARTED, "r", "w", 101, "PRT")
         self.assertNotEqual(first.event_id, second.event_id)
         sink = NullSink()
         self.assertIsNone(sink.publish(first))
@@ -72,7 +72,7 @@ class DomainEventTests(unittest.TestCase):
     def test_recording_sink_preserves_order(self):
         sink = RecordingSink()
         events = [
-            DomainEvent.create(kind, "r", "w", "u", "PRT")
+            DomainEvent.create(kind, "r", "w", 101, "PRT")
             for kind in (RUN_STARTED, NODE_WAITING, RUN_FINISHED)
         ]
         for event in events:
@@ -108,7 +108,7 @@ class BoundaryEventTests(unittest.TestCase):
         event = started[0]
         self.assertEqual(run.run_id, event.run_id)
         self.assertEqual("sample.definition", event.workflow_key)
-        self.assertEqual("test-user", event.user_id)
+        self.assertEqual(1008, event.user_id)
         self.assertEqual("PRT", event.environment)
         self.assertEqual({"entryNodeId": "node-test"}, event.payload)
 

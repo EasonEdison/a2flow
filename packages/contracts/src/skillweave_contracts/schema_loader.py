@@ -10,6 +10,7 @@ APPROVED_DEFINITION_NAMES = frozenset(
     {
         "contractRevision",
         "identifier",
+        "longUserId",
         "trustedContext",
         "trustedInvocationContext",
         "invocationScope",

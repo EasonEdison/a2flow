@@ -1,5 +1,6 @@
 """Authorized management facade for publication history and configuration selection."""
 from a2flow_asset_store.records import AssetError
+from skillweave_contracts.user_id import user_id_to_wire
 
 from .contracts import ManagementError, require_admin, require_reader
 
@@ -58,7 +59,7 @@ class PublicationService:
             "environment": target.environment,
             "versionId": target.version_id,
             "channel": target.channel,
-            "grayUserIds": list(target.gray_user_ids),
+            "grayUserIds": [user_id_to_wire(user) for user in target.gray_user_ids],
         }
         return self._translate(lambda: self.repository.publish_candidate(
             self.namespace, kind, key, candidate, value,
@@ -74,7 +75,7 @@ class PublicationService:
             "environment": target.environment,
             "versionId": target.version_id,
             "channel": target.channel,
-            "grayUserIds": list(target.gray_user_ids),
+            "grayUserIds": [user_id_to_wire(user) for user in target.gray_user_ids],
         }
         return self._translate(lambda: self.repository.rollback_configuration(
             self.namespace, kind, key, target.version_id, value,

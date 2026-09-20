@@ -77,9 +77,9 @@ class ManagementSkillTests(unittest.TestCase):
             self.reader, self.drafts, "a2flow-mvp-activity-planning")
         self.service = ManagementService([self.feature])
         self.admin = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         self.user = TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
 
     def draft_document(self):
         return {
@@ -186,11 +186,11 @@ class ManagementSkillTests(unittest.TestCase):
             "a2flow-mvp-activity-planning",
             __import__("a2flow_management").ManagedDraft.create(
                 "SKILL", "activity-planning/plan", 1,
-                self.draft_document(), "admin-1"), 0)
+                self.draft_document(), 101), 0)
         second = __import__("a2flow_management").ManagedDraft.create(
             "SKILL", "activity-planning/plan", 2,
             {**self.draft_document(), "skillMd": SKILL_MD + "\\nchanged"},
-            "admin-1")
+            101)
 
         class MovingDrafts:
             environment = "PRT"
@@ -229,7 +229,7 @@ class ManagementSkillTests(unittest.TestCase):
             create_skill_feature(self.reader, drafts,
                                  "a2flow-mvp-activity-planning")])
         online = TrustedManagementContext(
-            "admin-1", "ONLINE", frozenset({"ADMIN"}))
+            101, "ONLINE", frozenset({"ADMIN"}))
         with self.assertRaisesRegex(ManagementError, "DRAFT_ENVIRONMENT_MISMATCH"):
             service.get_draft(
                 online, "SKILL", "activity-planning/plan")

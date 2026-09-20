@@ -4,6 +4,7 @@ import math
 import re
 from dataclasses import dataclass
 from typing import TypeAlias
+from .user_id import require_user_id, user_id_from_wire, user_id_to_wire
 
 from .validation import (
     ContractValidationError,
@@ -68,11 +69,14 @@ def _parse_logical_path(value: object, *, path: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class TrustedContext:
-    user_id: str
+    user_id: int
     environment: str
 
     def __post_init__(self) -> None:
-        parse_identifier(self.user_id, path="$.userId")
+        try:
+            require_user_id(self.user_id)
+        except ValueError:
+            fail("$.userId", "invalid_user_id", "expected a signed64 integer")
         require_enum(self.environment, path="$.environment", allowed=frozenset({"PRT", "ONLINE"}))
 
     @classmethod
@@ -81,7 +85,7 @@ class TrustedContext:
             value, path=_path, required=frozenset({"userId", "environment"})
         )
         return cls(
-            user_id=parse_identifier(data["userId"], path=f"{_path}.userId"),
+            user_id=parse_user_id_wire(data["userId"], path=f"{_path}.userId"),
             environment=require_enum(
                 data["environment"],
                 path=f"{_path}.environment",
@@ -90,7 +94,14 @@ class TrustedContext:
         )
 
     def to_mapping(self) -> dict[str, object]:
-        return {"userId": self.user_id, "environment": self.environment}
+        return {"userId": user_id_to_wire(self.user_id), "environment": self.environment}
+
+
+def parse_user_id_wire(value: object, *, path: str = "$.userId") -> int:
+    try:
+        return user_id_from_wire(value)
+    except ValueError:
+        fail(path, "invalid_user_id", "expected a signed64 integer or canonical decimal string")
 
 
 @dataclass(frozen=True, slots=True)
@@ -673,6 +684,7 @@ class ResultInterpretationPolicySet:
 _DEFINITION_PARSERS = {
     "contractRevision": parse_contract_revision,
     "identifier": parse_identifier,
+    "longUserId": parse_user_id_wire,
     "trustedContext": TrustedContext.from_mapping,
     "trustedInvocationContext": TrustedInvocationContext.from_mapping,
     "invocationScope": parse_invocation_scope,

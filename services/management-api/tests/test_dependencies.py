@@ -59,8 +59,8 @@ class DependencyServiceTests(unittest.TestCase):
         self.repository = Repository()
         self.drafts = MemoryDraftRepository("PRT")
         self.service = DependencyService(self.repository, self.drafts, NAMESPACE)
-        self.admin = TrustedManagementContext("admin", "PRT", frozenset({"ADMIN"}))
-        self.user = TrustedManagementContext("user", "PRT", frozenset({"USER"}))
+        self.admin = TrustedManagementContext(101, "PRT", frozenset({"ADMIN"}))
+        self.user = TrustedManagementContext(102, "PRT", frozenset({"USER"}))
 
     def test_published_graph_extracts_schema_paths_exact_release_and_reverse(self):
         graph = self.service.inspect(self.user, "APPLICATION", "app/card")
@@ -76,11 +76,11 @@ class DependencyServiceTests(unittest.TestCase):
     def test_admin_sees_saved_draft_separately_but_user_does_not_leak_it(self):
         current = ManagedDraft.create("SKILL", "skill/root", 0, {
             "abilityBindings": ["ability.missing-release"], "applicationBindings": [],
-        }, "admin")
+        }, 101)
         self.drafts.save(NAMESPACE, current, 0)
         draft = ManagedDraft.create("SKILL", "private/draft", 0, {
             "abilityBindings": ["ability.one"], "applicationBindings": [],
-        }, "admin")
+        }, 101)
         self.drafts.save(NAMESPACE, draft, 0)
         inspected = self.service.inspect(self.admin, "SKILL", "skill/root")
         self.assertIn(("ability.missing-release", "saved-draft"), {
@@ -121,7 +121,7 @@ class DependencyServiceTests(unittest.TestCase):
         self.assertFalse(hasattr(self.repository, "writes"))
 
     def test_environment_mismatch_fails_closed(self):
-        context = TrustedManagementContext("user", "ONLINE", frozenset({"USER"}))
+        context = TrustedManagementContext(102, "ONLINE", frozenset({"USER"}))
         with self.assertRaisesRegex(Exception, "TRUSTED_ENVIRONMENT_MISMATCH"):
             self.service.inspect(context, "SKILL", "skill/root")
 
@@ -161,7 +161,7 @@ class DependencyServiceTests(unittest.TestCase):
     def test_unrelated_malformed_draft_does_not_taint_graph(self):
         unrelated = ManagedDraft.create("SKILL", "unrelated/bad", 0, {
             "abilityBindings": "invalid", "applicationBindings": [],
-        }, "admin")
+        }, 101)
         self.drafts.save(NAMESPACE, unrelated, 0)
         graph = self.service.inspect(self.admin, "APPLICATION", "app/card")
         self.assertFalse(graph["incomplete"])
@@ -170,7 +170,7 @@ class DependencyServiceTests(unittest.TestCase):
     def test_relevant_malformed_source_reports_versioned_location(self):
         malformed = ManagedDraft.create("SKILL", "skill/root", 0, {
             "abilityBindings": ["ability.one", 7], "applicationBindings": [],
-        }, "admin")
+        }, 101)
         saved = self.drafts.save(NAMESPACE, malformed, 0)
         graph = self.service.inspect(
             self.admin, "SKILL", "skill/root", root_sources=("saved-draft",))
@@ -188,7 +188,7 @@ class DependencyServiceTests(unittest.TestCase):
             NAMESPACE, "PRT", assets, self.repository.bundle.serving_data)
         corrected = ManagedDraft.create("SKILL", "skill/root", 0, {
             "abilityBindings": ["ability.one"], "applicationBindings": [],
-        }, "admin")
+        }, 101)
         self.drafts.save(NAMESPACE, corrected, 0)
         combined = self.service.inspect(self.admin, "SKILL", "skill/root")
         candidate = self.service.inspect(
@@ -219,7 +219,7 @@ class DependencyServiceTests(unittest.TestCase):
     def test_admin_root_variants_are_budgeted_and_user_never_sees_draft(self):
         draft = ManagedDraft.create("SKILL", "skill/root", 0, {
             "abilityBindings": ["ability.one"], "applicationBindings": [],
-        }, "admin")
+        }, 101)
         self.drafts.save(NAMESPACE, draft, 0)
         admin = self.service.inspect(self.admin, "SKILL", "skill/root", max_nodes=1)
         self.assertEqual(1, admin["counts"]["nodes"])
@@ -238,17 +238,17 @@ class DependencyServiceTests(unittest.TestCase):
             if value["kind"] == "ABILITY" and value["key"] == "ability.one":
                 value["stable"] = "v1"
                 value["gray"] = "v2"
-                value["grayUserIds"] = ["gray-user"]
+                value["grayUserIds"] = [103]
             serving.append(value)
         repository.bundle = Bundle(NAMESPACE, "ONLINE", repository.bundle.assets,
                                    canonical(serving))
         service = DependencyService(
             repository, MemoryDraftRepository("ONLINE"), NAMESPACE)
         gray = service.inspect(
-            TrustedManagementContext("gray-user", "ONLINE", frozenset({"USER"})),
+            TrustedManagementContext(103, "ONLINE", frozenset({"USER"})),
             "ABILITY", "ability.one")
         stable = service.inspect(
-            TrustedManagementContext("stable-user", "ONLINE", frozenset({"USER"})),
+            TrustedManagementContext(104, "ONLINE", frozenset({"USER"})),
             "ABILITY", "ability.one")
         self.assertEqual(("v2", "ONLINE_GRAY"),
                          (gray["root"]["versionId"], gray["root"]["selection"]))

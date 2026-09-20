@@ -1,7 +1,7 @@
 {
   "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
   "trustedContext": {
-    "userId": "user_demo_001",
+    "userId": "1001",
     "environment": "ONLINE"
   },
   "asset": {

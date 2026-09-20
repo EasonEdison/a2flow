@@ -12,6 +12,7 @@ import json
 from typing import Any, Callable
 
 from psycopg.errors import UniqueViolation
+from skillweave_contracts.user_id import require_user_id
 
 from .errors import BsideError
 
@@ -25,23 +26,19 @@ class UsersRepository:
         self._factory = connection_factory
 
     def create(self, *, username: str, password_hash: str,
-               role: str = "USER") -> str:
-        """Insert and return the numeric user id (string form).
-
-        The platform contracts require user identifiers to be strings; the
-        database identity is the bigserial id, exposed as its decimal text.
-        """
+               role: str = "USER") -> int:
+        """Insert and return the signed 64-bit database user identity."""
         with self._factory() as connection:
             try:
                 row = connection.execute(
                     "SELECT nextval(pg_get_serial_sequence('users', 'id')) "
                     "AS user_id"
                 ).fetchone()
-                user_id = str(row["user_id"])
+                user_id = require_user_id(row["user_id"])
                 connection.execute(
                     "INSERT INTO users (id, user_id, username, password_hash, role) "
                     "VALUES (%s, %s, %s, %s, %s)",
-                    (int(user_id), user_id, username, password_hash, role))
+                    (user_id, user_id, username, password_hash, role))
                 return user_id
             except UniqueViolation:
                 raise BsideError("USERNAME_TAKEN", 409) from None
@@ -58,8 +55,9 @@ class SessionsRepository:
     def __init__(self, connection_factory: Callable):
         self._factory = connection_factory
 
-    def create(self, *, token_sha256: str, user_id: str,
+    def create(self, *, token_sha256: str, user_id: int,
                expires_at: dt.datetime) -> None:
+        require_user_id(user_id)
         with self._factory() as connection:
             connection.execute(
                 "INSERT INTO sessions (token_sha256, user_id, expires_at) "
@@ -90,7 +88,8 @@ class ConversationsRepository:
     def __init__(self, connection_factory: Callable):
         self._factory = connection_factory
 
-    def create(self, *, user_id: str, title: str | None) -> dict:
+    def create(self, *, user_id: int, title: str | None) -> dict:
+        require_user_id(user_id)
         with self._factory() as connection:
             row = connection.execute(
                 "INSERT INTO conversations (user_id, title) VALUES (%s, %s) "
@@ -98,7 +97,8 @@ class ConversationsRepository:
                 (user_id, title)).fetchone()
         return dict(row)
 
-    def list_for(self, user_id: str, limit: int = 50) -> list[dict]:
+    def list_for(self, user_id: int, limit: int = 50) -> list[dict]:
+        require_user_id(user_id)
         with self._factory() as connection:
             rows = connection.execute(
                 "SELECT id, title, created_at FROM conversations "
@@ -106,7 +106,7 @@ class ConversationsRepository:
                 (user_id, limit)).fetchall()
         return [dict(row) for row in rows]
 
-    def owner(self, conversation_id: int) -> str | None:
+    def owner(self, conversation_id: int) -> int | None:
         with self._factory() as connection:
             row = connection.execute(
                 "SELECT user_id FROM conversations WHERE id = %s",
@@ -139,9 +139,10 @@ class MessagesRepository:
                 (conversation_id, limit)).fetchall()
         return [dict(row) for row in rows]
 
-    def legacy_history(self, user_id: str, conversation_id: int,
+    def legacy_history(self, user_id: int, conversation_id: int,
                        before_id: int) -> list[dict]:
         """One-time migration input, not a second live model history source."""
+        require_user_id(user_id)
         with self._factory() as connection:
             rows = connection.execute(
                 "SELECT m.id,m.role,m.content FROM messages m "
@@ -163,9 +164,10 @@ class SchedulesRepository:
     def __init__(self, connection_factory: Callable):
         self._factory = connection_factory
 
-    def create(self, *, user_id: str, workflow_key: str, environment: str,
+    def create(self, *, user_id: int, workflow_key: str, environment: str,
                rule_type: str, rule_json: dict, timezone: str,
                input_text: str, next_run_at: dt.datetime) -> dict:
+        require_user_id(user_id)
         with self._factory() as connection:
             row = connection.execute(
                 "INSERT INTO workflow_schedules "
@@ -180,7 +182,8 @@ class SchedulesRepository:
             ).fetchone()
         return dict(row)
 
-    def list_for(self, user_id: str, limit: int = 100) -> list[dict]:
+    def list_for(self, user_id: int, limit: int = 100) -> list[dict]:
+        require_user_id(user_id)
         with self._factory() as connection:
             rows = connection.execute(
                 "SELECT id, workflow_key, environment, rule_type, rule_json,"
@@ -199,7 +202,8 @@ class SchedulesRepository:
                 "WHERE id = %s", (schedule_id,)).fetchone()
         return dict(row) if row is not None else None
 
-    def update(self, schedule_id: int, user_id: str, **fields) -> dict | None:
+    def update(self, schedule_id: int, user_id: int, **fields) -> dict | None:
+        require_user_id(user_id)
         unknown = set(fields) - self._COLUMNS
         if unknown or not fields:
             raise BsideError("INVALID_SCHEDULE_UPDATE", 400)
@@ -223,7 +227,8 @@ class SchedulesRepository:
                 values).fetchone()
         return dict(row) if row is not None else None
 
-    def delete(self, schedule_id: int, user_id: str) -> bool:
+    def delete(self, schedule_id: int, user_id: int) -> bool:
+        require_user_id(user_id)
         with self._factory() as connection:
             cursor = connection.execute(
                 "DELETE FROM workflow_schedules WHERE id = %s AND user_id = %s",
@@ -235,7 +240,8 @@ class NotificationsRepository:
     def __init__(self, connection_factory: Callable):
         self._factory = connection_factory
 
-    def list_for(self, user_id: str, limit: int = 50) -> list[dict]:
+    def list_for(self, user_id: int, limit: int = 50) -> list[dict]:
+        require_user_id(user_id)
         with self._factory() as connection:
             rows = connection.execute(
                 "SELECT id, kind, title, body, ref_type, ref_id, read, "
@@ -244,7 +250,8 @@ class NotificationsRepository:
                 (user_id, limit)).fetchall()
         return [dict(row) for row in rows]
 
-    def mark_read(self, notification_id: int, user_id: str) -> bool:
+    def mark_read(self, notification_id: int, user_id: int) -> bool:
+        require_user_id(user_id)
         with self._factory() as connection:
             cursor = connection.execute(
                 "UPDATE notifications SET read = TRUE "
@@ -259,15 +266,17 @@ class RunOwnershipRepository:
     def __init__(self, connection_factory: Callable):
         self._factory = connection_factory
 
-    def create(self, *, control_id: str, user_id: str,
+    def create(self, *, control_id: str, user_id: int,
                workflow_key: str) -> None:
+        require_user_id(user_id)
         with self._factory() as connection:
             connection.execute(
                 "INSERT INTO run_ownership (control_id, user_id, workflow_key)"
                 " VALUES (%s, %s, %s)",
                 (control_id, user_id, workflow_key))
 
-    def list_for(self, user_id: str, limit: int = 50) -> list[dict]:
+    def list_for(self, user_id: int, limit: int = 50) -> list[dict]:
+        require_user_id(user_id)
         with self._factory() as connection:
             rows = connection.execute(
                 "SELECT control_id, workflow_key, created_at, run_id "
@@ -283,7 +292,8 @@ class RunOwnershipRepository:
                 "WHERE control_id = %s AND run_id IS NULL",
                 (run_id, control_id))
 
-    def owned_by(self, user_id: str, control_id: str) -> bool:
+    def owned_by(self, user_id: int, control_id: str) -> bool:
+        require_user_id(user_id)
         with self._factory() as connection:
             row = connection.execute(
                 "SELECT 1 FROM run_ownership "
@@ -291,7 +301,7 @@ class RunOwnershipRepository:
                 (user_id, control_id)).fetchone()
         return row is not None
 
-    def owner(self, control_id: str) -> str | None:
+    def owner(self, control_id: str) -> int | None:
         with self._factory() as connection:
             row = connection.execute(
                 "SELECT user_id FROM run_ownership WHERE control_id = %s",

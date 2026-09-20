@@ -32,7 +32,7 @@ from agent_workflow_runtime.chat import (
     WORKFLOW_CONFIRM,
 )
 
-OWNER = TrustedContext(user_id="u1", environment="PRT")
+OWNER = TrustedContext(user_id=1009, environment="PRT")
 
 
 def sha256_digest(content):
@@ -262,7 +262,7 @@ class UseSkillConversationScopeTests(unittest.TestCase):
         skill_key, trusted = reader.calls[0]
         self.assertEqual("demo/evidence-first-brief", skill_key)
         # The registry port receives the server-supplied owner.
-        self.assertEqual("u1", trusted.user_id)
+        self.assertEqual(1009, trusted.user_id)
         self.assertEqual("PRT", trusted.environment)
         self.assertIn(TOOL_CALL, [kind for kind, _ in emitter.events])
 
@@ -274,7 +274,7 @@ class ErrorBoundaryTests(unittest.TestCase):
             content="", tool_call_chunks=[tool_call_chunk(
                 0, "forged", "use_skill",
                 json.dumps({"skillKey": "demo/evidence-first-brief",
-                            "runtime": {"userId": "other-user"}}),
+                            "runtime": {"userId": '1005'}}),
             )],
         )])
         factory = FakeFactory([first, FakeModel([AIMessageChunk(content="拒绝")])])

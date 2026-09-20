@@ -203,7 +203,7 @@ def run(mode, run_id, options):
             with repo.scope(owner, run_id):
                 repo.save(replace(repo.get(item.key, owner), run_active=False))
         if options.get("owner"):
-            owner = replace(owner, user_id="other-user")
+            owner = replace(owner, user_id=1005)
         if options.get("environment"):
             owner = replace(owner, environment="ONLINE")
         result = service.submit(request(

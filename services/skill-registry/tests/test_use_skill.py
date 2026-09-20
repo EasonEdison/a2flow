@@ -85,7 +85,7 @@ class UseSkillTest(unittest.TestCase):
         return TrustedInvocationContext(
             contract_revision="SW-CONTRACTS-P1-CANDIDATE.1",
             trusted_context=TrustedContext(
-                user_id="user-123",
+                user_id=123,
                 environment="PRT",
             ),
             invocation_scope=scope,
@@ -178,7 +178,7 @@ class UseSkillTest(unittest.TestCase):
             "control-online",
         )._replace(
             trusted_context=TrustedContext(
-                user_id="user-123",
+                user_id=123,
                 environment="ONLINE",
             )
         )
@@ -382,7 +382,7 @@ class UseSkillTest(unittest.TestCase):
             with self.subTest(field="userId", line_break=repr(line_break)):
                 invalid_context = context._replace(
                     trusted_context=TrustedContext(
-                        user_id="user-123" + line_break,
+                        user_id="123" + line_break,
                         environment="PRT",
                     )
                 )

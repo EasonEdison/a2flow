@@ -72,7 +72,7 @@ class ProjectionTest(unittest.TestCase):
         for forbidden in ("for update", "pg_advisory", "result_json", "checkpoint", "select document ", "initial_inputs_json"):
             self.assertNotIn(forbidden, sql)
         for statement, params in connection.statements[1:]:
-            self.assertEqual(("test-user", "PRT", "run-test"), params[:3])
+            self.assertEqual((1008, "PRT", "run-test"), params[:3])
         self.assertEqual(101, connection.statements[-1][1][-1])
         self.assertEqual(101, connection.statements[-2][1][-1])
         self.assertEqual(2, calls[0]["connect_timeout"])
@@ -83,7 +83,7 @@ class ProjectionTest(unittest.TestCase):
         value = adapter.control(context().trusted_context, "start")
         self.assertEqual("DISPATCHING", value["delivery"])
         self.assertEqual(2, len(connection.statements))
-        self.assertEqual(("test-user", "PRT", "start"), connection.statements[1][1])
+        self.assertEqual((1008, "PRT", "start"), connection.statements[1][1])
         self.assertNotIn("payload_json", connection.statements[1][0])
         self.assertTrue(connection.closed)
 

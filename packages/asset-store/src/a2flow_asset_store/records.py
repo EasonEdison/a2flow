@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import hashlib
 import json
+from skillweave_contracts.user_id import user_id_from_wire
 
 MAX_BYTES = 16 * 1024 * 1024
 MAX_ASSETS = 128
@@ -66,7 +67,10 @@ class Bundle:
 
     @property
     def serving(self):
-        return json.loads(self.serving_data)
+        states = json.loads(self.serving_data)
+        for state in states:
+            state["grayUserIds"] = [user_id_from_wire(user) for user in state["grayUserIds"]]
+        return states
 
 
 @dataclass(frozen=True)

@@ -50,7 +50,7 @@ class ModelBudgetTest(unittest.TestCase):
         async def exercise(error):
             service = FailingService()
             service.error = error
-            owner = TrustedContext("synthetic-user", "PRT")
+            owner = TrustedContext(1007, "PRT")
             app = create_mvp_app(
                 service, object(), lambda *args: {}, lambda scope: owner,
                 unexpected_error_observer=observe_backend_failure,
@@ -111,8 +111,8 @@ class ModelBudgetTest(unittest.TestCase):
                 })
                 probe.assert_status(response)
 
-            with patch.object(probe, "SPEC", spec), \
-                    patch.object(probe, "_execute", side_effect=fail), \
+            with patch.object(probe, "SPEC", spec),\
+                    patch.object(probe, "_execute", side_effect=fail),\
                     self.assertRaisesRegex(RuntimeError, "MVP08_LIVE_CHAIN_FAILED"):
                 probe._run()
             record = json.loads(evidence.read_text())

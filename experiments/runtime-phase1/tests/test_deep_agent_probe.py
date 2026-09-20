@@ -78,7 +78,7 @@ class DeepAgentProbeTest(unittest.TestCase):
                 {
                     "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
                     "trustedContext": {
-                        "userId": "synthetic-user",
+                        "userId": '1007',
                         "environment": "PRT",
                     },
                     "invocationScope": {
@@ -149,7 +149,7 @@ class DeepAgentProbeTest(unittest.TestCase):
                 {
                     "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
                     "trustedContext": {
-                        "userId": "synthetic-user",
+                        "userId": '1007',
                         "environment": "PRT",
                     },
                     "invocationScope": {
@@ -212,7 +212,7 @@ class DeepAgentProbeTest(unittest.TestCase):
             {
                 "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
                 "trustedContext": {
-                    "userId": "synthetic-user",
+                    "userId": '1007',
                     "environment": "PRT",
                 },
                 "invocationScope": {
@@ -242,5 +242,5 @@ class DeepAgentProbeTest(unittest.TestCase):
         self.assertEqual(1, len(tool_messages))
         self.assertEqual(EXPECTED_CONTENT, json.loads(tool_messages[0].content))
         self.assertEqual(EXPECTED_SERVER_ARTIFACT, tool_messages[0].artifact)
-        self.assertNotIn("synthetic-user", tool_messages[0].content)
+        self.assertNotIn('1007', tool_messages[0].content)
         self.assertNotIn("evidence:skill-resolution-1", tool_messages[0].content)

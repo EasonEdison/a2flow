@@ -82,7 +82,7 @@ def wait_event(event_id="evt-1", run_id="run-1"):
         "event_id": event_id,
         "event_type": "NODE_WAITING",
         "run_id": run_id,
-        "user_id": "u1",
+        "user_id": "1001",
         "workflow_key": "wf/demo",
         "environment": "PRT",
         "occurred_at": "2026-09-19T10:00:00+00:00",
@@ -93,7 +93,7 @@ def wait_event(event_id="evt-1", run_id="run-1"):
 class TriggerIterationTests(unittest.TestCase):
     def test_takes_advisory_lock_then_claims(self):
         row = (
-            1, "u1", "wf/demo", "PRT", "period", {"every": "15m"},
+            1, 1001, "wf/demo", "PRT", "period", {"every": "15m"},
             "Asia/Shanghai", "输入",
             dt.datetime(2026, 9, 19, 9, 0, tzinfo=UTC),
             dt.datetime(2026, 9, 19, 9, 0, tzinfo=UTC),
@@ -116,7 +116,7 @@ class RunWorkflowConsumerTests(unittest.TestCase):
                 QueueItem(
                     item_id=1, queue="run_workflow",
                     payload={"workflow_key": "wf/demo", "input": "hi",
-                             "user_id": "u1"}, attempts=1,
+                             "user_id": "1001"}, attempts=1,
                 )
             ]
         )
@@ -152,7 +152,7 @@ class EventConsumerTests(unittest.TestCase):
             item_id=3, queue="domain_events",
             payload=wait_event(), attempts=1,
         )])
-        db = FakeDB(rows_by_index={1: [("u1",)], 2: [(0,)]})
+        db = FakeDB(rows_by_index={1: [(1001,)], 2: [(0,)]})
         processed = loops.run_event_consumer_iteration(
             conn=db, queue=queue, lark=FakeLark()
         )
@@ -175,7 +175,7 @@ class EventConsumerTests(unittest.TestCase):
 
 class MonitorIterationTests(unittest.TestCase):
     def test_overdue_run_stopped(self):
-        db = FakeDB(rows_by_index={0: [("run-9", "u1", "wf/demo")]})
+        db = FakeDB(rows_by_index={0: [("run-9", 1001, "wf/demo")]})
         http = FakeHttp()
         stopped = loops.run_monitor_iteration(conn=db, http=http)
         self.assertEqual(1, stopped)

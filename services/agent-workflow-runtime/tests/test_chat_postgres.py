@@ -18,7 +18,7 @@ class PostgresConversationTests(unittest.TestCase):
     def setUp(self):
         self.store = ConversationStore(os.environ["A2FLOW_TEST_CHAT_DSN"])
         self.store.setup()
-        self.owner = TrustedContext(user_id="test-user", environment="PRT")
+        self.owner = TrustedContext(user_id=9223372036854775807, environment="PRT")
         self.conversation = str(uuid4())
 
     def turn(self, owner, turn_id, text, loader=None):
@@ -49,8 +49,8 @@ class PostgresConversationTests(unittest.TestCase):
         with self.assertRaisesRegex(ConversationAdmissionError, "TURN_ALREADY_COMPLETED"):
             self.turn(self.owner, "2", "second")
         for other in (
-            TrustedContext(user_id="other-user", environment="PRT"),
-            TrustedContext(user_id="test-user", environment="ONLINE"),
+            TrustedContext(user_id=1005, environment="PRT"),
+            TrustedContext(user_id=self.owner.user_id, environment="ONLINE"),
         ):
             thread, messages = self.turn(other, "1", "isolated")
             self.assertNotEqual(first, thread)
@@ -65,6 +65,26 @@ class PostgresConversationTests(unittest.TestCase):
                 raise RuntimeError("fixture failure")
         with self.assertRaisesRegex(ConversationAdmissionError, "CONVERSATION_REQUIRES_REVIEW"):
             self.turn(self.owner, "3", "must not replay")
+
+    def test_fresh_identity_columns_are_bigint(self):
+        import psycopg
+        from importlib.resources import files
+        from agent_workflow_runtime import postgres, postgres_lifecycle, postgres_progress
+        from a2flow_management.repositories import _DDL
+        with psycopg.connect(os.environ["A2FLOW_TEST_CHAT_DSN"], autocommit=True) as connection:
+            connection.execute(files("a2flow_bside").joinpath("schema.sql").read_text())
+            for group in (postgres.DDL, postgres_lifecycle.DDL, postgres_progress.DDL, _DDL):
+                for statement in group:
+                    connection.execute(statement)
+            rows = connection.execute(
+                "SELECT table_name,column_name,data_type FROM information_schema.columns "
+                "WHERE table_schema=%s AND column_name IN (%s,%s)",
+                ("public", "user_id", "updated_by"),
+            ).fetchall()
+        self.assertGreaterEqual(len(rows), 15)
+        for table, column, kind in rows:
+            with self.subTest(table=table, column=column):
+                self.assertEqual("bigint", kind)
 
     def test_legacy_migration_has_owner_cutoff_and_no_200_row_truncation(self):
         from importlib.resources import files
@@ -89,6 +109,6 @@ class PostgresConversationTests(unittest.TestCase):
         rows = repo.legacy_history(self.owner.user_id, conversation, current["id"])
         self.assertEqual(250, len(rows))
         self.assertEqual(5001, len(rows[0]["content"]["text"]))
-        self.assertEqual([], repo.legacy_history("other-user", conversation, current["id"]))
+        self.assertEqual([], repo.legacy_history(1005, conversation, current["id"]))
         self.assertEqual(250, len(repo.legacy_history(
             self.owner.user_id, conversation, current["id"] + 1)))

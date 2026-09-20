@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 from collections import namedtuple
 import re
+from skillweave_contracts.user_id import require_user_id
 
 from skillweave_contracts import (
     CONTRACT_REVISION,
@@ -115,7 +116,9 @@ def _validate_context(context):
     trusted = context.trusted_context
     if not isinstance(trusted, TrustedContext):
         _fail("INVALID_TRUSTED_CONTEXT", "trustedContext is required")
-    if not _valid_identifier(trusted.user_id):
+    try:
+        require_user_id(trusted.user_id)
+    except ValueError:
         _fail("INVALID_TRUSTED_CONTEXT", "trusted userId is invalid")
     if trusted.environment not in (ENVIRONMENT_PRT, ENVIRONMENT_ONLINE):
         _fail("INVALID_TRUSTED_CONTEXT", "trusted environment is invalid")

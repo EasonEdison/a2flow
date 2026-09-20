@@ -50,9 +50,9 @@ class ActionServiceTest(unittest.TestCase):
 
     def test_ownership_node_run_interaction_and_action_rejected_before_execution(self):
         with self.assertRaisesRegex(ActionRejected, "INTERACTION_NOT_FOUND"):
-            self.service.submit(request(self.item), TrustedContext("other-user", "PRT"))
+            self.service.submit(request(self.item), TrustedContext(1005, "PRT"))
         with self.assertRaisesRegex(ActionRejected, "INTERACTION_NOT_FOUND"):
-            self.service.submit(request(self.item), TrustedContext("test-user", "ONLINE"))
+            self.service.submit(request(self.item), TrustedContext(1008, "ONLINE"))
         for field in ("runId", "nodeId", "interactionId", "actionName"):
             with self.subTest(field=field), self.assertRaises(ActionRejected):
                 self.service.submit(request(self.item, **{field: "wrong"}), self.owner)

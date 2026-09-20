@@ -45,7 +45,7 @@ def trusted_context() -> TrustedInvocationContext:
         {
             "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
             "trustedContext": {
-                "userId": "synthetic-user",
+                "userId": '1007',
                 "environment": "PRT",
             },
             "invocationScope": {

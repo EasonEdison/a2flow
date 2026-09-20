@@ -32,8 +32,8 @@ class PersonalMemory:
     @staticmethod
     def namespace(owner):
         require_owner(owner)
-        # Native Store namespace labels reject dots; platform user IDs allow them.
-        user_label = sha256(owner.user_id.encode("utf-8")).hexdigest()
+        # Keep a stable opaque namespace label for the canonical integer identity.
+        user_label = sha256(str(owner.user_id).encode("ascii")).hexdigest()
         return ("personal-memory", owner.environment, user_label, "default")
 
     def _access(self, owner, change=None):

@@ -2,7 +2,7 @@
   "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
   "controlRequestId": "publish_demo_002",
   "trustedContext": {
-    "userId": "user_demo_001",
+    "userId": "1001",
     "environment": "PRT"
   },
   "assetVersion": {

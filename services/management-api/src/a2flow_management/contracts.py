@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import re
+from skillweave_contracts.user_id import require_user_id, user_id_to_wire
 
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}")
 _KINDS = frozenset({"SKILL", "ABILITY", "APPLICATION", "COMPONENT", "WORKFLOW"})
@@ -32,14 +33,21 @@ def identifier(value, code="INVALID_IDENTIFIER"):
     return value
 
 
+def user_identifier(value, code="INVALID_TRUSTED_USER"):
+    try:
+        return require_user_id(value)
+    except ValueError:
+        raise ManagementError(code) from None
+
+
 @dataclass(frozen=True)
 class TrustedManagementContext:
-    user_id: str
+    user_id: int
     environment: str
     roles: frozenset[str]
 
     def __post_init__(self):
-        identifier(self.user_id, "INVALID_TRUSTED_USER")
+        user_identifier(self.user_id)
         if self.environment not in {"PRT", "ONLINE"}:
             raise ManagementError("INVALID_TRUSTED_ENVIRONMENT")
         if type(self.roles) is not frozenset or not self.roles <= {"ADMIN", "USER"}:
@@ -69,14 +77,17 @@ class ManagedDraft:
     revision: int
     data: bytes
     content_digest: str
-    updated_by: str
+    updated_by: int
+
+    def __post_init__(self):
+        user_identifier(self.updated_by)
 
     @classmethod
     def create(cls, kind, key, revision, document, updated_by):
         if kind not in _KINDS:
             raise ManagementError("INVALID_ASSET_KIND")
         identifier(key, "INVALID_ASSET_KEY")
-        identifier(updated_by, "INVALID_TRUSTED_USER")
+        user_identifier(updated_by)
         if type(revision) is not int or revision < 0:
             raise ManagementError("INVALID_DRAFT_REVISION")
         data = canonical(document)
@@ -90,7 +101,7 @@ class ManagedDraft:
     def to_mapping(self):
         return {"kind": self.kind, "key": self.key, "revision": self.revision,
                 "document": self.document, "contentDigest": self.content_digest,
-                "updatedBy": self.updated_by}
+                "updatedBy": user_id_to_wire(self.updated_by)}
 
 
 @dataclass(frozen=True)
@@ -124,7 +135,7 @@ class PublicationTarget:
     environment: str
     version_id: str
     channel: str
-    gray_user_ids: tuple[str, ...] = ()
+    gray_user_ids: tuple[int, ...] = ()
 
     def __post_init__(self):
         if type(self.gray_user_ids) is not tuple:
@@ -142,10 +153,10 @@ class PublicationTarget:
             raise ManagementError("GRAY_USERS_REQUIRED")
         if self.channel != "GRAY" and self.gray_user_ids:
             raise ManagementError("GRAY_USERS_NOT_ALLOWED")
+        for user_id in self.gray_user_ids:
+            user_identifier(user_id, "INVALID_GRAY_USER")
         if len(self.gray_user_ids) > 1024 or len(set(self.gray_user_ids)) != len(self.gray_user_ids):
             raise ManagementError("INVALID_GRAY_USERS")
-        for user_id in self.gray_user_ids:
-            identifier(user_id, "INVALID_GRAY_USER")
 
 
 @dataclass(frozen=True)
@@ -173,5 +184,5 @@ class PublicationPlan:
                 "target": {"environment": self.target.environment,
                            "versionId": self.target.version_id,
                            "channel": self.target.channel,
-                           "grayUserIds": list(self.target.gray_user_ids)},
+                           "grayUserIds": [user_id_to_wire(user) for user in self.target.gray_user_ids]},
                 "candidate": self.candidate, "contentDigest": self.content_digest}

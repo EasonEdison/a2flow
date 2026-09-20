@@ -246,9 +246,9 @@ class AssetTests(unittest.TestCase):
             self.document, expected_namespace=NAMESPACE, dry_run=False)
         reader = AssetReader(self.repo, NAMESPACE)
         self.assertTrue(reader.asset_exists(
-            "SKILL", "activity-planning/plan", TrustedContext("not-gray", "PRT")))
+            "SKILL", "activity-planning/plan", TrustedContext(104, "PRT")))
         self.assertFalse(reader.asset_exists(
-            "SKILL", "missing/skill", TrustedContext("not-gray", "PRT")))
+            "SKILL", "missing/skill", TrustedContext(104, "PRT")))
 
     def test_first_online_publication_must_be_stable(self):
         database = DatabaseDouble()
@@ -269,7 +269,7 @@ class AssetTests(unittest.TestCase):
             repository.publish_candidate(
                 NAMESPACE, "SKILL", "new/online", source,
                 {"environment": "ONLINE", "versionId": source["versionId"],
-                 "channel": "GRAY", "grayUserIds": ["gray-user"]},
+                 "channel": "GRAY", "grayUserIds": [103]},
                 digest(canonical(None)))
 
     def test_retained_version_returns_exact_immutable_document(self):
@@ -317,7 +317,7 @@ class AssetTests(unittest.TestCase):
              if field != "contentDigest"}))
         history = repository.publication_history(NAMESPACE, "SKILL", key)
         gray = {"environment": "ONLINE", "versionId": "v2",
-                "channel": "GRAY", "grayUserIds": ["gray-user"]}
+                "channel": "GRAY", "grayUserIds": [103]}
         repository.publish_candidate(
             NAMESPACE, "SKILL", key, candidate, gray,
             history["servingDigest"])
@@ -356,25 +356,25 @@ class AssetTests(unittest.TestCase):
             repository.publish_candidate(
                 NAMESPACE, "ABILITY", CONFIRM_KEY, candidate,
                 {"environment": "ONLINE", "versionId": "v2",
-                 "channel": "GRAY", "grayUserIds": ["gray-user"]},
+                 "channel": "GRAY", "grayUserIds": [103]},
                 history["servingDigest"])
 
     def test_runtime_skill_roundtrip_from_imported_bytes(self):
         self.repo.import_bundle(self.document, expected_namespace=NAMESPACE, dry_run=False)
         reader = AssetReader(self.repo, NAMESPACE)
         context = TrustedInvocationContext("SW-CONTRACTS-P1-CANDIDATE.1",
-            RegistryContext("u1", "PRT"), InvocationScope("CONVERSATION", conversation_id="c1"), "q1")
+            RegistryContext(101, "PRT"), InvocationScope("CONVERSATION", conversation_id="c1"), "q1")
         result = use_skill(UseSkillRequest("activity-planning/plan"), context, reader)
         self.assertIn("活动策划", result.content.instructions)
         self.assertEqual("PRT_CURRENT", result.artifact.selection)
-        self.assertEqual(7, len(reader.versions(TrustedContext("u1", "PRT"), "activity-planning")))
+        self.assertEqual(7, len(reader.versions(TrustedContext(101, "PRT"), "activity-planning")))
         self.assertEqual({"skillKey", "assetId", "versionId"}, set(reader.list_skills(context.trusted_context)[0]))
         self.assertNotIn("definition", reader.list_workflows(context.trusted_context)[0])
 
     def test_wrong_owner_environment_no_repository_read(self):
         reader = AssetReader(self.repo, NAMESPACE)
         with self.assertRaisesRegex(AssetError, "ENVIRONMENT_MISMATCH"):
-            reader.list_skills(TrustedContext("u1", "ONLINE"))
+            reader.list_skills(TrustedContext(101, "ONLINE"))
         self.assertEqual(0, self.db.connects)
 
     def test_corrupt_readback_rejected(self):
@@ -391,7 +391,7 @@ class AssetTests(unittest.TestCase):
         gray["versionId"] = "v2"
         doc["assets"].append(gray)
         state = next(s for s in doc["serving"] if s["key"] == gray["key"])
-        state["gray"], state["grayUserIds"] = "v2", ["gray-user"]
+        state["gray"], state["grayUserIds"] = "v2", ["103"]
         bundle = self.validate(self.resign(doc))
         class Snapshot:
             environment = "ONLINE"
@@ -399,32 +399,32 @@ class AssetTests(unittest.TestCase):
             def read(inner, ns):
                 return bundle
         reader = AssetReader(Snapshot(), NAMESPACE)
-        gray_result = reader.load_skill(gray["key"], TrustedContext("gray-user", "ONLINE"))
-        stable = reader.load_skill(gray["key"], TrustedContext("stable-user", "ONLINE"))
+        gray_result = reader.load_skill(gray["key"], TrustedContext(103, "ONLINE"))
+        stable = reader.load_skill(gray["key"], TrustedContext(104, "ONLINE"))
         self.assertEqual("v2", gray_result.resolution_evidence.version_id)
         self.assertEqual("ONLINE_GRAY", gray_result.resolution_evidence.selection)
         self.assertEqual("v1", stable.resolution_evidence.version_id)
         self.assertEqual("ONLINE_STABLE", stable.resolution_evidence.selection)
 
     def test_real_local_operations_and_confirmation_not_model_allowlisted(self):
-        result = budget_activity({"participants": 3, "budgetMinor": 100}, TrustedContext("u1", "PRT"))
+        result = budget_activity({"participants": 3, "budgetMinor": 100}, TrustedContext(101, "PRT"))
         self.assertEqual(33, result["perPersonMinor"])
         self.assertEqual(1, result["remainderMinor"])
         self.assertNotIn(CONFIRM_KEY, MODEL_ABILITY_KEYS)
         self.assertEqual({"selectedOptionId": "A", "confirmed": True},
-            select_activity({"optionId": "A", "confirmed": True}, TrustedContext("u1", "PRT")))
+            select_activity({"optionId": "A", "confirmed": True}, TrustedContext(101, "PRT")))
         for values in ({"participants": True, "budgetMinor": 10},
                        {"participants": 0, "budgetMinor": 10}):
             with self.assertRaises(ValueError):
-                budget_activity(values, TrustedContext("u1", "PRT"))
+                budget_activity(values, TrustedContext(101, "PRT"))
 
     def test_mutating_result_mapping_does_not_mutate_future_reads(self):
         self.repo.import_bundle(self.document, expected_namespace=NAMESPACE, dry_run=False)
         reader = AssetReader(self.repo, NAMESPACE)
-        result = reader.resolve_workflow("activity-planning", TrustedContext("u1", "PRT"))
+        result = reader.resolve_workflow("activity-planning", TrustedContext(101, "PRT"))
         result.definition["nodes"].clear()
         self.assertEqual(2, len(result.definition["nodes"]))
-        ability = reader.resolve_ability("activity-planning.budget", TrustedContext("u1", "PRT"))
+        ability = reader.resolve_ability("activity-planning.budget", TrustedContext(101, "PRT"))
         self.assertEqual("v1", ability.version_id)
         self.assertEqual("business-call:activity-planning.budget", ability.operation_ref)
 

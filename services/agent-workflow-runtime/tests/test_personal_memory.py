@@ -17,7 +17,7 @@ class MemoryMiddlewareTests(unittest.TestCase):
                 self.owner = owner
                 return self.entries
         memory = Memory()
-        owner = TrustedContext(user_id="user-a", environment="PRT")
+        owner = TrustedContext(user_id=1010, environment="PRT")
         model = FakeModel([AIMessageChunk(content="reply")])
         loop = ChatLoop(
             model_factory=FakeFactory([model]), model_reference="deepseek-v4-flash",
@@ -44,7 +44,7 @@ class MemoryPostgresTests(unittest.TestCase):
     def test_native_store_controls_isolation_and_stale_write(self):
         memory = PersonalMemory(os.environ["A2FLOW_TEST_CHAT_DSN"])
         memory.setup()
-        user = "user.name-" + str(uuid4())
+        user = uuid4().int % (2**63)
         owner = TrustedContext(user_id=user, environment="PRT")
         self.assertEqual({"enabled": False, "revision": 0, "entries": []}, memory.view(owner))
         entry = {"id": "tone", "text": "concise"}
@@ -52,7 +52,7 @@ class MemoryPostgresTests(unittest.TestCase):
         self.assertEqual([entry], memory.for_agent(owner))
         for other in (
             TrustedContext(user_id=user, environment="ONLINE"),
-            TrustedContext(user_id="other", environment="PRT"),
+            TrustedContext(user_id=1004, environment="PRT"),
         ):
             self.assertEqual([], memory.for_agent(other))
         memory.replace(owner, revision=1, enabled=False, entries=[entry])
@@ -67,7 +67,7 @@ class MemoryPostgresTests(unittest.TestCase):
 
     def test_input_limits(self):
         memory = PersonalMemory(os.environ["A2FLOW_TEST_CHAT_DSN"])
-        owner = TrustedContext(user_id="fixture", environment="PRT")
+        owner = TrustedContext(user_id=1001, environment="PRT")
         for entries in ([{"id": "../bad", "text": "x"}],
                         [{"id": "x", "text": "x"*1001}],
                         [{"id": "x", "text": "a"}, {"id": "x", "text": "b"}]):

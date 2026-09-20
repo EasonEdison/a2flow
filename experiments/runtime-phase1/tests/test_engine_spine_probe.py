@@ -20,7 +20,7 @@ def workflow_context() -> TrustedInvocationContext:
         {
             "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
             "trustedContext": {
-                "userId": "synthetic-engine-user",
+                "userId": '1006',
                 "environment": "PRT",
             },
             "invocationScope": {

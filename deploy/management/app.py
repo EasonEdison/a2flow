@@ -18,6 +18,7 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from fastapi import Request
+from skillweave_contracts.user_id import user_id_from_wire
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -171,11 +172,11 @@ class ManagementPreviewConfig:
     database: str
     environment: str
     namespace: str
-    user_id: str
+    user_id: int
     roles: frozenset[str]
     static_directory: str | None = None
     browser_origin: str | None = None
-    guest_user_id: str | None = None
+    guest_user_id: int | None = None
 
     def __post_init__(self):
         if type(self.conninfo) is not str or not self.conninfo:
@@ -187,8 +188,6 @@ class ManagementPreviewConfig:
         TrustedManagementContext(
             self.user_id, self.environment, self.roles)
         if self.guest_user_id is not None:
-            if type(self.guest_user_id) is not str or not self.guest_user_id:
-                raise RuntimeError("INVALID_GUEST_PRINCIPAL")
             TrustedManagementContext(
                 self.guest_user_id, self.environment, frozenset({"USER"}))
         static_directory = _static_directory(self.static_directory)
@@ -225,11 +224,11 @@ class ManagementPreviewConfig:
             database=_required("A2FLOW_MANAGEMENT_DATABASE_NAME"),
             environment=_required("A2FLOW_MANAGEMENT_ENVIRONMENT"),
             namespace=_required("A2FLOW_MANAGEMENT_ASSET_NAMESPACE"),
-            user_id=_required("A2FLOW_MANAGEMENT_USER_ID"),
+            user_id=user_id_from_wire(_required("A2FLOW_MANAGEMENT_USER_ID")),
             roles=frozenset(raw_roles),
             static_directory=_required("A2FLOW_MANAGEMENT_STATIC_DIRECTORY"),
             browser_origin=_required("A2FLOW_MANAGEMENT_BROWSER_ORIGIN"),
-            guest_user_id=guest_user_id,
+            guest_user_id=None if guest_user_id is None else user_id_from_wire(guest_user_id),
         )
 
 
