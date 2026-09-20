@@ -1,28 +1,20 @@
 """Small MVP08 ports over the asset package; no scenario implementation in core."""
 
-from dataclasses import dataclass
-from typing import Callable
 import json
 
 from skill_registry import (
     InvocationScope as RegistryScope, TrustedContext as RegistryOwner,
     TrustedInvocationContext as RegistryContext, UseSkillRequest, use_skill,
 )
-from skillweave_contracts.models import parse_result_interpretation_policy
-
+from .ability_execution import (
+    MODEL_AUTHORIZATION,
+    OperationSpec,
+    execute_ability as execute_resolved_ability,
+    result_policy,
+    validate_ability_definition,
+)
 from .models import ActionConfig, ActionRejected, json_copy
-from .policy import business_succeeded
 from .service import require_owner
-
-
-@dataclass(frozen=True)
-class OperationSpec:
-    execute: Callable
-    validate_input: Callable
-    validate_result: Callable
-    validate_definition: Callable
-    model_allowed: bool = False
-    action_allowed: bool = False
 
 
 class RuntimeAssets:
@@ -91,45 +83,24 @@ class RuntimeAssets:
             raise ActionRejected("ABILITY_BINDING_MISMATCH")
         if f"ABILITY:{ability.asset_id}" not in dict(self.run.versions):
             raise ActionRejected("ABILITY_NOT_ALLOWED")
-        definition = ability.definition
-        # MVP has no credential/context remapping profile. Reject instead of
-        # ignoring an authored binding that would change operation inputs.
-        if definition["credentialRequirements"] or any(
-            b["source"] != "MODEL_ARGUMENT" or b["targetPath"] != b["sourcePath"]
-            for b in definition["inputBindings"]
-        ):
-            raise ActionRejected("UNSUPPORTED_ABILITY_BINDING")
         spec = self.operations.get(ability.operation_ref)
-        if not isinstance(spec, OperationSpec):
-            raise ActionRejected("OPERATION_NOT_REGISTERED")
-        if spec.validate_definition(definition) is not True:
-            raise ActionRejected("UNSUPPORTED_ABILITY_PROFILE")
+        validate_ability_definition(ability, spec)
         return ability, spec
 
     @staticmethod
     def _policy(ability, policy_ref):
-        policies = [p for p in ability.definition["resultInterpretationPolicies"]
-                    if p["policyRef"] == policy_ref]
-        if len(policies) != 1:
-            raise ActionRejected("RESULT_POLICY_NOT_FOUND")
-        return parse_result_interpretation_policy(policies[0])
+        return result_policy(ability, policy_ref)
 
     def execute_ability(self, ability_key, arguments, context):
         ability, spec = self._ability(ability_key, context)
-        if not spec.model_allowed:
-            raise ActionRejected("ABILITY_NOT_MODEL_CALLABLE")
-        if spec.validate_input(arguments) is not True:
-            raise ActionRejected("INVALID_ABILITY_INPUT")
         self.check_versions()
-        result = json_copy(spec.execute(json_copy(arguments), self.run.owner))
-        config = ActionConfig(
-            "model-operation", ability.operation_ref, self.current_versions(),
-            self._policy(ability, ability.definition["defaultSuccessPolicyRef"]),
-            False, spec.validate_input, spec.validate_result,
+        return execute_resolved_ability(
+            ability,
+            spec,
+            arguments,
+            self.run.owner,
+            authorization=MODEL_AUTHORIZATION,
         )
-        if not business_succeeded(config, result):
-            raise ActionRejected("ABILITY_RESULT_NOT_SUCCESS")
-        return {"abilityKey": ability_key, "output": result, "versionId": ability.version_id}
 
     def versions(self, interaction):
         self._context(interaction.context)
