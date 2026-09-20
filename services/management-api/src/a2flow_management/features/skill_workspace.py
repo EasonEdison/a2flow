@@ -15,6 +15,18 @@ def _response_size(value):
         raise ManagementError("OUTPUT_TOO_LARGE", 413)
 
 
+def _validate_files(entries):
+    try:
+        validate_entries({"entries": entries, "requiredToolNames": []})
+    except Exception as error:
+        raise ManagementError(getattr(error, "code", "INVALID_WORKSPACE_FILES")) from None
+    paths = {entry["logicalPath"] for entry in entries}
+    for path in paths:
+        segments = path.split("/")
+        if any("/".join(segments[:length]) in paths for length in range(1, len(segments))):
+            raise ManagementError("WORKSPACE_PATH_CONFLICT")
+
+
 def workspace_namespace(namespace):
     # Reserved, bounded identity in the existing draft store, never an asset namespace.
     return "skill-workspace:" + hashlib.sha256(namespace.encode()).hexdigest()
@@ -26,8 +38,13 @@ class SkillWorkspaceMixin:
 
     def _document_entries(self, document):
         from .skill import _entry
-        return [_entry("skill-instructions", "SKILL.md", "text/markdown",
-                       document["skillMd"].encode("utf-8")), *document["resources"]]
+        if (type(document) is not dict or type(document.get("skillMd")) is not str
+                or type(document.get("resources")) is not list):
+            raise ManagementError("INVALID_SKILL_DRAFT")
+        entries = [_entry("skill-instructions", "SKILL.md", "text/markdown",
+                          document["skillMd"].encode("utf-8")), *document["resources"]]
+        _validate_files(entries)
+        return entries
 
     def get_workspace(self, context, key):
         parse_skill_key(key)
@@ -51,10 +68,7 @@ class SkillWorkspaceMixin:
 
     def _save_workspace(self, context, key, value, entries):
         # Validate package safety/limits/encoding, but allow unfinished SKILL.md prose.
-        try:
-            validate_entries({"entries": entries, "requiredToolNames": []})
-        except Exception as error:
-            raise ManagementError(getattr(error, "code", "INVALID_WORKSPACE_FILES")) from None
+        _validate_files(entries)
         document = {"baseDraftRevision": value["baseDraftRevision"],
                     "entries": entries, "dirty": True}
         _response_size({**document, "workspaceRevision": value["workspaceRevision"] + 1})
