@@ -8,6 +8,9 @@ import unittest
 from types import SimpleNamespace
 
 from langchain_core.messages import AIMessageChunk
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.outputs import ChatGenerationChunk
+from pydantic import Field
 
 from skill_registry.ports import MaterialPort, SkillMaterial
 from skill_registry.resources import (
@@ -82,25 +85,36 @@ def skill_material():
     )
 
 
-class FakeModel:
-    configuration = SimpleNamespace(harness_profile_key="fake")
-    client = None
-    async_client = None
+class FakeModel(BaseChatModel):
+    rounds: list
+    raise_on_stream: bool = False
+    tools: list = Field(default_factory=list)
+    observed: list = Field(default_factory=list)
 
     def __init__(self, chunks, *, raise_on_stream=False):
-        self._chunks = list(chunks)
-        self._raise_on_stream = raise_on_stream
-        self.tools = None
+        super().__init__(rounds=[list(chunks)], raise_on_stream=raise_on_stream)
+
+    @property
+    def configuration(self):
+        return SimpleNamespace(harness_profile_key="fakemodel")
+
+    @property
+    def _llm_type(self):
+        return "fake"
 
     def bind_tools(self, tools, **kwargs):
         self.tools = list(tools)
         return self
 
-    def stream(self, messages):
-        if self._raise_on_stream:
+    def _generate(self, messages, **kwargs):
+        raise AssertionError("Expected native streaming")
+
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+        self.observed.append(list(messages))
+        if self.raise_on_stream:
             raise RuntimeError("provider down")
-        for chunk in self._chunks:
-            yield chunk
+        for chunk in self.rounds.pop(0):
+            yield ChatGenerationChunk(message=chunk)
 
 
 class FakeFactory:
@@ -110,7 +124,11 @@ class FakeFactory:
 
     def create(self, reference, owner):
         self.created.append((reference, owner))
-        return self.models.pop(0)
+        model = self.models.pop(0)
+        for remaining in self.models:
+            model.rounds.extend(remaining.rounds)
+        self.models.clear()
+        return model
 
 
 def tool_call_chunk(index, call_id, name, args_text):
@@ -181,6 +199,10 @@ class WorkflowConfirmTests(unittest.TestCase):
         for kind, payload in emitter.events:
             self.assertNotIn("args", payload)
         self.assertEqual(DONE, emitter.events[-1][0])
+        self.assertEqual(1, len(factory.created))
+        self.assertEqual(1, sum(m.type == "human" for m in loop.history))
+        self.assertEqual(["human", "ai", "tool", "ai"],
+                         [m.type for m in loop.history])
 
 
 class UseSkillConversationScopeTests(unittest.TestCase):
@@ -221,6 +243,48 @@ class UseSkillConversationScopeTests(unittest.TestCase):
 
 
 class ErrorBoundaryTests(unittest.TestCase):
+    def test_forged_runtime_argument_is_rejected_before_tool(self):
+        reader = FakeMaterialPort(skill_material())
+        first = FakeModel([AIMessageChunk(
+            content="", tool_call_chunks=[tool_call_chunk(
+                0, "forged", "use_skill",
+                json.dumps({"skillKey": "demo/evidence-first-brief",
+                            "runtime": {"userId": "other-user"}}),
+            )],
+        )])
+        factory = FakeFactory([first, FakeModel([AIMessageChunk(content="拒绝")])])
+        loop = ChatLoop(
+            model_factory=factory, model_reference="deepseek-v4-flash",
+            owner=OWNER, conversation_id="conv1", reader=reader,
+            control_request_id="chatctrl1",
+        )
+        loop.turn("你好")
+        self.assertEqual([], reader.calls)
+        self.assertEqual("error", loop.history[2].status)
+        from agent_workflow_runtime.assembly import IMPLICIT_DEEP_AGENT_TOOLS
+        self.assertFalse({t.name for t in first.tools} & IMPLICIT_DEEP_AGENT_TOOLS)
+
+    def test_native_reasoning_and_tool_pairing_are_preserved(self):
+        first = FakeModel([AIMessageChunk(
+            content="", additional_kwargs={"reasoning_content": "fixture reasoning"},
+            tool_call_chunks=[tool_call_chunk(
+                0, "native-call", "propose_workflow_run",
+                json.dumps({"workflowKey": "demo", "title": "Demo"}),
+            )],
+        )])
+        loop = ChatLoop(
+            model_factory=FakeFactory([first, FakeModel([AIMessageChunk(content="done")])]),
+            model_reference="deepseek-v4-flash", owner=OWNER,
+            conversation_id="conv1", reader=FakeMaterialPort(skill_material()),
+            control_request_id="chatctrl1",
+        )
+        loop.turn("proposal")
+        self.assertEqual("fixture reasoning",
+                         loop.history[1].additional_kwargs["reasoning_content"])
+        self.assertEqual(loop.history[1].tool_calls[0]["id"],
+                         loop.history[2].tool_call_id)
+        self.assertEqual(1, sum(m.type == "human" for m in first.observed[-1]))
+
     def test_model_stream_failure_emits_error(self):
         emitter = ListEmitter()
         factory = FakeFactory([FakeModel([], raise_on_stream=True)])

@@ -26,6 +26,34 @@ IMPLICIT_DEEP_AGENT_TOOLS = frozenset({
 })
 
 
+def build_agent(
+    model, tools, validators, *, harness_profile_key, middleware=(),
+    checkpointer=None, context_schema=None, system_prompt=None,
+    control_middleware=(),
+):
+    """Shared SDK construction; scope-specific lifecycle stays in middleware.
+
+    No native Skill directory, filesystem execution or delegated agents are
+    enabled here. Conversation mode does not require a tool for a greeting.
+    """
+    register_harness_profile(
+        harness_profile_key,
+        HarnessProfile(
+            excluded_tools=IMPLICIT_DEEP_AGENT_TOOLS,
+            general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
+        ),
+    )
+    return create_deep_agent(
+        model=model, tools=list(tools), checkpointer=checkpointer,
+        context_schema=context_schema,
+        system_prompt=system_prompt or (
+            "Use authorized Skills and operations only through Runtime-owned Tools."
+        ),
+        middleware=[*control_middleware, ClosedModelArgsAdmission(validators),
+                    *middleware],
+    )
+
+
 def build_engine(
     model: BaseChatModel,
     tools: Sequence[BaseTool],
@@ -54,13 +82,6 @@ def build_engine(
         (item.metadata or {}).get("requires_action_guard") for item in tools
     ):
         raise ValueError("Interactive Action Tools require a terminal guard")
-    register_harness_profile(
-        harness_profile_key,
-        HarnessProfile(
-            excluded_tools=IMPLICIT_DEEP_AGENT_TOOLS,
-            general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
-        ),
-    )
     control_middleware = []
     if run_lifecycle is not None:
         from agent_workflow_runtime.native_control import (
@@ -74,16 +95,17 @@ def build_engine(
     if progress is not None:
         from .progress_observer import ProgressMiddleware
         observation_middleware = [ProgressMiddleware(node_context)]
-    graph = create_deep_agent(
+    graph = build_agent(
         model=model,
         checkpointer=checkpointer,
         tools=list(tools),
+        validators=validators,
+        harness_profile_key=harness_profile_key,
+        control_middleware=control_middleware,
         system_prompt=system_prompt or (
             "Use authorized Skills and operations only through Runtime-owned Tools."
         ),
         middleware=[
-            *control_middleware,
-            ClosedModelArgsAdmission(validators),
             *observation_middleware,
             RequiredToolFinalizerAdmission(
                 required_tool_names, terminal_guard, lifecycle=run_lifecycle,
