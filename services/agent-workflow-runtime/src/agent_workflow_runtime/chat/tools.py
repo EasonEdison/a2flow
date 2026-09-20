@@ -1,11 +1,8 @@
-"""Conversation-scoped chat tools: use_skill + propose_workflow_run.
+"""Conversation-scoped Tools with optional Skill execution assets.
 
-The workflow-run tools (execute_ability / render_application) are deliberately
-absent from chat: they bind to a run/node and to LangGraph interrupts, neither
-of which exists in an ordinary conversation. Chat skills reuse the same
-contracts-level use_skill entry as workflow nodes, with a CONVERSATION
-invocation scope. propose_workflow_run only emits a structured proposal event;
-it never starts a run.
+Chat Ability and Application Tools are registered only when a trusted
+``ChatAssets`` adapter is injected.  They never synthesize a Workflow run/node
+or use a Workflow interrupt.  ``propose_workflow_run`` remains proposal-only.
 """
 
 from __future__ import annotations
@@ -34,6 +31,8 @@ from skillweave_contracts.models import (
 )
 
 from .events import WORKFLOW_CONFIRM
+from ..mvp_tools import AbilityArgs, AbilityModelArgs, RenderArgs, RenderModelArgs
+from ..models import json_copy
 
 _EMITTER: ContextVar[Any] = ContextVar("a2flow_chat_emitter", default=None)
 
@@ -87,8 +86,9 @@ def build_chat_tools(
     trusted_context: TrustedContext,
     conversation_id: str,
     control_request_id: str,
+    chat_assets=None,
 ):
-    """(use_skill, propose_workflow_run) bound to one conversation context."""
+    """Build the legacy pair or the Skill-enabled four-tool tuple."""
 
     def _invocation():
         """Registry-scoped context for the contracts-level use_skill entry."""
@@ -116,15 +116,18 @@ def build_chat_tools(
         skillKey: str, runtime: ToolRuntime[TrustedInvocationContext]
     ):
         """Load this authorized Skill's instructions and resources for the conversation."""
-        result = use_skill(
-            UseSkillRequest(skill_key=skillKey), _invocation(), reader
-        )
-        mapping = result.to_mapping()
+        if chat_assets is None:
+            mapping = use_skill(
+                UseSkillRequest(skill_key=skillKey), _invocation(), reader
+            ).to_mapping()
+        else:
+            chat_assets.validate_context(runtime.context)
+            mapping = chat_assets.admit_skill(skillKey)
         return (
             json.dumps(mapping.get("content", {}), ensure_ascii=False, sort_keys=True),
             {
                 "skillKey": skillKey,
-                "versionId": mapping.get("versionId"),
+                "versionId": mapping["artifact"]["resolvedVersion"]["versionId"],
             },
         )
 
@@ -151,4 +154,60 @@ def build_chat_tools(
             {"workflowKey": workflowKey, "title": title},
         )
 
-    return use_skill_tool, propose_tool
+    if chat_assets is None:
+        return use_skill_tool, propose_tool
+
+    @tool(
+        "execute_ability",
+        args_schema=AbilityArgs,
+        response_format="content_and_artifact",
+    )
+    def execute_ability_tool(
+        abilityKey: str,
+        arguments: dict[str, Any],
+        runtime: ToolRuntime[TrustedInvocationContext],
+    ):
+        """Run one registered Ability bound by the active conversation Skill."""
+        chat_assets.validate_context(runtime.context)
+        value = chat_assets.execute_ability(abilityKey, arguments)
+        return json.dumps(value["output"], ensure_ascii=False, sort_keys=True), {
+            "abilityKey": value["abilityKey"],
+            "versionId": value["versionId"],
+        }
+
+    @tool(
+        "render_application",
+        args_schema=RenderArgs,
+        response_format="content_and_artifact",
+    )
+    def render_application_tool(
+        applicationKey: str,
+        data: dict[str, Any],
+        runtime: ToolRuntime[TrustedInvocationContext],
+    ):
+        """Prepare and persist one Skill-bound conversation Application."""
+        chat_assets.validate_context(runtime.context)
+        saved = chat_assets.render_application(
+            applicationKey, data, runtime.tool_call_id,
+        )
+        emitter = _EMITTER.get()
+        if emitter is not None:
+            emitter.emit("application_rendered", {"card": json_copy(saved)})
+        return (
+            json.dumps(
+                {"rendered": True, "cardId": saved["cardId"]},
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            {
+                "applicationKey": applicationKey,
+                "cardId": saved["cardId"],
+            },
+        )
+
+    return (
+        use_skill_tool,
+        propose_tool,
+        execute_ability_tool,
+        render_application_tool,
+    )
