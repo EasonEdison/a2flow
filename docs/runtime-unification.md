@@ -194,3 +194,12 @@ card state directly, without an obligatory model call. Only the owning lifecycle
 decides whether completion resumes an Agent or advances a Workflow node.
 No generic HTTP transport, LoadBinding expansion, deployment or live-model call
 is delivered by this foundational extraction.
+
+Verification of this foundation: 38 combined offline regressions passed against
+the pinned runtime image with network disabled, including the existing three-node
+Workflow, Skill display-only/interactive behavior, saved Action continuation,
+Chat regression, shared Ability validation and immutable Application preparation.
+A publication change during input validation prevents dispatch: the shared
+Ability caller supplies a required version-admission callback run immediately
+before the registered operation. Independent scoped preparation review found no
+blocking issue. This is not Chat Application end-to-end or deployment evidence.
