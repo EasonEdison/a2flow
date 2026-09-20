@@ -12,6 +12,7 @@ export type PendingResolve = (path: Path, expected: 'object' | 'array') => void;
 export type PendingDiscard = (path: Path) => void;
 export type PendingConflict = (path: Path) => string | null;
 export type FormProps = {
+  skillStage?: string;
   document: JsonObject;
   disabled: boolean;
   onChange: Change;

@@ -222,7 +222,8 @@ function ResourceWorkbench({ document, disabled, assetId, revision, pendingResou
 
 export function SkillEditor(props: FormProps) {
   const { document, disabled, onChange, references, onNavigateReference } = props;
-  const [stage, setStage] = useState('overview');
+  const [localStage, setStage] = useState('overview');
+  const stage = props.skillStage ?? localStage;
   const stages = [
     ['overview', '基础信息'], ['abilities', '业务能力'],
     ['applications', '渲染组件'], ['resources', '指令与文件'],
@@ -230,13 +231,13 @@ export function SkillEditor(props: FormProps) {
   const mismatch = skillFrontmatterMismatch(document);
   const metadata = isEditableRecord(document.metadata) ? document.metadata : undefined;
   return <div className="asset-form">
-    <nav className="skill-stage-tabs" aria-label="Skill 配置阶段">
+    {!props.skillStage ? <nav className="skill-stage-tabs" aria-label="Skill 配置阶段">
       {stages.map(([key, label]) => <button type="button" key={key} aria-pressed={stage === key}
         className={stage === key ? 'active' : ''} onClick={() => setStage(key)}>{label}
         {key === 'abilities' && Array.isArray(document.abilityBindings) ? <span>{document.abilityBindings.length}</span> : null}
         {key === 'applications' && Array.isArray(document.applicationBindings) ? <span>{document.applicationBindings.length}</span> : null}
       </button>)}
-    </nav>
+    </nav> : null}
     <div hidden={stage !== 'overview'}>
     {mismatch ? <div className="notice warning"><strong>metadata 与 frontmatter 需要核对</strong><span>{mismatch}</span></div> : null}
     <Section title="Skill 基础信息">

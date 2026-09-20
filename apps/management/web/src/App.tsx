@@ -580,6 +580,7 @@ function PublicationControls({
 }
 
 function AuthorWorkspace({
+  skillStage,
   session,
   kind,
   keyName,
@@ -609,6 +610,7 @@ function AuthorWorkspace({
   onPublish,
   onTargetChange,
 }: {
+  skillStage?: string;
   session: ManagementSession;
   kind: AssetKind;
   keyName: string;
@@ -686,7 +688,7 @@ function AuthorWorkspace({
             disabled={actionBusy}
             onChange={(event) => onEdit(event.target.value)}
           />
-        ) : <FormEditor kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} pendingResources={pendingResources} assetId={`${kind}:${keyName}`} revision={buffer.revision} references={references} onNavigateReference={onNavigateReference} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
+        ) : <FormEditor skillStage={skillStage} kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} pendingResources={pendingResources} assetId={`${kind}:${keyName}`} revision={buffer.revision} references={references} onNavigateReference={onNavigateReference} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
           onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending} onPendingResourcesChange={onPendingResourcesChange}
           getPendingConflict={getPendingConflict} />}
         <div className="editor-footer">
@@ -745,6 +747,7 @@ function App() {
   const [referenceRefresh, setReferenceRefresh] = useState(0);
   const [dependencyState, setDependencyState] = useState<DependencyViewState | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>('BASIC');
+  const [skillStage, setSkillStage] = useState('overview');
   const dependencyIdentity = session && kind && selectedKey
     ? `${session.userId}:${session.environment}:${kind}:${selectedKey}`
     : null;
@@ -1256,7 +1259,14 @@ function App() {
               </div>
             </header>
             <div className="detail-tabs" role="tablist" aria-label="详情分区">
-              {DETAIL_TABS.map((tab) => (
+              {kind === 'SKILL' && session.canAuthor ? [
+                ['overview', '基础信息'], ['abilities', '业务能力'], ['applications', '渲染组件'], ['resources', '指令与文件'],
+              ].map(([stage, label]) => <button type="button" role="tab" key={stage}
+                id={`skill-stage-${stage}`} aria-controls="detail-panel-edit"
+                aria-selected={detailTab === 'EDIT' && skillStage === stage}
+                className={detailTab === 'EDIT' && skillStage === stage ? 'active' : ''}
+                onClick={() => { setSkillStage(stage); setDetailTab('EDIT'); }}>{label}</button>) : null}
+              {DETAIL_TABS.filter((tab) => !(kind === 'SKILL' && session.canAuthor && ['BASIC', 'EDIT'].includes(tab.id))).map((tab) => (
                 <button
                   type="button"
                   role="tab"
@@ -1300,12 +1310,13 @@ function App() {
               className={detailTab === 'EDIT' ? 'detail-tab-panel active' : 'detail-tab-panel'}
               role="tabpanel"
               id="detail-panel-edit"
-              aria-labelledby="detail-tab-edit"
+              aria-labelledby={kind === 'SKILL' && session.canAuthor ? `skill-stage-${skillStage}` : 'detail-tab-edit'}
               aria-hidden={detailTab !== 'EDIT'}
             >
               {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) ? (
                 session.canAuthor && history ? (
                   <AuthorWorkspace
+                    skillStage={kind === 'SKILL' ? skillStage : undefined}
                     session={session}
                     kind={kind}
                     keyName={selectedKey}

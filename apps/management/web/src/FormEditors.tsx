@@ -8,14 +8,15 @@ import { SkillEditor } from './SkillEditor';
 import { WorkflowEditor } from './WorkflowEditor';
 import { ComponentEditor } from './ComponentEditor';
 
-export function FormEditor({ kind, text, disabled, pendingFields, pendingResources, assetId, revision, references, onNavigateReference, previewState, onPreviewStateChange, onEdit, onPendingChange, onApplyPending, onDiscardPending, onPendingResourcesChange, getPendingConflict }: {
+export function FormEditor({ skillStage, kind, text, disabled, pendingFields, pendingResources, assetId, revision, references, onNavigateReference, previewState, onPreviewStateChange, onEdit, onPendingChange, onApplyPending, onDiscardPending, onPendingResourcesChange, getPendingConflict }: {
+  skillStage?: string;
   kind: AssetKind; text: string; disabled: boolean; pendingFields: PendingFields; pendingResources: PendingResourceEdits; assetId: string; revision: number; references: ReferenceCatalog; onNavigateReference?: (kind: AssetKind, key: string) => void; previewState?: ApplicationPreviewState; onPreviewStateChange?: (state: ApplicationPreviewState) => void; onEdit: (text: string) => void;
   onPendingChange: PendingChange; onApplyPending: PendingResolve; onDiscardPending: PendingDiscard; onPendingResourcesChange: (pending: PendingResourceEdits) => void; getPendingConflict: PendingConflict;
 }) {
   const inspected = inspectDraftText(text);
   if (!inspected.ok) return <div className="notice warning"><strong>无法打开表单模式</strong><span>{inspected.error}</span><span>原始 JSON 已保留，请切回 JSON 模式修正。</span></div>;
   const onChange = (document: JsonObject) => onEdit(JSON.stringify(document, null, 2));
-  const props = { document: inspected.document, disabled, onChange, pendingFields, pendingResources, assetId, revision, references, onNavigateReference, previewState, onPreviewStateChange, onPendingChange, onApplyPending, onDiscardPending, onPendingResourcesChange, getPendingConflict };
+  const props = { skillStage, document: inspected.document, disabled, onChange, pendingFields, pendingResources, assetId, revision, references, onNavigateReference, previewState, onPreviewStateChange, onPendingChange, onApplyPending, onDiscardPending, onPendingResourcesChange, getPendingConflict };
   if (kind === 'SKILL') return <SkillEditor {...props} />;
   if (kind === 'ABILITY') return <AbilityEditor {...props} />;
   if (kind === 'APPLICATION') return <ApplicationEditor {...props} />;
