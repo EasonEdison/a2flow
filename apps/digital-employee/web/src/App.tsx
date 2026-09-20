@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeCard } from './components/NodeCard';
 import { MarkdownContent } from './components/MarkdownContent';
 import { MemorySettingsPage } from './components/MemorySettingsPage';
+import { ChatApplications } from './components/ChatApplications';
 import './chat.css';
 import { FixturePreview } from './FixturePreview';
 import { apiErrorMessage, productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
@@ -174,7 +175,7 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
     <button className="secondary" disabled={busy} onClick={() => { setError(''); void load(); }}>重新读取历史</button>
     {error ? <p className="chat-error" role="alert">{error}</p> : null}</header>
     <div className="message-flow" ref={flowRef}>{messages.map(message => <article className={`message ${message.role}`} key={message.id}><span>{message.role === 'user' ? '你' : 'AI'}</span><div>
-      {message.delivery ? <small>{message.delivery === 'completed' ? '已完成' : message.delivery === 'failed' ? '执行失败 · 未自动重试' : message.delivery === 'running' ? (busy ? '执行中' : '执行中或状态待确认 · 正在读取保存的进度') : message.delivery === 'unconfirmed' ? '结果待确认' : ''}</small> : null}
+      {message.delivery ? <small>{message.delivery === 'waiting_action' ? '已交给卡片交互 · 以卡片状态为准' : message.delivery === 'completed' ? '已完成' : message.delivery === 'failed' ? '执行失败 · 未自动重试' : message.delivery === 'running' ? (busy ? '执行中' : '执行中或状态待确认 · 正在读取保存的进度') : message.delivery === 'unconfirmed' ? '结果待确认' : ''}</small> : null}
       {message.reasoning || message.tools?.length ? <details key={`${message.id}-${message.delivery === 'running'}`} open={message.delivery === 'running'}><summary>执行详情 · {message.tools?.length ?? 0} 次工具调用</summary>{message.reasoning ? <MarkdownContent markdown={message.reasoning} /> : null}{message.tools?.map((tool, index) => <p key={index}>调用工具：{tool}</p>)}</details> : null}
       <MarkdownContent markdown={message.text} />
       {message.event?.type === 'workflow_confirm' && (!message.delivery || message.delivery === 'completed') ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><button className="primary" onClick={async () => {
@@ -182,7 +183,9 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
         catch { setError('工作流启动状态未确认，请查看工作流列表。'); }
       }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
       {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
-    </div></article>)}{runId ? <RunDetail runId={runId} /> : null}</div>
+    </div></article>)}{runId ? <RunDetail runId={runId} /> : null}
+    <ChatApplications key={conversationId} conversationId={conversationId} refreshKey={messages.length + Number(busy)} active={busy || pending} />
+    </div>
     <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}><textarea aria-label="消息" placeholder="输入消息，描述你想完成的工作" value={input} onChange={event => setInput(event.target.value)} /><button className="primary" disabled={busy || pending || !loaded || !input.trim()}>{busy ? '执行中…' : '发送'}</button></form>
   </section>;
 }

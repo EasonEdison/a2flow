@@ -137,6 +137,41 @@ def create_app_from_environment():
     from agent_workflow_runtime.personal_memory import PersonalMemory, MemoryConflict
     from a2flow_bside.errors import BsideError
     personal_memory = PersonalMemory(conninfo)
+    from agent_workflow_runtime.chat.assets import ChatAssets
+    from agent_workflow_runtime.chat.cards import ChatCardStore
+    from agent_workflow_runtime.chat.actions import ChatActionService
+    from agent_workflow_runtime.models import ActionRejected
+    from activity_planning_demo import application_validator, application_data_validator
+    from deploy.mvp.operations import operations
+    card_store = ChatCardStore(conninfo, environment=config.environment)
+    operation_registry = operations()
+
+    def assets_factory(owner, conversation_id, control_request_id="chat-action"):
+        return ChatAssets(reader=reader, operation_registry=operation_registry,
+            owner=owner, conversation_id=conversation_id,
+            control_request_id=control_request_id,
+            application_validator=application_validator,
+            data_validator=application_data_validator,
+            card_sink=lambda prepared, metadata: card_store.save(
+                owner, conversation_id, prepared, metadata))
+
+    card_actions = ChatActionService(card_store, assets_factory)
+
+    def chat_cards(user_id, conversation_id):
+        return card_store.list(memory_owner(user_id), conversation_id)
+
+    def card_context(owner, conversation_id):
+        return [{"cardId": card["cardId"], "applicationKey": card["display"]["applicationKey"],
+                 "status": card["status"], "result": card.get("result")}
+                for card in card_store.list(owner, conversation_id)[-20:]]
+
+    def chat_action(user_id, conversation_id, card_id, payload):
+        try:
+            return card_actions.execute(memory_owner(user_id), conversation_id, card_id,
+                request_id=payload["requestId"], action_name=payload["actionName"],
+                inputs=payload["inputs"], expected_revision=payload["expectedRevision"])
+        except ActionRejected as exc:
+            raise BsideError(exc.code, 409) from exc
 
     def memory_owner(user_id):
         return TrustedContext.from_mapping({
@@ -176,6 +211,8 @@ def create_app_from_environment():
         conversation_store=ConversationStore(conninfo),
         history_loader=legacy_history,
         personal_memory=personal_memory,
+        assets_factory=assets_factory,
+        card_context=card_context,
     )
 
     return create_app(
@@ -190,6 +227,8 @@ def create_app_from_environment():
         run_ownership=RunOwnershipRepository(connection_factory),
         runtime_client=HttpRuntimeClient(config.runtime_url),
         chat_runner=chat_runner,
+        chat_cards=chat_cards,
+        chat_action=chat_action,
         workflow_catalog=workflow_catalog,
         pepper=config.pepper,
         browser_origin=config.browser_origin,

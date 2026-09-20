@@ -16,6 +16,9 @@ export type Notification = { id: string; type: string; title: string; relatedTyp
 export type ApiError = Error & { code: string };
 export type MemoryEntry = { id: string; text: string };
 export type MemorySettings = { revision: number; enabled: boolean; entries: MemoryEntry[] };
+export type ChatCard = { cardId: string; conversationId: string; status: string; revision: number; result?: unknown;
+  display: { applicationKey: string; protocolProfile: string; rootId: string; components: Record<string, unknown>[];
+    data: Record<string, unknown>; actions: { actionName: string; inputSchema: Record<string, unknown> }[] } };
 
 const friendlyMessages: Record<string, string> = {
   INVALID_USERNAME: '用户名需为 3–32 位字母、数字、下划线或连字符',
@@ -139,6 +142,10 @@ const readSurfaceStream = async (response: Response, onSurface: (view: RunView) 
 };
 
 export const productApi = {
+  chatCards: (id: string, signal?: AbortSignal) => api<{ cards: ChatCard[] }>(`/api/conversations/${encodeURIComponent(id)}/cards`, { signal }),
+  chatAction: (id: string, card: ChatCard, requestId: string, actionName: string, inputs: Record<string, unknown>) => api<ChatCard>(
+    `/api/conversations/${encodeURIComponent(id)}/cards/${encodeURIComponent(card.cardId)}/actions`,
+    body({ requestId, actionName, inputs, expectedRevision: card.revision })),
   memory: (signal?: AbortSignal) => api<MemorySettings>('/api/memory', { signal }),
   saveMemory: (settings: MemorySettings) => api<MemorySettings>('/api/memory', {
     method: 'PUT', body: JSON.stringify(settings),

@@ -37,7 +37,7 @@ class ChatDelivery:
             message_id=self.assistant_id, content=copy.deepcopy(self.content))
 
     async def produce(self):
-        completed, failed = False, False
+        completed, failed, waiting = False, False, False
         last_save = time.monotonic()
         iterator = None
         try:
@@ -55,12 +55,15 @@ class ChatDelivery:
                     failed = True
                     self.content["errorCode"] = event.get("code", "CHAT_UNAVAILABLE")
                     continue
-                if kind in ("text_delta", "reasoning_delta"):
+                if kind == "waiting_action":
+                    waiting = True
+                    self.content["events"].append(event)
+                elif kind in ("text_delta", "reasoning_delta"):
                     key = "text" if kind == "text_delta" else "reasoning"
                     self.content[key] += str(event.get("text", ""))
                 elif kind == "tool_call":
                     self.content["tools"].append(str(event.get("tool", "")))
-                elif kind in ("workflow_confirm", "interaction_required"):
+                elif kind in ("workflow_confirm", "interaction_required", "application_rendered"):
                     self.content["events"].append(event)
                 else:
                     continue
@@ -72,9 +75,9 @@ class ChatDelivery:
                 self.content["delivery"] = "failed"
                 self.content.setdefault("errorCode", "CHAT_INCOMPLETE")
             else:
-                self.content["delivery"] = "completed"
+                self.content["delivery"] = "waiting_action" if waiting else "completed"
             await self.save()
-            await self.emit({"type": "done" if self.content["delivery"] == "completed" else "error",
+            await self.emit({"type": "done" if self.content["delivery"] in {"completed", "waiting_action"} else "error",
                              "code": self.content.get("errorCode"),
                              "content": copy.deepcopy(self.content)})
         except (Exception, asyncio.CancelledError):

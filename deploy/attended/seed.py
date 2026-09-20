@@ -31,6 +31,8 @@ def main() -> None:
     print("attended schemas applied")
     from agent_workflow_runtime.chat.persistence import ConversationStore
     ConversationStore(dsn).setup()
+    from agent_workflow_runtime.chat.cards import ChatCardStore
+    ChatCardStore(dsn, environment=required("A2FLOW_ENVIRONMENT")).setup()
     from agent_workflow_runtime.personal_memory import PersonalMemory
     PersonalMemory(dsn).setup()
     print("conversation checkpoint schema applied")

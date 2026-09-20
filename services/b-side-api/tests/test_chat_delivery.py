@@ -21,6 +21,20 @@ def delivery(runner, messages=None):
 
 
 class DeliveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_card_wait_is_not_reported_as_business_completion(self):
+        class Runner:
+            async def iterate(self, **kwargs):
+                yield {'type': 'application_rendered', 'card': {'cardId': 'card-1'}}
+                yield {'type': 'waiting_action', 'cardId': 'card-1'}
+                yield {'type': 'done'}
+        turn = delivery(Runner())
+        task = asyncio.create_task(turn.produce())
+        events = [json.loads(item[6:]) async for item in turn.stream()]
+        await task
+        self.assertEqual('waiting_action', turn.messages.saved[-1]['content']['delivery'])
+        self.assertEqual('done', events[-1]['type'])
+        self.assertEqual('waiting_action', events[-1]['content']['delivery'])
+
     async def test_disconnect_before_response_body_starts(self):
         class Runner:
             async def iterate(self, **kwargs):

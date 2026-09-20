@@ -97,6 +97,14 @@ class RunAction(BaseModel):
     inputs: dict[str, object] = Field(default_factory=dict)
 
 
+class ChatCardAction(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    requestId: str = Field(min_length=1, max_length=128)
+    actionName: str = Field(min_length=1, max_length=128)
+    inputs: dict[str, object]
+    expectedRevision: int = Field(ge=0)
+
+
 class ScheduleCreate(BaseModel):
     workflowKey: str = Field(min_length=1, max_length=256)
     ruleType: str = Field(min_length=1, max_length=16)
@@ -185,6 +193,8 @@ def create_app(
     now: Callable[[], dt.datetime] | None = None,
     memory_view=None,
     memory_replace=None,
+    chat_cards=None,
+    chat_action=None,
 ):
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
     dummy_hash = auth.hash_password("dummy-timing-password", pepper=pepper)
@@ -382,6 +392,27 @@ def create_app(
         app.state.chat_tasks.add(task)
         task.add_done_callback(app.state.chat_tasks.discard)
         return ChatStreamingResponse(delivery)
+
+    @app.get("/api/conversations/{conversation_id}/cards")
+    async def conversation_cards(conversation_id: int,
+                                 identity: RequestIdentity = Depends(identity)):
+        if conversations.owner(conversation_id) != identity.userId:
+            raise BsideError("CONVERSATION_NOT_FOUND", 404)
+        if chat_cards is None:
+            raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
+        return {"cards": await asyncio.to_thread(
+            chat_cards, identity.userId, str(conversation_id))}
+
+    @app.post("/api/conversations/{conversation_id}/cards/{card_id}/actions")
+    async def conversation_card_action(conversation_id: int, card_id: str,
+                                       body: ChatCardAction,
+                                       identity: RequestIdentity = Depends(identity)):
+        if conversations.owner(conversation_id) != identity.userId:
+            raise BsideError("CONVERSATION_NOT_FOUND", 404)
+        if chat_action is None:
+            raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
+        return await asyncio.to_thread(chat_action, identity.userId,
+            str(conversation_id), card_id, body.model_dump())
 
     @app.post("/api/conversations/{conversation_id}/run-refs")
     async def attach_run(

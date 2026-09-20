@@ -2,21 +2,12 @@
 
 import os
 
-from a2flow_asset_store.records import canonical
 from pydantic import SecretStr
 from skillweave_contracts import TrustedContext
 
 from activity_planning_demo import (
-    ABILITY_DEFINITION_KEYS, MODEL_ABILITY_KEYS,
-    ability_definition, application_data_validator, application_validator,
+    application_data_validator, application_validator,
     bundle_validator,
-)
-from activity_planning_demo.service import (
-    SERVICE_ACTIVITY_PACKAGE, SERVICE_ACTIVITY_PLANNING, ActivityPlanningService,
-)
-from agent_workflow_runtime.asset_adapters import OperationSpec
-from agent_workflow_runtime.business import (
-    BusinessRegistry, parse_business_call_ref, schema_validator,
 )
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
@@ -24,42 +15,7 @@ from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
 from .runtime_support import (
     BoundedDeepSeekFactory, SafeErrorObserver, database_conninfo, required,
 )
-
-
-def business_registry():
-    """Business services wired once; the platform core never imports them."""
-    service = ActivityPlanningService()
-    return BusinessRegistry({
-        SERVICE_ACTIVITY_PLANNING: service,
-        SERVICE_ACTIVITY_PACKAGE: service,
-    })
-
-
-_BUSINESS = business_registry()
-
-
-def operations():
-    """Build OperationSpecs generically from authored ability definitions.
-
-    Every spec is assembled from the asset definition (business-call ref,
-    input/output schemas, canonical profile) plus bundle-level callability
-    metadata. No business logic lives here.
-    """
-    specs = {}
-    for key in ABILITY_DEFINITION_KEYS:
-        definition = ability_definition(key)
-        service, method = parse_business_call_ref(
-            definition["adapterOperationRef"])
-        expected = canonical(definition)
-        specs[definition["adapterOperationRef"]] = OperationSpec(
-            _BUSINESS.dispatcher(service, method),
-            schema_validator(definition["resolvedInputSchema"]),
-            schema_validator(definition["outputSchema"]),
-            lambda value, expected=expected: canonical(value) == expected,
-            model_allowed=key in MODEL_ABILITY_KEYS,
-            action_allowed=key not in MODEL_ABILITY_KEYS,
-        )
-    return specs
+from .operations import business_registry, operations
 
 
 environment = required("A2FLOW_ENVIRONMENT")

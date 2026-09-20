@@ -14,13 +14,16 @@
   metadata remain in the completed in-memory graph state.
 - Workflow lifecycle, stop, closed tool arguments and required-tool Finalizer
   remain Workflow policies. Plain conversation greetings need not call a tool.
-- SDK filesystem/execute/subagent tools remain disabled. Existing conversation
-  tools are still use_skill and propose_workflow_run; the latter never starts a run.
+- SDK filesystem/execute/subagent tools remain disabled. Wired conversation
+  tools are use_skill, execute_ability, render_application and
+  propose_workflow_run; the latter never starts a run.
 
 ## Not yet delivered
 
-- Conversation-scoped ability execution and Application interactions.
-- Conversation-scoped Application persistence, Action updates and continuation.
+- Arbitrary Application/component profiles, generalized LoadBinding and HTTP adapters.
+- Automatic model resumption after a Chat card Action (Actions update the card
+  directly; the next user turn can read recent saved card outcomes).
+- Live-provider/deployed-browser acceptance of the new Chat Application chain.
 
 Source delivery is not deployment. Old-data migration is explicitly out of
 scope: no automatic identity fallback, remapping or database rewrite is included.
@@ -186,10 +189,9 @@ registry selection. It never turns model input into a URL or credential.
 Workflow preserves its current Action ledger and business-result semantics;
 Action execution is not replaced by a fail-fast model Tool helper.
 
-Still pending: wire the shared foundations into conversation-scoped Tool
-admission; save and update conversation surfaces; add the authenticated Action
-entry and UI; then verify one Skill/Application in both Chat and Workflow.
-User Actions should execute configured business operations and update saved
+Conversation wiring, durable surfaces, authenticated Actions and the existing
+bounded Application profile UI are now implemented below.
+User Actions execute configured business operations and update saved
 card state directly, without an obligatory model call. Only the owning lifecycle
 decides whether completion resumes an Agent or advances a Workflow node.
 No generic HTTP transport, LoadBinding expansion, deployment or live-model call
@@ -203,3 +205,53 @@ A publication change during input validation prevents dispatch: the shared
 Ability caller supplies a required version-admission callback run immediately
 before the registered operation. Independent scoped preparation review found no
 blocking issue. This is not Chat Application end-to-end or deployment evidence.
+
+## Chat Skill / Application vertical slice
+
+Chat uses an authenticated conversation owner and the same published Skill,
+Ability and Application definitions as Workflow, never fabricated run/node IDs.
+`use_skill` grants only that Skill's resolved dependency closure. Ability calls
+check registered callability, input/result schemas and configured success.
+Every dispatch/render/Action checks the recorded version closure. Changed
+configuration returns `RESET_REQUIRED`; old cards are not reinterpreted silently.
+Skill admission and Application rendering are exclusive tool batches to avoid
+concurrent admission changes or business calls racing an interactive stop.
+
+DISPLAY_ONLY saves a card and continues the model. INTERACTIVE saves first,
+then ends the model round through a public SDK middleware hook. The transcript
+records `waiting_action`, not business completion. This is not a suspended
+Workflow graph. An Action does not call the model again or advance a Workflow.
+New Chat turns retain native checkpoint messages and receive the last20 saved
+card statuses/results as explicitly untrusted-result/read-only factual context;
+this is not another history or memory engine.
+
+Two PostgreSQL tables preserve conversation cards and control-request claims.
+Action admission verifies current Skill/Application binding, saved choices,
+revision and user/environment/conversation ownership. A claim commits before
+business dispatch. Repeating its request ID cannot execute again; unconfirmed
+effects remain UNKNOWN or EXECUTING and are never automatically retried.
+Configured business success and interaction completion are distinct. Success
+without completion, or a known business failure, keeps the card interactive.
+The saved choice and result survive reload. This is platform request dedup,
+not business exactly-once, compensation or cross-system transactions.
+
+Authenticated endpoints:
+
+- `GET /api/conversations/{conversationId}/cards`
+- `POST /api/conversations/{conversationId}/cards/{cardId}/actions`, with only
+  requestId, actionName, inputs and expectedRevision. No caller identity fields.
+
+The Chat page reads saved cards, renders the registered Column/Text/ChoicePicker/
+Button subset, supports Markdown and collapse, and makes completed cards read-only.
+Unknown profiles do not execute. This is the existing bounded demo profile, not
+a claim of arbitrary A2UI compatibility. Fresh compatible schema initialization
+is explicit; request handlers never run DDL. No old-data migration is included.
+
+Verification:65 focused Python tests passed with a disposable PostgreSQL17,
+including native SDK use_skill→Ability→Application, direct Action, duplicate
+control requests, refreshed store read, a subsequent checkpointed turn, the
+attended streaming adapter, B-side authorization and existing three-node Workflow.
+The model was scripted, not a paid provider. Frontend typecheck/build and a
+separate synthetic browser select→submit→refresh→read-only check passed with no
+console errors (desktop1280×900 and mobile390×844 screenshots). These are distinct
+backend and UI acceptance evidence, not a combined live deployed environment.
