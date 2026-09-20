@@ -32,8 +32,12 @@ from .schema_loader import (
     load_definition_schema,
 )
 from .validation import ContractValidationError, ValidationIssue
+from .user_id import require_user_id, user_id_from_wire, user_id_to_wire
 
 __all__ = [
+    "require_user_id",
+    "user_id_from_wire",
+    "user_id_to_wire",
     "APPROVED_DEFINITION_NAMES",
     "CONTRACT_REVISION",
     "AuthorizedMaterialHandle",
