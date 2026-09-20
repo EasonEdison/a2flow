@@ -133,11 +133,22 @@ class MessagesRepository:
     def list_for(self, conversation_id: int, limit: int = 200) -> list[dict]:
         with self._factory() as connection:
             rows = connection.execute(
-                "SELECT id, role, content, ref_kind, ref_id, created_at "
+                "SELECT * FROM (SELECT id, role, content, ref_kind, ref_id, created_at "
                 "FROM messages WHERE conversation_id = %s "
-                "ORDER BY id ASC LIMIT %s",
+                "ORDER BY id DESC LIMIT %s) recent ORDER BY id ASC",
                 (conversation_id, limit)).fetchall()
         return [dict(row) for row in rows]
+
+    def update_delivery(self, *, conversation_id: int, message_id: int,
+                        content: dict) -> None:
+        with self._factory() as connection:
+            changed = connection.execute(
+                "UPDATE messages SET content=%s::jsonb "
+                "WHERE conversation_id=%s AND id=%s AND role='assistant'",
+                (json.dumps(content), conversation_id, message_id),
+            ).rowcount
+            if changed != 1:
+                raise ValueError("CHAT_MESSAGE_MISSING")
 
     def legacy_history(self, user_id: int, conversation_id: int,
                        before_id: int) -> list[dict]:

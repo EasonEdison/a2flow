@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeCard } from './components/NodeCard';
 import { MarkdownContent } from './components/MarkdownContent';
 import { MemorySettingsPage } from './components/MemorySettingsPage';
+import './chat.css';
 import { FixturePreview } from './FixturePreview';
 import { apiErrorMessage, productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
@@ -86,20 +87,104 @@ function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
 function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState('');
+  const [error, setError] = useState('');
+  const initial = useRef<Promise<Conversation[]> | null>(null);
+  useEffect(() => {
+    let active = true;
+    initial.current ??= productApi.conversations().then(async ({ items }) => items.length ? items : [await productApi.createConversation()]);
+    void initial.current.then(items => { if (active) { setConversations(items); setConversationId(items[0].id); } }).catch(() => { if (active) setError('会话读取失败，请刷新页面'); });
+    return () => { active = false; };
+  }, []);
+  return <div className="chat-layout">
+    <aside className="conversation-list"><div className="panel-heading"><h2>会话</h2><button aria-label="新建会话" onClick={async () => {
+      try { const item = await productApi.createConversation(); setConversations(items => [item, ...items]); setConversationId(item.id); }
+      catch { setError('新建会话失败'); }
+    }}>＋</button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => setConversationId(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
+    {conversationId ? <ChatConversation key={conversationId} conversationId={conversationId} /> : null}
+  </div>;
+}
+
+function ChatConversation({ conversationId }: { conversationId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [streaming, setStreaming] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState('');
+  const controller = useRef<AbortController | null>(null);
+  const sending = useRef(false);
+  const epoch = useRef(0);
   const flowRef = useRef<HTMLDivElement>(null);
   const [runId, setRunId] = useState('');
-  const loadMessages = useCallback(async (id: string) => { setMessages((await productApi.messages(id)).items); }, []);
-  useEffect(() => { void productApi.conversations().then(async ({ items }) => { let list = items; if (!list.length) list = [await productApi.createConversation()]; setConversations(list); setConversationId(list[0].id); }); }, []);
-  useEffect(() => { if (conversationId) void loadMessages(conversationId); }, [conversationId, loadMessages]);
-  useEffect(() => { const flow = flowRef.current; if (flow) flow.scrollTop = flow.scrollHeight; }, [messages, streaming]);
-  const send = async () => { const text = input.trim(); if (!text || !conversationId) return; setInput(''); setMessages((items) => [...items, { id: `local-${Date.now()}`, role: 'user', text, createdAt: new Date().toISOString() }]); setStreaming(''); let accumulated = ''; const event = await productApi.sendMessage(conversationId, text, (delta) => { accumulated += delta; setStreaming(accumulated); }); const assistant: Message = { id: `assistant-${Date.now()}`, role: 'assistant', text: accumulated || '我找到了合适的工作流，请确认后运行。', createdAt: new Date().toISOString(), event }; setMessages((items) => [...items, assistant]); setStreaming(''); };
-  return <div className="chat-layout">
-    <aside className="conversation-list"><div className="panel-heading"><h2>会话</h2><button aria-label="新建会话" onClick={async () => { const item = await productApi.createConversation(); setConversations((items) => [item, ...items]); setConversationId(item.id); }}>＋</button></div>{conversations.map((item) => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => setConversationId(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
-    <section className="chat-main"><header><h1>数字员工对话</h1><p>描述目标，确认后启动工作流</p></header><div className="message-flow" ref={flowRef}>{messages.map((message) => <article className={`message ${message.role}`} key={message.id}><span>{message.role === 'user' ? '你' : 'AI'}</span><div><MarkdownContent markdown={message.text} />{message.event?.type === 'workflow_confirm' ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><div><button className="primary" onClick={async () => { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', input || '来自对话的工作请求'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }}>运行工作流</button><button className="secondary" onClick={(event) => { event.currentTarget.closest('.workflow-confirm')?.remove(); }}>取消</button></div></section> : null}{message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}</div></article>)}{streaming ? <article className="message assistant"><span>AI</span><div><MarkdownContent markdown={streaming} /></div></article> : null}{runId ? <article className="message assistant"><span>AI</span><div><p>工作流已启动，正在等待你的确认。</p><RunDetail runId={runId} /></div></article> : null}</div><form className="chat-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}><textarea aria-label="消息" placeholder="输入消息，描述你想完成的工作" value={input} onChange={(event) => setInput(event.target.value)} /><button className="primary">发送</button></form></section>
-  </div>;
+  const load = useCallback(async () => {
+    if (sending.current) return;
+    const current = ++epoch.current;
+    try {
+      const result = await productApi.messages(conversationId);
+      if (current === epoch.current) { setMessages(result.items); setLoaded(true); }
+    } catch { if (current === epoch.current) { setLoaded(false); setError('历史读取失败，请重新读取；不要重复发送原消息。'); } }
+  }, [conversationId]);
+  useEffect(() => { void load(); return () => { epoch.current++; controller.current?.abort(); }; }, [load]);
+  const pending = messages.some(message => message.delivery === 'running' || message.delivery === 'unconfirmed');
+  useEffect(() => {
+    if (busy || !pending) return;
+    const timer = setInterval(() => { void load(); }, 5000);
+    return () => clearInterval(timer);
+  }, [busy, pending, load]);
+  useEffect(() => { const flow = flowRef.current; if (flow) flow.scrollTop = flow.scrollHeight; }, [messages]);
+  const send = async () => {
+    const text = input.trim();
+    if (!text || sending.current || pending || !loaded) return;
+    sending.current = true;
+    epoch.current++; // In-flight history reads cannot overwrite live deltas.
+    const abort = new AbortController();
+    controller.current = abort;
+    setBusy(true); setError(''); setInput('');
+    try {
+      await productApi.sendMessage(conversationId, text, event => {
+        if (abort.signal.aborted) return;
+        setMessages(items => {
+          let next = items;
+          if (event.type === 'turn_started') {
+            const createdAt = new Date().toISOString();
+            next = items.filter(item => item.id !== event.inputMessageId && item.id !== event.messageId).concat([
+              { id: event.inputMessageId, role: 'user', text, createdAt },
+              { id: event.messageId, role: 'assistant', text: '', reasoning: '', tools: [], delivery: 'running', createdAt },
+            ]);
+          }
+          return next.map(item => {
+            if (item.id !== event.messageId) return item;
+            if (event.type === 'text_delta') return { ...item, text: item.text + (event.text ?? '') };
+            if (event.type === 'reasoning_delta') return { ...item, reasoning: (item.reasoning ?? '') + (event.text ?? '') };
+            if (event.type === 'tool_call') return { ...item, tools: [...(item.tools ?? []), event.tool ?? '工具'] };
+            if (event.type === 'done') return { ...item, delivery: 'completed' };
+            if (event.type === 'error') return { ...item, delivery: 'unconfirmed' };
+            // Confirmations become actionable only through the saved history.
+            return item;
+          });
+        });
+        if (event.type === 'error') setError('本轮未成功完成，请查看保存的状态；不会自动重试。');
+      }, abort.signal);
+    } catch { if (!abort.signal.aborted) { setLoaded(false); setError('连接中断或发送状态未确认。请重新读取历史，不要重复发送原消息。'); } }
+    finally {
+      sending.current = false;
+      if (!abort.signal.aborted) { await load(); setBusy(false); }
+    }
+  };
+  return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述目标，确认后启动工作流</p></div>
+    <button className="secondary" disabled={busy} onClick={() => { setError(''); void load(); }}>重新读取历史</button>
+    {error ? <p className="chat-error" role="alert">{error}</p> : null}</header>
+    <div className="message-flow" ref={flowRef}>{messages.map(message => <article className={`message ${message.role}`} key={message.id}><span>{message.role === 'user' ? '你' : 'AI'}</span><div>
+      {message.delivery ? <small>{message.delivery === 'completed' ? '已完成' : message.delivery === 'failed' ? '执行失败 · 未自动重试' : message.delivery === 'running' ? (busy ? '执行中' : '执行中或状态待确认 · 正在读取保存的进度') : message.delivery === 'unconfirmed' ? '结果待确认' : ''}</small> : null}
+      {message.reasoning || message.tools?.length ? <details key={`${message.id}-${message.delivery === 'running'}`} open={message.delivery === 'running'}><summary>执行详情 · {message.tools?.length ?? 0} 次工具调用</summary>{message.reasoning ? <MarkdownContent markdown={message.reasoning} /> : null}{message.tools?.map((tool, index) => <p key={index}>调用工具：{tool}</p>)}</details> : null}
+      <MarkdownContent markdown={message.text} />
+      {message.event?.type === 'workflow_confirm' && (!message.delivery || message.delivery === 'completed') ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><button className="primary" onClick={async () => {
+        try { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', '来自对话的工作请求'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }
+        catch { setError('工作流启动状态未确认，请查看工作流列表。'); }
+      }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
+      {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
+    </div></article>)}{runId ? <RunDetail runId={runId} /> : null}</div>
+    <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}><textarea aria-label="消息" placeholder="输入消息，描述你想完成的工作" value={input} onChange={event => setInput(event.target.value)} /><button className="primary" disabled={busy || pending || !loaded || !input.trim()}>{busy ? '执行中…' : '发送'}</button></form>
+  </section>;
 }
 
 function WorkflowCenter({ onSchedule }: { onSchedule: (workflowKey: string) => void }) {

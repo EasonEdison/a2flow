@@ -112,6 +112,13 @@ class FakeMessages:
                 for row in self.rows
                 if row["conversation_id"] == conversation_id][:limit]
 
+    def update_delivery(self, *, conversation_id, message_id, content):
+        for row in self.rows:
+            if row['conversation_id'] == conversation_id and row['id'] == message_id:
+                row['content'] = content
+                return
+        raise ValueError('CHAT_MESSAGE_MISSING')
+
 
 class FakeSchedules:
     _PUBLIC = ("id", "workflow_key", "environment", "rule_type", "rule_json",
@@ -673,7 +680,7 @@ class ChatSseTests(unittest.TestCase):
                 json.loads(line[len("data: "):])
                 for line in lines if line.startswith("data: ")]
             self.assertEqual(
-                ["text_delta", "text_delta", "workflow_confirm", "done"],
+                ["turn_started", "text_delta", "text_delta", "workflow_confirm", "done"],
                 [event["type"] for event in events])
             self.assertEqual(
                 [(user_id, conversation_id, "帮我策划一场活动", "1")],
@@ -685,6 +692,8 @@ class ChatSseTests(unittest.TestCase):
                              [row["role"] for row in rows])
             self.assertEqual("好的，我帮你跑。",
                              rows[1]["content"]["text"])
+            self.assertEqual("completed", rows[1]["content"]["delivery"])
+            self.assertTrue(all(event['messageId'] == str(rows[1]['id']) for event in events))
             self.assertEqual(
                 "activity-package-demo",
                 rows[1]["content"]["events"][0]["workflowKey"])

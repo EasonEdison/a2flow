@@ -1,7 +1,7 @@
 """Real ChatRunner adapter: b-side SSE protocol over the runtime ChatLoop.
 
 The runtime ChatLoop is transport-free and synchronous per turn; the adapter
-runs each turn in a thread and replays the buffered emitter events through the
+runs each turn in a thread and forwards bounded live emitter events through the
 b-side ChatRunner protocol (JSON-safe dicts). Composition-root code: it is the
 only module that connects the two services.
 """
@@ -9,6 +9,8 @@ only module that connects the two services.
 from __future__ import annotations
 
 import asyncio
+import queue
+import threading
 from typing import Any, AsyncIterator
 
 
@@ -44,7 +46,6 @@ class ChatLoopRunner:
 
         from agent_workflow_runtime.chat.events import (
             DONE, ERROR, TEXT_DELTA, TOOL_CALL, WORKFLOW_CONFIRM,
-            ListEmitter,
         )
         from agent_workflow_runtime.chat.loop import ChatLoop
         from agent_workflow_runtime.chat.persistence import ConversationAdmissionError
@@ -52,7 +53,22 @@ class ChatLoopRunner:
         owner = TrustedContext.from_mapping({
             "userId": user_id, "environment": self._environment,
         })
-        emitter = ListEmitter()
+        pending = queue.Queue(maxsize=64)
+        closed = threading.Event()
+
+        class Emitter:
+            def emit(self, kind, payload):
+                # A closed transport must not cancel/replay a model/tool turn.
+                if kind == DONE:
+                    return  # Completion is published after the saver session exits.
+                while not closed.is_set():
+                    try:
+                        pending.put((kind, payload), timeout=0.1)
+                        return
+                    except queue.Full:
+                        pass
+
+        emitter = Emitter()
         def run():
             with self._conversation_store.session(
                 owner, str(conversation_id), turn_id,
@@ -71,28 +87,45 @@ class ChatLoopRunner:
                         user_id, conversation_id, int(turn_id)),
                 )
                 loop.turn(text)
+        def worker():
+            try:
+                run()
+            except ConversationAdmissionError as exc:
+                emitter.emit(ERROR, {"code": str(exc)})
+            except Exception:
+                emitter.emit(ERROR, {"code": "CHAT_UNAVAILABLE"})
+            finally:
+                emitter.emit("worker_finished", {})
+
+        # The B-side producer owns this iterator independently of its subscriber.
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        failed = False
+        def receive():
+            try:
+                return pending.get(timeout=0.1)
+            except queue.Empty:
+                return None
         try:
-            await asyncio.to_thread(run)
-        except ConversationAdmissionError as exc:
-            yield {"type": "error", "code": str(exc)}
-            return
-        except Exception as exc:  # noqa: BLE001
-            yield {"type": "error", "code": type(exc).__name__}
-            return
-        for kind, payload in emitter.events:
-            if kind == TEXT_DELTA:
-                yield {"type": "text_delta", "text": payload.get("text", "")}
-            elif kind == TOOL_CALL:
-                # Tool activity is not surfaced to the user; whitelist holds.
-                continue
-            elif kind == WORKFLOW_CONFIRM:
-                yield {
-                    "type": "workflow_confirm",
-                    "workflowKey": payload.get("workflowKey"),
-                    "title": payload.get("title"),
-                }
-            elif kind == ERROR:
-                yield {"type": "error", "code": payload.get("code", "CHAT_ERROR")}
-            elif kind == DONE:
-                break
-        yield {"type": "done"}
+            while True:
+                event = await asyncio.to_thread(receive)
+                if event is None:
+                    continue
+                kind, payload = event
+                if kind == "worker_finished":
+                    if not failed:
+                        yield {"type": "done"}
+                    return
+                if kind in (TEXT_DELTA, "reasoning_delta"):
+                    yield {"type": kind, "text": payload.get("text", "")}
+                elif kind == TOOL_CALL:
+                    yield {"type": "tool_call", "tool": payload.get("tool", "")}
+                elif kind == WORKFLOW_CONFIRM:
+                    yield {"type": kind, "workflowKey": payload.get("workflowKey"),
+                           "title": payload.get("title")}
+                elif kind == ERROR and not failed:
+                    failed = True
+                    yield {"type": "error", "code": payload.get("code", "CHAT_ERROR")}
+        finally:
+            closed.set()
+            await asyncio.to_thread(thread.join)

@@ -5,6 +5,8 @@ cards) is wired by the assembly in a later slice; offline tests inject a
 scripted fake. Events are plain JSON-safe dicts:
 
 - {"type": "text_delta", "text": "..."}      streamed assistant text
+- {"type": "reasoning_delta", "text": "..."} provider-returned visible reasoning
+- {"type": "tool_call", "tool": "..."}      name only, never arguments/results
 - {"type": "workflow_confirm", "workflowKey": "...", "title": "..."}
 - {"type": "interaction_required", "runId": "..."}
 - {"type": "error", "code": "..."}           runner-level failure

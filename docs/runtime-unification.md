@@ -112,3 +112,53 @@ the expanded memory suite passed9 tests against disposable PostgreSQL, including
 a real Store settings write read by a Workflow node without changing the record.
 The B-side memory authentication/body test also passed. All model traffic was
 synthetic; browser fixture evidence is not deployed end-to-end acceptance.
+
+## Live Chat delivery and transcript projection
+
+Ordinary Chat now forwards native Deep Agents message events during the turn,
+instead of collecting the whole response at either side of HTTP. Visible output
+includes text, provider-returned reasoning and tool names (not tool arguments,
+raw results, credentials or opaque provider metadata). SDK reasoning blocks take
+precedence over the existing DeepSeek native reasoning field; neither is emitted
+twice. This display is not a new model-history source.
+
+The B-side saves one user message and one running assistant placeholder before
+starting the worker. SSE carries stable decimal-string message IDs and increasing
+per-turn sequence numbers. The browser incrementally decodes UTF-8/SSE, ignores
+duplicate sequence numbers, rejects gaps/mixed IDs, and requires an explicit
+terminal event. It updates the existing message, not a second final answer.
+
+Two bounded queues (64 events each) separate native worker, projection producer
+and HTTP subscriber. Disconnect closes the subscription, not the producer; it
+does not retry tools. The native conversation lock still spans the worker turn.
+Graceful application shutdown waits for owned producers. A process kill is not
+a durable worker handoff and must not be interpreted as a completed turn.
+
+The existing messages JSON is a display projection: text, reasoning, tool names,
+structured cards and delivery state. Progress is saved at most once per second
+when events arrive, plus the final outcome. `completed` is emitted only after the
+native iterator/session exits and the final display save succeeds. Runner error
+or missing terminal means `failed`; an exception or uncertain save is
+`unconfirmed`, not success. If PostgreSQL cannot save, the older persisted
+`running` record remains explicitly uncertain. No automatic retry or rollback.
+
+Reload only reads the latest 200 saved messages in chronological order, and polls
+every five seconds while a turn is running/unconfirmed. It never invokes the
+model. A failed history read after an uncertain send blocks sending until a
+successful reread. Running details expand; terminal details collapse and remain
+inspectable. Workflow confirmation cards become actionable from saved completed
+history, not speculative chunks.
+
+Limits: no token-exact replay, cross-process resume, historical pagination UI,
+all-time POST idempotency ledger, or automatic checkpoint-to-transcript repair.
+A native completed turn with a failed display save remains unconfirmed; the
+system will not repeat execution to reconstruct it. Hard process crashes can
+leave running/uncertain records for manual review. These are intentionally not
+presented as successful or automatically recovered executions.
+
+Verification: 66 Python regressions (64 passed,2 opt-in PG cases skipped), seven
+frontend unit tests and production build passed. Five isolated PostgreSQL tests
+cover native conversation isolation and persisted latest-window delivery updates.
+Synthetic in-app browser checks show pre-completion text/reasoning/tool activity,
+reload during execution and automatic collapse after completion. No real model
+call, existing-data migration or live deployment was performed.

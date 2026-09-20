@@ -1,0 +1,15 @@
+.chat-main > header.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.chat-main > header.chat-header .chat-error {
+  flex-basis: 100%;
+  color: var(--danger);
+}
+.chat-composer textarea { flex: 1; min-width: 0; }
+.chat-composer button { flex-shrink: 0; white-space: nowrap; }
+.message details { margin: 8px 0; }
+.message details summary { cursor: pointer; }

@@ -1,11 +1,13 @@
 import { parseView } from './api/contracts';
 import { toView } from './api/adapter';
 import type { RunView } from './presentation';
+import { readChatStream } from './chatStream.mjs';
 
 export type Session = { userId: string; username: string; role: string };
 export type Conversation = { id: string; title: string; updatedAt: string };
 export type ChatEvent = { type: 'workflow_confirm'; workflowKey: string; title: string } | { type: 'interaction_required'; runId: string };
-export type Message = { id: string; role: 'user' | 'assistant'; text: string; createdAt: string; event?: ChatEvent };
+export type Message = { id: string; role: 'user' | 'assistant'; text: string; createdAt: string; event?: ChatEvent; delivery?: string; reasoning?: string; tools?: string[] };
+export type ChatStreamEvent = { type: string; sequence: number; messageId: string; inputMessageId: string; text?: string; tool?: string; code?: string; workflowKey?: string; title?: string; runId?: string };
 export type Workflow = { key: string; name: string; description: string; inputHint: string };
 export type RunItem = { id: string; workflowKey: string; title: string; status: string; input: string; createdAt: string };
 export type Schedule = { id: string; workflowKey: string; workflowName: string; input: string; cadence: string; enabled: boolean; nextRunAt: string };
@@ -168,30 +170,23 @@ export const productApi = {
           id: idOf(row.id),
           role: row.role === 'user' ? 'user' as const : 'assistant' as const,
           text: contentText(row.content),
+          delivery: textOf((row.content as Row)?.delivery),
+          reasoning: textOf((row.content as Row)?.reasoning),
+          tools: Array.isArray((row.content as Row)?.tools) ? ((row.content as Row).tools as unknown[]).filter((value): value is string => typeof value === 'string') : [],
           createdAt: textOf(row.createdAt),
           ...(event ? { event } : {}),
         };
       }),
     };
   },
-  sendMessage: async (id: string, text: string, onText: (text: string) => void) => {
-    const response = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`, { ...body({ text }), headers: { 'Content-Type': 'application/json' } });
+  sendMessage: async (id: string, text: string, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal) => {
+    const response = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`, { ...body({ text }), signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
     if (!response.ok) {
       const error = new Error('发送失败') as ApiError;
       error.code = 'REQUEST_FAILED';
       throw error;
     }
-    const raw = await response.text();
-    let event: ChatEvent | undefined;
-    for (const block of raw.split('\n\n')) {
-      const line = block.split('\n').find((item) => item.startsWith('data:'));
-      if (!line) continue;
-      const item = JSON.parse(line.slice(5).trim()) as { type: string; text?: string; workflowKey?: string; title?: string; runId?: string };
-      if (item.type === 'text_delta' && item.text) onText(item.text);
-      if (item.type === 'workflow_confirm' && item.workflowKey && item.title) event = { type: 'workflow_confirm', workflowKey: item.workflowKey, title: item.title };
-      if (item.type === 'interaction_required' && item.runId) event = { type: 'interaction_required', runId: item.runId };
-    }
-    return event;
+    await readChatStream(response, onEvent);
   },
   workflows: async (): Promise<{ items: Workflow[] }> => {
     const payload = await api<{ workflows?: Row[] }>('/api/workflows');

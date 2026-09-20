@@ -134,6 +134,17 @@ class ChatLoop:
                         continue
                     for text in self._text_deltas(message):
                         self._emitter.emit(TEXT_DELTA, {"text": text})
+                    reasoning = [block["reasoning"] for block in message.content_blocks
+                                 if block.get("type") == "reasoning"
+                                 and isinstance(block.get("reasoning"), str)]
+                    # The existing DeepSeek adapter preserves this native field.
+                    # Prefer SDK blocks if present; never emit it twice.
+                    native_reasoning = message.additional_kwargs.get("reasoning_content")
+                    if not reasoning and isinstance(native_reasoning, str):
+                        reasoning = [native_reasoning]
+                    for text in reasoning:
+                        if text:
+                            self._emitter.emit("reasoning_delta", {"text": text})
                 else:
                     messages = event.get("messages", messages)
                     for message in messages:

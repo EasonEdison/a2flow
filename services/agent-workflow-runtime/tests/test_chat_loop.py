@@ -185,6 +185,18 @@ class PlainTextTurnTests(unittest.TestCase):
         self.assertEqual(2, len(loop.history))
         self.assertEqual("human", loop.history[0].type)
 
+    def test_provider_reasoning_is_visible_without_forwarding_opaque_fields(self):
+        emitter = ListEmitter()
+        chunk = AIMessageChunk(content="answer", additional_kwargs={
+            "reasoning_content": "provider explanation", "secret": "never forwarded"})
+        loop = ChatLoop(model_factory=FakeFactory([FakeModel([chunk])]),
+            model_reference="deepseek-v4-flash", owner=OWNER,
+            conversation_id="conv1", reader=FakeMaterialPort(skill_material()),
+            control_request_id="chatctrl1", emitter=emitter)
+        loop.turn("hello")
+        self.assertIn(("reasoning_delta", {"text": "provider explanation"}), emitter.events)
+        self.assertNotIn("never forwarded", str(emitter.events))
+
 
 class WorkflowConfirmTests(unittest.TestCase):
     def test_propose_emits_confirm_and_never_starts(self):

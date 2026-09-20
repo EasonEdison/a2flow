@@ -12,6 +12,7 @@ import queue
 import re
 import threading
 import uuid
+from contextlib import asynccontextmanager
 from typing import Callable
 
 from fastapi import Depends, FastAPI, Request
@@ -22,6 +23,7 @@ from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 
 from . import auth
 from .chat_runner import ChatRunner
+from .chat_delivery import ChatDelivery, ChatStreamingResponse
 from .errors import BsideError, RemoteRuntimeError
 from .identity import (
     SESSION_COOKIE,
@@ -186,7 +188,15 @@ def create_app(
 ):
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
     dummy_hash = auth.hash_password("dummy-timing-password", pepper=pepper)
-    app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+    @asynccontextmanager
+    async def lifespan(app):
+        yield
+        # Graceful shutdown waits for owned turns, not HTTP subscribers.
+        if app.state.chat_tasks:
+            await asyncio.gather(*app.state.chat_tasks, return_exceptions=True)
+
+    app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
+    app.state.chat_tasks = set()
 
     def identity(request: Request) -> RequestIdentity:
         value = request.scope.get("a2flow.bside.identity")
@@ -345,7 +355,7 @@ def create_app(
         if owner is None or owner != identity.userId:
             raise BsideError("NOT_FOUND", 404)
         return {"messages": [
-            {"id": row["id"], "role": row["role"],
+            {"id": str(row["id"]), "role": row["role"],
              "content": row["content"], "refKind": row["ref_kind"],
              "refId": row["ref_id"], "createdAt": _iso(row["created_at"])}
             for row in messages.list_for(conversation_id)]}
@@ -361,38 +371,17 @@ def create_app(
             conversation_id=conversation_id, role="user",
             content={"text": body.text, "delivery": "submitted"})
 
-        async def stream():
-            text_parts = []
-            structured = []
-            try:
-                async for event in chat_runner.iterate(
-                        user_id=identity.userId,
-                        conversation_id=conversation_id, text=body.text,
-                        turn_id=str(input_message["id"])):
-                    event_type = event.get("type") if isinstance(
-                        event, dict) else None
-                    if event_type == "text_delta":
-                        text_parts.append(str(event.get("text", "")))
-                    elif event_type in {
-                            "workflow_confirm", "interaction_required"}:
-                        structured.append(event)
-                    yield ("data: " + json.dumps(event, ensure_ascii=False)
-                           + "\n\n")
-            except Exception:
-                yield ("data: " + json.dumps(
-                    {"type": "error", "code": "CHAT_UNAVAILABLE"},
-                    ensure_ascii=False) + "\n\n")
-            finally:
-                content = {"text": "".join(text_parts)}
-                if structured:
-                    content["events"] = structured
-                messages.append(
-                    conversation_id=conversation_id, role="assistant",
-                    content=content)
-
-        return StreamingResponse(
-            stream(), media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache"})
+        assistant_message = messages.append(
+            conversation_id=conversation_id, role="assistant",
+            content={"text": "", "delivery": "running"})
+        delivery = ChatDelivery(
+            messages=messages, runner=chat_runner, user_id=identity.userId,
+            conversation_id=conversation_id, text=body.text,
+            input_message=input_message, assistant_message=assistant_message)
+        task = asyncio.create_task(delivery.produce())
+        app.state.chat_tasks.add(task)
+        task.add_done_callback(app.state.chat_tasks.discard)
+        return ChatStreamingResponse(delivery)
 
     @app.post("/api/conversations/{conversation_id}/run-refs")
     async def attach_run(
