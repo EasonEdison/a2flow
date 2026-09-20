@@ -84,10 +84,13 @@ class ComponentCatalogManagementTests(unittest.TestCase):
     def test_admin_saves_subset_validates_and_prepares_publication(self):
         subset = definition(["Column", "Text"])
         saved = self.service.save_draft(
-            self.admin, "COMPONENT", KEY, 0, subset)
+            self.admin, "COMPONENT", KEY, 0,
+            {"definition": subset, "dependencies": []})
         report = self.service.validate_draft(
             self.admin, "COMPONENT", KEY)
         self.assertTrue(report.valid)
+        self.assertEqual(
+            {"definition": subset, "dependencies": []}, report.normalized)
         plan = self.service.prepare_publication(
             self.admin, "COMPONENT", KEY, saved.revision,
             PublicationTarget("PRT", "v2", "CURRENT"))
@@ -99,9 +102,30 @@ class ComponentCatalogManagementTests(unittest.TestCase):
                 ManagementError, "COMPONENT_NOT_IMPLEMENTED"):
             self.service.save_draft(
                 self.admin, "COMPONENT", KEY, 0,
-                definition(["Column", "RemoteScriptWidget"]))
+                {"definition": definition(
+                    ["Column", "RemoteScriptWidget"]), "dependencies": []})
         self.assertIsNone(self.drafts.get(
             "activity-planning", "COMPONENT", KEY))
+
+    def test_non_string_member_and_unimplemented_protocol_fail_closed(self):
+        cases = (
+            ({**definition(), "components": [{}]},
+             "INVALID_COMPONENT_DECLARATIONS"),
+            ({**definition(), "protocolProfileRef": "a2flow.future.v1"},
+             "UNSUPPORTED_COMPONENT_PROTOCOL"),
+        )
+        for value, code in cases:
+            with self.subTest(code=code), self.assertRaisesRegex(
+                    ManagementError, code):
+                self.service.save_draft(
+                    self.admin, "COMPONENT", KEY, 0,
+                    {"definition": value, "dependencies": []})
+
+    def test_published_catalog_opens_as_common_draft_envelope(self):
+        draft = self.service.get_draft(self.admin, "COMPONENT", KEY)
+        self.assertEqual({
+            "definition": definition(), "dependencies": [],
+        }, draft.document)
 
     def test_wrong_environment_rejects_before_draft_io(self):
         online = TrustedManagementContext(

@@ -242,35 +242,63 @@ class ApplicationManagementTests(unittest.TestCase):
         self.assertTrue(self.service.validate_draft(
             self.admin, "APPLICATION", APPLICATION_KEY).valid)
 
-    def test_unregistered_component_and_protocol_mismatch_fail_closed(self):
-        original = component_definition()
-        cases = (
-            ({**original, "components": ["Column", "Text", "ChoicePicker"]},
-             "APPLICATION_COMPONENT_NOT_REGISTERED"),
-            ({**original, "protocolProfileRef": "a2flow.other.v1"},
-             "APPLICATION_COMPONENT_PROTOCOL_MISMATCH"),
+    def test_unregistered_component_fails_closed(self):
+        reader = Reader(interactive_definition())
+        original_resolve = reader.resolve_asset
+
+        def resolve(kind, key, context):
+            result = original_resolve(kind, key, context)
+            if kind == "COMPONENT":
+                result["definition"]["components"].remove("Button")
+            return result
+
+        reader.resolve_asset = resolve
+        service = ManagementService([create_application_feature(
+            reader, Drafts(), "a2flow-mvp-activity-planning")])
+        service.save_draft(
+            self.admin, "APPLICATION", APPLICATION_KEY, 0,
+            self.document())
+        report = service.validate_draft(
+            self.admin, "APPLICATION", APPLICATION_KEY)
+        self.assertFalse(report.valid)
+        self.assertEqual(
+            "APPLICATION_COMPONENT_NOT_REGISTERED",
+            report.issues[0]["code"])
+
+    def test_application_and_catalog_protocol_must_match(self):
+        value = interactive_definition()
+        value["asset"]["protocolProfileRef"] = "a2flow.other.v1"
+        self.service.save_draft(
+            self.admin, "APPLICATION", APPLICATION_KEY, 0,
+            self.document(value))
+        report = self.service.validate_draft(
+            self.admin, "APPLICATION", APPLICATION_KEY)
+        self.assertFalse(report.valid)
+        self.assertEqual(
+            "APPLICATION_COMPONENT_PROTOCOL_MISMATCH",
+            report.issues[0]["code"])
+
+    def test_malformed_schema_types_return_bounded_validation_issue(self):
+        mutations = (
+            lambda schema: schema.__setitem__("type", []),
+            lambda schema: schema.__setitem__("required", [{}]),
         )
-        for catalog, code in cases:
-            with self.subTest(code=code):
-                reader = Reader(interactive_definition())
-                original_resolve = reader.resolve_asset
-
-                def resolve(kind, key, context, value=catalog):
-                    result = original_resolve(kind, key, context)
-                    if kind == "COMPONENT":
-                        result["definition"] = copy.deepcopy(value)
-                    return result
-
-                reader.resolve_asset = resolve
+        for mutate in mutations:
+            with self.subTest(mutate=mutate):
                 service = ManagementService([create_application_feature(
-                    reader, Drafts(), "a2flow-mvp-activity-planning")])
+                    Reader(interactive_definition()), Drafts(),
+                    "a2flow-mvp-activity-planning")])
+                value = interactive_definition()
+                mutate(value["surfaceTemplate"]["inputSchema"])
                 service.save_draft(
                     self.admin, "APPLICATION", APPLICATION_KEY, 0,
-                    self.document())
+                    self.document(value))
                 report = service.validate_draft(
                     self.admin, "APPLICATION", APPLICATION_KEY)
                 self.assertFalse(report.valid)
-                self.assertEqual(code, report.issues[0]["code"])
+                self.assertEqual(
+                    "INVALID_APPLICATION_INPUT_SCHEMA",
+                    report.issues[0]["code"])
 
     def test_display_only_never_waits_and_has_no_action(self):
         definition = display_definition()

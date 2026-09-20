@@ -27,7 +27,8 @@ def validate_input_schema(schema):
                 or count[0] > _MAX_SCHEMA_NODES):
             raise ManagementError("INVALID_APPLICATION_INPUT_SCHEMA")
         kind = node.get("type")
-        if kind not in _BY_TYPE or set(node) - (_COMMON | _BY_TYPE[kind]):
+        if (type(kind) is not str or kind not in _BY_TYPE
+                or set(node) - (_COMMON | _BY_TYPE[kind])):
             raise ManagementError("INVALID_APPLICATION_INPUT_SCHEMA")
         if "description" in node and (
                 type(node["description"]) is not str
@@ -46,11 +47,11 @@ def validate_input_schema(schema):
             if (node.get("additionalProperties") is not False
                     or type(properties) is not dict or len(properties) > 64
                     or type(required) is not list
-                    or len(required) != len(set(required))
                     or any(type(name) is not str or not name
                            or len(name) > 128 for name in properties)
                     or any(type(name) is not str or name not in properties
-                           for name in required)):
+                           for name in required)
+                    or len(required) != len(set(required))):
                 raise ManagementError("INVALID_APPLICATION_INPUT_SCHEMA")
             for child in properties.values():
                 visit(child, depth + 1)
