@@ -693,9 +693,9 @@ function AuthorWorkspace({
             disabled={actionBusy}
             onChange={(event) => onEdit(event.target.value)}
           />
-        ) : <FormEditor skillStage={skillStage} kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} pendingResources={pendingResources} assetId={`${kind}:${keyName}`} revision={buffer.revision} references={references} onNavigateReference={onNavigateReference} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
+        ) : <div hidden={kind === 'SKILL' && skillStage === 'resources'}><FormEditor skillStage={skillStage} kind={kind} text={buffer.text} disabled={actionBusy || (kind === 'SKILL' && (workspaceBlocked || pendingResource))} pendingFields={pendingFields} pendingResources={pendingResources} assetId={`${kind}:${keyName}`} revision={buffer.revision} references={references} onNavigateReference={onNavigateReference} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
           onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending} onPendingResourcesChange={onPendingResourcesChange}
-          getPendingConflict={getPendingConflict} />}
+          getPendingConflict={getPendingConflict} /></div>}
         {kind === 'SKILL' && mode === 'FORM' && !invalidDraft ? <div hidden={skillStage !== 'resources'}>
           <SkillFileWorkspace key={keyName} assetKey={keyName} revision={buffer.revision} environment={session.environment}
             disabled={actionBusy} draftDirty={buffer.dirty} pending={pendingResources} onPending={onPendingResourcesChange}
