@@ -18,6 +18,9 @@ from a2flow_management import (
 )
 from skillweave_contracts import TrustedContext, parse_identifier
 
+from .component_catalog import validate_catalog_compatibility
+from .schema import schema_path_exists, validate_input_schema
+
 
 _ALLOWED_COMPONENTS = frozenset({"Column", "Text", "ChoicePicker", "Button"})
 _ALLOWED_DEPENDENCY_KINDS = frozenset({"ABILITY", "COMPONENT"})
@@ -29,6 +32,12 @@ _FORBIDDEN_KEYS = frozenset({
 _INTERACTIVE_RETRY = frozenset({
     "RENDER_FAILED", "ACTION_CALL_FAILED", "ACTION_RESULT_NOT_SUCCESS",
 })
+_DISPLAY_POLICIES = (
+    {"bindingScope": "NONE", "ordinaryChatMayResume": False},
+    {"bindingScope": "RUNTIME_NODE_CARD_FORM",
+     "ordinaryChatMayResume": False,
+     "routeDirectlyWithoutAiReselection": False},
+)
 
 
 def _closed(value, keys, code):
@@ -69,10 +78,14 @@ def _components(definition):
     template = definition.get("surfaceTemplate")
     if type(template) is not dict:
         raise ManagementError("INVALID_SURFACE_TEMPLATE")
+    _closed(template, {"surfaceKey", "rootId", "inputSchema", "components"},
+            "INVALID_SURFACE_TEMPLATE")
+    parse_identifier(template["surfaceKey"])
+    validate_input_schema(template["inputSchema"])
     components = template.get("components")
     if type(components) is not list or not 1 <= len(components) <= 128:
         raise ManagementError("INVALID_COMPONENTS")
-    by_id, events = {}, {}
+    by_id, events, names, binding_paths = {}, {}, set(), set()
     for item in components:
         if type(item) is not dict:
             raise ManagementError("INVALID_COMPONENT")
@@ -81,6 +94,7 @@ def _components(definition):
                 or component_id in by_id or component not in _ALLOWED_COMPONENTS):
             raise ManagementError("INVALID_COMPONENT")
         by_id[component_id] = item
+        names.add(component)
         if component == "Column":
             _closed(item, {"id", "component", "children"}, "INVALID_COMPONENT")
             if type(item["children"]) is not list:
@@ -88,11 +102,13 @@ def _components(definition):
         elif component == "Text":
             _closed(item, {"id", "component", "text"}, "INVALID_COMPONENT")
             _binding(item["text"])
+            binding_paths.add(item["text"]["path"])
         elif component == "ChoicePicker":
             _closed(item, {"id", "component", "options", "value", "variant"},
                     "INVALID_COMPONENT")
             _binding(item["options"])
             _binding(item["value"])
+            binding_paths.update((item["options"]["path"], item["value"]["path"]))
             if item["variant"] != "mutuallyExclusive":
                 raise ManagementError("INVALID_COMPONENT")
         else:
@@ -110,6 +126,8 @@ def _components(definition):
                 raise ManagementError("INVALID_ACTION_EVENT")
             for binding in event["context"].values():
                 _binding(binding, literals=True)
+                if "path" in binding:
+                    binding_paths.add(binding["path"])
             events[name] = component_id
     root = template.get("rootId")
     if root not in by_id:
@@ -132,7 +150,10 @@ def _components(definition):
     visit(root)
     if len(visited) != len(by_id):
         raise ManagementError("INVALID_COMPONENT_GRAPH")
-    return events
+    if any(not schema_path_exists(template["inputSchema"], path)
+           for path in binding_paths):
+        raise ManagementError("APPLICATION_BINDING_PATH_NOT_DECLARED")
+    return events, frozenset(names)
 
 
 def _definition_profile(key, definition):
@@ -177,12 +198,13 @@ def _definition_profile(key, definition):
         definition.get("interactionPolicy"), definition.get("actionPolicies"))
     if type(actions) is not list:
         raise ManagementError("INVALID_ACTION_POLICIES")
-    events = _components(definition)
+    events, component_names = _components(definition)
     ability_releases = []
     if mode == "DISPLAY_ONLY":
-        if interaction != {"bindingScope": "NONE", "ordinaryChatMayResume": False}:
+        if interaction not in _DISPLAY_POLICIES:
             raise ManagementError("INVALID_DISPLAY_POLICY")
-        if actions or events or reasons != ["RENDER_FAILED"]:
+        if (actions or events
+                or not set(reasons) <= {"RENDER_FAILED"}):
             raise ManagementError("INVALID_DISPLAY_POLICY")
     else:
         if interaction != {
@@ -191,7 +213,7 @@ def _definition_profile(key, definition):
             "routeDirectlyWithoutAiReselection": True,
         }:
             raise ManagementError("INVALID_INTERACTION_POLICY")
-        if frozenset(reasons) != _INTERACTIVE_RETRY or not actions:
+        if not set(reasons) <= _INTERACTIVE_RETRY or not actions:
             raise ManagementError("INVALID_INTERACTION_POLICY")
         policies = {}
         required = {"actionName", "sourceComponentId", "abilityReleaseRef",
@@ -222,7 +244,8 @@ def _definition_profile(key, definition):
             ability_releases.append((ability_key, version))
         if policies.keys() != events.keys():
             raise ManagementError("INVALID_ACTION_POLICY")
-    return asset["componentCatalogRef"], tuple(ability_releases)
+    return (asset["componentCatalogRef"], tuple(ability_releases),
+            component_names)
 
 
 class ApplicationManagementFeature(ManagementFeature):
@@ -313,7 +336,8 @@ class ApplicationManagementFeature(ManagementFeature):
             _closed(draft.document, {"definition", "dependencies"},
                     "INVALID_DRAFT_FIELDS")
             definition = draft.document["definition"]
-            component_key, abilities = _definition_profile(draft.key, definition)
+            component_key, abilities, component_names = _definition_profile(
+                draft.key, definition)
             dependencies = draft.document["dependencies"]
             if type(dependencies) is not list or len(dependencies) > 128:
                 raise ManagementError("INVALID_DEPENDENCIES")
@@ -329,7 +353,10 @@ class ApplicationManagementFeature(ManagementFeature):
             if len(identities) != len(set(identities)) or set(identities) != expected:
                 raise ManagementError("APPLICATION_DEPENDENCY_MISMATCH")
             runtime = self._runtime_context(context)
-            self.reader.resolve_asset("COMPONENT", component_key, runtime)
+            catalog = self.reader.resolve_asset(
+                "COMPONENT", component_key, runtime)
+            validate_catalog_compatibility(
+                definition, catalog.get("definition"), component_names)
             for ability_key, expected_version in abilities:
                 resolved = self.reader.resolve_asset("ABILITY", ability_key, runtime)
                 if resolved["versionId"] != expected_version:

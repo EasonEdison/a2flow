@@ -156,7 +156,8 @@ class DependencyService:
 
         draft_map = {}
         if "ADMIN" in context.roles:
-            for draft_kind in ("SKILL", "ABILITY", "APPLICATION", "WORKFLOW"):
+            for draft_kind in (
+                    "SKILL", "ABILITY", "APPLICATION", "COMPONENT", "WORKFLOW"):
                 for draft in self.drafts.list(self.namespace, draft_kind):
                     draft_map[(draft.kind, draft.key)] = draft
 

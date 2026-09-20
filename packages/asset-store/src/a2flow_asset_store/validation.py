@@ -27,6 +27,29 @@ def environment(value):
     return value
 
 
+def application_component_catalog(application, catalog):
+    """Compile an Application against one selected declarative catalog."""
+    if type(application) is not dict or type(catalog) is not dict:
+        raise AssetError("SERVING_DEPENDENCY_MISMATCH")
+    asset = application.get("asset")
+    template = application.get("surfaceTemplate")
+    if type(asset) is not dict or type(template) is not dict:
+        raise AssetError("SERVING_DEPENDENCY_MISMATCH")
+    components = template.get("components")
+    declarations = catalog.get("components")
+    if (catalog.get("catalogKey") != asset.get("componentCatalogRef")
+            or catalog.get("protocolProfileRef") != asset.get("protocolProfileRef")
+            or type(components) is not list or type(declarations) is not list
+            or any(type(name) is not str for name in declarations)
+            or any(type(item) is not dict
+                   or type(item.get("component")) is not str
+                   for item in components)
+            or not {item["component"] for item in components}
+                    <= set(declarations)):
+        raise AssetError("SERVING_DEPENDENCY_MISMATCH")
+    return True
+
+
 def entries(definition):
     closed(definition, {"entries", "requiredToolNames"})
     if type(definition["entries"]) is not list or not 1 <= len(definition["entries"]) <= 128:
@@ -222,6 +245,46 @@ class BundleValidator:
             for dep in asset.document["dependencies"]:
                 if (dep["kind"], dep["key"]) not in seen:
                     raise AssetError("MISSING_DEPENDENCY")
+        # Selected Application and Component releases must compile together for
+        # the stable/current cohort and every ONLINE gray user cohort. This is
+        # part of bundle validation, so publish and rollback remain atomic.
+        state_by_key = {(state["kind"], state["key"]): state
+                        for state in serving}
+        asset_by_version = {asset.identity: asset for asset in result}
+        cohort_users = {None}
+        if expected_environment == "ONLINE":
+            cohort_users.update(user_id_from_wire(user)
+                                for state in serving
+                                for user in state["grayUserIds"])
+
+        def selected_version(state, user):
+            if expected_environment == "PRT":
+                return state["current"]
+            gray_users = {user_id_from_wire(item)
+                          for item in state["grayUserIds"]}
+            if user is not None and user in gray_users:
+                return state["gray"]
+            return state["stable"]
+
+        for user in cohort_users:
+            for identity, state in state_by_key.items():
+                if identity[0] != "APPLICATION":
+                    continue
+                application = asset_by_version.get(
+                    (*identity, selected_version(state, user)))
+                if application is None:
+                    raise AssetError("SERVING_DEPENDENCY_MISMATCH")
+                catalog_key = application.definition["asset"]["componentCatalogRef"]
+                catalog_state = state_by_key.get(("COMPONENT", catalog_key))
+                if catalog_state is None:
+                    raise AssetError("SERVING_DEPENDENCY_MISMATCH")
+                catalog = asset_by_version.get((
+                    "COMPONENT", catalog_key,
+                    selected_version(catalog_state, user)))
+                if catalog is None:
+                    raise AssetError("SERVING_DEPENDENCY_MISMATCH")
+                application_component_catalog(
+                    application.definition, catalog.definition)
         # Check every authored version, not only today's selected versions.
         graph = {}
         for asset in result:
