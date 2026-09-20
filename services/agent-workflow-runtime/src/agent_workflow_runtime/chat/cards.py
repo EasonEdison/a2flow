@@ -168,7 +168,7 @@ def _persist_option_selection(display, inputs):
     data = display.get("data")
     options = data.get("options") if type(data) is dict else None
     if (type(options) is not list or not any(
-            type(option) is dict and option.get("optionId") == option_id
+            type(option) is dict and option.get("value") == option_id
             for option in options)):
         _reject("INVALID_OPTION_ID")
     updated = deepcopy(display)

@@ -21,8 +21,8 @@ def prepared(*, interactive=True, prompt="Choose"):
         "protocolProfile": "a2flow.mvp08.v1", "componentCatalogRef": "catalog-1",
         "rootId": "root", "components": [{"id": "root", "component": "Text"}],
         "data": {"prompt": prompt, "options": [
-            {"label": "First", "optionId": "first"},
-            {"label": "Second", "optionId": "second"},
+            {"label": "First", "value": "first"},
+            {"label": "Second", "value": "second"},
         ]},
         "inputSchema": {"type": "object"},
         "actions": ([{"actionName": "confirm", "inputSchema": {"type": "object"}}]
