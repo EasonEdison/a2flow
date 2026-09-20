@@ -7,7 +7,8 @@ Durable conversation migration is a separate assembly concern.
 import asyncio
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain.agents.middleware import AgentMiddleware, hook_config
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from skillweave_contracts.models import (
     ConversationInvocationScope, TrustedInvocationContext,
 )
@@ -15,11 +16,66 @@ from skillweave_contracts.models import (
 from ..assembly import build_agent
 from ..service import require_owner
 from .events import DONE, ERROR, ListEmitter, TEXT_DELTA, TOOL_CALL
-from .tools import _EMITTER, ProposeModelArgs, UseSkillModelArgs, build_chat_tools
+from .tools import (
+    _EMITTER,
+    AbilityModelArgs,
+    ProposeModelArgs,
+    RenderModelArgs,
+    UseSkillModelArgs,
+    build_chat_tools,
+)
 
 
 class ChatLoopError(Exception):
     """The SDK did not complete the turn."""
+
+
+class _InteractiveCardStop(AgentMiddleware):
+    """Use the SDK's public jump hook after an interactive card is saved."""
+
+    def __init__(self, chat_assets):
+        self._chat_assets = chat_assets
+
+    @staticmethod
+    def _batch_rejection(request):
+        messages = request.state.get("messages", ())
+        calls = getattr(messages[-1], "tool_calls", ()) if messages else ()
+        renders = [call for call in calls if call.get("name") == "render_application"]
+        if not renders:
+            return None
+        first_render_id = renders[0].get("id")
+        if (
+            len(calls) == 1
+            and request.tool_call.get("id") == first_render_id
+        ):
+            return None
+        if request.tool_call.get("id") == first_render_id:
+            return None
+        return ToolMessage(
+            content="Application rendering must be the only operation in its tool batch",
+            name=request.tool_call["name"],
+            tool_call_id=request.tool_call["id"],
+            status="error",
+        )
+
+    def wrap_tool_call(self, request, handler):
+        rejection = self._batch_rejection(request)
+        if rejection is not None:
+            return rejection
+        return handler(request)
+
+    async def awrap_tool_call(self, request, handler):
+        rejection = self._batch_rejection(request)
+        if rejection is not None:
+            return rejection
+        return await handler(request)
+
+    @hook_config(can_jump_to=["end"])
+    def before_model(self, state, runtime):
+        del state, runtime
+        if self._chat_assets.waiting_action() is not None:
+            return {"jump_to": "end"}
+        return None
 
 
 def _close_model(model):
@@ -39,6 +95,7 @@ class ChatLoop:
         reader, control_request_id, emitter=None, system_prompt=None,
         tools=None, history=None, checkpointer=None, thread_id=None,
         history_loader=None, personal_memory=None,
+        chat_assets=None,
     ):
         require_owner(owner)
         if type(conversation_id) is not str or not conversation_id:
@@ -60,6 +117,7 @@ class ChatLoop:
         self._thread_id = thread_id
         self._history_loader = history_loader
         self._personal_memory = personal_memory
+        self._chat_assets = chat_assets
         self._history = [
             HumanMessage(content=str(text)) if role == "user"
             else AIMessage(content=str(text)) for role, text in (history or [])
@@ -75,19 +133,32 @@ class ChatLoop:
         token = _EMITTER.set(self._emitter)
         model = None
         try:
+            if self._chat_assets is not None:
+                self._chat_assets.begin_turn()
             model = self._model_factory.create(self._model_reference, self._owner)
             tools = self._tools if self._tools is not None else build_chat_tools(
                 reader=self._reader, trusted_context=self._owner,
                 conversation_id=self._conversation_id,
                 control_request_id=self._control_request_id,
+                chat_assets=self._chat_assets,
             )
             from ..personal_memory import PersonalMemoryMiddleware
             middleware = ([PersonalMemoryMiddleware(self._personal_memory, self._owner)]
                           if self._personal_memory is not None else [])
+            if self._chat_assets is not None:
+                middleware.append(_InteractiveCardStop(self._chat_assets))
+            validators = {
+                "use_skill": UseSkillModelArgs.model_validate,
+                "propose_workflow_run": ProposeModelArgs.model_validate,
+            }
+            if self._chat_assets is not None:
+                validators.update({
+                    "execute_ability": AbilityModelArgs.model_validate,
+                    "render_application": RenderModelArgs.model_validate,
+                })
             graph = build_agent(
                 model, tools,
-                {"use_skill": UseSkillModelArgs.model_validate,
-                 "propose_workflow_run": ProposeModelArgs.model_validate},
+                validators,
                 harness_profile_key=model.configuration.harness_profile_key,
                 context_schema=TrustedInvocationContext,
                 system_prompt=self._system_prompt,
@@ -152,6 +223,17 @@ class ChatLoop:
                             if call["id"] not in seen_calls:
                                 seen_calls.add(call["id"])
                                 self._emitter.emit(TOOL_CALL, {"tool": call["name"]})
+            waiting = (
+                None
+                if self._chat_assets is None
+                else self._chat_assets.waiting_action()
+            )
+            if waiting is not None:
+                self._history = list(messages)
+                self._emitter.emit(
+                    "waiting_action", {"cardId": waiting["cardId"]},
+                )
+                return None
             last = messages[-1]
             if not isinstance(last, AIMessage) or last.tool_calls:
                 raise ChatLoopError("INCOMPLETE_AGENT_TURN")
