@@ -20,7 +20,7 @@
 ## Not yet delivered
 
 - Conversation-scoped ability execution and Application interactions.
-- A bounded native-event-to-SSE bridge: the attended adapter still buffers a turn.
+- Conversation-scoped Application persistence, Action updates and continuation.
 
 Source delivery is not deployment. Old-data migration is explicitly out of
 scope: no automatic identity fallback, remapping or database rewrite is included.
@@ -55,9 +55,9 @@ is not included. A missing checkpoint for an existing conversation fails closed.
 The latest completed turn ID is deduplicated; this is not a full historical
 request ledger or a business exactly-once guarantee.
 
-The B-side transcript is still a display projection, not the model history.
-Transcript delivery-status reconciliation and incremental SSE remain follow-up
-work. This change does not make disconnect/reconnect streaming durable.
+The B-side transcript is a display projection, not the model history. Incremental
+SSE and saved delivery outcomes are implemented in the live-delivery section
+below; token-exact replay and automatic checkpoint-to-transcript repair are not.
 
 ## Personal preference memory
 
@@ -162,3 +162,35 @@ cover native conversation isolation and persisted latest-window delivery updates
 Synthetic in-app browser checks show pre-completion text/reasoning/tool activity,
 reload during execution and automatic collapse after completion. No real model
 call, existing-data migration or live deployment was performed.
+
+## Shared Skill execution foundations
+
+Workflow structure, node progress and workflow controls are ordinary product UI,
+not A2UI. A Skill may produce an Application whether invoked by Chat or a
+Workflow node. Reuse must not manufacture Workflow run/node identities for Chat.
+
+The shared Application preparation module now validates published templates,
+render policy, data and backend-resolved Action descriptors into immutable
+display material. It has no graph, checkpoint, run/node, user, persistence or
+transport dependency. This is deliberately a preparation service, not a new
+conversation lifecycle or a promise that arbitrary Applications can execute.
+The existing Workflow render Tool delegates preparation to it, then retains its
+own saved interaction, identity, interrupt/resume and completion policy. Its
+one-Action MVP continuation restriction remains; accepting multiple display
+descriptors in the pure preparation service does not enable new routing.
+
+The shared Ability execution module owns registered-operation authorization,
+definition/input/output validation, result-policy evaluation and JSON isolation.
+Callers still own trusted identity, Skill binding, current-version admission and
+registry selection. It never turns model input into a URL or credential.
+Workflow preserves its current Action ledger and business-result semantics;
+Action execution is not replaced by a fail-fast model Tool helper.
+
+Still pending: wire the shared foundations into conversation-scoped Tool
+admission; save and update conversation surfaces; add the authenticated Action
+entry and UI; then verify one Skill/Application in both Chat and Workflow.
+User Actions should execute configured business operations and update saved
+card state directly, without an obligatory model call. Only the owning lifecycle
+decides whether completion resumes an Agent or advances a Workflow node.
+No generic HTTP transport, LoadBinding expansion, deployment or live-model call
+is delivered by this foundational extraction.

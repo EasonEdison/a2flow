@@ -13,6 +13,7 @@ from skillweave_contracts import TrustedInvocationContext
 from skillweave_contracts.models import parse_identifier, parse_skill_key
 
 from .models import ActionRejected, Interaction
+from .application_runtime import ApplicationRuntime, validate_choice_data
 
 
 def _identifier(value):
@@ -72,37 +73,9 @@ def validators():
     }
 
 
-def validate_choice_data(value):
-    if type(value) is not dict or set(value) != {"prompt", "options"}:
-        raise ActionRejected("INVALID_APPLICATION_DATA")
-    if type(value["prompt"]) is not str or not 1 <= len(value["prompt"]) <= 2000:
-        raise ActionRejected("INVALID_APPLICATION_DATA")
-    options = value["options"]
-    if type(options) is not list or not 2 <= len(options) <= 8:
-        raise ActionRejected("INVALID_APPLICATION_DATA")
-    for option in options:
-        if (type(option) is not dict or set(option) != {"label", "value"}
-                or type(option["label"]) is not str or not 1 <= len(option["label"]) <= 2000
-                or type(option["value"]) is not str or not 1 <= len(option["value"]) <= 128):
-            raise ActionRejected("INVALID_APPLICATION_DATA")
-    if len({option["value"] for option in options}) != len(options):
-        raise ActionRejected("INVALID_APPLICATION_DATA")
-    return json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))
-
-
-def _profile(application, application_validator):
-    if application_validator(application) is not True:
-        raise ActionRejected("UNSUPPORTED_APPLICATION_PROFILE")
-    return application["surfaceTemplate"]
-
-
-
 def build_tools(assets, action_service, application_validator,
                 application_data_validator=None) -> tuple[BaseTool, BaseTool, BaseTool]:
-    if not callable(application_validator):
-        raise ValueError("APPLICATION_VALIDATOR_REQUIRED")
-    if application_data_validator is not None and not callable(application_data_validator):
-        raise ValueError("APPLICATION_DATA_VALIDATOR_INVALID")
+    applications = ApplicationRuntime(application_validator, application_data_validator)
     @tool("use_skill", args_schema=UseSkillArgs, response_format="content_and_artifact")
     def use_skill(skillKey: str, runtime: ToolRuntime[TrustedInvocationContext]):
         """Load the instruction and resources for this authorized Skill."""
@@ -124,25 +97,10 @@ def build_tools(assets, action_service, application_validator,
         """Persist one configured interactive or display-only node card."""
         context = assets.context(runtime.context)
         resolved = assets.application(applicationKey, context)
-        application = resolved["application"]
-        policy = application["renderPolicy"]
-        interactive = policy == {
-            "tool": "render_application", "interactionMode": "INTERACTIVE",
-            "requiresPause": True,
-        }
-        display_only = policy == {
-            "tool": "render_application", "interactionMode": "DISPLAY_ONLY",
-            "requiresPause": False,
-        }
-        if not interactive and not display_only:
-            raise ActionRejected("UNSUPPORTED_APPLICATION_PROFILE")
-        template = _profile(application, application_validator)
-        if application_data_validator is None:
-            safe_data = validate_choice_data(data)
-        elif application_data_validator(application, data) is True:
-            safe_data = json.loads(json.dumps(data, ensure_ascii=False, allow_nan=False))
-        else:
-            raise ActionRejected("INVALID_APPLICATION_DATA")
+        actions = assets.card_actions(applicationKey, context)
+        prepared = applications.prepare(application_key=applicationKey,
+            resolved=resolved, data=data, actions=actions)
+        interactive, display_only = prepared.interactive, not prepared.interactive
         if not runtime.tool_call_id:
             raise ActionRejected("TOOL_CALL_ID_REQUIRED")
         scope = context.invocation_scope
@@ -151,18 +109,13 @@ def build_tools(assets, action_service, application_validator,
                                runtime.tool_call_id], separators=(",", ":"), ensure_ascii=True)
         digest = sha256(material.encode()).hexdigest()
         interaction_id, card_id = "interaction:" + digest, "card:" + digest
-        actions = assets.card_actions(applicationKey, context) if interactive else []
+        # Existing Workflow MVP continuation admits one action. The display
+        # preparation layer itself has no graph/interrupt dependency.
         if (interactive and len(actions) != 1) or (display_only and actions):
             raise ActionRejected("UNSUPPORTED_APPLICATION_PROFILE")
         card = {
             "cardId": card_id, "nodeId": scope.node_id, "interactionId": interaction_id,
-            "applicationKey": applicationKey,
-            "applicationVersion": resolved["resolvedVersion"]["versionId"],
-            "protocolProfile": "a2flow.mvp08.v1",
-            "componentCatalogRef": application["asset"]["componentCatalogRef"],
-            "rootId": template["rootId"], "components": template["components"],
-            "data": safe_data, "inputSchema": template["inputSchema"],
-            "actions": actions,
+            **prepared.display(),
             "state": "WAITING" if interactive else "READ_ONLY",
             "actionEligibility": "REVALIDATION_REQUIRED" if interactive else "NOT_OPERABLE",
         }
