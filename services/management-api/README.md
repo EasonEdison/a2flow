@@ -79,6 +79,44 @@ exception text.
 No listener starts on import. The existing hash-pinned FastAPI/Starlette runtime
 dependencies are reused; this package does not install dependencies itself.
 
+## Skill file workspace
+
+ADMIN file editing uses a separate persistent workspace before committing to the
+existing full saved draft. All routes use `/management/assets/SKILL/{key}`:
+
+- `GET /workspace` returns `baseDraftRevision`, `workspaceRevision`, `dirty`, and
+  `entries`. Entries include `SKILL.md` first, then resources, each retaining
+  `handleId`, `logicalPath`, `mediaType`, `byteSize`, `contentDigest`, and `base64`.
+- `PUT /workspace/file` accepts `expectedWorkspaceRevision`, `logicalPath`,
+  `mediaType`, and `base64`. It upserts one file, derives size/digest and preserves
+  its handle. The response is the new workspace snapshot.
+- `POST /workspace/delete` accepts `expectedWorkspaceRevision` and `logicalPath`.
+  `SKILL.md` cannot be deleted. The response is the new workspace snapshot.
+- `POST /workspace/commit` accepts `expectedWorkspaceRevision` and
+  `expectedDraftRevision`, returning `{workspace, draft}`. It updates the saved
+  draft and clears workspace dirty state atomically; frontmatter becomes draft
+  metadata, while bindings and required tools remain unchanged.
+
+The initial workspace is a read-only projection with revision zero; its first
+file mutation persists it. PostgreSQL uses the existing management draft table,
+under the reserved namespace `skill-workspace:<sha256(original namespace)>`.
+This identity cannot be used as a public asset namespace. No filesystem or new
+schema migration is involved. PRT/ONLINE keep their existing separate databases.
+A clean workspace follows the latest saved draft; a dirty one retains its base.
+Stale file revisions return `WORKSPACE_REVISION_CONFLICT`. Draft changes after
+editing began return `WORKSPACE_BASE_DRAFT_CONFLICT` on commit and retain files.
+The current slice has no reset/rebase or ZIP import endpoint. Editors should
+commit file changes before separately saving bindings/metadata.
+
+File saves allow unfinished frontmatter, but package path, size, digest and text
+encoding rules still apply, and SKILL.md must remain nonempty Markdown. Commit
+requires supported frontmatter. Publication preparation and HTTP publication
+reject `WORKSPACE_NOT_COMMITTED` while saved file changes await commit. Existing
+publication remains an explicit separate action; runtime readers never query the
+workspace namespace. Published entries pass unchanged through `AssetReader` to
+`use_skill`, which exposes instruction text and resource path/handle descriptors.
+This slice does not add filesystem materialization or script execution.
+
 
 ## Opt-in PostgreSQL integration
 
