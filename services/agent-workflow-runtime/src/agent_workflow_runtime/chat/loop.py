@@ -40,19 +40,26 @@ class _InteractiveCardStop(AgentMiddleware):
     def _batch_rejection(request):
         messages = request.state.get("messages", ())
         calls = getattr(messages[-1], "tool_calls", ()) if messages else ()
-        renders = [call for call in calls if call.get("name") == "render_application"]
-        if not renders:
+        exclusive = [
+            call
+            for call in calls
+            if call.get("name") in {"use_skill", "render_application"}
+        ]
+        if not exclusive:
             return None
-        first_render_id = renders[0].get("id")
+        first_exclusive_id = exclusive[0].get("id")
         if (
             len(calls) == 1
-            and request.tool_call.get("id") == first_render_id
+            and request.tool_call.get("id") == first_exclusive_id
         ):
             return None
-        if request.tool_call.get("id") == first_render_id:
+        if request.tool_call.get("id") == first_exclusive_id:
             return None
         return ToolMessage(
-            content="Application rendering must be the only operation in its tool batch",
+            content=(
+                "Skill admission and Application rendering must each be the only "
+                "operation in their tool batch"
+            ),
             name=request.tool_call["name"],
             tool_call_id=request.tool_call["id"],
             status="error",

@@ -588,6 +588,42 @@ class ChatLoopSkillTests(unittest.TestCase):
         self.assertEqual(2, len(model.observed))
         self.assertEqual("waiting_action", emitter.events[-1][0])
 
+    def test_use_skill_batch_rejects_sibling_ability_before_dispatch(self):
+        reader = Reader()
+        calls = []
+        assets, _, _ = _assets(reader, _operations(calls=calls))
+        emitter = ListEmitter()
+        mixed = AIMessageChunk(
+            content="",
+            tool_call_chunks=[
+                {
+                    "index": 0,
+                    "id": "skill-1",
+                    "name": "use_skill",
+                    "args": json.dumps({"skillKey": SKILL_KEY}),
+                    "type": "tool_call_chunk",
+                },
+                {
+                    "index": 1,
+                    "id": "ability-1",
+                    "name": "execute_ability",
+                    "args": json.dumps({
+                        "abilityKey": CALCULATE_KEY,
+                        "arguments": {"value": 2},
+                    }),
+                    "type": "tool_call_chunk",
+                },
+            ],
+        )
+        rounds = [[mixed], [AIMessageChunk(content="Admission completed alone")]]
+        loop, model = _loop(rounds, assets, reader, emitter)
+        self.assertEqual("Admission completed alone", loop.turn("Use and execute"))
+        self.assertEqual([], calls)
+        self.assertEqual(1, len(reader.calls))
+        self.assertEqual(2, len(model.observed))
+        tool_messages = [message for message in loop.history if message.type == "tool"]
+        self.assertEqual(["success", "error"], [message.status for message in tool_messages])
+
     def test_forged_runtime_identity_is_rejected_before_skill_admission(self):
         assets, reader, _ = _assets()
         emitter = ListEmitter()
