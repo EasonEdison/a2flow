@@ -68,7 +68,7 @@ def _configure_database():
 
 def _initialize(conninfo):
     from a2flow_asset_store import PostgresAssetRepository
-    from activity_planning_demo import bundle_validator
+    from deploy.assets import bundle_validator
     from activity_planning_demo.package_bundle import make_package_bundle
     from a2flow_management import PostgresDraftRepository
 

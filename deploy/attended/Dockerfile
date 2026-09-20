@@ -31,7 +31,7 @@ RUN python -m pip install --no-cache-dir -r /tmp/runtime-requirements.lock \
     && python -m pip install --no-cache-dir \
         -c /tmp/runtime-requirements.lock \
         annotated-doc==0.0.5 anyio==4.15.1 pydantic==2.13.5 \
-        psycopg==3.3.5 psycopg-binary==3.3.5 typing_extensions==4.16.0 \
+        psycopg==3.3.5 psycopg-binary==3.3.5 typing_extensions==4.16.0 jsonschema==4.26.0 \
     && rm -f /tmp/*.lock /tmp/*.txt
 
 COPY packages/contracts packages/contracts
@@ -47,6 +47,7 @@ COPY services/agent-workflow-runtime services/agent-workflow-runtime
 COPY examples/activity-planning examples/activity-planning
 COPY experiments/runtime-phase1 experiments/runtime-phase1
 COPY deploy/__init__.py deploy/__init__.py
+COPY deploy/assets.py deploy/assets.py
 COPY deploy/mvp deploy/mvp
 COPY deploy/attended deploy/attended
 

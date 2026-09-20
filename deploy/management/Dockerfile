@@ -20,7 +20,7 @@ RUN python -m pip install --no-cache-dir \
         -c /tmp/runtime-constraints.lock \
         -r /tmp/listener-requirements.lock \
         annotated-doc==0.0.5 anyio==4.15.1 pydantic==2.13.5 \
-        psycopg==3.3.5 psycopg-binary==3.3.5 typing_extensions==4.16.0 \
+        psycopg==3.3.5 psycopg-binary==3.3.5 typing_extensions==4.16.0 jsonschema==4.26.0 \
     && python -m pip install --no-cache-dir --no-deps --require-hashes \
         -r /tmp/management-http.txt \
     && rm -f /tmp/*-requirements.lock /tmp/management-http.txt \
@@ -35,6 +35,7 @@ COPY services/workflow-composer services/workflow-composer
 COPY services/management-api services/management-api
 COPY examples/activity-planning examples/activity-planning
 COPY deploy/__init__.py deploy/__init__.py
+COPY deploy/assets.py deploy/assets.py
 COPY deploy/management deploy/management
 
 RUN groupadd --system --gid ${A2FLOW_GID} a2flow \

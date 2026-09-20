@@ -141,7 +141,7 @@ def create_app_from_environment():
     from agent_workflow_runtime.chat.cards import ChatCardStore
     from agent_workflow_runtime.chat.actions import ChatActionService
     from agent_workflow_runtime.models import ActionRejected
-    from activity_planning_demo import application_validator, application_data_validator
+    from deploy.assets import application_validator, application_data_validator
     from deploy.mvp.operations import operations
     card_store = ChatCardStore(conninfo, environment=config.environment)
     operation_registry = operations()

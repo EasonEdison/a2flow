@@ -1,0 +1,113 @@
+name: a2flow-realchat-prt
+
+x-environment: &environment
+  A2FLOW_ENVIRONMENT: PRT
+  A2FLOW_DATABASE_NAME: a2flow_realchat_prt
+  A2FLOW_DATABASE_USER: a2flow_realchat
+  A2FLOW_POSTGRES_PASSWORD_FILE: /run/secrets/app_postgres_password
+  A2FLOW_ASSET_NAMESPACE: a2flow-mvp-activity-planning
+  A2FLOW_USER_ID: "101"
+  A2FLOW_DEEPSEEK_KEY_FILE: /run/secrets/deepseek_key
+  A2FLOW_PEPPER_FILE: /run/secrets/pepper
+  A2FLOW_INTERNAL_TOKEN_FILE: /run/secrets/internal_token
+  A2FLOW_BSIDE_DATABASE_NAME: a2flow_realchat_prt
+  A2FLOW_BSIDE_ENVIRONMENT: PRT
+  A2FLOW_BSIDE_ASSET_NAMESPACE: a2flow-mvp-activity-planning
+  A2FLOW_BSIDE_VALIDATOR_FACTORY: deploy.assets:bundle_validator
+  A2FLOW_BSIDE_BROWSER_ORIGIN: http://127.0.0.1:14184
+  A2FLOW_BSIDE_SESSION_SECONDS: "7200"
+  A2FLOW_BSIDE_RUNTIME_URL: http://127.0.0.1:8782
+  A2FLOW_EMPLOYEE_STATIC_DIRECTORY: /opt/a2flow/static/employee
+  A2FLOW_MANAGEMENT_DATABASE_NAME: a2flow_realchat_prt
+  A2FLOW_MANAGEMENT_ENVIRONMENT: PRT
+  A2FLOW_MANAGEMENT_ASSET_NAMESPACE: a2flow-mvp-activity-planning
+  A2FLOW_MANAGEMENT_VALIDATOR_FACTORY: deploy.assets:bundle_validator
+  A2FLOW_MANAGEMENT_USER_ID: "101"
+  A2FLOW_MANAGEMENT_ROLES: ADMIN
+  A2FLOW_MANAGEMENT_AUTH_TOKEN_FILE: /run/secrets/management_auth_token
+  A2FLOW_MANAGEMENT_STATIC_DIRECTORY: /opt/a2flow/static/management
+  A2FLOW_MANAGEMENT_BROWSER_ORIGIN: http://127.0.0.1:14183
+
+x-host: &host
+  image: ${A2FLOW_REALCHAT_IMAGE:?set a reviewed SHA-tagged image}
+  network_mode: host
+  user: "${A2FLOW_UID:-1000}:${A2FLOW_GID:-1000}"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp:size=32m,mode=1777]
+  volumes:
+    - postgres_socket:/run/postgresql
+    - ${A2FLOW_REALCHAT_STATIC:?set an absolute static release directory}:/opt/a2flow/static:ro
+  secrets:
+    - app_postgres_password
+    - deepseek_key
+    - pepper
+    - internal_token
+    - management_auth_token
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: public.ecr.aws/docker/library/postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6
+    network_mode: none
+    environment:
+      POSTGRES_DB: a2flow_realchat_prt
+      POSTGRES_USER: a2flow_realchat
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    command: [postgres, -c, "listen_addresses=", -c, unix_socket_directories=/run/postgresql]
+    secrets: [postgres_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_socket:/run/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h /run/postgresql -U a2flow_realchat -d a2flow_realchat_prt"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  initialize:
+    <<: *host
+    profiles: [tools]
+    environment: *environment
+    command: [initialize]
+    restart: "no"
+  management:
+    <<: *host
+    environment:
+      <<: *environment
+      A2FLOW_LISTEN_PORT: "8780"
+    command: [management]
+  bside:
+    <<: *host
+    environment:
+      <<: *environment
+      A2FLOW_LISTEN_PORT: "8781"
+    command: [bside]
+  runtime:
+    <<: *host
+    environment:
+      <<: *environment
+      A2FLOW_LISTEN_PORT: "8782"
+    command: [runtime]
+
+secrets:
+  postgres_password:
+    file: ${A2FLOW_REALCHAT_SECRETS:?set an absolute private secrets directory}/postgres_password
+  app_postgres_password:
+    file: ${A2FLOW_REALCHAT_SECRETS}/app_postgres_password
+  deepseek_key:
+    file: ${A2FLOW_REALCHAT_SECRETS}/deepseek_key
+  pepper:
+    file: ${A2FLOW_REALCHAT_SECRETS}/pepper
+  internal_token:
+    file: ${A2FLOW_REALCHAT_SECRETS}/internal_token
+  management_auth_token:
+    file: ${A2FLOW_REALCHAT_SECRETS}/management_auth_token
+
+volumes:
+  postgres_data:
+  postgres_socket:
