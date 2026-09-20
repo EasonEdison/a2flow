@@ -84,6 +84,21 @@ class ManagementService:
         require_admin(context)
         return self._feature(kind).validate_draft(context, key)
 
+    def skill_workspace(self, context, key, operation, *args):
+        require_admin(context)
+        feature = self._feature("SKILL")
+        methods = {
+            "get": "get_workspace", "save": "save_workspace_file",
+            "delete": "delete_workspace_file", "commit": "commit_workspace",
+            "require-clean": "require_clean_workspace",
+        }
+        method = getattr(feature, methods[operation], None)
+        if not callable(method):
+            if operation == "require-clean":
+                return None
+            raise ManagementError("WORKSPACE_NOT_SUPPORTED", 404)
+        return method(context, key, *args)
+
     def comparison_document(self, context, kind, key, document):
         require_admin(context)
         feature = self._feature(kind)

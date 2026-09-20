@@ -64,6 +64,17 @@ class MemoryDraftRepository(DraftRepository):
         self._rows[identity] = copy.deepcopy(saved)
         return saved
 
+    def commit_workspace(self, namespace, draft, expected_revision,
+                         workspace_namespace, workspace, expected_workspace_revision):
+        current = self.get(namespace, draft.kind, draft.key)
+        editing = self.get(workspace_namespace, draft.kind, draft.key)
+        if editing is None or editing.revision != expected_workspace_revision:
+            raise ManagementError("WORKSPACE_REVISION_CONFLICT", 409)
+        if (current.revision if current else 0) != expected_revision:
+            raise ManagementError("WORKSPACE_BASE_DRAFT_CONFLICT", 409)
+        return (self.save(namespace, draft, expected_revision),
+                self.save(workspace_namespace, workspace, expected_workspace_revision))
+
 
 class PostgresDraftRepository(DraftRepository):
     """One environment/database binding; setup is an explicit operator action."""
@@ -202,3 +213,42 @@ class PostgresDraftRepository(DraftRepository):
                     raise ManagementError("DRAFT_REVISION_CONFLICT", 409)
                 return ManagedDraft.create(
                     draft.kind, draft.key, row[0], draft.document, draft.updated_by)
+
+    def commit_workspace(self, namespace, draft, expected_revision,
+                         workspace_namespace, workspace, expected_workspace_revision):
+        """Commit files and acknowledge the workspace in one PostgreSQL transaction."""
+        identifier(namespace, "INVALID_NAMESPACE")
+        identifier(workspace_namespace, "INVALID_NAMESPACE")
+        for value in (expected_revision, expected_workspace_revision):
+            if type(value) is not int or value < 0:
+                raise ManagementError("INVALID_EXPECTED_REVISION")
+        with self._connection() as connection:
+            with connection.transaction():
+                editing = connection.execute(
+                    "UPDATE a2flow_management_drafts SET revision=revision+1,"
+                    "document=%s,digest=%s,updated_by=%s "
+                    "WHERE namespace=%s AND kind=%s AND asset_key=%s "
+                    "AND revision=%s RETURNING revision",
+                    (workspace.data, workspace.content_digest, workspace.updated_by,
+                     workspace_namespace, workspace.kind, workspace.key,
+                     expected_workspace_revision)).fetchone()
+                if editing is None:
+                    raise ManagementError("WORKSPACE_REVISION_CONFLICT", 409)
+                if expected_revision == 0:
+                    saved = self._insert(connection, namespace, draft)
+                else:
+                    saved = connection.execute(
+                        "UPDATE a2flow_management_drafts SET revision=revision+1,"
+                        "document=%s,digest=%s,updated_by=%s "
+                        "WHERE namespace=%s AND kind=%s AND asset_key=%s "
+                        "AND revision=%s RETURNING revision",
+                        (draft.data, draft.content_digest, draft.updated_by,
+                         namespace, draft.kind, draft.key, expected_revision)).fetchone()
+                if saved is None:
+                    raise ManagementError("WORKSPACE_BASE_DRAFT_CONFLICT", 409)
+                return (
+                    ManagedDraft.create(draft.kind, draft.key, saved[0],
+                                        draft.document, draft.updated_by),
+                    ManagedDraft.create(workspace.kind, workspace.key, editing[0],
+                                        workspace.document, workspace.updated_by),
+                )

@@ -30,6 +30,23 @@ class CompareDraft(_Closed):
     document: dict[str, JsonValue]
 
 
+class WorkspaceFile(_Closed):
+    expectedWorkspaceRevision: int = Field(ge=0)
+    logicalPath: str = Field(min_length=1, max_length=256)
+    mediaType: str = Field(min_length=1, max_length=256)
+    base64: str
+
+
+class WorkspaceDelete(_Closed):
+    expectedWorkspaceRevision: int = Field(ge=0)
+    logicalPath: str = Field(min_length=1, max_length=256)
+
+
+class WorkspaceCommit(_Closed):
+    expectedWorkspaceRevision: int = Field(ge=0)
+    expectedDraftRevision: int = Field(ge=0)
+
+
 class Target(_Closed):
     environment: str
     versionId: str = Field(min_length=1, max_length=256)
@@ -167,6 +184,28 @@ def create_app(service, *, identity_resolver, publications=None, dependencies=No
     def list_published(request: Request, kind: str):
         return _response(service.list_published(context(request), kind))
 
+    @app.get("/management/assets/SKILL/{key:path}/workspace")
+    def workspace(request: Request, key: str):
+        return _response(service.skill_workspace(context(request), key_value(key), "get"))
+
+    @app.put("/management/assets/SKILL/{key:path}/workspace/file")
+    def workspace_file(request: Request, key: str, body: WorkspaceFile):
+        return _response(service.skill_workspace(
+            context(request), key_value(key), "save", body.expectedWorkspaceRevision,
+            body.logicalPath, body.mediaType, body.base64))
+
+    @app.post("/management/assets/SKILL/{key:path}/workspace/delete")
+    def workspace_delete(request: Request, key: str, body: WorkspaceDelete):
+        return _response(service.skill_workspace(
+            context(request), key_value(key), "delete", body.expectedWorkspaceRevision,
+            body.logicalPath))
+
+    @app.post("/management/assets/SKILL/{key:path}/workspace/commit")
+    def workspace_commit(request: Request, key: str, body: WorkspaceCommit):
+        return _response(service.skill_workspace(
+            context(request), key_value(key), "commit", body.expectedWorkspaceRevision,
+            body.expectedDraftRevision))
+
     @app.get("/management/assets/{kind}/{key:path}/draft")
     def get_draft(request: Request, kind: str, key: str):
         return _response(service.get_draft(
@@ -278,11 +317,15 @@ def create_app(service, *, identity_resolver, publications=None, dependencies=No
         @app.post("/management/assets/{kind}/{key:path}/publications")
         def publish(request: Request, kind: str, key: str,
                     body: PublishCandidate):
+            who = require_admin(context(request))
+            asset_key = key_value(key)
+            if kind == "SKILL":
+                service.skill_workspace(who, asset_key, "require-clean")
             target = PublicationTarget(
                 body.target.environment, body.target.versionId,
                 body.target.channel, tuple(body.target.grayUserIds))
             return _response(publications.publish(
-                require_admin(context(request)), kind, key_value(key), body.candidate,
+                who, kind, asset_key, body.candidate,
                 target, body.expectedServingDigest))
 
         @app.post("/management/assets/{kind}/{key:path}/rollbacks")

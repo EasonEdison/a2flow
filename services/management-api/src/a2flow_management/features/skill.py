@@ -12,6 +12,7 @@ from ..contracts import (
     ManagedDraft, ManagementError, PublicationPlan, ValidationReport,
 )
 from ..service import ManagementFeature
+from .skill_workspace import SkillWorkspaceMixin
 
 _FRONTMATTER = re.compile(r"\A---\n(?P<header>.*?)\n---\n", re.DOTALL)
 _DRAFT_KEYS = {
@@ -55,7 +56,7 @@ def _entry(handle, path, media_type, raw):
     }
 
 
-class SkillManagementFeature(ManagementFeature):
+class SkillManagementFeature(SkillWorkspaceMixin, ManagementFeature):
     kind = "SKILL"
 
     def __init__(self, reader, drafts, namespace):
@@ -240,6 +241,7 @@ class SkillManagementFeature(ManagementFeature):
         }
 
     def prepare_publication(self, context, key, expected_revision, target):
+        self.require_clean_workspace(context, key)
         draft = self.get_draft(context, key)
         if draft.revision != expected_revision:
             raise ManagementError("DRAFT_REVISION_CONFLICT", 409)
