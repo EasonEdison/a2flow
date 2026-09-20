@@ -35,7 +35,7 @@ x-host: &host
   read_only: true
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
-  tmpfs: [/tmp:size=32m,mode=1777]
+  tmpfs: ["/tmp:size=32m,mode=1777"]
   volumes:
     - postgres_socket:/run/postgresql
     - ${A2FLOW_REALCHAT_STATIC:?set an absolute static release directory}:/opt/a2flow/static:ro
