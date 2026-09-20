@@ -1,5 +1,9 @@
 # A2Flow contributor instructions
 
+## Authoring migration release (2026-09-20)
+
+The project owner explicitly authorized adapting their existing Skill/A2UI authoring and execution implementation. This scoped release supersedes the earlier independent-source restriction for those components only. Preserve the reference workflows while adapting interfaces to this project's React/Python stack; do not import credentials, private endpoints, business data, operational logs or unrelated infrastructure. Main-brain owns integration and delivery. UI/source completion and real runtime acceptance remain separate gates.
+
 ## Current bounded release (2026-09-16)
 
 Main-brain has released AF12 common management publication, retained-version history and configuration rollback backend work. This supersedes the historical M-side pauses below only for explicitly assigned paths. Skill registry owns asset-store and management-api changes; main-brain alone reviews and integrates. No automatic successor work, model calls, database mutation or deployment follows from this source release. Keep candidate preparation non-publishing, immutable history, trusted authorization, PRT/ONLINE isolation, userId gray routing and atomic dependency-safe serving changes. Configuration rollback never compensates business operations. Current quota and execution cursor belong in the private coordinator records, not permanent architecture requirements.

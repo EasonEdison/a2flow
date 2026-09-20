@@ -292,7 +292,7 @@ code, pre { font-family: var(--mono); }
 .binding-section { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .binding-section > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px; background: #f0f7f5; }
 .binding-section h4, .binding-section h5 { margin: 0; }.binding-section header span, .binding-section header small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
-.binding-columns { display: grid; grid-template-columns: 1fr 1fr; min-width: 0; }
+.binding-columns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); min-width: 0; }
 .binding-catalog, .binding-current { min-width: 0; padding: 13px; }.binding-current { border-left: 1px solid var(--line); background: #fbfcfc; }
 .binding-catalog > label { display: flex; flex-direction: column; gap: 6px; color: #495d57; font-size: 10px; font-weight: 700; }
 .component-center-label { margin-top: 24px; }
@@ -303,11 +303,24 @@ code, pre { font-family: var(--mono); }
 .component-implementation small { color: var(--muted); }
 .component-implementation code { overflow-wrap: anywhere; color: #34584e; font-size: 11px; }
 .binding-catalog input { width: 100%; min-width: 0; border: 1px solid #cfdcd8; border-radius: 7px; padding: 9px 10px; background: #fff; }
-.binding-list { display: grid; gap: 8px; margin-top: 10px; }
+.binding-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; margin-top: 16px; }
 .binding-card { display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; }
 .binding-card strong { font-size: 11px; }.binding-card code { color: var(--green-dark); font-size: 9px; overflow-wrap: anywhere; }.binding-card span, .binding-card small, .binding-state { color: var(--muted); font-size: 9px; line-height: 1.5; }
 .binding-card > div { display: flex; justify-content: flex-end; gap: 5px; margin-top: 4px; }.binding-card .warning-button { padding: 7px 9px; }
 .binding-card.unavailable, .binding-card.duplicate, .binding-card.malformed { border-color: #dfbd84; background: #fffaf0; }.binding-state.error { color: var(--red); }
+.skill-stage-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.skill-stage-tabs button { border: 0; background: transparent; border-radius: 7px; padding: 12px 18px; color: #52617b; font-size: 14px; cursor: pointer; }
+.skill-stage-tabs button.active { background: #2563eb; color: white; }
+.skill-stage-tabs button span { margin-left: 8px; opacity: .8; font-size: 12px; }
+.skill-stage-hint, .binding-explanation { color: #65748b; line-height: 1.7; font-size: 13px; padding: 0 16px; }
+.binding-section .binding-card { padding: 18px; gap: 10px; }
+.binding-section .binding-card strong { font-size: 15px; }
+.binding-section .binding-card code, .binding-section .binding-card span, .binding-section .binding-card small { font-size: 12px; }
+.binding-section .binding-card.selected-binding { border-color: #80a6f5; background: #f8faff; }
+.binding-section .binding-version-facts { display: block; background: #f3f7ff; border: 1px solid #dce7ff; border-radius: 6px; padding: 10px; }
+.binding-badge { color: #2563eb; font-size: 12px; }
+.binding-current { display: flex; flex-direction: column; gap: 14px; }
+.binding-catalog > h5, .binding-current > h5 { font-size: 15px; margin: 0 0 14px; }
 .form-section > small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
 .fixed-policy { border-radius: 7px; padding: 9px; background: #f0f4f2; color: var(--muted); font-family: var(--mono); font-size: 10px; overflow-wrap: anywhere; }
 .sequence-preview { grid-column: 1 / -1; margin: 0; padding-left: 24px; }

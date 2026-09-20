@@ -156,6 +156,7 @@ export interface ReferenceCatalog {
   loading: boolean;
   errors: Record<string, string>;
   assets: Partial<Record<AssetKind, AssetSummary[]>>;
+  bindingCandidates?: Partial<Record<AssetKind, AssetSummary[]>>;
   histories: Record<string, PublicationHistory>;
   retry?: () => void;
 }

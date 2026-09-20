@@ -770,9 +770,13 @@ function App() {
     })).then(async (results) => {
       if (controller.signal.aborted) return;
       const nextAssets: ReferenceCatalog['assets'] = {};
+      const bindingCandidates: ReferenceCatalog['assets'] = {};
       const errors: ReferenceCatalog['errors'] = {};
       for (const [referenceKind, value] of results) {
-        if (Array.isArray(value)) nextAssets[referenceKind] = value.filter((item) => !item.draftOnly);
+        if (Array.isArray(value)) {
+          bindingCandidates[referenceKind] = value;
+          nextAssets[referenceKind] = value.filter((item) => !item.draftOnly);
+        }
         else errors[referenceKind] = errorText(value);
       }
       const historyEntries = await Promise.all((nextAssets.ABILITY ?? []).map(async (item): Promise<[string, PublicationHistory | Error]> => {
@@ -789,6 +793,7 @@ function App() {
         loading: false,
         errors,
         assets: Object.fromEntries(kinds.map((referenceKind) => [referenceKind, errors[referenceKind] ? current.assets[referenceKind] ?? [] : nextAssets[referenceKind] ?? []])),
+        bindingCandidates: Object.fromEntries(kinds.map((referenceKind) => [referenceKind, errors[referenceKind] ? current.bindingCandidates?.[referenceKind] ?? [] : bindingCandidates[referenceKind] ?? []])),
         histories,
         retry: () => setReferenceRefresh((value) => value + 1),
       }));
