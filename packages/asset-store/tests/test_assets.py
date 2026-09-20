@@ -3,10 +3,14 @@ from contextlib import contextmanager
 from copy import deepcopy
 import unittest
 
-from a2flow_asset_store import AssetError, AssetReader, PostgresAssetRepository
+from a2flow_asset_store import (
+    AssetError, AssetReader, BundleValidator, PostgresAssetRepository,
+)
+from a2ui_composer import application_validator, component_validator
 from a2flow_asset_store.records import canonical, digest
 from activity_planning_demo import (
-    bundle_validator, MODEL_ABILITY_KEYS, CONFIRM_KEY,
+    bundle_validator, COMPONENT_KEY, MODEL_ABILITY_KEYS, CONFIRM_KEY,
+    OperationCatalog,
 )
 from activity_planning_demo.service import budget_activity, select_activity
 from activity_planning_demo.bundle import make_bundle, NAMESPACE
@@ -297,6 +301,38 @@ class AssetTests(unittest.TestCase):
                 NAMESPACE, "ABILITY", key, candidate, target,
                 before["servingDigest"])
         self.assertNotIn((NAMESPACE, "ABILITY", key, "v2"), self.db.assets)
+
+    def test_component_rollback_cannot_remove_selected_application_member(self):
+        validator = BundleValidator(
+            OperationCatalog(), application_validator=application_validator,
+            component_validator=component_validator)
+        repository = PostgresAssetRepository(
+            "not-a-real-dsn", environment="PRT", database="asset_prt",
+            validator=validator, connection_factory=self.db.connect)
+        document = deepcopy(self.document)
+        old = deepcopy(next(item for item in document["assets"]
+                            if (item["kind"], item["key"]) ==
+                            ("COMPONENT", COMPONENT_KEY)))
+        old["versionId"] = "without-button"
+        old["definition"]["components"].remove("Button")
+        old["contentDigest"] = digest(canonical({
+            field: value for field, value in old.items()
+            if field != "contentDigest"}))
+        document["assets"].append(old)
+        repository.import_bundle(
+            document, expected_namespace=NAMESPACE, dry_run=False)
+        history = repository.publication_history(
+            NAMESPACE, "COMPONENT", COMPONENT_KEY)
+        with self.assertRaisesRegex(
+                AssetError, "SERVING_DEPENDENCY_MISMATCH"):
+            repository.rollback_configuration(
+                NAMESPACE, "COMPONENT", COMPONENT_KEY, "without-button",
+                {"environment": "PRT", "versionId": "without-button",
+                 "channel": "CURRENT", "grayUserIds": []},
+                history["servingDigest"])
+        after = repository.publication_history(
+            NAMESPACE, "COMPONENT", COMPONENT_KEY)
+        self.assertEqual("v1", after["serving"]["current"])
 
     def test_online_gray_and_finish_gray_are_atomic(self):
         database = DatabaseDouble()

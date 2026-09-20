@@ -13,7 +13,7 @@ from .records import (
     ResolvedWorkflow,
     canonical,
 )
-from .validation import entries, namespace
+from .validation import application_component_catalog, entries, namespace
 
 
 def owner_context(value):
@@ -167,6 +167,9 @@ class AssetReader(CatalogPort, MaterialPort):
 
     def resolve_application(self, application_key, invocation_context):
         owner, bundle, asset, _, versions = self._read("APPLICATION", application_key, invocation_context)
+        catalog_key = asset.definition["asset"]["componentCatalogRef"]
+        catalog, _ = self._resolve(bundle, owner, "COMPONENT", catalog_key)
+        application_component_catalog(asset.definition, catalog.definition)
         for action in asset.definition["actionPolicies"]:
             ability_key, expected_version = action["abilityReleaseRef"].split("@")
             resolved, _ = self._resolve(bundle, owner,

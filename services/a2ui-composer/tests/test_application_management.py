@@ -11,8 +11,8 @@ from a2flow_management import (
     TrustedManagementContext,
 )
 from a2flow_asset_store import AssetReader
-from a2ui_composer import create_application_feature
-from activity_planning_demo import bundle_validator
+from a2ui_composer import application_validator, create_application_feature
+from activity_planning_demo import bundle_validator, component_definition
 from activity_planning_demo.bundle import NAMESPACE, make_bundle
 
 
@@ -52,7 +52,10 @@ def interactive_definition():
             "inputSchema": {"type": "object", "required": ["prompt", "options"],
                             "additionalProperties": False,
                             "properties": {"prompt": {"type": "string"},
-                                           "options": {"type": "array"}}},
+                                           "options": {
+                                               "type": "array",
+                                               "items": {"type": "string"}},
+                                           "optionId": {"type": "string"}}},
             "components": [
                 {"id": "root", "component": "Column",
                  "children": ["prompt", "selection", "confirm"]},
@@ -87,8 +90,7 @@ def display_definition():
 
 class Validator:
     def validate_definition(self, kind, key, definition):
-        if (kind != "APPLICATION"
-                or definition not in (interactive_definition(), display_definition())):
+        if kind != "APPLICATION" or application_validator(definition) is not True:
             raise ManagementError("INVALID_APPLICATION")
 
 
@@ -121,7 +123,8 @@ class Reader:
                           if self.definition["actionPolicies"] else [])],
                     "selection": "PRT_CURRENT"}
         if kind == "COMPONENT" and key == COMPONENT_KEY:
-            return {"kind": kind, "key": key, "versionId": "v1"}
+            return {"kind": kind, "key": key, "versionId": "v1",
+                    "definition": component_definition()}
         if kind == "ABILITY" and key == ABILITY_KEY:
             return {"kind": kind, "key": key, "versionId": "v1"}
         raise ManagementError("ASSET_NOT_FOUND", 404)
@@ -180,9 +183,9 @@ class ApplicationManagementTests(unittest.TestCase):
         self.service = ManagementService([create_application_feature(
             self.reader, self.drafts, "a2flow-mvp-activity-planning")])
         self.admin = TrustedManagementContext(
-            "admin-1", "PRT", frozenset({"ADMIN"}))
+            101, "PRT", frozenset({"ADMIN"}))
         self.user = TrustedManagementContext(
-            "user-1", "PRT", frozenset({"USER"}))
+            102, "PRT", frozenset({"USER"}))
 
     @staticmethod
     def document(definition=None):
@@ -229,6 +232,45 @@ class ApplicationManagementTests(unittest.TestCase):
         self.assertEqual("confirm_activity", policy["actionName"])
         self.assertTrue(policy["completeInteractionOnSuccess"])
         self.assertEqual("v1", self.reader.published_version)
+
+    def test_changed_button_label_compiles_against_registered_catalog(self):
+        definition = interactive_definition()
+        definition["surfaceTemplate"]["components"][-1]["label"] = "Save selection"
+        self.service.save_draft(
+            self.admin, "APPLICATION", APPLICATION_KEY, 0,
+            self.document(definition))
+        self.assertTrue(self.service.validate_draft(
+            self.admin, "APPLICATION", APPLICATION_KEY).valid)
+
+    def test_unregistered_component_and_protocol_mismatch_fail_closed(self):
+        original = component_definition()
+        cases = (
+            ({**original, "components": ["Column", "Text", "ChoicePicker"]},
+             "APPLICATION_COMPONENT_NOT_REGISTERED"),
+            ({**original, "protocolProfileRef": "a2flow.other.v1"},
+             "APPLICATION_COMPONENT_PROTOCOL_MISMATCH"),
+        )
+        for catalog, code in cases:
+            with self.subTest(code=code):
+                reader = Reader(interactive_definition())
+                original_resolve = reader.resolve_asset
+
+                def resolve(kind, key, context, value=catalog):
+                    result = original_resolve(kind, key, context)
+                    if kind == "COMPONENT":
+                        result["definition"] = copy.deepcopy(value)
+                    return result
+
+                reader.resolve_asset = resolve
+                service = ManagementService([create_application_feature(
+                    reader, Drafts(), "a2flow-mvp-activity-planning")])
+                service.save_draft(
+                    self.admin, "APPLICATION", APPLICATION_KEY, 0,
+                    self.document())
+                report = service.validate_draft(
+                    self.admin, "APPLICATION", APPLICATION_KEY)
+                self.assertFalse(report.valid)
+                self.assertEqual(code, report.issues[0]["code"])
 
     def test_display_only_never_waits_and_has_no_action(self):
         definition = display_definition()
@@ -281,7 +323,7 @@ class ApplicationManagementTests(unittest.TestCase):
 
     def test_wrong_environment_rejects_before_draft_io(self):
         online = TrustedManagementContext(
-            "admin-1", "ONLINE", frozenset({"ADMIN"}))
+            101, "ONLINE", frozenset({"ADMIN"}))
         operations = (
             lambda: self.service.get_draft(
                 online, "APPLICATION", APPLICATION_KEY),

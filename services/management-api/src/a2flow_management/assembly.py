@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 from a2flow_asset_store.validation import namespace as validate_namespace
+from a2ui_composer.component_catalog import create_component_feature
 from a2ui_composer.management import create_application_feature
 from a2flow_workflow_composer.management import create_workflow_feature
 from capability_registry.management import create_ability_feature
@@ -42,6 +43,7 @@ def create_management_app(*, reader, drafts, namespace, identity_resolver):
         create_ability_feature(
             reader, drafts, expected_namespace, ability_validator),
         create_application_feature(reader, drafts, expected_namespace),
+        create_component_feature(reader, drafts, expected_namespace),
         create_workflow_feature(
             reader, drafts, expected_namespace, validator),
     )

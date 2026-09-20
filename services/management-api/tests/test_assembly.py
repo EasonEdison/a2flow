@@ -105,14 +105,15 @@ class AssemblyTests(unittest.TestCase):
     def call(self, method, path, **kwargs):
         return asyncio.run(request(self.assembly.app, method, path, **kwargs))
 
-    def test_session_is_server_authoritative_and_component_not_registered(self):
+    def test_session_is_server_authoritative_and_registers_component(self):
         response = self.call(
             "GET", "/management/session",
             headers={"x-role": "ADMIN", "x-environment": "ONLINE"})
         self.assertEqual(200, response.status_code)
         self.assertEqual({
             "userId": "102", "environment": "PRT",
-            "registeredKinds": ["ABILITY", "APPLICATION", "SKILL", "WORKFLOW"],
+            "registeredKinds": [
+                "ABILITY", "APPLICATION", "COMPONENT", "SKILL", "WORKFLOW"],
             "canAuthor": False,
         }, response.json())
 
@@ -130,6 +131,7 @@ class AssemblyTests(unittest.TestCase):
             "SKILL": "activity-planning/plan",
             "ABILITY": "activity-planning.budget",
             "APPLICATION": "activity-planning.confirm",
+            "COMPONENT": "activity-planning.basic",
             "WORKFLOW": "activity-planning",
         }
         for kind, key in keys.items():
