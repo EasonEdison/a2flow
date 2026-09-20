@@ -13,6 +13,7 @@ import type {
   RetainedVersion,
   ValidationReport,
 } from './contracts';
+import type { SkillWorkspace } from './SkillFileWorkspace';
 
 export class ManagementApiError extends Error {
   constructor(readonly code: string, readonly status: number) {
@@ -56,6 +57,24 @@ function assetPath(kind: AssetKind, key?: string): string {
 }
 
 export const managementApi = {
+  skillWorkspace(key: string, signal?: AbortSignal) {
+    return request<SkillWorkspace>(assetPath('SKILL', key) + '/workspace', {}, signal);
+  },
+  saveSkillFile(key: string, expectedWorkspaceRevision: number, logicalPath: string, mediaType: string, base64: string) {
+    return request<SkillWorkspace>(assetPath('SKILL', key) + '/workspace/file', {
+      method: 'PUT', body: JSON.stringify({ expectedWorkspaceRevision, logicalPath, mediaType, base64 }),
+    });
+  },
+  commitSkillWorkspace(key: string, expectedWorkspaceRevision: number, expectedDraftRevision: number) {
+    return request<{ workspace: SkillWorkspace; draft: ManagedDraft }>(assetPath('SKILL', key) + '/workspace/commit', {
+      method: 'POST', body: JSON.stringify({ expectedWorkspaceRevision, expectedDraftRevision }),
+    });
+  },
+  deleteSkillFile(key: string, expectedWorkspaceRevision: number, logicalPath: string) {
+    return request<SkillWorkspace>(assetPath('SKILL', key) + '/workspace/delete', {
+      method: 'POST', body: JSON.stringify({ expectedWorkspaceRevision, logicalPath }),
+    });
+  },
   session(signal?: AbortSignal) {
     return request<ManagementSession>('/management/session', {}, signal);
   },

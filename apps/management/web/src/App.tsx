@@ -7,6 +7,7 @@ import { beginDependencyLoad, settleDependencyLoad, staleDependencyState, type D
 import { diffValues } from './structured-diff';
 import { filterAssets } from './asset-filter';
 import { FormEditor } from './FormEditors';
+import { SkillFileWorkspace } from './SkillFileWorkspace';
 import { saveBodyIssue } from './skill-resource-state';
 import {
   applyPendingField, createPendingFieldState, discardPendingField, editPendingField, inspectDraftText,
@@ -26,6 +27,7 @@ import {
   type DraftBuffer,
   type JsonObject,
   type ManagementSession,
+  type ManagedDraft,
   type PendingResourceEdits,
   type PublicationHistory,
   type PublicationPlan,
@@ -581,6 +583,7 @@ function PublicationControls({
 
 function AuthorWorkspace({
   skillStage,
+  onWorkspaceCommitted,
   session,
   kind,
   keyName,
@@ -611,6 +614,7 @@ function AuthorWorkspace({
   onTargetChange,
 }: {
   skillStage?: string;
+  onWorkspaceCommitted: (draft: ManagedDraft) => void;
   session: ManagementSession;
   kind: AssetKind;
   keyName: string;
@@ -641,6 +645,7 @@ function AuthorWorkspace({
   onTargetChange: () => void;
 }) {
   const [mode, setMode] = useState<'FORM' | 'JSON'>('FORM');
+  const [workspaceBlocked, setWorkspaceBlocked] = useState(kind === 'SKILL');
   if (!buffer) return <div className="workspace-state">正在加载草稿…</div>;
   const inspection = inspectDraftText(buffer.text);
   const invalidDraft = !inspection.ok;
@@ -650,16 +655,16 @@ function AuthorWorkspace({
   return (
     <div className="author-workspace">
       <section className="editor-panel">
-        <div className="editor-heading">
+        <div className="editor-heading" hidden={kind === 'SKILL' && skillStage === 'resources' && !invalidDraft}>
           <div>
-            <p className="section-label">管理草稿编辑器</p>
+            <p className="section-label">{kind === 'SKILL' ? 'Skill 工作台' : '管理草稿编辑器'}</p>
             <h2>{kind} · {keyName}</h2>
           </div>
           <div className="editor-heading-actions">
             <div className="mode-switch" role="group" aria-label="编辑模式">
               <button type="button" className={mode === 'FORM' ? 'active' : ''} disabled={actionBusy || invalidDraft}
                 onClick={() => setMode('FORM')}>表单</button>
-              <button type="button" className={mode === 'JSON' ? 'active' : ''} disabled={actionBusy}
+              <button type="button" className={mode === 'JSON' ? 'active' : ''} disabled={actionBusy || pendingResource || (kind === 'SKILL' && workspaceBlocked)}
                 onClick={() => setMode('JSON')}>完整 JSON</button>
             </div>
             <span className={buffer.dirty ? 'edit-state dirty' : 'edit-state'}>
@@ -677,7 +682,7 @@ function AuthorWorkspace({
           </div>
         ) : null}
         {invalidDraft ? <div className="notice warning invalid-json"><strong>完整 JSON 当前无效</strong><span>{inspection.error}</span><span>内容不会被重置；修正前不能保存、验证或发布，也不能进入表单模式。</span></div> : null}
-        {pendingJsonField || pendingResource ? <div className="notice warning invalid-json"><strong>存在尚未应用的局部编辑</strong><span>canonical 草稿尚未改变。请在表单中明确应用或丢弃；切换资产或模式不会清除字段或资源文本。</span></div> : null}
+        {pendingJsonField || pendingResource ? <div className="notice warning invalid-json"><strong>存在尚未保存的编辑</strong><span>请先保存或取消当前字段、文件的修改；数据库中的草稿尚未改变。</span></div> : null}
         {saveBudgetIssue ? <div className="notice error"><strong>草稿超过保存请求预算</strong><span>{saveBudgetIssue}；当前 management Host 的 `BODY_LIMIT` 为 1 MiB，检查包含 expectedRevision/document 完整请求封套；请缩小资源后再保存。</span></div> : null}
         {mode === 'JSON' || invalidDraft ? (
           <textarea
@@ -691,13 +696,18 @@ function AuthorWorkspace({
         ) : <FormEditor skillStage={skillStage} kind={kind} text={buffer.text} disabled={actionBusy} pendingFields={pendingFields} pendingResources={pendingResources} assetId={`${kind}:${keyName}`} revision={buffer.revision} references={references} onNavigateReference={onNavigateReference} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
           onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending} onPendingResourcesChange={onPendingResourcesChange}
           getPendingConflict={getPendingConflict} />}
+        {kind === 'SKILL' && mode === 'FORM' && !invalidDraft ? <div hidden={skillStage !== 'resources'}>
+          <SkillFileWorkspace key={keyName} assetKey={keyName} revision={buffer.revision} environment={session.environment}
+            disabled={actionBusy} draftDirty={buffer.dirty} pending={pendingResources} onPending={onPendingResourcesChange}
+            onCommitted={onWorkspaceCommitted} onBlocked={setWorkspaceBlocked} />
+        </div> : null}
         <div className="editor-footer">
           <span>修订 #{buffer.revision} · {buffer.updatedBy}</span>
           <div>
-            <button className="quiet-button" type="button" disabled={actionBusy || buffer.dirty || invalidDraft || pendingJsonField || pendingResource} onClick={onValidate}>
+            <button className="quiet-button" type="button" disabled={actionBusy || buffer.dirty || invalidDraft || pendingJsonField || pendingResource || (kind === 'SKILL' && workspaceBlocked)} onClick={onValidate}>
               验证已保存草稿
             </button>
-            <button className="primary-button" type="button" disabled={actionBusy || !buffer.dirty || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue)} onClick={onSave}>
+            <button className="primary-button" type="button" disabled={actionBusy || !buffer.dirty || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue) || (kind === 'SKILL' && workspaceBlocked)} onClick={onSave}>
               {actionBusy ? '处理中…' : '保存草稿'}
             </button>
           </div>
@@ -709,7 +719,7 @@ function AuthorWorkspace({
       <PublicationControls
         session={session}
         revision={buffer.revision}
-        disabled={buffer.dirty || actionBusy || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue) || validation?.valid !== true}
+        disabled={buffer.dirty || actionBusy || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue) || (kind === 'SKILL' && workspaceBlocked) || validation?.valid !== true}
         onPrepare={onPrepare}
         onTargetChange={onTargetChange}
       />
@@ -1260,7 +1270,7 @@ function App() {
             </header>
             <div className="detail-tabs" role="tablist" aria-label="详情分区">
               {kind === 'SKILL' && session.canAuthor ? [
-                ['overview', '基础信息'], ['abilities', '业务能力'], ['applications', '渲染组件'], ['resources', '指令与文件'],
+                ['overview', '基础信息'], ['abilities', '业务能力'], ['applications', '渲染组件'], ['resources', '文件处理'],
               ].map(([stage, label]) => <button type="button" role="tab" key={stage}
                 id={`skill-stage-${stage}`} aria-controls="detail-panel-edit"
                 aria-selected={detailTab === 'EDIT' && skillStage === stage}
@@ -1316,6 +1326,13 @@ function App() {
               {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) ? (
                 session.canAuthor && history ? (
                   <AuthorWorkspace
+                    onWorkspaceCommitted={(draft) => {
+                      if (!activeBufferId) return;
+                      setBuffers((current) => ({ ...current, [activeBufferId]: createDraftBuffer(draft) }));
+                      setValidation(null);
+                      setPlan(null);
+                      setDependencyState((current) => staleDependencyState(current, 'SAVED_DRAFT_CHANGED'));
+                    }}
                     skillStage={kind === 'SKILL' ? skillStage : undefined}
                     session={session}
                     kind={kind}

@@ -8,8 +8,8 @@ export type PendingResourceText = { identity: string; base: string; text: string
 export function resourceIdentity(resource: unknown, index?: number): string;
 export function resourceIdentityIssue(resource: unknown, resources: unknown[]): string | null;
 export function pathIssue(path: unknown, resources?: unknown[], current?: unknown): string | null;
-export function inspectResource(resource: unknown): ResourceInspection;
-export function inspectResourceVerified(resource: unknown): Promise<ResourceInspection>;
+export function inspectResource(resource: unknown, allowInstruction?: boolean): ResourceInspection;
+export function inspectResourceVerified(resource: unknown, allowInstruction?: boolean): Promise<ResourceInspection>;
 export function pendingText(resource: unknown, text: string): PendingResourceText;
 export function applyPendingText(resource: unknown, pending: PendingResourceText): Promise<{ resource?: Record<string, unknown>; error?: string }>;
 export function mediaTypeForPath(path: string, browserType?: string): string | null;

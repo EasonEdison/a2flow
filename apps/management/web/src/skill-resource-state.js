@@ -39,11 +39,11 @@ async function sha256(bytes) {
   return `sha256:${[...new Uint8Array(result)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
-function descriptorIssue(resource) {
+function descriptorIssue(resource, allowInstruction = false) {
   if (!resource || typeof resource !== 'object' || Array.isArray(resource)) return 'INVALID_ENTRY';
   if (!HANDLE_PATTERN.test(resource.handleId ?? '')) return 'INVALID_HANDLE_ID';
   const path = pathIssue(resource.logicalPath, [], resource);
-  if (path) return path;
+  if (path && !(allowInstruction && path === 'RESERVED_SKILL_MD')) return path;
   if (typeof resource.mediaType !== 'string' || !resource.mediaType || resource.mediaType.length > 128) return 'INVALID_MEDIA_TYPE';
   if (!Number.isInteger(resource.byteSize) || resource.byteSize < 0) return 'INVALID_DECLARED_SIZE';
   if (!DIGEST_PATTERN.test(resource.contentDigest ?? '')) return 'INVALID_DECLARED_DIGEST';
@@ -74,8 +74,8 @@ export function pathIssue(path, resources = [], current = null) {
   return null;
 }
 
-export function inspectResource(resource) {
-  const descriptor = descriptorIssue(resource);
+export function inspectResource(resource, allowInstruction = false) {
+  const descriptor = descriptorIssue(resource, allowInstruction);
   if (descriptor) return { status: 'repair', reason: descriptor };
   let bytes;
   try { bytes = base64ToBytes(resource.base64); }
@@ -92,8 +92,8 @@ export function inspectResource(resource) {
   return { status: 'readonly', reason: 'BINARY_RESOURCE' };
 }
 
-export async function inspectResourceVerified(resource) {
-  const inspected = inspectResource(resource);
+export async function inspectResourceVerified(resource, allowInstruction = false) {
+  const inspected = inspectResource(resource, allowInstruction);
   if (inspected.status === 'repair') return inspected;
   try {
     const bytes = base64ToBytes(resource.base64);
