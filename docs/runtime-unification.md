@@ -255,3 +255,23 @@ The model was scripted, not a paid provider. Frontend typecheck/build and a
 separate synthetic browser select→submit→refresh→read-only check passed with no
 console errors (desktop1280×900 and mobile390×844 screenshots). These are distinct
 backend and UI acceptance evidence, not a combined live deployed environment.
+
+## Managed component catalogs and shared PRT assets
+
+COMPONENT catalogs now use the same management draft, validation, immutable
+publication and rollback APIs as other assets. A catalog declares an installed
+renderer protocol and its registered members. Registration cannot install code:
+the currently implemented profile exposes Column, Text, ChoicePicker and Button.
+The Application editor loads its published catalog; missing catalogs fail closed.
+Application compilation and asset resolution check actual membership and protocol,
+and catalog publication must preserve validity of serving dependents.
+
+`deploy.assets` supplies structural Application validators rather than comparing
+definitions to hardcoded demo JSON. Parameter data follows the configured schema
+using jsonschema. Business operations still require an installed adapter.
+
+`deploy/realchat` is a parallel loopback-only PRT composition with one PostgreSQL
+asset namespace shared by M, Chat and Runtime. It does not migrate or replace old
+databases. Seed installs prerequisite examples only; real UI publication and
+subsequent Chat rendering must be verified independently before claiming the
+end-to-end deployment works.
