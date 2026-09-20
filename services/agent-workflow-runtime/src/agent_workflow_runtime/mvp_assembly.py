@@ -104,6 +104,7 @@ class MvpRuntimeHost:
         model_reference="deepseek-v4-flash", static_directory=None,
         checkpointer_factory=None, unexpected_error_observer=None,
         application_data_validator=None, event_sink=None,
+        personal_memory=None,
     ):
         if not callable(identity_resolver):
             raise ValueError("VERIFIED_IDENTITY_RESOLVER_REQUIRED")
@@ -116,6 +117,7 @@ class MvpRuntimeHost:
         self.application_data_validator = application_data_validator
         self.model_factory = model_factory
         self.model_reference = model_reference
+        self.personal_memory = personal_memory
         self.static_directory = static_directory
         self.unexpected_error_observer = unexpected_error_observer
         self._checkpointer_factory = checkpointer_factory or (
@@ -226,6 +228,7 @@ class MvpRuntimeHost:
                         run_lifecycle=lifecycle, progress=self.progress,
                         node_context=run.context(node["nodeId"]),
                         system_prompt=self._system_prompt(node, required),
+                        personal_memory=self.personal_memory,
                     )
                 context_loader = lambda node_ids: confirmed_context(
                     self.interactions, run, node_ids,

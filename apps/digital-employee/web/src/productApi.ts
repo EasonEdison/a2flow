@@ -12,6 +12,8 @@ export type Schedule = { id: string; workflowKey: string; workflowName: string; 
 export type Notification = { id: string; type: string; title: string; relatedType?: string; relatedId?: string; read: boolean; createdAt: string };
 
 export type ApiError = Error & { code: string };
+export type MemoryEntry = { id: string; text: string };
+export type MemorySettings = { revision: number; enabled: boolean; entries: MemoryEntry[] };
 
 const friendlyMessages: Record<string, string> = {
   INVALID_USERNAME: '用户名需为 3–32 位字母、数字、下划线或连字符',
@@ -21,6 +23,9 @@ const friendlyMessages: Record<string, string> = {
   AUTHENTICATION_REQUIRED: '登录已过期，请重新登录',
   UNAUTHENTICATED: '登录已过期，请重新登录',
   REQUEST_FAILED: '请求失败，请稍后再试',
+  MEMORY_UNAVAILABLE: '个人记忆暂不可用，请稍后重新读取',
+  INVALID_MEMORY_SETTINGS: '记忆格式或长度不符合要求，请检查后再保存',
+  MEMORY_REVISION_CONFLICT: '记忆已在其他页面更新，请重新读取后再编辑，避免覆盖其他修改',
 };
 
 export function apiErrorMessage(error: unknown, fallback = '操作失败，请稍后再试'): string {
@@ -132,6 +137,10 @@ const readSurfaceStream = async (response: Response, onSurface: (view: RunView) 
 };
 
 export const productApi = {
+  memory: (signal?: AbortSignal) => api<MemorySettings>('/api/memory', { signal }),
+  saveMemory: (settings: MemorySettings) => api<MemorySettings>('/api/memory', {
+    method: 'PUT', body: JSON.stringify(settings),
+  }),
   session: () => api<Session>('/api/auth/session'),
   login: (username: string, password: string) => api<Session>('/api/auth/login', body({ username, password })),
   register: (username: string, password: string) => api<Session>('/api/auth/register', body({ username, password })),

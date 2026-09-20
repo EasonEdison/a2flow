@@ -19,14 +19,13 @@
 
 ## Not yet delivered
 
-- Memory settings UI and Workflow-node read-only preference integration.
 - Conversation-scoped ability execution and Application interactions.
 - A bounded native-event-to-SSE bridge: the attended adapter still buffers a turn.
 
-Do not treat this source change as completion of persistent history/memory or
-as a deployment. Existing fixed-owner Workflow runs need an explicit ownership
-migration using authoritative B-side ownership records before upgrading a live
-installation. No automatic identity fallback or database rewrite is included.
+Source delivery is not deployment. Old-data migration is explicitly out of
+scope: no automatic identity fallback, remapping or database rewrite is included.
+The signed64 identity change targets fresh compatible schemas; do not upgrade
+an old-schema installation as if its data had been migrated.
 
 SDK extension reference:
 [Deep Agents customization](https://docs.langchain.com/oss/python/deepagents/customization).
@@ -60,7 +59,7 @@ The B-side transcript is still a display projection, not the model history.
 Transcript delivery-status reconciliation and incremental SSE remain follow-up
 work. This change does not make disconnect/reconnect streaming durable.
 
-## Personal preference memory (backend slice)
+## Personal preference memory
 
 The attended initializer creates native LangGraph PostgresStore tables.
 Preferences live in that Store, scoped by environment/user/default profile;
@@ -73,12 +72,43 @@ there is no second memory database or automatic extraction service.
   Disabled entries can still be viewed or deleted in settings.
 - At most20 entries,1000 characters each,8000 total characters. IDs are restricted
   to letters/digits/underscore/hyphen. Strict bodies reject userId/environment.
-- Chat uses SDK middleware to re-read the current settings at each model call.
+- Chat and attended Workflow nodes use the same SDK middleware to re-read current
+  settings before each model call. Workflow reads use the trusted node owner,
+  never a model-supplied user or environment. The attended composition points
+  both paths to the same database and native Store.
   These preferences are labeled user data, not policy or business facts; they
   are not appended as graph history messages. No model memory-write Tool or
   generic filesystem access is enabled in this slice.
 
 Deleting/disabling affects subsequent memory reads. It cannot recall an already
-dispatched model request or erase content quoted in older chat replies. The
-settings UI, Workflow-node integration, and user-requested in-chat memory writes
-are not delivered yet. No production database migration/deployment is implied.
+dispatched model request or erase content quoted in older chat replies.
+User-requested in-chat memory writes are not delivered. No production database
+migration/deployment is implied.
+
+### Settings and read-only Workflow integration
+
+The digital-employee navigation exposes Settings / Personal memory. Users can
+view, add, edit, delete entries and change the switch. All edits take effect only
+after explicit Save; the page separately shows the last saved enabled state.
+Turning off reading retains the entries so the user can still inspect/delete them.
+
+Saving sends only revision/enabled/entries. Identity and environment come from
+the existing authenticated B-side route. Revision conflicts retain local edits,
+block resubmission and ask the user to reread; reloading unsaved edits requires a
+discard confirmation. An uncertain save response also requires a reread rather
+than automatic replay. Request failures never substitute a browser-local store.
+
+Workflow memory is read-only, cannot satisfy required-tool/interaction facts,
+and does not bring old run progress into a fresh run. No new model tools are
+enabled. Sync and async middleware use the same untrusted-preference policy;
+injected system content is not appended to checkpoint messages.
+
+Validation: frontend typecheck/build and four state tests passed. Browser
+fixtures at desktop1440x1000 and mobile390x844 exercised CRUD, disabled reads,
+revision conflicts, uncertain responses, failed reads and expired sessions,
+without page errors or overflow; an in-app browser repeated edit/save. Python
+targeted regression collected29 tests (27 passed,2 optional PG cases skipped);
+the expanded memory suite passed9 tests against disposable PostgreSQL, including
+a real Store settings write read by a Workflow node without changing the record.
+The B-side memory authentication/body test also passed. All model traffic was
+synthetic; browser fixture evidence is not deployed end-to-end acceptance.

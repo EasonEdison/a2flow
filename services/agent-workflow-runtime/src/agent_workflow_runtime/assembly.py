@@ -67,6 +67,7 @@ def build_engine(
     progress: Any = None,
     node_context: Any = None,
     system_prompt: str | None = None,
+    personal_memory: Any = None,
 ) -> CompiledStateGraph:
     """Build from trusted backend inputs, never request-selected Python internals.
 
@@ -76,6 +77,8 @@ def build_engine(
 
     if node_context is not None and run_lifecycle is None:
         raise ValueError("Node context requires run lifecycle")
+    if personal_memory is not None and node_context is None:
+        raise ValueError("Personal memory requires a trusted node context")
     if system_prompt is not None and (not isinstance(system_prompt, str) or not system_prompt):
         raise ValueError("System prompt must be a nonempty string")
     if terminal_guard is None and any(
@@ -92,6 +95,12 @@ def build_engine(
         )
         control_middleware.append(RunAdmissionMiddleware(run_lifecycle, node_context))
     observation_middleware = []
+    memory_middleware = []
+    if personal_memory is not None:
+        from .personal_memory import PersonalMemoryMiddleware
+        memory_middleware = [PersonalMemoryMiddleware(
+            personal_memory, node_context.trusted_context,
+        )]
     if progress is not None:
         from .progress_observer import ProgressMiddleware
         observation_middleware = [ProgressMiddleware(node_context)]
@@ -107,6 +116,7 @@ def build_engine(
         ),
         middleware=[
             *observation_middleware,
+            *memory_middleware,
             RequiredToolFinalizerAdmission(
                 required_tool_names, terminal_guard, lifecycle=run_lifecycle,
                 node_context=node_context,

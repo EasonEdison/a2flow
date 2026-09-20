@@ -18,6 +18,7 @@ from agent_workflow_runtime.event_sink_postgres import PostgresEventSink
 from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
 from agent_workflow_runtime.internal_identity import private_identity
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
+from agent_workflow_runtime.personal_memory import PersonalMemory
 from deploy.mvp import app as mvp
 
 
@@ -76,5 +77,8 @@ def create_app_from_environment():
         static_directory=os.environ.get("A2FLOW_STATIC_DIRECTORY"),
         unexpected_error_observer=mvp.error_observer,
         event_sink=sink,
+        # Attended B-side and Runtime use the same database and native Store.
+        # Setup belongs to the seed command; never create tables per request.
+        personal_memory=PersonalMemory(mvp.conninfo),
     )
     return host.create_app()

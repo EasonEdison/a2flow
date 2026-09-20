@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { NodeCard } from './components/NodeCard';
 import { MarkdownContent } from './components/MarkdownContent';
+import { MemorySettingsPage } from './components/MemorySettingsPage';
 import { FixturePreview } from './FixturePreview';
 import { apiErrorMessage, productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
-type Page = 'chat' | 'workflows' | 'schedules' | 'notifications';
+type Page = 'chat' | 'workflows' | 'schedules' | 'notifications' | 'memory';
 const runLabels: Record<string, string> = { RUNNING: '运行中', WAITING: '等待确认', SUCCEEDED: '已完成', STOPPED: '已停止', FAILED: '失败', SUBMITTED: '已提交' };
 const notificationLabels: Record<string, string> = { WAITING: '等待确认', COMPLETED: '完成', STOPPED: '停止', FAILED: '失败', SYSTEM: '系统' };
 
@@ -42,6 +43,7 @@ function Shell({ session, page, unread, onPage, onLogout, children }: { session:
       <button className={page === 'workflows' ? 'active' : ''} onClick={() => navigate('workflows')}>工作流中心</button>
       <button className={page === 'schedules' ? 'active' : ''} onClick={() => navigate('schedules')}>定时管理</button>
       <button className={page === 'notifications' ? 'active' : ''} onClick={() => navigate('notifications')}>通知中心{unread ? <span className="nav-count">{unread}</span> : null}</button>
+      <button className={page === 'memory' ? 'active' : ''} onClick={() => navigate('memory')}>设置 · 个人记忆</button>
     </aside>
     <section className="product-content">{children}</section>
   </div>;
@@ -148,7 +150,7 @@ function Product() {
   if (checking) return <div className="loading-screen">正在加载 A2Flow…</div>;
   if (!session) return <Login onSession={setSession} />;
   return <Shell session={session} page={page} unread={unread} onPage={(next) => { setNotificationRun(''); setPage(next); }} onLogout={async () => { await productApi.logout(); setPage('chat'); setSession(null); }}>
-    {notificationRun ? <RunDetail runId={notificationRun} onBack={() => setNotificationRun('')} /> : page === 'chat' ? <ChatPage /> : page === 'workflows' ? <WorkflowCenter onSchedule={(key) => { setScheduleWorkflow(key); setPage('schedules'); }} /> : page === 'schedules' ? <SchedulePage initialWorkflow={scheduleWorkflow} /> : <NotificationPage items={notifications} refresh={refreshNotifications} onRun={(id) => setNotificationRun(id)} />}
+    {notificationRun ? <RunDetail runId={notificationRun} onBack={() => setNotificationRun('')} /> : page === 'memory' ? <MemorySettingsPage key={session.userId} /> : page === 'chat' ? <ChatPage /> : page === 'workflows' ? <WorkflowCenter onSchedule={(key) => { setScheduleWorkflow(key); setPage('schedules'); }} /> : page === 'schedules' ? <SchedulePage initialWorkflow={scheduleWorkflow} /> : <NotificationPage items={notifications} refresh={refreshNotifications} onRun={(id) => setNotificationRun(id)} />}
   </Shell>;
 }
 
