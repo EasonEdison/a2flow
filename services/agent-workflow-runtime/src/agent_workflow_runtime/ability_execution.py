@@ -94,17 +94,21 @@ def execute_ability(
     owner,
     *,
     authorization,
+    before_dispatch,
     success_policy_ref=None,
 ):
     """Execute one pre-admitted Ability through a registered operation.
 
-    The caller must check the current version/closure and bind ``ability`` to
-    the requested key before entering this function.  ``owner`` is a trusted
-    backend value and is never inferred from arguments or model output.
+    The caller must bind ``ability`` to the requested key and supply a trusted
+    ``before_dispatch`` guard that rechecks its current version/closure.  The
+    guard runs after all local validation and immediately before operation
+    dispatch.  ``owner`` is never inferred from arguments or model output.
     """
 
     if type(owner) is not TrustedContext:
         raise ActionRejected("TRUSTED_CONTEXT_REQUIRED")
+    if not callable(before_dispatch):
+        raise ActionRejected("ABILITY_DISPATCH_GUARD_REQUIRED")
     definition = validate_ability_definition(ability, operation)
     _authorize(operation, authorization)
     if operation.validate_input(arguments) is not True:
@@ -116,6 +120,7 @@ def execute_ability(
         else success_policy_ref
     )
     policy = result_policy(ability, policy_ref)
+    before_dispatch()
     result = json_copy(operation.execute(json_copy(arguments), owner))
     evaluation = _SuccessEvaluation(operation.validate_result, policy)
     if not business_succeeded(evaluation, result):

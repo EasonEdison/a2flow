@@ -93,13 +93,13 @@ class RuntimeAssets:
 
     def execute_ability(self, ability_key, arguments, context):
         ability, spec = self._ability(ability_key, context)
-        self.check_versions()
         return execute_resolved_ability(
             ability,
             spec,
             arguments,
             self.run.owner,
             authorization=MODEL_AUTHORIZATION,
+            before_dispatch=self.check_versions,
         )
 
     def versions(self, interaction):
