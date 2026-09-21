@@ -17,7 +17,19 @@ Do not rerun seed against edited/published assets to force an old snapshot.
 
 Listeners bind only server loopback: M 8780, B 8781, Runtime 8782. Forward local
 14183 to 8780 and 14184 to 8781 with SSH. Browser origins are exact and deliberate.
-M uses its private-preview login; B uses its existing login/session flow.
+M uses username/password login at `/login`, sharing B's PostgreSQL `users` and
+`sessions` repositories and password pepper. Administrators can edit; USER
+accounts are read-only. Account roles and userId come from the database, not
+the browser. There is no default password or token fallback in account mode.
+Provision the initial administrator explicitly through the shared users
+repository; never reset an existing account as a deployment side effect.
+
+For an authorized reverse-proxy deployment, set
+`A2FLOW_MANAGEMENT_BROWSER_ORIGIN` and the comma-separated
+`A2FLOW_MANAGEMENT_BROWSER_ORIGINS` allowlist. The default remains the local
+SSH origin. Use HTTPS for public password authentication; do not mix HTTP and
+HTTPS origins in one authentication host. Legacy preview deployments remain
+separate and are not migrated by this configuration.
 
 Acceptance must use the real M page: save/validate/publish an Application edit,
 confirm its component references are registered, then invoke the bound Skill in
