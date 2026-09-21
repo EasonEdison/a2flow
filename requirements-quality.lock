@@ -1,0 +1,9 @@
+annotated-types==0.8.0
+mypy==1.18.2
+mypy_extensions==1.1.0
+pathspec==1.1.1
+pydantic==2.13.5
+pydantic_core==2.46.5
+ruff==0.13.2
+typing-inspection==0.4.4
+typing_extensions==4.16.0
