@@ -12,6 +12,7 @@ from .dependencies import DependencyService
 from .features.skill import create_skill_feature
 from .http import create_app
 from .publication import PublicationService
+from .releases import ReleaseService
 from .service import ManagementService
 
 
@@ -22,7 +23,8 @@ class ManagementAssembly:
     app: object
 
 
-def create_management_app(*, reader, drafts, namespace, identity_resolver):
+def create_management_app(*, reader, drafts, namespace, identity_resolver,
+                          release_repositories=None):
     """Compose one service/app; performs no I/O and starts no listener."""
     expected_namespace = validate_namespace(namespace)
     if getattr(reader, "namespace", None) != expected_namespace:
@@ -50,6 +52,10 @@ def create_management_app(*, reader, drafts, namespace, identity_resolver):
     service = ManagementService(features)
     publications = PublicationService(repository, expected_namespace)
     dependencies = DependencyService(repository, drafts, expected_namespace)
+    repositories = dict(release_repositories or {})
+    repositories[reader_environment] = repository
+    releases = ReleaseService(
+        service, repositories, expected_namespace, reader_environment)
 
     def environment_identity(scope):
         identity = identity_resolver(scope)
@@ -61,4 +67,5 @@ def create_management_app(*, reader, drafts, namespace, identity_resolver):
     return ManagementAssembly(
         service, publications,
         create_app(service, identity_resolver=environment_identity,
-                   publications=publications, dependencies=dependencies))
+                   publications=publications, dependencies=dependencies,
+                   releases=releases))

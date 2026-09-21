@@ -177,12 +177,20 @@ class ManagementPreviewConfig:
     static_directory: str | None = None
     browser_origin: str | None = None
     guest_user_id: int | None = None
+    online_database: str | None = None
+    online_conninfo: str | None = field(default=None, repr=False)
 
     def __post_init__(self):
         if type(self.conninfo) is not str or not self.conninfo:
             raise RuntimeError("EXPLICIT_DATABASE_CONNECTION_REQUIRED")
         if type(self.database) is not str or not self.database:
             raise RuntimeError("EXACT_DATABASE_REQUIRED")
+        if self.online_database is not None:
+            if (not self.online_database or self.environment != "PRT"
+                    or self.online_database == self.database):
+                raise RuntimeError("RELEASE_DATABASES_MUST_BE_SEPARATE")
+        elif self.online_conninfo is not None:
+            raise RuntimeError("ONLINE_DATABASE_NAME_REQUIRED")
         if type(self.namespace) is not str or not self.namespace:
             raise RuntimeError("EXACT_NAMESPACE_REQUIRED")
         TrustedManagementContext(
@@ -229,6 +237,8 @@ class ManagementPreviewConfig:
             static_directory=_required("A2FLOW_MANAGEMENT_STATIC_DIRECTORY"),
             browser_origin=_required("A2FLOW_MANAGEMENT_BROWSER_ORIGIN"),
             guest_user_id=None if guest_user_id is None else user_id_from_wire(guest_user_id),
+            online_database=os.environ.get("A2FLOW_MANAGEMENT_ONLINE_DATABASE_NAME"),
+            online_conninfo=os.environ.get("A2FLOW_MANAGEMENT_ONLINE_DATABASE_URL"),
         )
 
 
@@ -485,11 +495,21 @@ def create_management_preview_host(config, *, validator, bearer_token,
         database=config.database,
     )
     identity = authentication or _PreviewAuthentication(token_pairs, config.browser_origin)
+    release_repositories = {}
+    if config.online_database is not None:
+        from psycopg.conninfo import make_conninfo
+        online_conninfo = config.online_conninfo or make_conninfo(
+            config.conninfo, dbname=config.online_database)
+        release_repositories["ONLINE"] = PostgresAssetRepository(
+            online_conninfo, environment="ONLINE",
+            database=config.online_database, validator=validator)
+
     assembly = create_management_app(
         reader=reader,
         drafts=drafts,
         namespace=config.namespace,
         identity_resolver=identity,
+        release_repositories=release_repositories,
     )
     if config.static_directory is not None:
         if authentication is None:

@@ -258,6 +258,13 @@ class PostgresAssetRepository:
             ns, kind, key, target["versionId"], target,
             expected_serving_digest, candidate=candidate, status="PUBLISHED")
 
+    def check_candidate(self, ns, kind, key, candidate, target,
+                        expected_serving_digest):
+        """Validate the exact publication transaction without writing rows."""
+        return self._change_serving(
+            ns, kind, key, target["versionId"], target,
+            expected_serving_digest, candidate=candidate, status="CHECKED", dry_run=True)
+
     def rollback_configuration(self, ns, kind, key, version_id, target,
                                expected_serving_digest):
         """Select a retained version; this never compensates business effects."""
@@ -266,7 +273,7 @@ class PostgresAssetRepository:
             candidate=None, status="ROLLED_BACK")
 
     def _change_serving(self, ns, kind, key, version_id, target,
-                        expected_serving_digest, *, candidate, status):
+                        expected_serving_digest, *, candidate, status, dry_run=False):
         ns = namespace(ns)
         kind, key = self._asset_key(kind, key)
         if (type(expected_serving_digest) is not str
@@ -353,6 +360,9 @@ class PostgresAssetRepository:
                     proposed, expected_namespace=ns,
                     expected_environment=self.environment)
                 self._validate_serving_closure(proposed)
+                if dry_run:
+                    return {"status": "PREPARED_NOT_PUBLISHED", "published": False,
+                            "expectedServingDigest": expected_serving_digest}
 
                 if candidate is not None and identity not in {
                         (item["kind"], item["key"], item["versionId"])

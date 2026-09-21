@@ -70,6 +70,10 @@ class RollbackSelection(_Closed):
     target: Target
 
 
+class ReleaseCandidate(PublishCandidate):
+    expectedRevision: int = Field(ge=0)
+
+
 def _error(status, code):
     return JSONResponse({"error": {"code": code}}, status_code=status)
 
@@ -124,7 +128,8 @@ class BodyLimit:
         await self.app(scope, replay, send)
 
 
-def create_app(service, *, identity_resolver, publications=None, dependencies=None):
+def create_app(service, *, identity_resolver, publications=None, dependencies=None,
+               releases=None):
     """Create an app without starting a listener.
 
     identity_resolver receives the server ASGI scope and must return an already
@@ -187,6 +192,37 @@ def create_app(service, *, identity_resolver, publications=None, dependencies=No
     @app.get("/management/assets/SKILL/{key:path}/workspace")
     def workspace(request: Request, key: str):
         return _response(service.skill_workspace(context(request), key_value(key), "get"))
+
+    if releases is not None:
+        @app.get("/management/release-targets")
+        def release_targets(request: Request):
+            return _response(releases.targets(context(request)))
+
+        @app.get("/management/release-targets/{environment}/assets/{kind}/{key:path}/versions")
+        def release_versions(request: Request, environment: str, kind: str, key: str):
+            return _response(releases.history(
+                context(request), environment, kind, key_value(key)))
+
+        @app.post("/management/release-targets/{environment}/assets/{kind}/{key:path}/publication-checks")
+        def release_check(request: Request, environment: str, kind: str, key: str,
+                          body: PreparePublication):
+            target = PublicationTarget(
+                body.target.environment, body.target.versionId,
+                body.target.channel, tuple(body.target.grayUserIds))
+            return _response(releases.check(
+                context(request), environment, kind, key_value(key),
+                body.expectedRevision, target))
+
+        @app.post("/management/release-targets/{environment}/assets/{kind}/{key:path}/publications")
+        def release_publish(request: Request, environment: str, kind: str, key: str,
+                            body: ReleaseCandidate):
+            target = PublicationTarget(
+                body.target.environment, body.target.versionId,
+                body.target.channel, tuple(body.target.grayUserIds))
+            return _response(releases.publish(
+                context(request), environment, kind, key_value(key),
+                body.expectedRevision, target, body.candidate,
+                body.expectedServingDigest))
 
     @app.put("/management/assets/SKILL/{key:path}/workspace/file")
     def workspace_file(request: Request, key: str, body: WorkspaceFile):
