@@ -7,7 +7,6 @@ resolves the session cookie itself, exactly like the management preview host.
 from __future__ import annotations
 
 import datetime as dt
-import hmac
 from dataclasses import dataclass
 from typing import Callable
 from skillweave_contracts.user_id import require_user_id
@@ -44,10 +43,10 @@ def parse_session_token(cookie_value: str | None) -> str | None:
     return token
 
 
-def require_origin(headers, browser_origin: str) -> None:
+def require_origin(headers, browser_origin: str | tuple[str, ...]) -> None:
     origins = headers.getlist("origin")
-    if len(origins) != 1 or not hmac.compare_digest(
-            origins[0], browser_origin):
+    allowed = (browser_origin,) if isinstance(browser_origin, str) else browser_origin
+    if len(origins) != 1 or origins[0] not in allowed:
         raise BsideError("ORIGIN_REQUIRED", 403)
 
 
