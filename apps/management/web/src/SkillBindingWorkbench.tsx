@@ -40,7 +40,7 @@ function BindingSection({ kind, values, document, disabled, references, onChange
   }
 
   return <section className="binding-section" aria-label={config.title}>
-    <header><div><h4>{config.title}绑定</h4><span>{rows.length} 个绑定 · {availableCount}</span></div><small>修改后点击下方“保存草稿”，刷新后仍保留。</small></header>
+    <header><div><h4>{config.title}绑定</h4><span>{rows.length} 个绑定 · {availableCount}</span></div><small>绑定与解绑立即保存到数据库草稿及关系表，已发布版本不受影响。</small></header>
     <p className="binding-explanation">{kind === 'ABILITY' ? '选择 Skill 可以调用的业务能力。当前支持仅执行；展示内容通过“渲染组件”绑定 Application。' : '选择 Skill 可以渲染的 A2UI Application。基础组件在组件中心管理，不直接绑定到 Skill。'}绑定不会自动改写 Skill 指令。</p>
     <div className="binding-columns">
       <div className="binding-catalog">
@@ -65,7 +65,7 @@ function BindingSection({ kind, values, document, disabled, references, onChange
       </div>
       <div className="binding-current">
         <h5>当前 Skill 已绑定{config.title} <span className="binding-badge">{rows.length} 个</span></h5>
-        {!list ? <div className="binding-state error">{config.field} 类型异常，原值已保留；请在完整 JSON 模式修复。</div> : null}
+        {!list ? <div className="binding-state error">{config.field} 类型异常，原值已保留；请重新加载草稿并核对数据。</div> : null}
         {list && rows.length === 0 ? <p className="binding-state">尚未绑定。</p> : null}
         {rows.map((row) => <article className={`binding-card bound ${row.status}`} key={row.identity}>
           {row.asset ? <AssetEvidence asset={row.asset} /> : <>
