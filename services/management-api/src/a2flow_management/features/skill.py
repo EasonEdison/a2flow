@@ -48,6 +48,14 @@ def _verified(material):
         (material.instruction_entry, *material.resource_entries))
 
 
+def _required_tools(document):
+    """Host tool requirements are platform-derived, never author-managed grants."""
+    return [tool for field, tool in (
+        ("abilityBindings", "execute_ability"),
+        ("applicationBindings", "render_application"),
+    ) if document.get(field)]
+
+
 def _entry(handle, path, media_type, raw):
     return {
         "handleId": handle, "logicalPath": path, "mediaType": media_type,
@@ -147,11 +155,16 @@ class SkillManagementFeature(SkillWorkspaceMixin, ManagementFeature):
     def save_draft(self, context, key, expected_revision, document):
         parse_skill_key(key)
         self._draft_context(context)
+        # Accept legacy clients/drafts but discard their authored tool selection.
+        if type(document) is dict:
+            document = {**document, "requiredToolNames": _required_tools(document)}
         candidate = ManagedDraft.create(
             self.kind, key, 1, document, context.user_id)
         return self.drafts.save(self.namespace, candidate, expected_revision)
 
     def _validate_document(self, document, context):
+        if type(document) is dict:
+            document = {**document, "requiredToolNames": _required_tools(document)}
         _closed(document, _DRAFT_KEYS)
         _closed(document["metadata"], {"name", "description"}, "INVALID_METADATA")
         for value in document["metadata"].values():

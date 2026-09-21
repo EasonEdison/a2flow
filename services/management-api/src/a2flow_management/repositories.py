@@ -3,8 +3,12 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 import copy
 import hashlib
+import json
 
 from .contracts import ManagedDraft, ManagementError, identifier
+from .relations import (
+    RELATION_DDL, draft_relations, list_relations, replace_draft_relations,
+)
 
 _DDL = (
     "CREATE TABLE IF NOT EXISTS a2flow_management_drafts "
@@ -34,7 +38,7 @@ class MemoryDraftRepository(DraftRepository):
     def __init__(self, environment):
         if environment not in {"PRT", "ONLINE"}:
             raise ManagementError("INVALID_TRUSTED_ENVIRONMENT")
-        self._environment, self._rows = environment, {}
+        self._environment, self._rows, self._relations = environment, {}, {}
 
     @property
     def environment(self):
@@ -61,8 +65,18 @@ class MemoryDraftRepository(DraftRepository):
             raise ManagementError("DRAFT_REVISION_CONFLICT", 409)
         saved = ManagedDraft.create(
             draft.kind, draft.key, actual + 1, draft.document, draft.updated_by)
+        relations = draft_relations(namespace, saved, saved.revision)
         self._rows[identity] = copy.deepcopy(saved)
+        self._relations[(*identity, saved.revision)] = relations
         return saved
+
+    def list_relations(self, namespace, kind, key, revision=None):
+        if revision is None:
+            draft = self.get(namespace, kind, key)
+            if draft is None:
+                return ()
+            revision = draft.revision
+        return copy.deepcopy(self._relations.get((namespace, kind, key, revision), ()))
 
     def commit_workspace(self, namespace, draft, expected_revision,
                          workspace_namespace, workspace, expected_workspace_revision):
@@ -72,6 +86,9 @@ class MemoryDraftRepository(DraftRepository):
             raise ManagementError("WORKSPACE_REVISION_CONFLICT", 409)
         if (current.revision if current else 0) != expected_revision:
             raise ManagementError("WORKSPACE_BASE_DRAFT_CONFLICT", 409)
+        # Validate both projections before mutating either in-memory record.
+        draft_relations(namespace, draft, expected_revision + 1)
+        draft_relations(workspace_namespace, workspace, expected_workspace_revision + 1)
         return (self.save(namespace, draft, expected_revision),
                 self.save(workspace_namespace, workspace, expected_workspace_revision))
 
@@ -123,8 +140,25 @@ class PostgresDraftRepository(DraftRepository):
         with self._connection() as connection:
             with connection.transaction():
                 connection.execute("SELECT pg_advisory_xact_lock(%s)", (78080302,))
-                for statement in _DDL:
+                for statement in (*_DDL, *RELATION_DDL):
                     connection.execute(statement)
+                # Lock current drafts so a concurrent binding save cannot leave a
+                # backfilled relation snapshot attached to the wrong revision.
+                rows = connection.execute(
+                    "SELECT namespace,kind,asset_key,revision,document,updated_by "
+                    "FROM a2flow_management_drafts FOR UPDATE"
+                ).fetchall()
+                for namespace, kind, key, revision, document, updated_by in rows:
+                    draft = ManagedDraft.create(
+                        kind, key, revision, json.loads(bytes(document)), updated_by)
+                    replace_draft_relations(connection, namespace, draft, revision)
+
+    def list_relations(self, namespace, kind, key, revision=None):
+        identifier(namespace, "INVALID_NAMESPACE")
+        if revision is not None and (type(revision) is not int or revision < 1):
+            raise ManagementError("INVALID_EXPECTED_REVISION")
+        with self._connection() as connection:
+            return list_relations(connection, namespace, kind, key, revision)
 
     def get(self, namespace, kind, key):
         identifier(namespace, "INVALID_NAMESPACE")
@@ -178,6 +212,7 @@ class PostgresDraftRepository(DraftRepository):
                 row = self._insert(connection, namespace, draft)
                 if row is None:
                     raise ManagementError("DRAFT_REVISION_CONFLICT", 409)
+                replace_draft_relations(connection, namespace, draft, row[0])
                 return ManagedDraft.create(
                     draft.kind, draft.key, row[0], draft.document, draft.updated_by)
 
@@ -211,6 +246,7 @@ class PostgresDraftRepository(DraftRepository):
                          expected_revision)).fetchone()
                 if row is None:
                     raise ManagementError("DRAFT_REVISION_CONFLICT", 409)
+                replace_draft_relations(connection, namespace, draft, row[0])
                 return ManagedDraft.create(
                     draft.kind, draft.key, row[0], draft.document, draft.updated_by)
 
@@ -246,6 +282,7 @@ class PostgresDraftRepository(DraftRepository):
                          namespace, draft.kind, draft.key, expected_revision)).fetchone()
                 if saved is None:
                     raise ManagementError("WORKSPACE_BASE_DRAFT_CONFLICT", 409)
+                replace_draft_relations(connection, namespace, draft, saved[0])
                 return (
                     ManagedDraft.create(draft.kind, draft.key, saved[0],
                                         draft.document, draft.updated_by),
