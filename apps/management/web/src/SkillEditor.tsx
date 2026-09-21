@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { isEditableRecord, skillFrontmatterMismatch, updatePath } from './form-editor-state';
 import { Field, MalformedValue, Section, type FormProps } from './EditorControls';
 import { SkillBindingWorkbench } from './SkillBindingWorkbench';
+import type { SkillDraftDocument } from './asset-drafts';
 
-export function SkillEditor(props: FormProps) {
+export function SkillEditor(props: FormProps<SkillDraftDocument>) {
   const { document, disabled, onChange, references, onNavigateReference } = props;
   const [localStage, setStage] = useState('overview');
   const stage = props.skillStage ?? localStage;

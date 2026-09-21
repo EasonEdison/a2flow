@@ -6,16 +6,17 @@ execute JavaScript; the renderer-owned manifest below remains authoritative.
 
 import hashlib
 
-from a2flow_asset_store.records import canonical as asset_canonical, digest
+from a2flow_asset_store.records import canonical as asset_canonical
+from a2flow_asset_store.records import digest
 from a2flow_management import (
     ManagedDraft,
     ManagementError,
     ManagementFeature,
     PublicationPlan,
     ValidationReport,
+    parse_draft_structure,
 )
 from skillweave_contracts import TrustedContext, parse_identifier
-
 
 _IMPLEMENTED_COMPONENTS = {
     "Button": {
@@ -40,16 +41,22 @@ _IMPLEMENTED_PROTOCOL = "a2flow.mvp08.v1"
 
 def implemented_component_declarations():
     """Return detached renderer contracts for the M-side catalog editor."""
-    return tuple({
-        "name": name,
-        "fields": list(contract["fields"]),
-        "purpose": contract["purpose"],
-    } for name, contract in sorted(_IMPLEMENTED_COMPONENTS.items()))
+    return tuple(
+        {
+            "name": name,
+            "fields": list(contract["fields"]),
+            "purpose": contract["purpose"],
+        }
+        for name, contract in sorted(_IMPLEMENTED_COMPONENTS.items())
+    )
 
 
 def validate_component_definition(key, definition):
     if type(definition) is not dict or set(definition) != {
-            "catalogKey", "protocolProfileRef", "components"}:
+        "catalogKey",
+        "protocolProfileRef",
+        "components",
+    }:
         raise ManagementError("INVALID_COMPONENT_CATALOG")
     if definition["catalogKey"] != key:
         raise ManagementError("COMPONENT_CATALOG_KEY_MISMATCH")
@@ -58,9 +65,12 @@ def validate_component_definition(key, definition):
     if definition["protocolProfileRef"] != _IMPLEMENTED_PROTOCOL:
         raise ManagementError("UNSUPPORTED_COMPONENT_PROTOCOL")
     components = definition["components"]
-    if (type(components) is not list or not components
-            or len(components) > len(_IMPLEMENTED_COMPONENTS)
-            or any(type(name) is not str for name in components)):
+    if (
+        type(components) is not list
+        or not components
+        or len(components) > len(_IMPLEMENTED_COMPONENTS)
+        or any(type(name) is not str for name in components)
+    ):
         raise ManagementError("INVALID_COMPONENT_DECLARATIONS")
     if len(components) != len(set(components)):
         raise ManagementError("INVALID_COMPONENT_DECLARATIONS")
@@ -88,21 +98,21 @@ def validate_catalog_compatibility(application, catalog, component_names=None):
         components = template.get("components") if type(template) is dict else None
         if type(components) is not list:
             raise ManagementError("APPLICATION_COMPONENT_CATALOG_INVALID")
-        component_names = {item.get("component") for item in components
-                           if type(item) is dict}
+        component_names = {item.get("component") for item in components if type(item) is dict}
     if not set(component_names) <= set(normalized["components"]):
         raise ManagementError("APPLICATION_COMPONENT_NOT_REGISTERED")
     return True
 
 
 def _component_document(key, document):
-    if (type(document) is not dict
-            or set(document) != {"definition", "dependencies"}
-            or document.get("dependencies") != []):
+    if (
+        type(document) is not dict
+        or set(document) != {"definition", "dependencies"}
+        or document.get("dependencies") != []
+    ):
         raise ManagementError("INVALID_COMPONENT_DRAFT_FIELDS")
     return {
-        "definition": validate_component_definition(
-            key, document.get("definition")),
+        "definition": validate_component_definition(key, document.get("definition")),
         "dependencies": [],
     }
 
@@ -124,16 +134,14 @@ class ComponentCatalogManagementFeature(ManagementFeature):
     def _published(self, context, key):
         parse_identifier(key)
         try:
-            return self.reader.resolve_asset(
-                self.kind, key, self._runtime_context(context))
+            return self.reader.resolve_asset(self.kind, key, self._runtime_context(context))
         except Exception as error:
             if getattr(error, "code", None) == "ASSET_NOT_FOUND":
                 raise ManagementError("COMPONENT_CATALOG_NOT_FOUND", 404) from None
             raise
 
     def list_published(self, context):
-        return self.reader.list_assets(
-            self.kind, self._runtime_context(context))
+        return self.reader.list_assets(self.kind, self._runtime_context(context))
 
     def get_published(self, context, key):
         published = self._published(context, key)
@@ -158,11 +166,15 @@ class ComponentCatalogManagementFeature(ManagementFeature):
         if draft is not None:
             return draft
         return ManagedDraft.create(
-            self.kind, key, 0, {
+            self.kind,
+            key,
+            0,
+            {
                 "definition": self._published(context, key)["definition"],
                 "dependencies": [],
             },
-            context.user_id)
+            context.user_id,
+        )
 
     def create_draft(self, context, key):
         parse_identifier(key)
@@ -171,35 +183,38 @@ class ComponentCatalogManagementFeature(ManagementFeature):
             raise ManagementError("DRAFT_ALREADY_EXISTS", 409)
         if self.reader.asset_exists(self.kind, key, self._runtime_context(context)):
             raise ManagementError("ASSET_ALREADY_EXISTS", 409)
-        draft = ManagedDraft.create(self.kind, key, 1, {
-            "definition": {
-                "catalogKey": key,
-                "protocolProfileRef": "",
-                "components": [],
+        draft = ManagedDraft.create(
+            self.kind,
+            key,
+            1,
+            {
+                "definition": {
+                    "catalogKey": key,
+                    "protocolProfileRef": "",
+                    "components": [],
+                },
+                "dependencies": [],
             },
-            "dependencies": [],
-        }, context.user_id)
+            context.user_id,
+        )
         return self.drafts.create(self.namespace, draft)
 
     def save_draft(self, context, key, expected_revision, document):
         parse_identifier(key)
         self._draft_context(context)
-        document = _component_document(key, document)
-        draft = ManagedDraft.create(
-            self.kind, key, 0, document, context.user_id)
+        parse_draft_structure("COMPONENT", key, document)
+        draft = ManagedDraft.create(self.kind, key, 0, document, context.user_id)
         return self.drafts.save(self.namespace, draft, expected_revision)
 
     def _validate_snapshot(self, draft):
         try:
             document = _component_document(draft.key, draft.document)
             definition = document["definition"]
-            self.reader.repository.validator.validate_definition(
-                self.kind, draft.key, definition)
+            self.reader.repository.validator.validate_definition(self.kind, draft.key, definition)
         except ManagementError as error:
             return ValidationReport.failure(error.code)
         except Exception as error:
-            return ValidationReport.failure(
-                getattr(error, "code", "INVALID_COMPONENT_CATALOG"))
+            return ValidationReport.failure(getattr(error, "code", "INVALID_COMPONENT_CATALOG"))
         return ValidationReport.success(document)
 
     def validate_draft(self, context, key):
@@ -214,9 +229,11 @@ class ComponentCatalogManagementFeature(ManagementFeature):
 
     def retained_comparison_document(self, context, key, document):
         parse_identifier(key)
-        if (type(document) is not dict
-                or type(document.get("definition")) is not dict
-                or document.get("dependencies") != []):
+        if (
+            type(document) is not dict
+            or type(document.get("definition")) is not dict
+            or document.get("dependencies") != []
+        ):
             raise ManagementError("RETAINED_VERSION_NOT_COMPARABLE", 409)
         return {
             "definition": document["definition"],
@@ -247,8 +264,7 @@ class ComponentCatalogManagementFeature(ManagementFeature):
             "dependencies": report.normalized["dependencies"],
         }
         candidate = {**value, "contentDigest": digest(asset_canonical(value))}
-        return PublicationPlan.create(
-            self.kind, key, draft.revision, target, candidate)
+        return PublicationPlan.create(self.kind, key, draft.revision, target, candidate)
 
 
 def create_component_feature(reader, drafts, namespace):

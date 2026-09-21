@@ -703,6 +703,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .detail-tabs button:hover { color: var(--description); }
 .detail-tabs button.active { color: var(--primary); font-weight: 600; }
 .detail-tabs button.active::after { position: absolute; right: 18px; bottom: -1px; left: 18px; height: 2px; background: var(--primary); content: ""; }
+.debug-entry-card { display: grid; gap: 20px; }
+.debug-entry-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.debug-entry-actions a { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .detail-tab-panel { display: none; }
 .detail-tab-panel.active { display: block; }
 .detail-tab-panel > * + * { margin-top: 16px; }

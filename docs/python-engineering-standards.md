@@ -18,6 +18,10 @@ Pydantic belongs at an untrusted transport boundary. Domain validation remains i
 
 Pydantic 只放在不可信传输边界。领域校验继续由领域构造器负责，使 HTTP、CLI、测试和内部调用共享同一套规则与错误码。
 
+Management drafts are a special stored-input boundary. Their Pydantic models validate identity, field containers, relation-bearing values, and prohibited material before repository I/O, but they do not normalize or replace the submitted JSON document. An author may save a structurally safe yet incomplete draft; publishability remains the responsibility of the asset validator. Unknown extension fields are preserved unless the asset contract explicitly forbids them. Stable management error codes must survive the migration from manual dictionary inspection to typed models.
+
+管理草稿是一类特殊的持久化输入边界。对应的 Pydantic 模型在写仓库前校验身份、字段容器、关联字段与禁止写入的内容，但不得把提交的 JSON 重新导出后替换原文。作者可以保存结构安全但尚不完整的草稿；能否发布仍由各资产校验器判断。除非资产契约明确禁止，未知扩展字段必须保留。从手写字典检查迁移到类型模型时，既有管理错误码必须保持稳定。
+
 ## 2. Shared asset kernel / 统一资产内核
 
 - Asset kinds use one shared identity: `SKILL`, `ABILITY`, `COMPONENT`, `APPLICATION`, and `WORKFLOW`.

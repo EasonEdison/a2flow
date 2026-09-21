@@ -10,6 +10,7 @@ from skillweave_contracts import ASSET_KINDS, AssetKind, parse_identifier, parse
 
 from .contracts import ManagedDraft, ManagementError
 from .db_types import DatabaseConnection
+from .draft_models import draft_reference_targets
 
 RelationType: TypeAlias = Literal[
     "SKILL_ABILITY",
@@ -59,72 +60,13 @@ def _relation_type(source: AssetKind, target: AssetKind) -> RelationType:
     return cast(RelationType, value)
 
 
-def _string_list(value: object, *, code: str, limit: int) -> list[str]:
-    if type(value) is not list or len(value) > limit:
-        raise ManagementError(code)
-    if any(type(item) is not str for item in value):
-        raise ManagementError(code)
-    return cast(list[str], value)
-
-
 def _binding_targets(draft: ManagedDraft) -> tuple[RelationTarget, ...]:
-    ability_kind: AssetKind = "ABILITY"
-    application_kind: AssetKind = "APPLICATION"
-    component_kind: AssetKind = "COMPONENT"
-    skill_kind: AssetKind = "SKILL"
-    if draft.kind == "SKILL":
-        groups: list[tuple[AssetKind, list[str]]] = [
-            (
-                kind,
-                _string_list(draft.document.get(field, []), code="INVALID_BINDINGS", limit=64),
-            )
-            for field, kind in (
-                ("abilityBindings", ability_kind),
-                ("applicationBindings", application_kind),
-            )
-        ]
-    elif draft.kind == "APPLICATION":
-        dependencies = draft.document.get("dependencies", [])
-        if type(dependencies) is not list or len(dependencies) > 128:
-            raise ManagementError("INVALID_DEPENDENCIES")
-        groups = [(kind, []) for kind in (ability_kind, component_kind)]
-        by_kind: dict[AssetKind, list[str]] = dict(groups)
-        for item in dependencies:
-            if (
-                type(item) is not dict
-                or set(item) != {"kind", "key"}
-                or type(item.get("kind")) is not str
-                or item.get("kind") not in by_kind
-                or type(item.get("key")) is not str
-            ):
-                raise ManagementError("INVALID_DEPENDENCIES")
-            dependency = cast(dict[str, object], item)
-            by_kind[cast(AssetKind, dependency["kind"])].append(cast(str, dependency["key"]))
-    elif draft.kind == "WORKFLOW":
-        nodes = draft.document.get("nodes", [])
-        if type(nodes) is not list or len(nodes) > 64:
-            raise ManagementError("INVALID_WORKFLOW_NODES")
-        values: list[str] = []
-        for node in nodes:
-            if (
-                type(node) is not dict
-                or "skillKey" not in node
-                or type(node.get("skillKey")) is not str
-            ):
-                raise ManagementError("INVALID_WORKFLOW_NODE")
-            skill_key = cast(str, node["skillKey"])
-            try:
-                parse_skill_key(skill_key)
-            except ValueError:
-                raise ManagementError("INVALID_WORKFLOW_NODE") from None
-            if skill_key not in values:
-                values.append(skill_key)
-        groups = [(skill_kind, values)]
-    else:
-        # Ability and Component currently declare no outgoing asset references.
-        groups = []
+    references = draft_reference_targets(draft.kind, draft.document)
+    groups: dict[AssetKind, list[str]] = {}
+    for kind, key in references:
+        groups.setdefault(kind, []).append(key)
     result: list[RelationTarget] = []
-    for kind, values in groups:
+    for kind, values in groups.items():
         limit = 128 if draft.kind == "APPLICATION" else 64
         if len(values) > limit:
             raise ManagementError("INVALID_BINDINGS")
@@ -132,7 +74,8 @@ def _binding_targets(draft: ManagedDraft) -> tuple[RelationTarget, ...]:
             try:
                 (parse_skill_key if kind == "SKILL" else parse_identifier)(value)
             except ValueError:
-                raise ManagementError("INVALID_BINDINGS") from None
+                code = "INVALID_WORKFLOW_NODE" if draft.kind == "WORKFLOW" else "INVALID_BINDINGS"
+                raise ManagementError(code) from None
         if len(set(values)) != len(values):
             raise ManagementError("INVALID_BINDINGS")
         result.extend((kind, key, _relation_type(draft.kind, kind)) for key in values)

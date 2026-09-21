@@ -9,6 +9,7 @@ import { filterAssets } from './asset-filter';
 import { FormEditor } from './FormEditors';
 import { SkillFileWorkspace } from './SkillFileWorkspace';
 import { saveBodyIssue } from './skill-resource-state';
+import { draftStructureIssue } from './asset-drafts';
 import {
   applyPendingField, createPendingFieldState, discardPendingField, editPendingField, inspectDraftText,
   pendingFieldConflict, reconcilePendingFields, type PendingFields,
@@ -40,12 +41,13 @@ type Buffers = Record<string, DraftBuffer>;
 type PendingBuffers = Record<string, PendingFields>;
 type PendingResourceBuffers = Record<string, PendingResourceEdits>;
 type PreviewBuffers = Record<string, ApplicationPreviewState>;
-type DetailTab = 'BASIC' | 'EDIT' | 'RELEASE' | 'DEPENDENCIES' | 'HISTORY';
+type DetailTab = 'BASIC' | 'EDIT' | 'RELEASE' | 'DEBUG' | 'DEPENDENCIES' | 'HISTORY';
 
 const DETAIL_TABS: { id: DetailTab; label: string }[] = [
   { id: 'BASIC', label: '基础信息' },
   { id: 'EDIT', label: '编辑' },
   { id: 'RELEASE', label: '打包发布' },
+  { id: 'DEBUG', label: '调试页面' },
   { id: 'DEPENDENCIES', label: '依赖与血缘' },
   { id: 'HISTORY', label: '版本历史' },
 ];
@@ -997,7 +999,7 @@ function App() {
     setPendingBuffers((current) => ({ ...current, [activeBufferId]: result.pending }));
   }
 
-  async function saveDraft(nextText?: string) {
+  async function saveDraft(nextText?: string, reason: 'draft' | 'binding' = 'draft') {
     if (!kind || !selectedKey || !activeBufferId || !buffer) return;
     const submittedText = nextText ?? buffer.text;
     setActionBusy(true);
@@ -1006,6 +1008,10 @@ function App() {
       const document = JSON.parse(submittedText) as JsonObject;
       if (!document || Array.isArray(document) || typeof document !== 'object') {
         throw new SyntaxError('DRAFT_MUST_BE_OBJECT');
+      }
+      const structureIssue = draftStructureIssue(kind, document);
+      if (structureIssue) {
+        throw new Error(`${structureIssue.path} · ${structureIssue.message}`);
       }
       const saved = await managementApi.saveDraft(kind, selectedKey, buffer.revision, document);
       setBuffers((current) => ({
@@ -1016,6 +1022,9 @@ function App() {
         current, 'SAVED_DRAFT_CHANGED'));
       setValidation(null);
       setPlan(null);
+      setSuccessMessage(reason === 'binding'
+        ? `绑定关系已保存至草稿修订 #${saved.revision}，关系快照以服务端返回为准。`
+        : `草稿已保存至修订 #${saved.revision}。`);
     } catch (error) {
       const conflict = error instanceof ManagementApiError && error.code === 'DRAFT_REVISION_CONFLICT';
       if (conflict) {
@@ -1261,7 +1270,9 @@ function App() {
                 aria-selected={detailTab === 'EDIT' && skillStage === stage}
                 className={detailTab === 'EDIT' && skillStage === stage ? 'active' : ''}
                 onClick={() => { setSkillStage(stage); setDetailTab('EDIT'); }}>{label}</button>) : null}
-              {DETAIL_TABS.filter((tab) => !(kind === 'SKILL' && session.canAuthor && ['BASIC', 'EDIT'].includes(tab.id))).map((tab) => (
+              {DETAIL_TABS.filter((tab) =>
+                (tab.id !== 'DEBUG' || kind === 'SKILL') &&
+                !(kind === 'SKILL' && session.canAuthor && ['BASIC', 'EDIT'].includes(tab.id))).map((tab) => (
                 <button
                   type="button"
                   role="tab"
@@ -1275,6 +1286,21 @@ function App() {
                   {tab.label}
                 </button>
               ))}
+            </div>
+            <div
+              className={detailTab === 'DEBUG' ? 'detail-tab-panel active' : 'detail-tab-panel'}
+              role="tabpanel"
+              id="detail-panel-debug"
+              aria-labelledby="detail-tab-debug"
+              aria-hidden={detailTab !== 'DEBUG'}
+            >
+              {kind === 'SKILL' ? <section className="detail-card debug-entry-card">
+                <div className="card-heading"><h2>运行态调试</h2><span>使用当前环境已发布的 Skill；不会把未保存草稿伪装成运行结果。</span></div>
+                <div className="debug-entry-actions">
+                  <a className="primary-button" href="/employee/" target="_blank" rel="noreferrer">打开数字员工调试页</a>
+                  <button className="quiet-button" type="button" onClick={() => setDetailTab('DEPENDENCIES')}>查看依赖与血缘</button>
+                </div>
+              </section> : null}
             </div>
             <div
               className={detailTab === 'BASIC' ? 'detail-tab-panel active' : 'detail-tab-panel'}
@@ -1336,7 +1362,7 @@ function App() {
                     references={references}
                     onEdit={(text) => {
                       editDraft(text);
-                      if (kind === 'SKILL' && ['abilities', 'applications'].includes(skillStage)) void saveDraft(text);
+                      if (kind === 'SKILL' && ['abilities', 'applications'].includes(skillStage)) void saveDraft(text, 'binding');
                     }}
                     onPendingChange={changePendingField}
                     onApplyPending={applyPending}
