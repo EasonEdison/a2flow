@@ -463,7 +463,7 @@ def _attach_browser(app, authentication, static_directory):
 
 
 def create_management_preview_host(config, *, validator, bearer_token,
-                                   guest_token=None):
+                                   guest_token=None, authentication=None):
     """Build the protected ASGI Host without setup, seed, or connection attempts."""
     if type(config) is not ManagementPreviewConfig:
         raise RuntimeError("INVALID_MANAGEMENT_PREVIEW_CONFIG")
@@ -484,7 +484,7 @@ def create_management_preview_host(config, *, validator, bearer_token,
         environment=config.environment,
         database=config.database,
     )
-    identity = _PreviewAuthentication(token_pairs, config.browser_origin)
+    identity = authentication or _PreviewAuthentication(token_pairs, config.browser_origin)
     assembly = create_management_app(
         reader=reader,
         drafts=drafts,
@@ -492,7 +492,11 @@ def create_management_preview_host(config, *, validator, bearer_token,
         identity_resolver=identity,
     )
     if config.static_directory is not None:
-        _attach_browser(assembly.app, identity, config.static_directory)
+        if authentication is None:
+            _attach_browser(assembly.app, identity, config.static_directory)
+        else:
+            from .account_auth import attach_account_browser
+            attach_account_browser(assembly.app, identity, config.static_directory)
     return ManagementPreviewHost(config, reader, drafts, assembly.app)
 
 
@@ -509,6 +513,26 @@ def create_app_from_environment():
     config = ManagementPreviewConfig.from_environment()
     validator = _load_validator(
         _required("A2FLOW_MANAGEMENT_VALIDATOR_FACTORY"))
+    mode = os.environ.get("A2FLOW_MANAGEMENT_AUTH_MODE", "preview")
+    if mode == "account":
+        import psycopg
+        from psycopg.rows import dict_row
+        from a2flow_bside.repositories import UsersRepository, SessionsRepository
+        from .account_auth import AccountAuthentication
+
+        def connection():
+            return psycopg.connect(config.conninfo, row_factory=dict_row)
+
+        origins = [_browser_origin(value.strip()) for value in os.environ.get(
+            "A2FLOW_MANAGEMENT_BROWSER_ORIGINS", config.browser_origin).split(",")]
+        identity = AccountAuthentication(
+            users=UsersRepository(connection), sessions=SessionsRepository(connection),
+            pepper=_read_secret_file("A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE").decode("ascii"),
+            environment=config.environment, origins=origins)
+        return create_management_preview_host(
+            config, validator=validator, bearer_token=None, authentication=identity).app
+    if mode != "preview":
+        raise RuntimeError("INVALID_MANAGEMENT_AUTH_MODE")
     token = _read_secret_file("A2FLOW_MANAGEMENT_AUTH_TOKEN_FILE")
     guest_token = None
     if os.environ.get("A2FLOW_MANAGEMENT_GUEST_TOKEN_FILE"):
