@@ -94,6 +94,7 @@ def create_app_from_environment(*, chat_runner=None):
         workflow_catalog=workflow_catalog,
         pepper=config.pepper,
         browser_origin=config.browser_origin,
+        browser_origins=config.browser_origins,
         environment=config.environment,
         chat_runner=chat_runner if chat_runner is not None else _UnavailableChatRunner(),
         session_seconds=config.session_seconds,

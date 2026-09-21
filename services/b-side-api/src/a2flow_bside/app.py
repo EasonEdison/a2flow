@@ -195,7 +195,13 @@ def create_app(
     memory_replace=None,
     chat_cards=None,
     chat_action=None,
+    browser_origins: tuple[str, ...] = (),
 ):
+    from .config import browser_origin as validate_origin
+    allowed_origins = tuple(validate_origin(value) for value in (browser_origins or (browser_origin,)))
+    if (validate_origin(browser_origin) not in allowed_origins or
+            len({value.split(":", 1)[0] for value in allowed_origins}) != 1):
+        raise RuntimeError("INVALID_BSIDE_BROWSER_ORIGINS")
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
     dummy_hash = auth.hash_password("dummy-timing-password", pepper=pepper)
     @asynccontextmanager
@@ -253,7 +259,7 @@ def create_app(
                         "x-role", "x-roles", "x-user-id"}:
                     raise BsideError("IDENTITY_FIELDS_NOT_ALLOWED", 400)
                 if request.method in _UNSAFE_METHODS and not internal:
-                    require_origin(request.headers, browser_origin)
+                    require_origin(request.headers, allowed_origins)
             except BsideError as error:
                 return JSONResponse({"error": {"code": error.code}},
                                     status_code=error.status)

@@ -25,6 +25,7 @@ def browser_origin(value: str) -> str:
         raise RuntimeError("INVALID_BSIDE_BROWSER_ORIGIN")
     parts = urlsplit(value)
     if (parts.scheme not in {"http", "https"} or not parts.hostname
+            or "*" in parts.netloc
             or parts.username is not None or parts.password is not None
             or parts.path not in {"", "/"} or parts.query or parts.fragment):
         raise RuntimeError("INVALID_BSIDE_BROWSER_ORIGIN")
@@ -64,6 +65,15 @@ class BsideConfig:
     environment: str
     namespace: str
     session_seconds: int
+    browser_origins: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        primary = browser_origin(self.browser_origin)
+        origins = tuple(browser_origin(value) for value in (self.browser_origins or (primary,)))
+        if primary not in origins or len({value.split(":", 1)[0] for value in origins}) != 1:
+            raise RuntimeError("INVALID_BSIDE_BROWSER_ORIGINS")
+        object.__setattr__(self, "browser_origin", primary)
+        object.__setattr__(self, "browser_origins", origins)
 
     @classmethod
     def from_environment(cls):
@@ -85,4 +95,7 @@ class BsideConfig:
             namespace=namespace,
             session_seconds=session_seconds(
                 _required("A2FLOW_BSIDE_SESSION_SECONDS")),
+            browser_origins=tuple(value.strip() for value in
+                _required("A2FLOW_BSIDE_BROWSER_ORIGINS").split(","))
+                if "A2FLOW_BSIDE_BROWSER_ORIGINS" in os.environ else (),
         )
