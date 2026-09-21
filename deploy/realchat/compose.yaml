@@ -24,7 +24,6 @@ x-environment: &environment
   A2FLOW_MANAGEMENT_VALIDATOR_FACTORY: deploy.assets:bundle_validator
   A2FLOW_MANAGEMENT_USER_ID: "101"
   A2FLOW_MANAGEMENT_ROLES: ADMIN
-  A2FLOW_MANAGEMENT_AUTH_TOKEN_FILE: /run/secrets/management_auth_token
   A2FLOW_MANAGEMENT_STATIC_DIRECTORY: /opt/a2flow/static/management
   A2FLOW_MANAGEMENT_BROWSER_ORIGIN: http://127.0.0.1:14183
 
@@ -44,7 +43,6 @@ x-host: &host
     - deepseek_key
     - pepper
     - internal_token
-    - management_auth_token
   depends_on:
     postgres:
       condition: service_healthy
@@ -80,6 +78,10 @@ services:
     environment:
       <<: *environment
       A2FLOW_LISTEN_PORT: "8780"
+      A2FLOW_MANAGEMENT_AUTH_MODE: account
+      A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE: /run/secrets/pepper
+      A2FLOW_MANAGEMENT_BROWSER_ORIGIN: ${A2FLOW_MANAGEMENT_BROWSER_ORIGIN:-http://127.0.0.1:14183}
+      A2FLOW_MANAGEMENT_BROWSER_ORIGINS: ${A2FLOW_MANAGEMENT_BROWSER_ORIGINS:-http://127.0.0.1:14183}
     command: [management]
   bside:
     <<: *host
@@ -105,8 +107,6 @@ secrets:
     file: ${A2FLOW_REALCHAT_SECRETS}/pepper
   internal_token:
     file: ${A2FLOW_REALCHAT_SECRETS}/internal_token
-  management_auth_token:
-    file: ${A2FLOW_REALCHAT_SECRETS}/management_auth_token
 
 volumes:
   postgres_data:
