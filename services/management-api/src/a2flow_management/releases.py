@@ -83,6 +83,11 @@ class ReleaseService:
                 history["servingDigest"]))
         result.update(checked)
         result["preparedRevision"] = plan.draft_revision
+        result["candidateIdentity"] = {
+            "kind": plan.kind, "key": plan.key,
+            "versionId": plan.target.version_id,
+            "contentDigest": plan.content_digest,
+        }
         result["validation"] = {"valid": True, "issues": []}
         return result
 

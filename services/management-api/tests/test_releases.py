@@ -84,3 +84,32 @@ class ReleaseTests(unittest.TestCase):
                       "versionId": "v2", "channel": "STABLE", "grayUserIds": []}})
         self.assertEqual(200, response.status_code)
         self.assertEqual(("ONLINE", "SKILL", "demo/test", 3), releases.check.call_args.args[1:5])
+
+    def test_real_release_service_http_confirmation_contract(self):
+        from fastapi.testclient import TestClient
+        from a2flow_management.http import create_app
+        serving_digest = "sha256:" + "0" * 64
+        self.online.check_candidate.return_value = {
+            "status": "PREPARED_NOT_PUBLISHED", "published": False,
+            "expectedServingDigest": serving_digest,
+        }
+        # Exercise real HTTP serialization, ReleaseService.check and
+        # PublicationPlan; only the persistence and source feature ports are fakes.
+        app = create_app(self.service, identity_resolver=lambda scope: self.context,
+                         releases=self.releases)
+        with TestClient(app) as client:
+            response = client.post(
+                "/management/release-targets/ONLINE/assets/ABILITY/test/publication-checks",
+                json={"expectedRevision": 3, "target": {"environment": "ONLINE",
+                      "versionId": "v2", "channel": "STABLE", "grayUserIds": []}})
+        self.assertEqual(200, response.status_code)
+        result = response.json()
+        self.assertEqual("PREPARED_NOT_PUBLISHED", result["status"])
+        self.assertIs(False, result["published"])
+        self.assertEqual(3, result["preparedRevision"])
+        self.assertEqual(serving_digest, result["expectedServingDigest"])
+        self.assertEqual({"kind": "ABILITY", "key": "test", "versionId": "v2",
+                          "contentDigest": result["contentDigest"]},
+                         result["candidateIdentity"])
+        self.assertEqual(self.candidate, result["candidate"])
+        self.online.publish_candidate.assert_not_called()
