@@ -254,6 +254,50 @@ class AssetTests(unittest.TestCase):
         self.assertFalse(reader.asset_exists(
             "SKILL", "missing/skill", TrustedContext(104, "PRT")))
 
+    def test_empty_online_readiness_and_first_publication(self):
+        database = DatabaseDouble()
+        database.env, database.database = "ONLINE", "asset_online"
+        repository = PostgresAssetRepository(
+            "not-a-real-dsn", environment="ONLINE", database="asset_online",
+            validator=self.validator, connection_factory=database.connect)
+        self.assertEqual({"ready": True, "empty": True},
+                         repository.check_publication_ready(NAMESPACE))
+        self.assertFalse(any(sql.startswith(("INSERT", "UPDATE", "CREATE"))
+                             for sql, _ in database.calls))
+        with self.assertRaisesRegex(AssetError, "ASSET_NOT_FOUND"):
+            repository.publication_history(NAMESPACE, "COMPONENT", COMPONENT_KEY)
+        component = deepcopy(next(item for item in make_bundle("ONLINE")["assets"]
+                                  if item["kind"] == "COMPONENT"))
+        target = {"environment": "ONLINE", "versionId": component["versionId"],
+                  "channel": "STABLE", "grayUserIds": []}
+        check = repository.check_candidate(NAMESPACE, "COMPONENT", COMPONENT_KEY,
+            component, target, digest(canonical(None)))
+        self.assertFalse(check["published"])
+        self.assertEqual({}, database.assets)
+        result = repository.publish_candidate(NAMESPACE, "COMPONENT", COMPONENT_KEY,
+            component, target, digest(canonical(None)))
+        self.assertTrue(result["published"])
+        self.assertEqual(1, len(database.assets))
+        self.assertEqual({"ready": True, "empty": False},
+                         repository.check_publication_ready(NAMESPACE))
+
+    def test_empty_online_still_rejects_missing_dependencies(self):
+        database = DatabaseDouble()
+        database.env, database.database = "ONLINE", "asset_online"
+        repository = PostgresAssetRepository(
+            "not-a-real-dsn", environment="ONLINE", database="asset_online",
+            validator=self.validator, connection_factory=database.connect)
+        application = deepcopy(next(item for item in make_bundle("ONLINE")["assets"]
+                                    if item["kind"] == "APPLICATION"))
+        target = {"environment": "ONLINE", "versionId": application["versionId"],
+                  "channel": "STABLE", "grayUserIds": []}
+        for operation in (repository.check_candidate, repository.publish_candidate):
+            with self.assertRaises(AssetError):
+                operation(NAMESPACE, "APPLICATION", application["key"],
+                          application, target, digest(canonical(None)))
+        self.assertEqual({}, database.assets)
+        self.assertEqual({}, database.states)
+
     def test_first_online_publication_must_be_stable(self):
         database = DatabaseDouble()
         database.env, database.database = "ONLINE", "asset_online"

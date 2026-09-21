@@ -109,6 +109,20 @@ class PostgresAssetRepository:
         return {"format": "AF-MVP-08-ASSETS-1", "namespace": ns,
                 "environment": self.environment, "assets": assets, "serving": states}
 
+    def check_publication_ready(self, ns):
+        """Check an initialized destination; an empty namespace is publishable."""
+        ns = namespace(ns)
+        with self._connection() as connection:
+            with connection.transaction():
+                connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                document = self._document(connection, ns)
+                if document["assets"] or document["serving"]:
+                    self.validator.validate(
+                        document, expected_namespace=ns,
+                        expected_environment=self.environment)
+                    self._validate_serving_closure(document)
+                return {"ready": True, "empty": not document["assets"]}
+
     def read(self, ns):
         namespace(ns)
         with self._connection() as connection:

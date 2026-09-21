@@ -39,7 +39,7 @@ class ReleaseService:
                 try:
                     self._context(context, environment)
                     PublicationService._translate(
-                        lambda: self.repositories[environment].read(self.namespace))
+                        lambda: self.repositories[environment].check_publication_ready(self.namespace))
                     item["available"] = True
                 except ManagementError as error:
                     item["errorCode"] = error.code
