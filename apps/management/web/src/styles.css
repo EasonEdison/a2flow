@@ -800,5 +800,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .skill-file-content footer small { display: block; margin-top: 5px; overflow-wrap: anywhere; }
 .skill-file-help p { padding: 12px; background: white; border: 1px solid #e3e8ef; border-radius: 6px; color: #64748b; font-size: 12px; line-height: 1.7; }
 .skill-file-status { padding: 20px; }
+.publication-controls.release-manager { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 24px; }
+.release-manager > div:not(.release-environment), .release-manager > small, .release-manager > [role="alert"] { grid-column: 1 / -1; }
+.release-manager h2 { margin: 0 0 8px; }
+.release-manager label { display: block; margin: 12px 0 6px; }
+.release-manager select { width: 100%; }
+.release-environment { padding: 20px; border: 1px solid #dbe5f4; border-radius: 12px; background: #f8faff; }
+.release-environment h3 { margin: 0 0 12px; }
+.release-environment p { color: #64748b; margin: 0 0 16px; }
+@media (max-width: 650px) { .publication-controls.release-manager { grid-template-columns: 1fr; } }
 @media (max-width: 1200px) { .skill-files-layout { grid-template-columns: 160px minmax(0, 1fr); } .skill-file-help { grid-column: 1 / -1; border-left: 0; border-top: 1px solid #e3e8ef; } }
 @media (max-width: 650px) { .skill-files-layout { grid-template-columns: 1fr; } .skill-files-browser { border-right: 0; border-bottom: 1px solid #e3e8ef; } }

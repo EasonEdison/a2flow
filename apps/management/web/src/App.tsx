@@ -535,7 +535,7 @@ function PublicationControls({
   }
 
   return (
-    <section className="publication-controls">
+    <section className="publication-controls release-manager">
       <div>
         <h2>发布管理</h2>
         <p>草稿来源：{session.environment} 管理工作区</p>
