@@ -40,11 +40,12 @@ type Buffers = Record<string, DraftBuffer>;
 type PendingBuffers = Record<string, PendingFields>;
 type PendingResourceBuffers = Record<string, PendingResourceEdits>;
 type PreviewBuffers = Record<string, ApplicationPreviewState>;
-type DetailTab = 'BASIC' | 'EDIT' | 'DEPENDENCIES' | 'HISTORY';
+type DetailTab = 'BASIC' | 'EDIT' | 'RELEASE' | 'DEPENDENCIES' | 'HISTORY';
 
 const DETAIL_TABS: { id: DetailTab; label: string }[] = [
   { id: 'BASIC', label: '基础信息' },
   { id: 'EDIT', label: '编辑' },
+  { id: 'RELEASE', label: '打包发布' },
   { id: 'DEPENDENCIES', label: '依赖与血缘' },
   { id: 'HISTORY', label: '版本历史' },
 ];
@@ -451,23 +452,19 @@ function CandidateView({
     <section className="candidate-panel" aria-live="polite">
       <div className="candidate-title">
         <div>
-          <p className="section-label">Publication candidate</p>
-          <h3>候选已准备，但尚未发布</h3>
+          <p className="section-label">发布检查</p>
+          <h3>检查通过，请确认发布目标</h3>
         </div>
-        <span>NOT PUBLISHED</span>
+        <span>待确认</span>
       </div>
       <p>环境 {plan.target.environment} · 通道 {plan.target.channel} · 版本 {plan.target.versionId} · 灰度用户 {users}</p>
       {plan.target.channel === 'STABLE' ? <p className="candidate-warning">切换 STABLE 会清除当前灰度。</p> : null}
       <div className="candidate-action">
-        <small>CAS：{history.servingDigest}</small>
+        <small>已校验目标版本状态 · 当前保留 {history.versions.length} 个源环境版本</small>
         <button className="primary-button" type="button" disabled={busy} onClick={onPublish}>
-          确认并显式发布
+          确认发布到{plan.target.environment === 'PRT' ? '预发' : '线上'}
         </button>
       </div>
-      <details>
-        <summary>查看候选 JSON</summary>
-        <pre>{JSON.stringify(plan.candidate, null, 2)}</pre>
-      </details>
     </section>
   );
 }
@@ -514,21 +511,24 @@ function PublicationControls({
   session: ManagementSession;
   revision: number;
   disabled: boolean;
-  onPrepare: (versionId: string, channel: string, grayUserIds: string[]) => Promise<void>;
+  onPrepare: (versionId: string, channel: string, grayUserIds: string[], environment: 'PRT' | 'ONLINE') => Promise<void>;
   onTargetChange: () => void;
 }) {
   const [versionId, setVersionId] = useState('');
-  const [channel, setChannel] = useState(session.environment === 'PRT' ? 'CURRENT' : 'STABLE');
+  const [channel, setChannel] = useState('STABLE');
   const [grayUsers, setGrayUsers] = useState('');
   const [working, setWorking] = useState(false);
+  const [targets, setTargets] = useState<Array<{ environment: 'PRT' | 'ONLINE'; available: boolean; errorCode?: string }>>([]);
+  const [targetError, setTargetError] = useState('');
+  useEffect(() => { let active = true; managementApi.releaseTargets().then((value) => { if (active) setTargets(value.targets); }).catch((error) => { if (active) setTargetError(errorText(error)); }); return () => { active = false; }; }, []);
 
-  async function submit() {
+  async function submit(environment: 'PRT' | 'ONLINE') {
     setWorking(true);
     try {
-      const users = channel === 'GRAY'
+      const users = environment === 'ONLINE' && channel === 'GRAY'
         ? grayUsers.split(/[\n,]/).map((item) => item.trim()).filter(Boolean)
         : [];
-      await onPrepare(versionId.trim(), channel, users);
+      await onPrepare(versionId.trim(), environment === 'PRT' ? 'CURRENT' : channel === 'GRAY' ? 'GRAY' : 'STABLE', users, environment);
     } finally {
       setWorking(false);
     }
@@ -537,7 +537,9 @@ function PublicationControls({
   return (
     <section className="publication-controls">
       <div>
-        <label htmlFor="version-id">候选版本标识</label>
+        <h2>发布管理</h2>
+        <p>草稿来源：{session.environment} 管理工作区</p>
+        <label htmlFor="version-id">发布版本</label>
         <input
           id="version-id"
           value={versionId}
@@ -547,15 +549,15 @@ function PublicationControls({
           placeholder="例如 0.2.0-rc.1"
         />
       </div>
-      {session.environment === 'ONLINE' ? (
+      {(
         <div>
           <label htmlFor="release-channel">目标通道</label>
           <select id="release-channel" disabled={disabled || working} value={channel} onChange={(event) => { setChannel(event.target.value); onTargetChange(); }}>
-            <option value="STABLE">STABLE</option>
-            <option value="GRAY">GRAY</option>
+            <option value="STABLE">线上全量</option>
+            <option value="GRAY">线上灰度</option>
           </select>
         </div>
-      ) : null}
+      )}
       {channel === 'GRAY' ? (
         <div className="gray-users">
           <label htmlFor="gray-users">灰度用户 ID</label>
@@ -568,20 +570,21 @@ function PublicationControls({
           />
         </div>
       ) : null}
-      <button
-        className="secondary-button"
-        type="button"
-        disabled={disabled || working || !versionId.trim()}
-        onClick={submit}
-      >
-        {working ? '正在准备…' : '准备未发布候选'}
-      </button>
-      <small>草稿修订 #{revision} · 只生成候选，不执行发布</small>
+      {(['PRT', 'ONLINE'] as const).map((environment) => {
+        const target = targets.find((item) => item.environment === environment);
+        return <div key={environment} className="release-environment"><h3>{environment === 'PRT' ? '预发环境' : '线上环境'}</h3>
+          <p>{environment === 'PRT' ? '独立预发配置，发布后供 PRT 使用。' : '独立线上配置；不会读取预发依赖。'}</p>
+          <button className="primary-button" type="button" disabled={disabled || working || !versionId.trim() || !target?.available} onClick={() => void submit(environment)}>{working ? '正在检查…' : environment === 'PRT' ? '发布到预发' : '发布到线上'}</button>
+          {target && !target.available ? <p role="alert">环境未就绪：{target.errorCode}</p> : null}</div>;
+      })}
+      {targetError ? <p role="alert">{targetError}</p> : null}
+      <small>草稿修订 #{revision} · 先检查依赖与内容，检查通过后确认发布。未保存内容不会发布。</small>
     </section>
   );
 }
 
 function AuthorWorkspace({
+  releaseMode,
   skillStage,
   onWorkspaceCommitted,
   session,
@@ -613,6 +616,7 @@ function AuthorWorkspace({
   onPublish,
   onTargetChange,
 }: {
+  releaseMode: boolean;
   skillStage?: string;
   onWorkspaceCommitted: (draft: ManagedDraft) => void;
   session: ManagementSession;
@@ -640,33 +644,31 @@ function AuthorWorkspace({
   onSave: () => void;
   onReload: () => void;
   onValidate: () => void;
-  onPrepare: (versionId: string, channel: string, users: string[]) => Promise<void>;
+  onPrepare: (versionId: string, channel: string, users: string[], environment: 'PRT' | 'ONLINE') => Promise<void>;
   onPublish: () => void;
   onTargetChange: () => void;
 }) {
-  const [mode, setMode] = useState<'FORM' | 'JSON'>('FORM');
   const [workspaceBlocked, setWorkspaceBlocked] = useState(kind === 'SKILL');
   if (!buffer) return <div className="workspace-state">正在加载草稿…</div>;
   const inspection = inspectDraftText(buffer.text);
   const invalidDraft = !inspection.ok;
   const pendingJsonField = Object.keys(pendingFields).length > 0;
   const pendingResource = Object.keys(pendingResources).length > 0;
+  const bindingBlocked = kind === 'SKILL' && ['abilities', 'applications'].includes(skillStage ?? '') && buffer.dirty;
   const saveBudgetIssue = inspection.ok ? saveBodyIssue({ expectedRevision: buffer.revision, document: inspection.document }) : null;
   return (
     <div className="author-workspace">
-      <section className="editor-panel">
+      <div className="editor-heading-actions" style={{ justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button className="quiet-button" type="button" disabled={actionBusy || buffer.dirty || invalidDraft || pendingJsonField || pendingResource || (kind === 'SKILL' && workspaceBlocked)} onClick={onValidate}>验证已保存草稿</button>
+        <button className="primary-button" type="button" disabled={actionBusy || !buffer.dirty || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue) || (kind === 'SKILL' && workspaceBlocked)} onClick={onSave}>{actionBusy ? '处理中…' : '保存草稿'}</button>
+      </div>
+      <section className="editor-panel" hidden={releaseMode}>
         <div className="editor-heading" hidden={kind === 'SKILL' && skillStage === 'resources' && !invalidDraft}>
           <div>
             <p className="section-label">{kind === 'SKILL' ? 'Skill 工作台' : '管理草稿编辑器'}</p>
             <h2>{kind} · {keyName}</h2>
           </div>
           <div className="editor-heading-actions">
-            <div className="mode-switch" role="group" aria-label="编辑模式">
-              <button type="button" className={mode === 'FORM' ? 'active' : ''} disabled={actionBusy || invalidDraft}
-                onClick={() => setMode('FORM')}>表单</button>
-              <button type="button" className={mode === 'JSON' ? 'active' : ''} disabled={actionBusy || pendingResource || (kind === 'SKILL' && workspaceBlocked)}
-                onClick={() => setMode('JSON')}>完整 JSON</button>
-            </div>
             <span className={buffer.dirty ? 'edit-state dirty' : 'edit-state'}>
               {buffer.dirty ? '未保存' : '已同步'}
             </span>
@@ -681,49 +683,31 @@ function AuthorWorkspace({
             </button>
           </div>
         ) : null}
-        {invalidDraft ? <div className="notice warning invalid-json"><strong>完整 JSON 当前无效</strong><span>{inspection.error}</span><span>内容不会被重置；修正前不能保存、验证或发布，也不能进入表单模式。</span></div> : null}
+        {invalidDraft ? <div className="notice warning invalid-json"><strong>草稿结构异常</strong><span>{inspection.error}</span><span>内容已保留，请重新加载最新草稿后核对。</span></div> : null}
         {pendingJsonField || pendingResource ? <div className="notice warning invalid-json"><strong>存在尚未保存的编辑</strong><span>请先保存或取消当前字段、文件的修改；数据库中的草稿尚未改变。</span></div> : null}
         {saveBudgetIssue ? <div className="notice error"><strong>草稿超过保存请求预算</strong><span>{saveBudgetIssue}；当前 management Host 的 `BODY_LIMIT` 为 1 MiB，检查包含 expectedRevision/document 完整请求封套；请缩小资源后再保存。</span></div> : null}
-        {mode === 'JSON' || invalidDraft ? (
-          <textarea
-            className="json-editor"
-            aria-label="结构化草稿 JSON"
-            spellCheck={false}
-            value={buffer.text}
-            disabled={actionBusy}
-            onChange={(event) => onEdit(event.target.value)}
-          />
-        ) : <div hidden={kind === 'SKILL' && skillStage === 'resources'}><FormEditor skillStage={skillStage} kind={kind} text={buffer.text} disabled={actionBusy || (kind === 'SKILL' && (workspaceBlocked || pendingResource))} pendingFields={pendingFields} pendingResources={pendingResources} assetId={`${kind}:${keyName}`} revision={buffer.revision} references={references} onNavigateReference={onNavigateReference} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
+        {bindingBlocked ? <p className="notice warning">请先保存其他未保存的草稿修改，再绑定或解绑资产。绑定操作将立即保存到数据库。</p> : null}
+        {invalidDraft ? null : <div hidden={kind === 'SKILL' && skillStage === 'resources'}><FormEditor skillStage={skillStage} kind={kind} text={buffer.text} disabled={actionBusy || bindingBlocked || (kind === 'SKILL' && (workspaceBlocked || pendingResource))} pendingFields={pendingFields} pendingResources={pendingResources} assetId={`${kind}:${keyName}`} revision={buffer.revision} references={references} onNavigateReference={onNavigateReference} previewState={previewState} onPreviewStateChange={onPreviewStateChange} onEdit={onEdit}
           onPendingChange={onPendingChange} onApplyPending={onApplyPending} onDiscardPending={onDiscardPending} onPendingResourcesChange={onPendingResourcesChange}
           getPendingConflict={getPendingConflict} /></div>}
-        {kind === 'SKILL' && mode === 'FORM' && !invalidDraft ? <div hidden={skillStage !== 'resources'}>
+        {kind === 'SKILL' && !invalidDraft ? <div hidden={skillStage !== 'resources'}>
           <SkillFileWorkspace key={keyName} assetKey={keyName} revision={buffer.revision} environment={session.environment}
             disabled={actionBusy} draftDirty={buffer.dirty} pending={pendingResources} onPending={onPendingResourcesChange}
             onCommitted={onWorkspaceCommitted} onBlocked={setWorkspaceBlocked} />
         </div> : null}
-        <div className="editor-footer">
-          <span>修订 #{buffer.revision} · {buffer.updatedBy}</span>
-          <div>
-            <button className="quiet-button" type="button" disabled={actionBusy || buffer.dirty || invalidDraft || pendingJsonField || pendingResource || (kind === 'SKILL' && workspaceBlocked)} onClick={onValidate}>
-              验证已保存草稿
-            </button>
-            <button className="primary-button" type="button" disabled={actionBusy || !buffer.dirty || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue) || (kind === 'SKILL' && workspaceBlocked)} onClick={onSave}>
-              {actionBusy ? '处理中…' : '保存草稿'}
-            </button>
-          </div>
-        </div>
       </section>
       {actionMessage ? <div className="notice error">{actionMessage}</div> : null}
       {successMessage ? <div className="notice success">{successMessage}</div> : null}
       {validation ? <ValidationView report={validation} /> : null}
-      <PublicationControls
+      <div hidden={!releaseMode}><PublicationControls
         session={session}
         revision={buffer.revision}
-        disabled={buffer.dirty || actionBusy || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue) || (kind === 'SKILL' && workspaceBlocked) || validation?.valid !== true}
+        disabled={buffer.dirty || actionBusy || invalidDraft || pendingJsonField || pendingResource || Boolean(saveBudgetIssue) || (kind === 'SKILL' && workspaceBlocked)}
         onPrepare={onPrepare}
         onTargetChange={onTargetChange}
       />
       {plan ? <CandidateView plan={plan} history={history} busy={actionBusy} onPublish={onPublish} /> : null}
+      </div>
     </div>
   );
 }
@@ -1013,13 +997,13 @@ function App() {
     setPendingBuffers((current) => ({ ...current, [activeBufferId]: result.pending }));
   }
 
-  async function saveDraft() {
+  async function saveDraft(nextText?: string) {
     if (!kind || !selectedKey || !activeBufferId || !buffer) return;
-    const submittedText = buffer.text;
+    const submittedText = nextText ?? buffer.text;
     setActionBusy(true);
     setActionMessage(null);
     try {
-      const document = JSON.parse(buffer.text) as JsonObject;
+      const document = JSON.parse(submittedText) as JsonObject;
       if (!document || Array.isArray(document) || typeof document !== 'object') {
         throw new SyntaxError('DRAFT_MUST_BE_OBJECT');
       }
@@ -1185,7 +1169,7 @@ function App() {
     }
   }
 
-  async function prepareCandidate(versionId: string, channel: string, grayUserIds: string[]) {
+  async function prepareCandidate(versionId: string, channel: string, grayUserIds: string[], environment: 'PRT' | 'ONLINE') {
     if (!session || !kind || !selectedKey || !buffer) return;
     setActionBusy(true);
     setActionMessage(null);
@@ -1193,13 +1177,13 @@ function App() {
     setPlan(null);
     try {
       const check = await managementApi.publicationCheck(kind, selectedKey, buffer.revision, {
-        environment: session.environment,
+        environment,
         versionId,
         channel,
         grayUserIds,
       });
       setValidation(check.validation);
-      if (check.status !== 'PREPARED_NOT_PUBLISHED' || !check.candidate || !check.preparedRevision || !check.candidateIdentity) {
+      if (check.status !== 'PREPARED_NOT_PUBLISHED' || !check.candidate || check.preparedRevision === undefined || !check.candidateIdentity) {
         setDependencyState((current) => staleDependencyState(current, 'PUBLICATION_CHECK_INCOMPLETE'));
         return;
       }
@@ -1207,6 +1191,7 @@ function App() {
         kind,
         key: selectedKey,
         draftRevision: check.preparedRevision,
+        expectedServingDigest: check.expectedServingDigest,
         contentDigest: check.candidateIdentity.contentDigest,
         target: check.target,
         status: 'PREPARED_NOT_PUBLISHED',
@@ -1317,15 +1302,16 @@ function App() {
                 : null}
             </div>
             <div
-              className={detailTab === 'EDIT' ? 'detail-tab-panel active' : 'detail-tab-panel'}
+              className={detailTab === 'EDIT' || detailTab === 'RELEASE' ? 'detail-tab-panel active' : 'detail-tab-panel'}
               role="tabpanel"
               id="detail-panel-edit"
               aria-labelledby={kind === 'SKILL' && session.canAuthor ? `skill-stage-${skillStage}` : 'detail-tab-edit'}
-              aria-hidden={detailTab !== 'EDIT'}
+              aria-hidden={detailTab !== 'EDIT' && detailTab !== 'RELEASE'}
             >
               {!assetLoading && !assetError && (detail || selectedSummary?.draftOnly) ? (
                 session.canAuthor && history ? (
                   <AuthorWorkspace
+                    releaseMode={detailTab === 'RELEASE'}
                     onWorkspaceCommitted={(draft) => {
                       if (!activeBufferId) return;
                       setBuffers((current) => ({ ...current, [activeBufferId]: createDraftBuffer(draft) }));
@@ -1348,7 +1334,10 @@ function App() {
                     pendingResources={pendingResources}
                     previewState={previewState}
                     references={references}
-                    onEdit={editDraft}
+                    onEdit={(text) => {
+                      editDraft(text);
+                      if (kind === 'SKILL' && ['abilities', 'applications'].includes(skillStage)) void saveDraft(text);
+                    }}
                     onPendingChange={changePendingField}
                     onApplyPending={applyPending}
                     onDiscardPending={discardPending}
@@ -1360,7 +1349,7 @@ function App() {
                     onPreviewStateChange={(state) => { if (activeBufferId) setPreviewBuffers((current) => ({ ...current, [activeBufferId]: state })); }}
                     onNavigateReference={(referenceKind, keyName) => { setKind(referenceKind); setSearchQuery(''); setSelectedKey(keyName); setHistory(null); setDetail(null); setAssets([]); }}
                     getPendingConflict={(path) => pendingFieldConflict(pendingFields, path)}
-                    onSave={saveDraft}
+                    onSave={() => void saveDraft()}
                     onReload={reloadDraft}
                     onValidate={validateDraft}
                     onPrepare={prepareCandidate}

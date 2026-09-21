@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { isEditableRecord, skillFrontmatterMismatch, updatePath } from './form-editor-state';
 import { Field, MalformedValue, Section, type FormProps } from './EditorControls';
 import { SkillBindingWorkbench } from './SkillBindingWorkbench';
-import { StringRows } from './StringRows';
 
 export function SkillEditor(props: FormProps) {
   const { document, disabled, onChange, references, onNavigateReference } = props;
@@ -30,7 +29,6 @@ export function SkillEditor(props: FormProps) {
         <Field label="描述" value={metadata?.description} disabled={disabled} multiline onChange={(value) => onChange(updatePath(document, ['metadata', 'description'], value))} />
       </> : <MalformedValue label="metadata" value={document.metadata} />}
     </Section>
-    <StringRows label="所需工具" document={document} path={['requiredToolNames']} disabled={disabled} onChange={onChange} />
     <p className="skill-stage-hint">业务能力和展示应用在对应页签绑定；发布与版本历史仍使用资产详情的统一入口。</p>
     </div>
     <div hidden={stage !== 'abilities'}><SkillBindingWorkbench kind="ABILITY" document={document} disabled={disabled} references={references} onChange={onChange} onNavigate={onNavigateReference} /></div>

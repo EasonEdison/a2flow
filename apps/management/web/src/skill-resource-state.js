@@ -1,3 +1,6 @@
+import { sha256 as digestSha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+
 const MAX_ENTRIES = 127;
 const MAX_ENTRY_BYTES = 4 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 16 * 1024 * 1024;
@@ -32,11 +35,7 @@ function base64ToBytes(value) {
 }
 
 async function sha256(bytes) {
-  if (!globalThis.crypto?.subtle) throw new Error('SECURE_CONTEXT_CRYPTO_UNAVAILABLE');
-  let result;
-  try { result = await globalThis.crypto.subtle.digest('SHA-256', bytes); }
-  catch { throw new Error('SHA256_DIGEST_FAILED'); }
-  return `sha256:${[...new Uint8Array(result)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+  return `sha256:${bytesToHex(digestSha256(bytes))}`;
 }
 
 function descriptorIssue(resource, allowInstruction = false) {

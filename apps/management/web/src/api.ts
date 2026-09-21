@@ -57,6 +57,9 @@ function assetPath(kind: AssetKind, key?: string): string {
 }
 
 export const managementApi = {
+  releaseTargets() {
+    return request<{ targets: Array<{ environment: 'PRT' | 'ONLINE'; available: boolean; errorCode?: string }> }>('/management/release-targets');
+  },
   skillWorkspace(key: string, signal?: AbortSignal) {
     return request<SkillWorkspace>(assetPath('SKILL', key) + '/workspace', {}, signal);
   },
@@ -119,9 +122,9 @@ export const managementApi = {
     return request<RetainedVersion>(assetPath(kind, key) + '/versions/' + encodeURIComponent(versionId), {}, signal);
   },
   publish(kind: AssetKind, key: string, plan: PublicationPlan, expectedServingDigest: string) {
-    return request<PublicationResult>(assetPath(kind, key) + '/publications', {
+    return request<PublicationResult>('/management/release-targets/' + plan.target.environment + '/assets/' + encodeURIComponent(kind) + '/' + encodeURIComponent(key) + '/publications', {
       method: 'POST',
-      body: JSON.stringify({ expectedServingDigest, candidate: plan.candidate, target: plan.target }),
+      body: JSON.stringify({ expectedRevision: plan.draftRevision, expectedServingDigest: plan.expectedServingDigest ?? expectedServingDigest, candidate: plan.candidate, target: plan.target }),
     });
   },
   rollback(kind: AssetKind, key: string, target: PublicationTarget, expectedServingDigest: string) {
@@ -136,7 +139,7 @@ export const managementApi = {
     expectedRevision: number,
     target: PublicationTarget,
   ) {
-    return request<PublicationCheck>(assetPath(kind, key) + '/publication-checks', {
+    return request<PublicationCheck>('/management/release-targets/' + target.environment + '/assets/' + encodeURIComponent(kind) + '/' + encodeURIComponent(key) + '/publication-checks', {
       method: 'POST', body: JSON.stringify({ expectedRevision, target }),
     });
   },

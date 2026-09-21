@@ -53,6 +53,7 @@ export interface PublicationTarget {
 }
 
 export interface PublicationCheck extends JsonObject {
+  expectedServingDigest?: string;
   validation: ValidationReport;
   dependencies?: DependencyGraph;
   target: PublicationTarget;
@@ -64,6 +65,7 @@ export interface PublicationCheck extends JsonObject {
 }
 
 export interface PublicationPlan extends JsonObject {
+  expectedServingDigest?: string;
   kind: AssetKind;
   key: string;
   draftRevision: number;

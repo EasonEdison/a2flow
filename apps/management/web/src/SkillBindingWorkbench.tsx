@@ -75,7 +75,7 @@ function BindingSection({ kind, values, document, disabled, references, onChange
           </>}
           <div>{row.key && row.asset && onNavigate ? <button type="button" className="quiet-button" disabled={disabled} onClick={() => onNavigate(kind, row.key!)}>查看详情</button> : null}
             <button type="button" className="warning-button" aria-label={`解除绑定 ${row.key ?? row.identity}`} disabled={disabled}
-              onClick={() => { if (window.confirm(`确认解除绑定 ${row.key ?? '异常项'}？此操作只修改本地草稿。`)) update(removeBinding(list!, row.identity)); }}>解除绑定</button></div>
+              onClick={() => { if (window.confirm(`确认解除绑定 ${row.key ?? '异常项'} 并保存到数据库草稿？已发布版本不受影响。`)) update(removeBinding(list!, row.identity)); }}>解除绑定</button></div>
         </article>)}
       </div>
     </div>

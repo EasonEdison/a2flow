@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { managementApi } from './api';
 import type { ManagedDraft, PendingResourceEdits } from './contracts';
-import { inspectResourceVerified, mediaTypeForPath, type ResourceInspection } from './skill-resource-state';
+import { inspectResourceVerified, type ResourceInspection } from './skill-resource-state';
 
 export interface SkillWorkspaceEntry {
   handleId: string;
@@ -138,26 +138,6 @@ export function SkillFileWorkspace({ assetKey, revision, environment, disabled, 
     finally { setBusy(false); }
   }
 
-  async function uploadFile(upload: File) {
-    if (!workspace || locked || editing || fileChanged || draftDirty) return;
-    const path = newPath.trim() || upload.name;
-    if (workspace.entries.some((entry) => entry.logicalPath === path)) {
-      setError('文件已存在，请从文件树选择后编辑。'); return;
-    }
-    setBusy(true); setError(null);
-    try {
-      if (upload.size > 700 * 1024) throw new Error('文件过大：当前 HTTP 请求上限为 1 MiB，单文件上传限制为 700 KiB。');
-      const media = path.endsWith('.py') ? 'text/x-python' : mediaTypeForPath(path, upload.type);
-      if (!media) throw new Error('不支持此文件类型。');
-      const bytes = new Uint8Array(await upload.arrayBuffer());
-      let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
-      const next = await managementApi.saveSkillFile(assetKey, workspace.workspaceRevision, path, media, btoa(binary));
-      setWorkspace(next); setSelected(path); setNewPath('');
-      setMessage('文件已上传到数据库工作区，尚未提交到待发布草稿。');
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
-    finally { setBusy(false); }
-  }
-
   async function deleteFile() {
     if (!workspace || locked || editing || fileChanged || draftDirty || selected === 'SKILL.md') return;
     if (!window.confirm(`从编辑工作区移除 ${selected}？已发布版本不受影响。`)) return;
@@ -171,7 +151,7 @@ export function SkillFileWorkspace({ assetKey, revision, environment, disabled, 
 
   return <div className="skill-file-workspace">
     <div className="skill-workspace-meta">
-      <div><span>工作区</span><strong>{assetKey}</strong></div>
+      <div><span>资产标识（非文件路径）</span><strong>{assetKey}</strong></div>
       <div><span>工作区视图</span><strong>{environment} 编辑态</strong></div>
       <div><span>草稿修订</span><strong>{revision}</strong></div>
       <div><span>文件数</span><strong>{workspace?.entries.length ?? '—'} 个</strong></div>
@@ -204,8 +184,7 @@ export function SkillFileWorkspace({ assetKey, revision, environment, disabled, 
         </div> : <p className="skill-file-status">{inspection?.status === 'readonly' ? '二进制文件：内容已保留，当前只读。' : inspection?.status === 'repair' ? `文件校验失败：${inspection.reason}` : '正在校验文件内容…'}</p>}
         <footer>{editing || fileChanged ? '编辑中：保存或取消后才能切换文件。' : '只读模式 · 点击「编辑」后修改'}<small>{file?.contentDigest}</small></footer>
       </section>
-      <aside className="skill-file-help"><h3>上传文件</h3><label className="secondary-button file-button">选择单个文件<input type="file" aria-label="上传工作区文件" disabled={locked || editing || fileChanged || draftDirty || !workspace}
-        onChange={(event) => { const upload = event.target.files?.[0]; event.target.value = ''; if (upload) void uploadFile(upload); }} /></label><p>使用左侧新文件路径；未填写时使用文件名。ZIP 整包导入暂未提供。</p>
+      <aside className="skill-file-help">
         <h3>文件保护</h3><p>默认只读，点击编辑后才允许修改当前文件。</p><p>切换文件前必须保存或取消未保存改动。</p><p>保存文件只写数据库工作区；保存当前工作区后更新待发布草稿。发布是独立操作。</p><p>SKILL.md、scripts 和 references 从同一份数据库文件结构恢复，目录不是服务器上的编辑路径。</p>
         {draftDirty ? <p className="notice warning">其他页签还有未保存的草稿修改，请先保存，再提交文件工作区。</p> : null}
       </aside>
