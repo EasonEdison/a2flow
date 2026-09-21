@@ -15,7 +15,7 @@ export function StringRows({ label, document, path, disabled, onChange }: {
         }} /> : <div className="malformed-row" role="status" aria-label={`${label} ${index + 1} 类型错误`}>
         <strong>{typeof value === 'object' ? (value === null ? 'null' : Array.isArray(value) ? 'array' : 'object') : typeof value}</strong>
         <code>{JSON.stringify(value)}</code>
-        <span>原值已保留。请在完整 JSON 修复，或明确移除此项。</span>
+        <span>原值已保留。请重新加载草稿；若问题仍存在，由后端修复该字段结构，或明确移除此项。</span>
       </div>}
       <RowActions index={index} length={rows.length} disabled={disabled || typeof value !== 'string'}
         onMove={(direction) => { rowKeys.move(index, direction); onChange(moveRow(document, path, index, direction)); }}

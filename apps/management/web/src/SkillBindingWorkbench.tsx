@@ -40,7 +40,7 @@ function BindingSection({ kind, values, document, disabled, references, onChange
   }
 
   return <section className="binding-section" aria-label={config.title}>
-    <header><div><h4>{config.title}绑定</h4><span>{rows.length} 个绑定 · {availableCount}</span></div><small>绑定与解绑立即保存到数据库草稿及关系表，已发布版本不受影响。</small></header>
+    <header><div><h4>{config.title}绑定</h4><span>{rows.length} 个绑定 · {availableCount}</span></div><small>绑定与解绑会立即提交当前 Skill 的完整绑定快照；看到保存修订后才算成功，已发布版本不受影响。</small></header>
     <p className="binding-explanation">{kind === 'ABILITY' ? '选择 Skill 可以调用的业务能力。当前支持仅执行；展示内容通过“渲染组件”绑定 Application。' : '选择 Skill 可以渲染的 A2UI Application。基础组件在组件中心管理，不直接绑定到 Skill。'}绑定不会自动改写 Skill 指令。</p>
     <div className="binding-columns">
       <div className="binding-catalog">
@@ -75,7 +75,7 @@ function BindingSection({ kind, values, document, disabled, references, onChange
           </>}
           <div>{row.key && row.asset && onNavigate ? <button type="button" className="quiet-button" disabled={disabled} onClick={() => onNavigate(kind, row.key!)}>查看详情</button> : null}
             <button type="button" className="warning-button" aria-label={`解除绑定 ${row.key ?? row.identity}`} disabled={disabled}
-              onClick={() => { if (window.confirm(`确认解除绑定 ${row.key ?? '异常项'} 并保存到数据库草稿？已发布版本不受影响。`)) update(removeBinding(list!, row.identity)); }}>解除绑定</button></div>
+              onClick={() => { if (window.confirm(`确认解除绑定 ${row.key ?? '异常项'} 并保存当前 Skill 草稿？已发布版本不受影响。`)) update(removeBinding(list!, row.identity)); }}>解除绑定</button></div>
         </article>)}
       </div>
     </div>

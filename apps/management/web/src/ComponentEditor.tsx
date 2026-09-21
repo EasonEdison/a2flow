@@ -1,5 +1,6 @@
 import { isEditableRecord, updatePath } from './form-editor-state';
 import { Field, MalformedValue, Section, type FormProps } from './EditorControls';
+import type { ComponentDraftDocument } from './asset-drafts';
 
 export const COMPONENT_IMPLEMENTATIONS = [
   { name: 'Column', description: '纵向布局容器', props: 'id (string, 只读身份) · children (component id[])' },
@@ -8,7 +9,7 @@ export const COMPONENT_IMPLEMENTATIONS = [
   { name: 'Button', description: '产生有界事件的按钮', props: 'id · label · action.event.name · action.event.context' },
 ] as const;
 
-export function ComponentEditor({ document, disabled, onChange }: FormProps) {
+export function ComponentEditor({ document, disabled, onChange }: FormProps<ComponentDraftDocument>) {
   const definition = document.definition;
   if (!isEditableRecord(definition)) return <MalformedValue label="definition" value={definition} />;
   const members = definition.components;
@@ -33,7 +34,7 @@ export function ComponentEditor({ document, disabled, onChange }: FormProps) {
     </Section>
     <Section title="已注册组件">
       <div className="notice warning"><strong>这是配置目录，不是代码上传器</strong><span>只能勾选下方宿主已实现的四种组件。自定义 JavaScript、HTML 或远程组件无法在此注册。</span></div>
-      {unsupportedMembers.length ? <div className="notice error"><strong>草稿含有未实现的组件名</strong><span>{unsupportedMembers.join(', ')}；表单不会静默删除，请在完整 JSON 中显式修正，后端验证会拒绝发布。</span></div> : null}
+      {unsupportedMembers.length ? <div className="notice error"><strong>草稿含有未实现的组件名</strong><span>{unsupportedMembers.join(', ')}；表单不会静默删除，请取消对应成员后保存，后端验证会拒绝发布。</span></div> : null}
       {!editableMembers ? <MalformedValue label="definition.components" value={members} /> : <div className="component-implementation-list">
         {COMPONENT_IMPLEMENTATIONS.map((implementation) => <label className="component-implementation" key={implementation.name}>
           <input type="checkbox" checked={registered.has(implementation.name)} disabled={disabled}

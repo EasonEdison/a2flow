@@ -1,7 +1,8 @@
 import { appendRow, isEditableRecord, moveRow, removeRow, updateRow } from './form-editor-state';
 import { EnumSelect, Field, JsonField, MalformedValue, RowActions, Section, useRowKeys, type FormProps } from './EditorControls';
+import type { AbilityDraftDocument } from './asset-drafts';
 
-export function AbilityEditor({ document, disabled, onChange, pendingFields, onPendingChange, onApplyPending, onDiscardPending, getPendingConflict }: FormProps) {
+export function AbilityEditor({ document, disabled, onChange, pendingFields, onPendingChange, onApplyPending, onDiscardPending, getPendingConflict }: FormProps<AbilityDraftDocument>) {
   const bindings = document.inputBindings;
   const credentials = document.credentialRequirements;
   const bindingKeys = useRowKeys(Array.isArray(bindings) ? bindings.length : 0);

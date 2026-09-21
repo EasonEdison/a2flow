@@ -1,7 +1,8 @@
 """Focused AF10 Ability management tests."""
-from copy import deepcopy
+
 import hashlib
 import unittest
+from copy import deepcopy
 
 from a2flow_management import (
     ManagedDraft,
@@ -28,12 +29,14 @@ def ability_document():
     return {
         "abilityKey": "demo.catalog.lookup",
         "modelArgumentSchema": {
-            "type": "object", "additionalProperties": False,
+            "type": "object",
+            "additionalProperties": False,
             "required": ["query"],
             "properties": {"query": {"type": "string"}},
         },
         "resolvedInputSchema": {
-            "type": "object", "additionalProperties": False,
+            "type": "object",
+            "additionalProperties": False,
             "required": ["query", "userId"],
             "properties": {
                 "query": {"type": "string"},
@@ -41,26 +44,26 @@ def ability_document():
             },
         },
         "outputSchema": {
-            "type": "object", "additionalProperties": False,
+            "type": "object",
+            "additionalProperties": False,
             "required": ["ok"],
             "properties": {"ok": {"type": "boolean"}},
         },
         "inputBindings": [
-            {"targetPath": "/query", "source": "MODEL_ARGUMENT",
-             "sourcePath": "/query"},
-            {"targetPath": "/userId", "source": "TRUSTED_CONTEXT",
-             "sourcePath": "/userId"},
+            {"targetPath": "/query", "source": "MODEL_ARGUMENT", "sourcePath": "/query"},
+            {"targetPath": "/userId", "source": "TRUSTED_CONTEXT", "sourcePath": "/userId"},
         ],
-        "credentialRequirements": [
-            {"slotId": "demoRead", "required": True}],
+        "credentialRequirements": [{"slotId": "demoRead", "required": True}],
         "adapterOperationRef": "demo.catalog.lookup.read",
-        "resultInterpretationPolicies": [{
-            "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
-            "policyRef": "okTrue",
-            "operator": "JSON_POINTER_EQUALS",
-            "jsonPointer": "/ok",
-            "expectedLiteral": True,
-        }],
+        "resultInterpretationPolicies": [
+            {
+                "contractRevision": "SW-CONTRACTS-P1-CANDIDATE.1",
+                "policyRef": "okTrue",
+                "operator": "JSON_POINTER_EQUALS",
+                "jsonPointer": "/ok",
+                "expectedLiteral": True,
+            }
+        ],
         "defaultSuccessPolicyRef": "okTrue",
     }
 
@@ -80,26 +83,32 @@ class FakeAbilityReader:
     def __init__(self):
         definition = ability_document()
         value = {
-            "kind": "ABILITY", "key": definition["abilityKey"],
-            "assetId": "ability-demo", "versionId": "v1",
-            "definition": definition, "dependencies": [],
+            "kind": "ABILITY",
+            "key": definition["abilityKey"],
+            "assetId": "ability-demo",
+            "versionId": "v1",
+            "definition": definition,
+            "dependencies": [],
         }
         self.published = {
-            **value, "contentDigest": digest(value),
+            **value,
+            "contentDigest": digest(value),
             "selection": "PRT_CURRENT",
         }
 
     def list_assets(self, kind, context):
         if kind != "ABILITY":
             raise AssertionError("unexpected kind")
-        return ({
-            "kind": "ABILITY",
-            "key": self.published["key"],
-            "assetId": self.published["assetId"],
-            "versionId": self.published["versionId"],
-            "contentDigest": self.published["contentDigest"],
-            "selection": self.published["selection"],
-        },)
+        return (
+            {
+                "kind": "ABILITY",
+                "key": self.published["key"],
+                "assetId": self.published["assetId"],
+                "versionId": self.published["versionId"],
+                "contentDigest": self.published["contentDigest"],
+                "selection": self.published["selection"],
+            },
+        )
 
     def asset_exists(self, kind, key, context):
         return kind == "ABILITY" and key == self.published["key"]
@@ -111,13 +120,12 @@ class FakeAbilityReader:
 
 
 def feature(reader, drafts):
-    validator = AbilityDefinitionValidator(
-        OperationCatalog(), SharedResultPolicySetValidator())
+    validator = AbilityDefinitionValidator(OperationCatalog(), SharedResultPolicySetValidator())
     return create_ability_feature(reader, drafts, "a2flow-demo", validator)
 
 
-ADMIN = TrustedManagementContext("admin-1", "PRT", frozenset({"ADMIN"}))
-USER = TrustedManagementContext("user-1", "PRT", frozenset({"USER"}))
+ADMIN = TrustedManagementContext(101, "PRT", frozenset({"ADMIN"}))
+USER = TrustedManagementContext(102, "PRT", frozenset({"USER"}))
 
 
 class AbilityManagementTests(unittest.TestCase):
@@ -129,100 +137,75 @@ class AbilityManagementTests(unittest.TestCase):
     def test_user_can_browse_but_cannot_open_drafts(self):
         listed = self.service.list_published(USER, "ABILITY")
         self.assertEqual("demo.catalog.lookup", listed[0]["key"])
-        detail = self.service.get_published(
-            USER, "ABILITY", "demo.catalog.lookup")
-        self.assertEqual("demo.catalog.lookup.read",
-                         detail["definition"]["adapterOperationRef"])
+        detail = self.service.get_published(USER, "ABILITY", "demo.catalog.lookup")
+        self.assertEqual("demo.catalog.lookup.read", detail["definition"]["adapterOperationRef"])
         self.assertEqual("PRT_CURRENT", detail["resolution"]["selection"])
         with self.assertRaisesRegex(ManagementError, "ADMIN_REQUIRED"):
-            self.service.get_draft(
-                USER, "ABILITY", "demo.catalog.lookup")
+            self.service.get_draft(USER, "ABILITY", "demo.catalog.lookup")
 
     def test_admin_creates_unconfigured_draft_without_publishing(self):
-        created = self.service.create_draft(
-            ADMIN, "ABILITY", "new.ability")
+        created = self.service.create_draft(ADMIN, "ABILITY", "new.ability")
         self.assertEqual("new.ability", created.document["abilityKey"])
-        self.assertFalse(self.service.validate_draft(
-            ADMIN, "ABILITY", "new.ability").valid)
-        self.assertIn("new.ability", {
-            item["key"] for item in self.service.list_published(ADMIN, "ABILITY")})
-        self.assertNotIn("new.ability", {
-            item["key"] for item in self.service.list_published(USER, "ABILITY")})
+        self.assertFalse(self.service.validate_draft(ADMIN, "ABILITY", "new.ability").valid)
+        self.assertIn(
+            "new.ability", {item["key"] for item in self.service.list_published(ADMIN, "ABILITY")}
+        )
+        self.assertNotIn(
+            "new.ability", {item["key"] for item in self.service.list_published(USER, "ABILITY")}
+        )
 
     def test_admin_can_edit_and_validate_draft(self):
-        initial = self.service.get_draft(
-            ADMIN, "ABILITY", "demo.catalog.lookup")
+        initial = self.service.get_draft(ADMIN, "ABILITY", "demo.catalog.lookup")
         self.assertEqual(0, initial.revision)
         invalid = ability_document()
         invalid["outputSchema"] = []
-        saved = self.service.save_draft(
-            ADMIN, "ABILITY", "demo.catalog.lookup", 0, invalid)
+        saved = self.service.save_draft(ADMIN, "ABILITY", "demo.catalog.lookup", 0, invalid)
         self.assertEqual(1, saved.revision)
-        report = self.service.validate_draft(
-            ADMIN, "ABILITY", "demo.catalog.lookup")
+        report = self.service.validate_draft(ADMIN, "ABILITY", "demo.catalog.lookup")
         self.assertFalse(report.valid)
-        self.assertIn("ABILITY_SCHEMA_INVALID",
-                      {issue["code"] for issue in report.issues})
+        self.assertIn("ABILITY_SCHEMA_INVALID", {issue["code"] for issue in report.issues})
         fixed = self.service.save_draft(
-            ADMIN, "ABILITY", "demo.catalog.lookup", 1,
-            ability_document())
+            ADMIN, "ABILITY", "demo.catalog.lookup", 1, ability_document()
+        )
         self.assertEqual(2, fixed.revision)
-        self.assertTrue(self.service.validate_draft(
-            ADMIN, "ABILITY", "demo.catalog.lookup").valid)
+        self.assertTrue(self.service.validate_draft(ADMIN, "ABILITY", "demo.catalog.lookup").valid)
 
     def test_save_rejects_untrusted_operation_and_credential_material(self):
         unknown = ability_document()
         unknown["adapterOperationRef"] = "https://example.invalid/run"
-        with self.assertRaisesRegex(ManagementError,
-                                    "UNTRUSTED_ABILITY_REFERENCE"):
-            self.service.save_draft(
-                ADMIN, "ABILITY", "demo.catalog.lookup", 0, unknown)
+        with self.assertRaisesRegex(ManagementError, "UNTRUSTED_ABILITY_REFERENCE"):
+            self.service.save_draft(ADMIN, "ABILITY", "demo.catalog.lookup", 0, unknown)
         credential = ability_document()
         credential["credentialRequirements"][0]["token"] = "do-not-store"
-        with self.assertRaisesRegex(ManagementError,
-                                    "UNTRUSTED_ABILITY_REFERENCE"):
-            self.service.save_draft(
-                ADMIN, "ABILITY", "demo.catalog.lookup", 0, credential)
+        with self.assertRaisesRegex(ManagementError, "UNTRUSTED_ABILITY_REFERENCE"):
+            self.service.save_draft(ADMIN, "ABILITY", "demo.catalog.lookup", 0, credential)
         credential = ability_document()
         credential["credentialRequirements"] = "literal-secret-value"
-        with self.assertRaisesRegex(ManagementError,
-                                    "UNTRUSTED_ABILITY_REFERENCE"):
-            self.service.save_draft(
-                ADMIN, "ABILITY", "demo.catalog.lookup", 0, credential)
+        with self.assertRaisesRegex(ManagementError, "UNTRUSTED_ABILITY_REFERENCE"):
+            self.service.save_draft(ADMIN, "ABILITY", "demo.catalog.lookup", 0, credential)
         executable = ability_document()
         executable["script"] = "print('not allowed')"
-        with self.assertRaisesRegex(ManagementError,
-                                    "INVALID_ABILITY_DRAFT_FIELDS"):
-            self.service.save_draft(
-                ADMIN, "ABILITY", "demo.catalog.lookup", 0, executable)
-        self.assertIsNone(self.drafts.get(
-            "a2flow-demo", "ABILITY", "demo.catalog.lookup"))
+        with self.assertRaisesRegex(ManagementError, "INVALID_ABILITY_DRAFT_FIELDS"):
+            self.service.save_draft(ADMIN, "ABILITY", "demo.catalog.lookup", 0, executable)
+        self.assertIsNone(self.drafts.get("a2flow-demo", "ABILITY", "demo.catalog.lookup"))
 
     def test_publication_plan_is_validated_and_does_not_publish(self):
-        self.service.save_draft(
-            ADMIN, "ABILITY", "demo.catalog.lookup", 0,
-            ability_document())
+        self.service.save_draft(ADMIN, "ABILITY", "demo.catalog.lookup", 0, ability_document())
         plan = self.service.prepare_publication(
-            ADMIN, "ABILITY", "demo.catalog.lookup", 1,
-            PublicationTarget("PRT", "v2", "CURRENT"))
+            ADMIN, "ABILITY", "demo.catalog.lookup", 1, PublicationTarget("PRT", "v2", "CURRENT")
+        )
         self.assertEqual("ABILITY", plan.kind)
         self.assertEqual("v2", plan.candidate["versionId"])
         self.assertEqual("ability-demo", plan.candidate["assetId"])
-        value = {key: value for key, value in plan.candidate.items()
-                 if key != "contentDigest"}
-        self.assertEqual(
-            digest(value), plan.candidate["contentDigest"])
+        value = {key: value for key, value in plan.candidate.items() if key != "contentDigest"}
+        self.assertEqual(digest(value), plan.candidate["contentDigest"])
         self.assertEqual("v1", self.reader.published["versionId"])
 
     def test_publication_uses_one_draft_snapshot(self):
-        first = ManagedDraft.create(
-            "ABILITY", "demo.catalog.lookup", 1,
-            ability_document(), "admin-1")
+        first = ManagedDraft.create("ABILITY", "demo.catalog.lookup", 1, ability_document(), 101)
         moved_document = deepcopy(ability_document())
         moved_document["outputSchema"] = []
-        second = ManagedDraft.create(
-            "ABILITY", "demo.catalog.lookup", 2,
-            moved_document, "admin-1")
+        second = ManagedDraft.create("ABILITY", "demo.catalog.lookup", 2, moved_document, 101)
 
         class MovingDrafts:
             environment = "PRT"
@@ -240,8 +223,8 @@ class AbilityManagementTests(unittest.TestCase):
         moving = MovingDrafts()
         service = ManagementService([feature(self.reader, moving)])
         plan = service.prepare_publication(
-            ADMIN, "ABILITY", "demo.catalog.lookup", 1,
-            PublicationTarget("PRT", "v2", "CURRENT"))
+            ADMIN, "ABILITY", "demo.catalog.lookup", 1, PublicationTarget("PRT", "v2", "CURRENT")
+        )
         self.assertEqual(1, plan.draft_revision)
         self.assertEqual(1, moving.calls)
 
@@ -262,17 +245,11 @@ class AbilityManagementTests(unittest.TestCase):
 
         drafts = CountingDrafts()
         service = ManagementService([feature(self.reader, drafts)])
-        online = TrustedManagementContext(
-            "admin-1", "ONLINE", frozenset({"ADMIN"}))
-        with self.assertRaisesRegex(ManagementError,
-                                    "DRAFT_ENVIRONMENT_MISMATCH"):
-            service.get_draft(
-                online, "ABILITY", "demo.catalog.lookup")
-        with self.assertRaisesRegex(ManagementError,
-                                    "DRAFT_ENVIRONMENT_MISMATCH"):
-            service.save_draft(
-                online, "ABILITY", "demo.catalog.lookup", 0,
-                ability_document())
+        online = TrustedManagementContext(101, "ONLINE", frozenset({"ADMIN"}))
+        with self.assertRaisesRegex(ManagementError, "DRAFT_ENVIRONMENT_MISMATCH"):
+            service.get_draft(online, "ABILITY", "demo.catalog.lookup")
+        with self.assertRaisesRegex(ManagementError, "DRAFT_ENVIRONMENT_MISMATCH"):
+            service.save_draft(online, "ABILITY", "demo.catalog.lookup", 0, ability_document())
         self.assertEqual(0, drafts.calls)
 
 

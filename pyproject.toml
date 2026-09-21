@@ -11,6 +11,7 @@ files = [
   "packages/asset-store/src/a2flow_asset_store/records.py",
   "services/management-api/src/a2flow_management/contracts.py",
   "services/management-api/src/a2flow_management/db_types.py",
+  "services/management-api/src/a2flow_management/draft_models.py",
   "services/management-api/src/a2flow_management/http_models.py",
   "services/management-api/src/a2flow_management/relations.py",
   "services/management-api/src/a2flow_management/repositories.py",

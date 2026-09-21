@@ -11,9 +11,9 @@ export type PendingChange = (path: Path, text: string, expected: 'object' | 'arr
 export type PendingResolve = (path: Path, expected: 'object' | 'array') => void;
 export type PendingDiscard = (path: Path) => void;
 export type PendingConflict = (path: Path) => string | null;
-export type FormProps = {
+export type FormProps<TDocument extends JsonObject = JsonObject> = {
   skillStage?: string;
-  document: JsonObject;
+  document: TDocument;
   disabled: boolean;
   onChange: Change;
   pendingFields: PendingFields;
@@ -64,7 +64,7 @@ export function Field({ label, value, disabled, multiline = false, readOnly = fa
       onChange={(event) => onChange?.(event.target.value)} />
   );
   return <label className="form-field"><span>{label}</span>{control}{malformed
-    ? <small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），请在完整 JSON 模式修正。</small>
+    ? <small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），请重新加载草稿；若问题仍存在，由后端修复该字段结构。</small>
     : null}</label>;
 }
 
@@ -74,7 +74,7 @@ export function ReferencePicker({ label, value, kind, disabled, references, onCh
 }) {
   if (typeof value !== 'string') {
     return <label className="form-field"><span>{label}</span><select aria-label={label} value="" disabled><option value="">类型错误</option></select>
-      <small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），原值已保留；请在完整 JSON 模式明确修复。</small></label>;
+      <small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），原值已保留；请重新加载草稿后核对。</small></label>;
   }
   const current = value;
   const options = references?.assets[kind] ?? [];
@@ -99,7 +99,7 @@ export function ReleaseReferencePicker({ label, value, disabled, references, onC
     return <div className="form-field"><span>{label}</span><div className="reference-pair">
       <select aria-label={`${label} key`} value="" disabled><option value="">类型错误</option></select>
       <select aria-label={`${label} version`} value="" disabled><option value="">类型错误</option></select>
-    </div><small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），原值已保留；请在完整 JSON 模式明确修复。</small></div>;
+    </div><small className="field-feedback error">当前值类型不受支持（{JSON.stringify(value)}），原值已保留；请重新加载草稿后核对。</small></div>;
   }
   const current = value;
   const [key = '', version = ''] = current.split('@');
@@ -134,11 +134,11 @@ export function EnumSelect({ label, value, options, disabled, onChange }: {
     onChange={(event) => onChange(event.target.value)}>
     {!supported ? <option value={current}>不受支持：{current || JSON.stringify(value)}</option> : null}
     {options.map((option) => <option value={option} key={option}>{option}</option>)}
-  </select>{!supported ? <small className="field-feedback error">当前值未被表单支持，请在完整 JSON 模式修正。</small> : null}</label>;
+  </select>{!supported ? <small className="field-feedback error">当前值未被表单支持，请重新加载草稿后核对。</small> : null}</label>;
 }
 
 export function MalformedValue({ label, value }: { label: string; value: unknown }) {
-  return <div className="field-feedback error">{label} 的当前值类型不受支持（{JSON.stringify(value)}），已保留；请在完整 JSON 模式修正。</div>;
+  return <div className="field-feedback error">{label} 的当前值类型不受支持（{JSON.stringify(value)}），已保留；请重新加载草稿后核对。</div>;
 }
 
 export function JsonField({ label, document, path, disabled, expected, pendingFields, onPendingChange, onApply, onDiscard, getConflict }: {

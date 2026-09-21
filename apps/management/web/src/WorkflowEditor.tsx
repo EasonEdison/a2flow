@@ -1,7 +1,8 @@
 import { appendRow, isEditableRecord, moveRow, removeRow, updateRow, workflowTopologyWarning } from './form-editor-state';
 import { Field, MalformedValue, ReferencePicker, RowActions, Section, useRowKeys, type FormProps } from './EditorControls';
+import type { WorkflowDraftDocument } from './asset-drafts';
 
-export function WorkflowEditor({ document, disabled, onChange, references }: FormProps) {
+export function WorkflowEditor({ document, disabled, onChange, references }: FormProps<WorkflowDraftDocument>) {
   const nodes = document.nodes;
   const warning = workflowTopologyWarning(document);
   const rowKeys = useRowKeys(Array.isArray(nodes) ? nodes.length : 0);

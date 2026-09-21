@@ -1,4 +1,5 @@
 """Ability management adapter for the shared A2Flow management service."""
+
 import hashlib
 
 from a2flow_management import (
@@ -7,22 +8,11 @@ from a2flow_management import (
     ManagementFeature,
     PublicationPlan,
     ValidationReport,
+    parse_draft_structure,
 )
 from a2flow_management.contracts import canonical
 from skillweave_contracts import TrustedContext, parse_identifier
 
-
-_DRAFT_FIELDS = {
-    "abilityKey",
-    "adapterOperationRef",
-    "credentialRequirements",
-    "defaultSuccessPolicyRef",
-    "inputBindings",
-    "modelArgumentSchema",
-    "outputSchema",
-    "resolvedInputSchema",
-    "resultInterpretationPolicies",
-}
 _UNTRUSTED_ISSUE_CODES = {
     "ABILITY_FIELD_UNSUPPORTED",
     "ADAPTER_OPERATION_REF_INVALID",
@@ -57,16 +47,14 @@ class AbilityManagementFeature(ManagementFeature):
     def _published(self, context, key):
         parse_identifier(key)
         try:
-            return self.reader.resolve_asset(
-                self.kind, key, self._runtime_context(context))
+            return self.reader.resolve_asset(self.kind, key, self._runtime_context(context))
         except Exception as error:
             if getattr(error, "code", None) == "ASSET_NOT_FOUND":
                 raise ManagementError("ABILITY_NOT_FOUND", 404) from None
             raise
 
     def list_published(self, context):
-        return self.reader.list_assets(
-            self.kind, self._runtime_context(context))
+        return self.reader.list_assets(self.kind, self._runtime_context(context))
 
     def get_published(self, context, key):
         published = self._published(context, key)
@@ -89,8 +77,7 @@ class AbilityManagementFeature(ManagementFeature):
         if draft is not None:
             return draft
         published = self._published(context, key)
-        return ManagedDraft.create(
-            self.kind, key, 0, published["definition"], context.user_id)
+        return ManagedDraft.create(self.kind, key, 0, published["definition"], context.user_id)
 
     def create_draft(self, context, key):
         parse_identifier(key)
@@ -100,14 +87,17 @@ class AbilityManagementFeature(ManagementFeature):
         if self.reader.asset_exists(self.kind, key, self._runtime_context(context)):
             raise ManagementError("ASSET_ALREADY_EXISTS", 409)
         document = {
-            "abilityKey": key, "adapterOperationRef": "",
-            "credentialRequirements": [], "defaultSuccessPolicyRef": "",
-            "inputBindings": [], "modelArgumentSchema": {},
-            "outputSchema": {}, "resolvedInputSchema": {},
+            "abilityKey": key,
+            "adapterOperationRef": "",
+            "credentialRequirements": [],
+            "defaultSuccessPolicyRef": "",
+            "inputBindings": [],
+            "modelArgumentSchema": {},
+            "outputSchema": {},
+            "resolvedInputSchema": {},
             "resultInterpretationPolicies": [],
         }
-        candidate = ManagedDraft.create(
-            self.kind, key, 1, document, context.user_id)
+        candidate = ManagedDraft.create(self.kind, key, 1, document, context.user_id)
         return self.drafts.create(self.namespace, candidate)
 
     def _validate_snapshot(self, draft):
@@ -115,25 +105,19 @@ class AbilityManagementFeature(ManagementFeature):
         if not result.is_valid:
             return ValidationReport(
                 False,
-                tuple({
-                    "code": issue.code,
-                    "path": issue.path,
-                    "message": issue.message,
-                } for issue in result.issues),
+                tuple(
+                    {
+                        "code": issue.code,
+                        "path": issue.path,
+                        "message": issue.message,
+                    }
+                    for issue in result.issues
+                ),
             )
         return ValidationReport.success(draft.document)
 
     def _admit_draft(self, key, document):
-        if type(document) is not dict or set(document) != _DRAFT_FIELDS:
-            raise ManagementError("INVALID_ABILITY_DRAFT_FIELDS")
-        if document.get("abilityKey") != key:
-            raise ManagementError("ABILITY_KEY_MISMATCH")
-        requirements = document["credentialRequirements"]
-        if (type(requirements) is not list
-                or any(type(item) is not dict
-                       or set(item) != {"slotId", "required"}
-                       for item in requirements)):
-            raise ManagementError("UNTRUSTED_ABILITY_REFERENCE")
+        parse_draft_structure("ABILITY", key, document)
         result = self.validator.validate(document)
         if any(issue.code in _UNTRUSTED_ISSUE_CODES for issue in result.issues):
             raise ManagementError("UNTRUSTED_ABILITY_REFERENCE")
@@ -142,8 +126,7 @@ class AbilityManagementFeature(ManagementFeature):
         parse_identifier(key)
         self._draft_context(context)
         self._admit_draft(key, document)
-        candidate = ManagedDraft.create(
-            self.kind, key, 1, document, context.user_id)
+        candidate = ManagedDraft.create(self.kind, key, 1, document, context.user_id)
         return self.drafts.save(self.namespace, candidate, expected_revision)
 
     def validate_draft(self, context, key):
@@ -186,8 +169,7 @@ class AbilityManagementFeature(ManagementFeature):
             "dependencies": [],
         }
         candidate = {**value, "contentDigest": _digest(value)}
-        return PublicationPlan.create(
-            self.kind, key, draft.revision, target, candidate)
+        return PublicationPlan.create(self.kind, key, draft.revision, target, candidate)
 
 
 def create_ability_feature(reader, drafts, namespace, validator):
