@@ -1,5 +1,19 @@
 """Strict adapters for the SW-P1-SUBSET-01 Skill/Policy contract closure."""
 
+from .asset_types import (
+    ASSET_KINDS,
+    ENVIRONMENTS,
+    AssetIdentity,
+    AssetKind,
+    EffectiveVersions,
+    Environment,
+    JsonObject,
+    JsonScalar,
+    JsonValue,
+    ReleaseChannel,
+    ServingState,
+    VersionedAssetIdentity,
+)
 from .models import (
     CONTRACT_REVISION,
     AuthorizedMaterialHandle,
@@ -35,6 +49,18 @@ from .validation import ContractValidationError, ValidationIssue
 from .user_id import require_user_id, user_id_from_wire, user_id_to_wire
 
 __all__ = [
+    "ASSET_KINDS",
+    "ENVIRONMENTS",
+    "AssetIdentity",
+    "AssetKind",
+    "EffectiveVersions",
+    "Environment",
+    "JsonObject",
+    "JsonScalar",
+    "JsonValue",
+    "ReleaseChannel",
+    "ServingState",
+    "VersionedAssetIdentity",
     "require_user_id",
     "user_id_from_wire",
     "user_id_to_wire",

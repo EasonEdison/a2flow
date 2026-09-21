@@ -4,11 +4,9 @@ from collections.abc import Mapping
 from functools import partial
 from typing import Protocol, cast
 
+from skillweave_contracts import AssetKind, Environment, JsonObject, JsonValue
+
 from .contracts import (
-    AssetKind,
-    Environment,
-    JsonObject,
-    JsonValue,
     ManagementError,
     PublicationPlan,
     PublicationTarget,

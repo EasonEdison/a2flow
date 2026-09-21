@@ -77,6 +77,10 @@ class DraftDatabaseDouble:
             return DraftRows([(1,)] if self.published else [])
         if sql.startswith("INSERT INTO a2flow_management_drafts"):
             return DraftRows([(1,)])
+        if sql.startswith("DELETE FROM a2flow_management_relations"):
+            return DraftRows()
+        if sql.startswith("INSERT INTO a2flow_management_relations"):
+            return DraftRows()
         raise AssertionError("unexpected SQL " + sql)
 
 

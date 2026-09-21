@@ -4,11 +4,12 @@ Revision snapshots retain prior bindings; removing a binding means it is absent
 from the new source revision. Published dependency/version storage is separate.
 """
 
-from typing import Literal, Protocol, TypeAlias, TypedDict, cast
+from typing import Literal, TypeAlias, TypedDict, cast
 
-from skillweave_contracts import parse_identifier, parse_skill_key
+from skillweave_contracts import ASSET_KINDS, AssetKind, parse_identifier, parse_skill_key
 
-from .contracts import AssetKind, ManagedDraft, ManagementError
+from .contracts import ManagedDraft, ManagementError
+from .db_types import DatabaseConnection
 
 RelationType: TypeAlias = Literal[
     "SKILL_ABILITY",
@@ -18,7 +19,15 @@ RelationType: TypeAlias = Literal[
     "WORKFLOW_SKILL",
 ]
 RelationTarget: TypeAlias = tuple[AssetKind, str, RelationType]
-SqlParams: TypeAlias = tuple[object, ...]
+RELATION_TYPES: frozenset[str] = frozenset(
+    {
+        "SKILL_ABILITY",
+        "SKILL_APPLICATION",
+        "APPLICATION_ABILITY",
+        "APPLICATION_COMPONENT",
+        "WORKFLOW_SKILL",
+    }
+)
 
 
 class DraftRelation(TypedDict):
@@ -29,14 +38,6 @@ class DraftRelation(TypedDict):
     targetKind: AssetKind
     targetKey: str
     relationType: RelationType
-
-
-class QueryResult(Protocol):
-    def fetchall(self) -> list[tuple[object, ...]]: ...
-
-
-class RelationConnection(Protocol):
-    def execute(self, query: str, params: SqlParams = ()) -> QueryResult: ...
 
 
 RELATION_DDL = (
@@ -53,16 +54,7 @@ RELATION_DDL = (
 
 def _relation_type(source: AssetKind, target: AssetKind) -> RelationType:
     value = f"{source}_{target}"
-    allowed: frozenset[str] = frozenset(
-        {
-            "SKILL_ABILITY",
-            "SKILL_APPLICATION",
-            "APPLICATION_ABILITY",
-            "APPLICATION_COMPONENT",
-            "WORKFLOW_SKILL",
-        }
-    )
-    if value not in allowed:
+    if value not in RELATION_TYPES:
         raise ManagementError("INVALID_RELATION_TYPE")
     return cast(RelationType, value)
 
@@ -167,7 +159,7 @@ def draft_relations(
 
 
 def replace_draft_relations(
-    connection: RelationConnection,
+    connection: DatabaseConnection,
     namespace: str,
     draft: ManagedDraft,
     revision: int,
@@ -199,7 +191,7 @@ def replace_draft_relations(
 
 
 def list_relations(
-    connection: RelationConnection,
+    connection: DatabaseConnection,
     namespace: str,
     kind: AssetKind,
     key: str,
@@ -228,8 +220,10 @@ def list_relations(
         if (
             type(row_revision) is not int
             or type(target_kind) is not str
+            or target_kind not in ASSET_KINDS
             or type(target_key) is not str
             or type(relation_type) is not str
+            or relation_type not in RELATION_TYPES
         ):
             raise ManagementError("INVALID_RELATION_ROW", 500)
         result.append(

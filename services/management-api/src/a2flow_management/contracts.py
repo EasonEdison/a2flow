@@ -6,19 +6,20 @@ import re
 from dataclasses import dataclass
 from typing import Literal, NotRequired, Self, TypeAlias, TypedDict, cast
 
+from skillweave_contracts.asset_types import (
+    ASSET_KINDS,
+    AssetKind,
+    Environment,
+    JsonObject,
+    JsonValue,
+    ReleaseChannel,
+)
 from skillweave_contracts.user_id import require_user_id, user_id_to_wire
 
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}")
-_KINDS = frozenset({"SKILL", "ABILITY", "APPLICATION", "COMPONENT", "WORKFLOW"})
 _MAX_BYTES = 8 * 1024 * 1024
 
-AssetKind: TypeAlias = Literal["SKILL", "ABILITY", "APPLICATION", "COMPONENT", "WORKFLOW"]
-Environment: TypeAlias = Literal["PRT", "ONLINE"]
-ReleaseChannel: TypeAlias = Literal["CURRENT", "STABLE", "GRAY"]
 Role: TypeAlias = Literal["ADMIN", "USER"]
-JsonScalar: TypeAlias = None | bool | int | float | str
-JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
-JsonObject: TypeAlias = dict[str, JsonValue]
 
 
 class ValidationIssue(TypedDict):
@@ -130,7 +131,7 @@ class ManagedDraft:
         document: JsonObject,
         updated_by: int,
     ) -> Self:
-        if kind not in _KINDS:
+        if kind not in ASSET_KINDS:
             raise ManagementError("INVALID_ASSET_KIND")
         identifier(key, "INVALID_ASSET_KEY")
         user_identifier(updated_by)
@@ -197,6 +198,25 @@ class PublicationTarget:
     version_id: str
     channel: ReleaseChannel
     gray_user_ids: tuple[int, ...] = ()
+
+    @classmethod
+    def create(
+        cls,
+        environment: str,
+        version_id: str,
+        channel: str,
+        gray_user_ids: tuple[int, ...] = (),
+    ) -> Self:
+        if environment not in {"PRT", "ONLINE"}:
+            raise ManagementError("INVALID_TARGET_ENVIRONMENT")
+        if channel not in {"CURRENT", "STABLE", "GRAY"}:
+            raise ManagementError("INVALID_PUBLICATION_CHANNEL")
+        return cls(
+            cast(Environment, environment),
+            version_id,
+            cast(ReleaseChannel, channel),
+            gray_user_ids,
+        )
 
     def __post_init__(self) -> None:
         if type(self.gray_user_ids) is not tuple:

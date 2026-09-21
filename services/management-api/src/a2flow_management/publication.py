@@ -4,11 +4,9 @@ from collections.abc import Callable
 from typing import Protocol, TypeVar
 
 from a2flow_asset_store.records import AssetError
+from skillweave_contracts import AssetKind, Environment, JsonObject
 
 from .contracts import (
-    AssetKind,
-    Environment,
-    JsonObject,
     ManagementError,
     PublicationTarget,
     PublicationTargetMapping,

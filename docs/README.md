@@ -31,6 +31,7 @@ These existing engineering records may use English, Chinese, or both. The paired
 - [Approved contract subset / 已批准契约子集](../openspec/changes/skillweave-phase1/implementation-release-01.md)
 - [Workstreams / 分工与依赖](workstreams.md)
 - [Management authoring, references, and comparison / 管理创建、引用与版本比较](management-authoring.md)
+- [Python engineering standards / Python 工程规范](python-engineering-standards.md)
 - [Runtime experiments / 运行引擎实验](../experiments/runtime-phase1/README.md)
 - [Runtime readiness / 引擎准出](../openspec/changes/oss-agent-workflow-runtime/readiness.md)
 - [Runtime regression evidence / 引擎回归证据](../openspec/changes/oss-agent-workflow-runtime/regression.md)

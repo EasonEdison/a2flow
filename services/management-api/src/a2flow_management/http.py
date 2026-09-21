@@ -1,77 +1,36 @@
 """Bounded ASGI adapter. The Host owns authentication and listener setup."""
+
 import hashlib
-from typing import Annotated, Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, BeforeValidator
-from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
+from skillweave_contracts.user_id import user_id_to_wire
 
 from .contracts import (
-    ManagementError, PublicationTarget, TrustedManagementContext, identifier,
-    require_admin, require_reader,
+    ManagementError,
+    TrustedManagementContext,
+    identifier,
+    require_admin,
+    require_reader,
+)
+from .http_models import (
+    CompareDraft,
+    PreparePublication,
+    PublishCandidate,
+    ReleaseCandidate,
+    RollbackSelection,
+    SaveDraft,
+    WorkspaceCommit,
+    WorkspaceDelete,
+    WorkspaceFile,
+)
+from .http_models import (
+    Target as Target,
 )
 
 BODY_LIMIT = 1024 * 1024
 RESPONSE_LIMIT = 2 * 1024 * 1024
-
-
-class _Closed(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class SaveDraft(_Closed):
-    expectedRevision: int = Field(ge=0)
-    document: dict[str, JsonValue]
-
-
-class CompareDraft(_Closed):
-    document: dict[str, JsonValue]
-
-
-class WorkspaceFile(_Closed):
-    expectedWorkspaceRevision: int = Field(ge=0)
-    logicalPath: str = Field(min_length=1, max_length=256)
-    mediaType: str = Field(min_length=1, max_length=256)
-    base64: str
-
-
-class WorkspaceDelete(_Closed):
-    expectedWorkspaceRevision: int = Field(ge=0)
-    logicalPath: str = Field(min_length=1, max_length=256)
-
-
-class WorkspaceCommit(_Closed):
-    expectedWorkspaceRevision: int = Field(ge=0)
-    expectedDraftRevision: int = Field(ge=0)
-
-
-class Target(_Closed):
-    environment: str
-    versionId: str = Field(min_length=1, max_length=256)
-    channel: str
-    grayUserIds: list[Annotated[int, BeforeValidator(user_id_from_wire)]] = Field(default_factory=list, max_length=1024)
-
-
-class PreparePublication(_Closed):
-    expectedRevision: int = Field(ge=0)
-    target: Target
-
-
-class PublishCandidate(_Closed):
-    expectedServingDigest: str = Field(min_length=71, max_length=71)
-    candidate: dict[str, JsonValue]
-    target: Target
-
-
-class RollbackSelection(_Closed):
-    expectedServingDigest: str = Field(min_length=71, max_length=71)
-    target: Target
-
-
-class ReleaseCandidate(PublishCandidate):
-    expectedRevision: int = Field(ge=0)
 
 
 def _error(status, code):
@@ -96,6 +55,7 @@ def _response(value):
 
 class BodyLimit:
     """Counts received bytes before framework JSON parsing."""
+
     def __init__(self, app):
         self.app = app
 
@@ -128,8 +88,7 @@ class BodyLimit:
         await self.app(scope, replay, send)
 
 
-def create_app(service, *, identity_resolver, publications=None, dependencies=None,
-               releases=None):
+def create_app(service, *, identity_resolver, publications=None, dependencies=None, releases=None):
     """Create an app without starting a listener.
 
     identity_resolver receives the server ASGI scope and must return an already
@@ -178,12 +137,14 @@ def create_app(service, *, identity_resolver, publications=None, dependencies=No
     @app.get("/management/session")
     def session(request: Request):
         who = require_reader(context(request))
-        return _response({
-            "userId": user_id_to_wire(who.user_id),
-            "environment": who.environment,
-            "registeredKinds": list(service.kinds),
-            "canAuthor": "ADMIN" in who.roles,
-        })
+        return _response(
+            {
+                "userId": user_id_to_wire(who.user_id),
+                "environment": who.environment,
+                "registeredKinds": list(service.kinds),
+                "canAuthor": "ADMIN" in who.roles,
+            }
+        )
 
     @app.get("/management/assets/{kind}")
     def list_published(request: Request, kind: str):
@@ -194,134 +155,169 @@ def create_app(service, *, identity_resolver, publications=None, dependencies=No
         return _response(service.skill_workspace(context(request), key_value(key), "get"))
 
     if releases is not None:
+
         @app.get("/management/release-targets")
         def release_targets(request: Request):
             return _response(releases.targets(context(request)))
 
         @app.get("/management/release-targets/{environment}/assets/{kind}/{key:path}/versions")
         def release_versions(request: Request, environment: str, kind: str, key: str):
-            return _response(releases.history(
-                context(request), environment, kind, key_value(key)))
+            return _response(releases.history(context(request), environment, kind, key_value(key)))
 
-        @app.post("/management/release-targets/{environment}/assets/{kind}/{key:path}/publication-checks")
-        def release_check(request: Request, environment: str, kind: str, key: str,
-                          body: PreparePublication):
-            target = PublicationTarget(
-                body.target.environment, body.target.versionId,
-                body.target.channel, tuple(body.target.grayUserIds))
-            return _response(releases.check(
-                context(request), environment, kind, key_value(key),
-                body.expectedRevision, target))
+        @app.post(
+            "/management/release-targets/{environment}/assets/{kind}/{key:path}/publication-checks"
+        )
+        def release_check(
+            request: Request, environment: str, kind: str, key: str, body: PreparePublication
+        ):
+            target = body.target.to_domain()
+            return _response(
+                releases.check(
+                    context(request),
+                    environment,
+                    kind,
+                    key_value(key),
+                    body.expectedRevision,
+                    target,
+                )
+            )
 
         @app.post("/management/release-targets/{environment}/assets/{kind}/{key:path}/publications")
-        def release_publish(request: Request, environment: str, kind: str, key: str,
-                            body: ReleaseCandidate):
-            target = PublicationTarget(
-                body.target.environment, body.target.versionId,
-                body.target.channel, tuple(body.target.grayUserIds))
-            return _response(releases.publish(
-                context(request), environment, kind, key_value(key),
-                body.expectedRevision, target, body.candidate,
-                body.expectedServingDigest))
+        def release_publish(
+            request: Request, environment: str, kind: str, key: str, body: ReleaseCandidate
+        ):
+            target = body.target.to_domain()
+            return _response(
+                releases.publish(
+                    context(request),
+                    environment,
+                    kind,
+                    key_value(key),
+                    body.expectedRevision,
+                    target,
+                    body.candidate,
+                    body.expectedServingDigest,
+                )
+            )
 
     @app.put("/management/assets/SKILL/{key:path}/workspace/file")
     def workspace_file(request: Request, key: str, body: WorkspaceFile):
-        return _response(service.skill_workspace(
-            context(request), key_value(key), "save", body.expectedWorkspaceRevision,
-            body.logicalPath, body.mediaType, body.base64))
+        return _response(
+            service.skill_workspace(
+                context(request),
+                key_value(key),
+                "save",
+                body.expectedWorkspaceRevision,
+                body.logicalPath,
+                body.mediaType,
+                body.base64,
+            )
+        )
 
     @app.post("/management/assets/SKILL/{key:path}/workspace/delete")
     def workspace_delete(request: Request, key: str, body: WorkspaceDelete):
-        return _response(service.skill_workspace(
-            context(request), key_value(key), "delete", body.expectedWorkspaceRevision,
-            body.logicalPath))
+        return _response(
+            service.skill_workspace(
+                context(request),
+                key_value(key),
+                "delete",
+                body.expectedWorkspaceRevision,
+                body.logicalPath,
+            )
+        )
 
     @app.post("/management/assets/SKILL/{key:path}/workspace/commit")
     def workspace_commit(request: Request, key: str, body: WorkspaceCommit):
-        return _response(service.skill_workspace(
-            context(request), key_value(key), "commit", body.expectedWorkspaceRevision,
-            body.expectedDraftRevision))
+        return _response(
+            service.skill_workspace(
+                context(request),
+                key_value(key),
+                "commit",
+                body.expectedWorkspaceRevision,
+                body.expectedDraftRevision,
+            )
+        )
 
     @app.get("/management/assets/{kind}/{key:path}/draft")
     def get_draft(request: Request, kind: str, key: str):
-        return _response(service.get_draft(
-            context(request), kind, key_value(key)))
+        return _response(service.get_draft(context(request), kind, key_value(key)))
 
     @app.post("/management/assets/{kind}/{key:path}/draft")
     def create_draft(request: Request, kind: str, key: str):
-        return _response(service.create_draft(
-            context(request), kind, key_value(key)))
+        return _response(service.create_draft(context(request), kind, key_value(key)))
 
     @app.put("/management/assets/{kind}/{key:path}/draft")
     def save_draft(request: Request, kind: str, key: str, body: SaveDraft):
-        return _response(service.save_draft(
-            context(request), kind, key_value(key),
-            body.expectedRevision, body.document))
+        return _response(
+            service.save_draft(
+                context(request), kind, key_value(key), body.expectedRevision, body.document
+            )
+        )
 
     @app.post("/management/assets/{kind}/{key:path}/validate")
     def validate_draft(request: Request, kind: str, key: str):
-        return _response(service.validate_draft(
-            context(request), kind, key_value(key)))
+        return _response(service.validate_draft(context(request), kind, key_value(key)))
 
     @app.post("/management/assets/{kind}/{key:path}/comparison-documents")
-    def comparison_document(request: Request, kind: str, key: str,
-                            body: CompareDraft):
-        return _response(service.comparison_document(
-            context(request), kind, key_value(key), body.document))
+    def comparison_document(request: Request, kind: str, key: str, body: CompareDraft):
+        return _response(
+            service.comparison_document(context(request), kind, key_value(key), body.document)
+        )
 
     @app.post("/management/assets/{kind}/{key:path}/publication-checks")
-    def publication_check(request: Request, kind: str, key: str,
-                          body: PreparePublication):
+    def publication_check(request: Request, kind: str, key: str, body: PreparePublication):
         who = require_admin(context(request))
         asset_key = key_value(key)
-        target = PublicationTarget(
-            body.target.environment, body.target.versionId,
-            body.target.channel, tuple(body.target.grayUserIds))
+        target = body.target.to_domain()
         validation = service.validate_draft(who, kind, asset_key)
-        dependency_graph = dependencies.inspect(
-            who, kind, asset_key, root_sources=("saved-draft",)) if dependencies is not None else None
+        dependency_graph = (
+            dependencies.inspect(who, kind, asset_key, root_sources=("saved-draft",))
+            if dependencies is not None
+            else None
+        )
         validation_mapping = validation.to_mapping()
         result = {
             "validation": validation_mapping,
             "dependencies": dependency_graph,
-            "target": {"environment": target.environment,
-                       "versionId": target.version_id,
-                       "channel": target.channel,
-                       "grayUserIds": [user_id_to_wire(user) for user in target.gray_user_ids]},
+            "target": {
+                "environment": target.environment,
+                "versionId": target.version_id,
+                "channel": target.channel,
+                "grayUserIds": [user_id_to_wire(user) for user in target.gray_user_ids],
+            },
             "status": "VALIDATION_FAILED",
             "published": False,
         }
         if validation_mapping["valid"]:
-            plan = service.prepare_publication(
-                who, kind, asset_key, body.expectedRevision, target)
+            plan = service.prepare_publication(who, kind, asset_key, body.expectedRevision, target)
             result.update(plan.to_mapping())
-            result.update({
-                "status": "PREPARED_NOT_PUBLISHED",
-                "preparedRevision": plan.draft_revision,
-                "candidateIdentity": {
-                    "kind": plan.kind, "key": plan.key,
-                    "versionId": plan.target.version_id,
-                    "contentDigest": plan.content_digest,
-                },
-                "published": False,
-            })
+            result.update(
+                {
+                    "status": "PREPARED_NOT_PUBLISHED",
+                    "preparedRevision": plan.draft_revision,
+                    "candidateIdentity": {
+                        "kind": plan.kind,
+                        "key": plan.key,
+                        "versionId": plan.target.version_id,
+                        "contentDigest": plan.content_digest,
+                    },
+                    "published": False,
+                }
+            )
         return _response(result)
 
     @app.post("/management/assets/{kind}/{key:path}/publication-plans")
-    def prepare(request: Request, kind: str, key: str,
-                      body: PreparePublication):
+    def prepare(request: Request, kind: str, key: str, body: PreparePublication):
         who = context(request)
-        target = PublicationTarget(
-            body.target.environment, body.target.versionId,
-            body.target.channel, tuple(body.target.grayUserIds))
-        plan = service.prepare_publication(
-            who, kind, key_value(key), body.expectedRevision, target)
+        target = body.target.to_domain()
+        plan = service.prepare_publication(who, kind, key_value(key), body.expectedRevision, target)
         result = plan.to_mapping()
         result["status"] = "PREPARED_NOT_PUBLISHED"
         result["published"] = False
         return _response(result)
 
     if publications is not None:
+
         @app.get("/management/assets/{kind}/{key:path}/versions")
         def versions(request: Request, kind: str, key: str):
             who = require_reader(context(request))
@@ -332,57 +328,68 @@ def create_app(service, *, identity_resolver, publications=None, dependencies=No
                 if error.code != "ASSET_NOT_FOUND" or "ADMIN" not in who.roles:
                     raise
                 service.get_draft(who, kind, asset_key)
-                return _response({
-                    "kind": kind, "key": asset_key, "versions": [], "serving": None,
-                    "servingDigest": "sha256:" + hashlib.sha256(b"null").hexdigest(),
-                })
+                return _response(
+                    {
+                        "kind": kind,
+                        "key": asset_key,
+                        "versions": [],
+                        "serving": None,
+                        "servingDigest": "sha256:" + hashlib.sha256(b"null").hexdigest(),
+                    }
+                )
 
         @app.get("/management/assets/{kind}/{key:path}/versions/{version_id}")
         def version(request: Request, kind: str, key: str, version_id: str):
             who = require_reader(context(request))
             asset_key = key_value(key)
             retained = publications.version(
-                who, kind, asset_key,
-                identifier(version_id, "INVALID_VERSION_ID"))
-            return _response({
-                **retained,
-                "document": service.retained_comparison_document(
-                    who, kind, asset_key, retained["document"]),
-            })
+                who, kind, asset_key, identifier(version_id, "INVALID_VERSION_ID")
+            )
+            return _response(
+                {
+                    **retained,
+                    "document": service.retained_comparison_document(
+                        who, kind, asset_key, retained["document"]
+                    ),
+                }
+            )
 
         @app.post("/management/assets/{kind}/{key:path}/publications")
-        def publish(request: Request, kind: str, key: str,
-                    body: PublishCandidate):
+        def publish(request: Request, kind: str, key: str, body: PublishCandidate):
             who = require_admin(context(request))
             asset_key = key_value(key)
             if kind == "SKILL":
                 service.skill_workspace(who, asset_key, "require-clean")
-            target = PublicationTarget(
-                body.target.environment, body.target.versionId,
-                body.target.channel, tuple(body.target.grayUserIds))
-            return _response(publications.publish(
-                who, kind, asset_key, body.candidate,
-                target, body.expectedServingDigest))
+            target = body.target.to_domain()
+            return _response(
+                publications.publish(
+                    who, kind, asset_key, body.candidate, target, body.expectedServingDigest
+                )
+            )
 
         @app.post("/management/assets/{kind}/{key:path}/rollbacks")
-        def rollback(request: Request, kind: str, key: str,
-                     body: RollbackSelection):
-            target = PublicationTarget(
-                body.target.environment, body.target.versionId,
-                body.target.channel, tuple(body.target.grayUserIds))
-            return _response(publications.rollback(
-                require_admin(context(request)), kind, key_value(key), target,
-                body.expectedServingDigest))
+        def rollback(request: Request, kind: str, key: str, body: RollbackSelection):
+            target = body.target.to_domain()
+            return _response(
+                publications.rollback(
+                    require_admin(context(request)),
+                    kind,
+                    key_value(key),
+                    target,
+                    body.expectedServingDigest,
+                )
+            )
 
     if dependencies is not None:
+
         @app.get("/management/assets/{kind}/{key:path}/dependencies")
         def dependency_graph(request: Request, kind: str, key: str):
-            return _response(dependencies.inspect(
-                require_reader(context(request)), kind, key_value(key)))
+            return _response(
+                dependencies.inspect(require_reader(context(request)), kind, key_value(key))
+            )
 
     @app.get("/management/assets/{kind}/{key:path}")
     def detail(request: Request, kind: str, key: str):
-        return _response(service.get_published(
-            context(request), kind, key_value(key)))
+        return _response(service.get_published(context(request), kind, key_value(key)))
 
     return app
