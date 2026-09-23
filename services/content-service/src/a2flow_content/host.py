@@ -55,12 +55,12 @@ def configure_listener(server: grpc.Server, values: Mapping[str, str]) -> int:
     if mode != "MTLS":
         raise ValueError("explicit MTLS or LOOPBACK_TEST mode required")
     credentials = grpc.ssl_server_credentials(
-        (
+        [
             (
                 Path(values["A2FLOW_CONTENT_KEY_FILE"]).read_bytes(),
                 Path(values["A2FLOW_CONTENT_CERT_FILE"]).read_bytes(),
             ),
-        ),
+        ],
         root_certificates=Path(values["A2FLOW_CONTENT_CLIENT_CA_FILE"]).read_bytes(),
         require_client_auth=True,
     )
@@ -77,6 +77,7 @@ def run(values: Mapping[str, str], *, migrate_only: bool = False) -> None:
         print("CONTENT_SCHEMA_READY")
         return
     # Serving never implicitly creates or alters database objects.
+    repository.check_ready()
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix="content-rpc") as executor:
         server = grpc.server(
             executor,

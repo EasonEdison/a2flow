@@ -137,6 +137,22 @@ _ContentServiceGetArtifactType = typing_extensions.TypeVar(
     ],
 )
 
+_ContentServiceGetConfirmationType = typing_extensions.TypeVar(
+    '_ContentServiceGetConfirmationType',
+    grpc.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.GetConfirmationRequest,
+        a2flow.content.v1.content_pb2.Confirmation,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.GetConfirmationRequest,
+        a2flow.content.v1.content_pb2.Confirmation,
+    ],
+    default=grpc.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.GetConfirmationRequest,
+        a2flow.content.v1.content_pb2.Confirmation,
+    ],
+)
+
 _ContentServiceConfirmReadingType = typing_extensions.TypeVar(
     '_ContentServiceConfirmReadingType',
     grpc.UnaryUnaryMultiCallable[
@@ -201,7 +217,7 @@ _ContentServiceExportManuscriptType = typing_extensions.TypeVar(
     ],
 )
 
-class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _ContentServiceListProjectsType, _ContentServiceGetProjectType, _ContentServiceSaveSourceType, _ContentServiceGetSourceType, _ContentServiceSaveArtifactType, _ContentServiceGetArtifactType, _ContentServiceConfirmReadingType, _ContentServiceConfirmTopicType, _ContentServiceConfirmManuscriptType, _ContentServiceExportManuscriptType]):
+class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _ContentServiceListProjectsType, _ContentServiceGetProjectType, _ContentServiceSaveSourceType, _ContentServiceGetSourceType, _ContentServiceSaveArtifactType, _ContentServiceGetArtifactType, _ContentServiceGetConfirmationType, _ContentServiceConfirmReadingType, _ContentServiceConfirmTopicType, _ContentServiceConfirmManuscriptType, _ContentServiceExportManuscriptType]):
     @typing.overload
     def __init__(self: ContentServiceStub[
         grpc.UnaryUnaryMultiCallable[
@@ -231,6 +247,10 @@ class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _Conte
         grpc.UnaryUnaryMultiCallable[
             a2flow.content.v1.content_pb2.GetArtifactRequest,
             a2flow.content.v1.content_pb2.Artifact,
+        ],
+        grpc.UnaryUnaryMultiCallable[
+            a2flow.content.v1.content_pb2.GetConfirmationRequest,
+            a2flow.content.v1.content_pb2.Confirmation,
         ],
         grpc.UnaryUnaryMultiCallable[
             a2flow.content.v1.content_pb2.ConfirmReadingRequest,
@@ -281,6 +301,10 @@ class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _Conte
             a2flow.content.v1.content_pb2.Artifact,
         ],
         grpc.aio.UnaryUnaryMultiCallable[
+            a2flow.content.v1.content_pb2.GetConfirmationRequest,
+            a2flow.content.v1.content_pb2.Confirmation,
+        ],
+        grpc.aio.UnaryUnaryMultiCallable[
             a2flow.content.v1.content_pb2.ConfirmReadingRequest,
             a2flow.content.v1.content_pb2.Confirmation,
         ],
@@ -311,6 +335,8 @@ class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _Conte
     SaveArtifact: _ContentServiceSaveArtifactType
 
     GetArtifact: _ContentServiceGetArtifactType
+
+    GetConfirmation: _ContentServiceGetConfirmationType
 
     ConfirmReading: _ContentServiceConfirmReadingType
 
@@ -348,6 +374,10 @@ ContentServiceAsyncStub: typing_extensions.TypeAlias = ContentServiceStub[
     grpc.aio.UnaryUnaryMultiCallable[
         a2flow.content.v1.content_pb2.GetArtifactRequest,
         a2flow.content.v1.content_pb2.Artifact,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.GetConfirmationRequest,
+        a2flow.content.v1.content_pb2.Confirmation,
     ],
     grpc.aio.UnaryUnaryMultiCallable[
         a2flow.content.v1.content_pb2.ConfirmReadingRequest,
@@ -416,6 +446,13 @@ class ContentServiceServicer(metaclass=abc.ABCMeta):
         request: a2flow.content.v1.content_pb2.GetArtifactRequest,
         context: _ServicerContext,
     ) -> typing.Union[a2flow.content.v1.content_pb2.Artifact, collections.abc.Awaitable[a2flow.content.v1.content_pb2.Artifact]]: ...
+
+    @abc.abstractmethod
+    def GetConfirmation(
+        self,
+        request: a2flow.content.v1.content_pb2.GetConfirmationRequest,
+        context: _ServicerContext,
+    ) -> typing.Union[a2flow.content.v1.content_pb2.Confirmation, collections.abc.Awaitable[a2flow.content.v1.content_pb2.Confirmation]]: ...
 
     @abc.abstractmethod
     def ConfirmReading(

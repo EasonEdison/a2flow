@@ -334,6 +334,21 @@ class ContentRpcService(rpc.ContentServiceServicer):
             ),
         )
 
+    def GetConfirmation(
+        self, request: pb.GetConfirmationRequest, context: grpc.ServicerContext
+    ) -> pb.Confirmation:
+        return invoke(
+            context,
+            lambda: confirmation(
+                self.service.get_confirmation(
+                    trusted(request.context),
+                    m.GetConfirmationQuery(
+                        m.uuid_value(request.confirmation_id, "CONFIRMATION_ID")
+                    ),
+                )
+            ),
+        )
+
     def ConfirmReading(
         self, request: pb.ConfirmReadingRequest, context: grpc.ServicerContext
     ) -> pb.Confirmation:

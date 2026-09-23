@@ -587,6 +587,26 @@ class GetArtifactRequest(google.protobuf.message.Message):
 Global___GetArtifactRequest: typing_extensions.TypeAlias = GetArtifactRequest
 
 @typing.final
+class GetConfirmationRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTEXT_FIELD_NUMBER: builtins.int
+    CONFIRMATION_ID_FIELD_NUMBER: builtins.int
+    confirmation_id: builtins.str
+    @property
+    def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
+    def __init__(
+        self,
+        *,
+        context: a2flow.capability.v1.capability_pb2.ExecutionContext | None = ...,
+        confirmation_id: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["confirmation_id", b"confirmation_id", "context", b"context"]) -> None: ...
+
+Global___GetConfirmationRequest: typing_extensions.TypeAlias = GetConfirmationRequest
+
+@typing.final
 class ConfirmReadingRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
