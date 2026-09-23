@@ -14,6 +14,7 @@ from a2flow_content.models import (
     Environment,
     ExportFormat,
     ExportManuscriptQuery,
+    GetConfirmationQuery,
     GetProjectQuery,
     InputReference,
     ListProjectsQuery,
@@ -124,6 +125,13 @@ def test_complete_content_kernel() -> None:
         ConfirmReadingCommand(project.id, brief_record.id, ("p1",), "个人理解", 2),
     )
     assert reading.selection.selected_point_ids == ("p1",)
+    assert (
+        service.get_confirmation(
+            context(user_id, "get-reading-confirmation"),
+            GetConfirmationQuery(reading.id),
+        )
+        == reading
+    )
 
     brief_ref = InputReference(ReferenceKind.ARTIFACT, brief_record.id, brief_record.revision)
     topic_record = service.save_artifact(
@@ -182,12 +190,13 @@ def test_complete_content_kernel() -> None:
         context(user_id, "export-md"),
         ExportManuscriptQuery(manuscript_record.id, ExportFormat.MARKDOWN),
     )
+    plain = service.export_manuscript(
+        context(user_id, "export-txt"),
+        ExportManuscriptQuery(manuscript_record.id, ExportFormat.TXT),
+    )
     assert markdown.filename.endswith(".md") and markdown.content.startswith("# ")
-    with pytest.raises(ContentError, match="TXT_EXPORT_NOT_IMPLEMENTED"):
-        service.export_manuscript(
-            context(user_id, "export-txt"),
-            ExportManuscriptQuery(manuscript_record.id, ExportFormat.TXT),
-        )
+    assert plain.filename.endswith(".txt")
+    assert plain.content.startswith("注意力不是意志力")
     page = service.list_projects(context(user_id, "list"), ListProjectsQuery())
     assert page.total == 1 and page.items[0].revision == 5
 
