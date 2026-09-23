@@ -18,7 +18,10 @@ services:
       - postgres_socket:/run/postgresql
       - ${A2FLOW_RELEASE_DIRECTORY:?set immutable release directory}/java:/opt/management:ro
       - ${A2FLOW_RELEASE_DIRECTORY}/static/management:/opt/management-static:ro
-      - ${A2FLOW_DEPLOY_PRIVATE}:/run/a2flow:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}/management.json:/run/a2flow/management.json:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}/rpc/server.pem:/run/a2flow/rpc/server.pem:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}/rpc/server-key.pem:/run/a2flow/rpc/server-key.pem:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}/rpc/ca.pem:/run/a2flow/rpc/ca.pem:ro
     command: [java, -Xms32m, -Xmx256m, -XX:MaxMetaspaceSize=192m, -cp, "/opt/management/classes:/opt/management/dependency/*", dev.a2flow.management.host.ManagementApplication]
   publication:
     <<: *private
@@ -35,7 +38,9 @@ services:
       - postgres_socket:/run/postgresql
       - ${A2FLOW_RELEASE_DIRECTORY}/static/employee:/opt/a2flow/static/employee:ro
       - ${A2FLOW_EXISTING_SECRETS:?set existing account/model secrets directory}:/run/secrets:ro
-      - ${A2FLOW_DEPLOY_PRIVATE}/rpc:/run/a2flow-rpc:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}/rpc/engine.pem:/run/a2flow-rpc/engine.pem:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}/rpc/engine-key.pem:/run/a2flow-rpc/engine-key.pem:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}/rpc/ca.pem:/run/a2flow-rpc/ca.pem:ro
     command: [bside]
 
 volumes:
