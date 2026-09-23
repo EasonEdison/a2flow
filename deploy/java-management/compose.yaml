@@ -1,0 +1,44 @@
+name: a2flow-java-management
+
+x-private: &private
+  network_mode: host
+  user: "1000:1000"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:size=64m,mode=1777"]
+  restart: unless-stopped
+
+services:
+  management:
+    <<: *private
+    image: ${A2FLOW_JAVA_IMAGE:?set reviewed JRE image digest}
+    env_file: ["${A2FLOW_DEPLOY_PRIVATE:?set private config directory}/java.env"]
+    volumes:
+      - postgres_socket:/run/postgresql
+      - ${A2FLOW_RELEASE_DIRECTORY:?set immutable release directory}/java:/opt/management:ro
+      - ${A2FLOW_RELEASE_DIRECTORY}/static/management:/opt/management-static:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}:/run/a2flow:ro
+    command: [java, -Xms32m, -Xmx256m, -XX:MaxMetaspaceSize=192m, -cp, "/opt/management/classes:/opt/management/dependency/*", dev.a2flow.management.host.ManagementApplication]
+  publication:
+    <<: *private
+    image: ${A2FLOW_PYTHON_IMAGE:?set reviewed Python image}
+    env_file: ["${A2FLOW_DEPLOY_PRIVATE}/publication.env"]
+    volumes:
+      - postgres_socket:/run/postgresql
+    entrypoint: [python, /opt/a2flow/services/management-java/publication-bridge/bridge.py]
+  bside:
+    <<: *private
+    image: ${A2FLOW_PYTHON_IMAGE}
+    env_file: ["${A2FLOW_DEPLOY_PRIVATE}/bside.env"]
+    volumes:
+      - postgres_socket:/run/postgresql
+      - ${A2FLOW_RELEASE_DIRECTORY}/static/employee:/opt/a2flow/static/employee:ro
+      - ${A2FLOW_EXISTING_SECRETS:?set existing account/model secrets directory}:/run/secrets:ro
+      - ${A2FLOW_DEPLOY_PRIVATE}/rpc:/run/a2flow-rpc:ro
+    command: [bside]
+
+volumes:
+  postgres_socket:
+    external: true
+    name: ${A2FLOW_EXISTING_POSTGRES_SOCKET:?set existing socket volume}

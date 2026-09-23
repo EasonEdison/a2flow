@@ -343,6 +343,11 @@
       "sha256": "a3cda864c5cefa94421ab662d4a9baa2bbdb8a4046df3b66d7ab18833d546b1a"
     },
     {
+      "path": "backend/access/AccountSessionDataSource.java",
+      "size": 2933,
+      "sha256": "4414fd0612506536e95e1a2d4cf031d595c5c2788ac2e21913a9ace19c12502f"
+    },
+    {
       "path": "backend/access/AssetAccessResult.java",
       "size": 625,
       "sha256": "9a43d7cc1e7ec518362c3fc2d240cf3be00f6e4a07c0016f4041d26a4c3fa2ff",
@@ -427,8 +432,8 @@
     },
     {
       "path": "backend/access/DatabaseSessionIdentityResolver.java",
-      "size": 1940,
-      "sha256": "dd5666471ebb2120a708cbdd5b87ea987efc39c18be2c2d455bc1a2b60188527"
+      "size": 2142,
+      "sha256": "369a74d9a0614691cec0db79aaea48b1c009d36f530e0f9f277ccb9f718f0528"
     },
     {
       "path": "backend/access/ManagementIdentityProvider.java",
@@ -2760,6 +2765,11 @@
       "sourceSha256": "626b48e35f0bc2034415a93994c50affa6b361a7bd9f29d6029ca1c9ab2ed0e7"
     },
     {
+      "path": "backend/storage/db/tests/AccountSessionDataSourceJdbcTest.java",
+      "size": 7482,
+      "sha256": "206aa9a91251d83daf15b6b7c15ce8b2845fe470a64b7f92e43a1138880144a2"
+    },
+    {
       "path": "backend/storage/db/tests/CapabilityGrpcJdbcProbe.java",
       "size": 14924,
       "sha256": "ce038fb3f128a977282f9a36d15e13cdc362d3ad8363f2dcb8331fe8aa7a4d91"
@@ -2798,6 +2808,11 @@
       "path": "backend/storage/db/tests/PublicationHttpAdapterTest.java",
       "size": 2173,
       "sha256": "7088855eb7a02ac84fb48c6e520d47401f5ef2999dc8db5135db4a8cf830dbe2"
+    },
+    {
+      "path": "backend/storage/db/tests/run-account-split-tests.sh",
+      "size": 2279,
+      "sha256": "9c2d09d812d37bfd183ff078b0a0396936d0e44520b1b11d3f68dc56198e500c"
     },
     {
       "path": "backend/storage/db/tests/run-capability-rpc-probe.sh",
@@ -2982,8 +2997,8 @@
     },
     {
       "path": "frontend/api.ts",
-      "size": 87442,
-      "sha256": "a3c7108c9bf3faea2f81597dc17c1e8dc984a7e600a9f7bf6b8ce766149edeae",
+      "size": 87554,
+      "sha256": "51a4f412e447e947b19fac3c61fc3985adb1d9a6d034e91a3841bcc8527f2c33",
       "sourceSha256": "75c2c7c0157e5c5af663ac2af06099e5d217804d2e130ef414f348b76c731f87"
     },
     {
@@ -3166,8 +3181,8 @@
     },
     {
       "path": "frontend/employeesApi.ts",
-      "size": 1186,
-      "sha256": "55868a4e42ffe17a9343a3b6f5c857f27f1834c8a30cbd0fa8437d223390f520"
+      "size": 1258,
+      "sha256": "32d1fe0e14b1134e87fd4f5278a4174138f4dd41a242927071bcf30f0153d4d8"
     },
     {
       "path": "frontend/index.html",
@@ -3182,13 +3197,18 @@
     },
     {
       "path": "frontend/main.tsx",
-      "size": 3295,
-      "sha256": "6e3b553756078ebce2128b58ec8b99bace364fee3f2681e48bccd017285eba10"
+      "size": 3537,
+      "sha256": "b9f5b40ea972a14bf483a64d8de59b5123e6691383c319e8997bddea3c1a24cf"
     },
     {
       "path": "frontend/management.less",
       "size": 114945,
       "sha256": "9c55d415f9018e0c764498051fa1693ba04acb8ad9f11e20d25d27cbc8173b72"
+    },
+    {
+      "path": "frontend/ManagementSessionNotice.tsx",
+      "size": 836,
+      "sha256": "d5ba88365220b20e617d9a65a26c32cdf411e36419934aec7522439f2f2d3eb6"
     },
     {
       "path": "frontend/package-lock.json",
@@ -3421,6 +3441,16 @@
       "path": "frontend/shared/managementAuthoringPolicy.ts",
       "size": 454,
       "sha256": "5e781c974db08b3fa28f894142ff99036e6e06f645ede7841125a767610c2712"
+    },
+    {
+      "path": "frontend/shared/managementSession.test.ts",
+      "size": 1858,
+      "sha256": "54244677462135c88dbd9809e5b859d30aecc2b53516a3554d9cb0f562024476"
+    },
+    {
+      "path": "frontend/shared/managementSession.ts",
+      "size": 1039,
+      "sha256": "fef375c29f9b5b9db6b7dcbd744e40c6a7490ef09b5060c5460128929b5e7a87"
     },
     {
       "path": "frontend/shared/PreviewImage.tsx",
@@ -3667,13 +3697,13 @@
     },
     {
       "path": "MANUAL-MODE.zh-CN.md",
-      "size": 8452,
-      "sha256": "02f20da2295f4195d736add382310fbb734c2f19acfc197527dfb516234f15b8"
+      "size": 9236,
+      "sha256": "a159e4a9358a8caa1c77ff3424d56f437b05735fe8a1fbcecb7c5a4e1d500971"
     },
     {
       "path": "pom.xml",
-      "size": 6994,
-      "sha256": "6bd12f127b04131d192bf0a6f62ad450155e002e86315ee2f502218fe74661c8"
+      "size": 7335,
+      "sha256": "02b5092f2ca1fa784c027dd6a355548f1e7b48440302e6e2c7986dd5b3cebd3c"
     },
     {
       "path": "proto/a2flow/a2ui/v1/a2ui.proto",

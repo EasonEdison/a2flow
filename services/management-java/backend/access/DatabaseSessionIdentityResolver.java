@@ -7,12 +7,18 @@ import java.util.HexFormat;
 import javax.sql.DataSource;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** 复用 M/B 账号登录写入的 users/sessions，不创建账号，不签发另一套登录凭据。 */
 @Component
 public class DatabaseSessionIdentityResolver {
     private final JdbcTemplate jdbc;
+
+    @Autowired
+    public DatabaseSessionIdentityResolver(AccountSessionDataSource accounts) {
+        this(accounts.dataSource());
+    }
 
     public DatabaseSessionIdentityResolver(DataSource dataSource) {
         this.jdbc = new JdbcTemplate(dataSource);

@@ -5,6 +5,7 @@ import { Alert, Spin } from 'antd';
 import 'antd/dist/antd.css';
 import './management.less';
 import { A2UI_APPLICATION_ROUTES } from './a2uiCatalogContracts';
+import ManagementSessionNotice from './ManagementSessionNotice';
 
 const SkillPage = lazy(() => import('./index'));
 const ComponentCenter = lazy(() => import('./ComponentCenterPage'));
@@ -23,8 +24,10 @@ ReactDOM.render(
   <BrowserRouter>
     <nav className="management-navigation" aria-label="管理台导航">
       <strong>A2Flow</strong><Link to="/management">Skill</Link><Link to="/management/capabilities">能力</Link><Link to="/management/components">A2UI / 组件</Link><Link to="/management/workflows">Workflow</Link>
+      <a href="/login">登录</a>
+      <form action="/logout" method="post" style={{ margin: 0 }}><button type="submit">退出登录</button></form>
     </nav>
-    <main className="management-content"><Suspense fallback={<Spin tip="加载页面" />}>
+    <main className="management-content"><ManagementSessionNotice /><Suspense fallback={<Spin tip="加载页面" />}>
       <Routes>
         <Route path="/" element={<Navigate to="/management" replace />} />
         <Route path="/management" element={<SkillPage />} />

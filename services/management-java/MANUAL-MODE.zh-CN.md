@@ -44,7 +44,9 @@
 
 管理配置 JSON 的手填基础字段为 `workspaceRoot`、`workspaceChangeGuard`；按所用页面和业务能力提供 `pages`、`capabilityClusters`。工作区路径仅为数据库文件的本地投影，不是另一份持久化真相。暂停功能的 `agents`、模型、记忆和提示词配置不作为手填入口的必需项。
 
-当前 Java 会话解析器使用管理端 DataSource，因此该数据源必须能访问既有账号体系的 `users`、`sessions` 表。部署前需核对目标库；不能因为找不到账号表就创建第二套账号或复制账号数据。HTTP已接入来源校验、认证错误响应和请求作用域；`/login`、`/logout`只代理既有账号服务，不生成另一套密码或会话。登录上游同样需要允许最终浏览器origin。
+生产部署必须将管理表放入独立新库，并显式配置既有账号库的只读连接：`A2FLOW_ACCOUNT_JDBC_URL`、`A2FLOW_ACCOUNT_DB_USER`、`A2FLOW_ACCOUNT_DB_PASSWORD`；可选 `A2FLOW_ACCOUNT_DB_POOL_SIZE` 默认 2，范围 1–8。账号角色只授予既有 `users`、`sessions` 的查询权限，由部署秘密配置注入凭据。独立账号池开启 JDBC readOnly 和 PostgreSQL `default_transaction_read_only`，只用于原有会话查询，不参与管理事务、不运行迁移。查询失败直接失败，不回退到管理库。
+
+只有以上四项账号连接配置全部缺省时，保留共用管理 DataSource 的隔离测试模式；部分配置或无效配置启动失败，生产不得依赖缺省模式。管理库仍使用 `A2FLOW_MANAGEMENT_JDBC_URL/DB_USER/DB_PASSWORD`，账号库不得执行管理 V001 迁移。不能因为找不到账号表就创建第二套账号或复制账号数据。HTTP已接入来源校验、认证错误响应和请求作用域；`/login`、`/logout`只代理既有账号服务，不生成另一套密码或会话。登录上游同样需要允许最终浏览器origin。账号 JDBC 网络可达性由部署层提供，不由解析器修改数据库或宿主网络。
 
 ## 启动及隔离检查
 

@@ -1,7 +1,8 @@
 import type { SpecialistDebugEmployeeSource } from './specialistPrtDebug';
+import { managementFetch } from './shared/managementSession';
 
 export async function listDigitalEmployeeDefinitions(query: { pageNo: number; pageSize: number }): Promise<{ list: SpecialistDebugEmployeeSource[]; total: number }> {
-  const response = await fetch(`/api/management/employees?${new URLSearchParams({ pageNo: String(query.pageNo), pageSize: String(query.pageSize) })}`, { credentials: 'same-origin' });
+  const response = await managementFetch(`/api/management/employees?${new URLSearchParams({ pageNo: String(query.pageNo), pageSize: String(query.pageSize) })}`, { credentials: 'same-origin' });
   if (!response.ok) throw new Error(`员工目录接口尚不可用（HTTP ${response.status}），无法加载调试专员`);
   const result: unknown = await response.json();
   if (!result || typeof result !== 'object' || !('list' in result) || !Array.isArray(result.list) || !('total' in result) || typeof result.total !== 'number') {

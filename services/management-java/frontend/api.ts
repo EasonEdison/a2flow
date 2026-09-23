@@ -1,5 +1,6 @@
 import { jsonParse, jsonStringify } from './shared/safeJson';
 import { assertManualManagementMethod } from './shared/managementAuthoringPolicy';
+import { managementFetch } from './shared/managementSession';
 import type { ComponentAssetQuery, ComponentPreviewResult, ComponentRenderPreviewParams, ComponentRenderPreviewResult, AssetReleaseEnvironmentFacts, AssetAccessResult, AssetReleaseOperationResult, AssetReleaseOverview, ReleaseDiffDocument, ReleaseDiffQuery, ReleaseAssetType, ReleaseEnvironment, SkillFactoryComponentAsset, } from './types';
 import type { A2uiCatalogAuthoringJson, A2uiCatalogComponentContract, A2uiCatalogComponentQuery, A2uiCatalogComponentRecord, A2uiManagedCatalogImportResult, A2uiCatalogQuery, A2uiCatalogRecord, } from './a2uiCatalogContracts';
 import { parseA2uiCatalogAuthoringJson } from './a2uiCatalogContracts';
@@ -1023,7 +1024,7 @@ function stringifyDirectBody(params: object): string {
 }
 export async function callSkillFactory<T>(method: SkillFactoryMethodCode, params: object = {}): Promise<T> {
     assertManualManagementMethod(method);
-    const response = await fetch(BASE_URL, {
+    const response = await managementFetch(BASE_URL, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1040,7 +1041,7 @@ export async function callSkillFactory<T>(method: SkillFactoryMethodCode, params
 }
 export async function callSkillFactoryBizRender<T>(method: SkillFactoryMethodCode, params: object = {}): Promise<T> {
     assertManualManagementMethod(method);
-    const response = await fetch(BIZ_RENDER_URL, {
+    const response = await managementFetch(BIZ_RENDER_URL, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1108,7 +1109,7 @@ function skillBindingResultText(response: AdviserSkillBindingResponse, baseRespo
         ?.join?.('，');
 }
 async function callSkillBinding(action: SkillBindingActionCode, params: SkillBindingParams): Promise<SkillBindingRecord> {
-    const response = await fetch(skillBindingEndpoint(action), {
+    const response = await managementFetch(skillBindingEndpoint(action), {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1185,7 +1186,7 @@ function normalizeSpecialistPrtBindingState(value: Record<string, unknown>): Spe
     };
 }
 async function callSpecialistPrtBinding(url: string, body: Record<string, unknown>): Promise<SpecialistPrtBindingState> {
-    const response = await fetch(url, {
+    const response = await managementFetch(url, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1657,7 +1658,7 @@ function consumeSseText(text: string, fallback: EventFallback, onEvent: (event: 
 export async function streamSkillFactoryEvents(params: object, onEvent: (event: SkillFactoryCodingEvent) => void, options: StreamOptions = {}): Promise<void> {
     assertManualManagementMethod('CODING_CHAT');
     const fallback = params as EventFallback;
-    const response = await fetch(CHAT_URL, {
+    const response = await managementFetch(CHAT_URL, {
         method: 'POST',
         credentials: 'include',
         headers: {
