@@ -1,0 +1,7 @@
+.a2ui-card-content { border: 0; padding: 12px 0 0; margin: 0; min-width: 0; }
+.a2ui-surface { --a2ui-color-primary: #326bfb; --a2ui-spacing-s: 8px; --a2ui-spacing-m: 12px; --a2ui-spacing-l: 16px; --a2ui-border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
+.a2ui-surface input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.a2ui-surface textarea, .a2ui-surface select { max-width: 100%; box-sizing: border-box; border: 1px solid #d8deea; border-radius: 6px; padding: 7px 9px; font: inherit; }
+.a2ui-surface button { border: 1px solid #d8deea; border-radius: 6px; padding: 8px 12px; font: inherit; }
+.a2ui-surface img, .a2ui-surface video { max-width: 100%; }
+.a2ui-card-content:disabled { opacity: .8; }

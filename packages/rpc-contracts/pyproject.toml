@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "a2flow-rpc-contracts"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["grpcio==1.75.1", "protobuf>=6.31.1,<7"]
+
+[project.optional-dependencies]
+typing = ["mypy==1.19.1", "mypy-protobuf==3.7.0",
+          "types-protobuf==7.35.1.20260906", "types-grpcio==1.83.0.20260730"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"*" = ["*.pyi", "py.typed"]

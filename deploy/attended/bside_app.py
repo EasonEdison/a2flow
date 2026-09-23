@@ -15,7 +15,7 @@ from psycopg.rows import dict_row
 
 from skillweave_contracts import TrustedContext
 
-from a2flow_asset_store import AssetReader, PostgresAssetRepository
+from a2flow_asset_store import PostgresAssetRepository
 from a2flow_bside.app import create_app
 from a2flow_bside.config import BsideConfig
 from a2flow_bside.repositories import (
@@ -71,7 +71,10 @@ def create_app_from_environment():
         database=_required("A2FLOW_BSIDE_DATABASE_NAME"),
         validator=validator,
     )
-    reader = AssetReader(repository, config.namespace)
+    from agent_workflow_runtime.rpc_client import RpcClient
+    from agent_workflow_runtime.rpc_assets import RpcAssetReader
+    rpc = RpcClient.from_environment(os.environ)
+    reader = RpcAssetReader(repository, config.namespace, rpc)
 
     def workflow_catalog(user_id: int):
         owner = TrustedContext.from_mapping({
@@ -137,25 +140,20 @@ def create_app_from_environment():
     from agent_workflow_runtime.personal_memory import PersonalMemory, MemoryConflict
     from a2flow_bside.errors import BsideError
     personal_memory = PersonalMemory(conninfo)
-    from agent_workflow_runtime.chat.assets import ChatAssets
+    from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
     from agent_workflow_runtime.chat.cards import ChatCardStore
-    from agent_workflow_runtime.chat.actions import ChatActionService
+    from agent_workflow_runtime.chat.rpc_actions import RpcChatActionService
     from agent_workflow_runtime.models import ActionRejected
-    from deploy.assets import application_validator, application_data_validator
-    from deploy.mvp.operations import operations
     card_store = ChatCardStore(conninfo, environment=config.environment)
-    operation_registry = operations()
 
     def assets_factory(owner, conversation_id, control_request_id="chat-action"):
-        return ChatAssets(reader=reader, operation_registry=operation_registry,
+        return RpcChatAssets(reader=reader, rpc=rpc,
             owner=owner, conversation_id=conversation_id,
             control_request_id=control_request_id,
-            application_validator=application_validator,
-            data_validator=application_data_validator,
             card_sink=lambda prepared, metadata: card_store.save(
                 owner, conversation_id, prepared, metadata))
 
-    card_actions = ChatActionService(card_store, assets_factory)
+    card_actions = RpcChatActionService(card_store, assets_factory)
 
     def chat_cards(user_id, conversation_id):
         return card_store.list(memory_owner(user_id), conversation_id)

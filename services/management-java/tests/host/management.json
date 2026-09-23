@@ -1,0 +1,9 @@
+{
+  "workspaceRoot": "target/http-smoke-projection",
+  "workspaceChangeGuard": {},
+  "pages": {
+    "HADES_SKILL_FACTORY": {
+      "specialists": [{ "id": "101", "name": "隔离测试专员", "digitalEmployeeId": "101" }]
+    }
+  }
+}

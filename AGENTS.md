@@ -1,5 +1,14 @@
 # A2Flow contributor instructions
 
+## 当前实施边界（2026-09-23）
+
+- 已批准完整管理端迁移：`services/management-java` 保留 Java 管理、编译、发布和确定性执行；Python Deep Agents 负责 Agent 模型循环。此范围覆盖下文过时的仅 Python 转写、仅设计和暂停管理端约束。
+- 当前集中完成业务能力、A2UI 与普通 Chat。Workflow 新功能、管理端 AI 辅助生成暂停，不因整目录迁移而自动启用。
+- 业务执行两跳均使用 Protobuf gRPC：Python → Java 执行服务 → 业务下游。内部上下文传可信 signed int64 userId，不转发浏览器 Cookie，不增加 HTTP 业务兜底。管理页面、账号会话和发布控制面仍可使用 HTTP。
+- Ability/Application 的环境与灰度选择以 Java 已发布状态为准；Python 按选中的发布身份读取同环境数据库中完整留存材料。PRT 与 ONLINE 不跨库回退。
+- 新增 Python 边界必须标注参数和返回类型；固定结构使用 typed DTO，动态业务 JSON 与固定运行协议分离。生成的 RPC 契约附带类型声明。不要用全面忽略类型错误替代正确模型。
+- 保存源代码、隔离数据库联调和公网部署分别验收；使用 `services/management-java/RPC-CHAT.zh-CN.md` 与验证记录，不把旧公共页面当作本轮部署结果。
+
 ## Authoring migration release (2026-09-20)
 
 The project owner explicitly authorized adapting their existing Skill/A2UI authoring and execution implementation. This scoped release supersedes the earlier independent-source restriction for those components only. Preserve the reference workflows while adapting interfaces to this project's React/Python stack; do not import credentials, private endpoints, business data, operational logs or unrelated infrastructure. Main-brain owns integration and delivery. UI/source completion and real runtime acceptance remain separate gates.

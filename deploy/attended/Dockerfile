@@ -36,6 +36,8 @@ RUN python -m pip install --no-cache-dir -r /tmp/runtime-requirements.lock \
 
 COPY packages/contracts packages/contracts
 COPY packages/asset-store packages/asset-store
+COPY packages/rpc-contracts packages/rpc-contracts
+RUN python -m pip install --no-cache-dir /opt/a2flow/packages/rpc-contracts
 COPY services/skill-registry services/skill-registry
 COPY services/capability-registry services/capability-registry
 COPY services/a2ui-composer services/a2ui-composer

@@ -1,0 +1,11 @@
+{
+  "workspaceRoot": "target/chat-rpc-integration-projection",
+  "workspaceChangeGuard": {},
+  "pages": {
+    "HADES_SKILL_FACTORY": {
+      "specialists": [{"id": "101", "name": "隔离测试专员", "digitalEmployeeId": "101"}],
+      "businessDomains": [{"value": "integration", "label": "隔离联调业务域"}],
+      "capabilityDomains": [{"value": "activity", "label": "隔离活动能力域"}]
+    }
+  }
+}

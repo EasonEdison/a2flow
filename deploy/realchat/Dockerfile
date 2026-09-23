@@ -5,6 +5,7 @@ USER root
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 RUN python -m pip install --no-cache-dir --index-url ${PIP_INDEX_URL} jsonschema==4.26.0
 COPY packages /opt/a2flow/packages
+RUN python -m pip install --no-cache-dir --index-url ${PIP_INDEX_URL} /opt/a2flow/packages/rpc-contracts
 COPY services /opt/a2flow/services
 COPY examples/activity-planning /opt/a2flow/examples/activity-planning
 COPY deploy /opt/a2flow/deploy

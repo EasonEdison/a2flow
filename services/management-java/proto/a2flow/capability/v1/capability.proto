@@ -1,0 +1,49 @@
+syntax = "proto3";
+package a2flow.capability.v1;
+option java_package = "dev.a2flow.management.capabilityrpc.proto";
+option java_multiple_files = true;
+
+enum Environment { ENVIRONMENT_UNSPECIFIED = 0; PRT = 1; ONLINE = 2; }
+// Host-only authority. Business/model arguments must never supply or overwrite these fields.
+message ExecutionContext {
+  optional int64 user_id = 1;
+  Environment environment = 2;
+  string request_id = 3;
+  string client = 4;
+}
+message ResolveRequest { string asset_key = 1; ExecutionContext context = 2; }
+message ResolveResponse {
+  string asset_key = 1;
+  string action_code = 2;
+  int32 capability_version = 3;
+  string description = 4;
+  string input_schema_json = 5;
+  string key_output_fields_json = 6;
+  Environment resolved_environment = 7;
+  string source_id = 8;
+  string source_digest = 9;
+}
+message ExecuteRequest {
+  string asset_key = 1;
+  ExecutionContext context = 2;
+  // Raw UTF-8 JSON, not google.protobuf.Struct: exact integers must not pass through double.
+  bytes arguments_json = 3;
+  string expected_source_id = 4;
+  string expected_source_digest = 5;
+}
+message ExecuteResponse {
+  bool success = 1;
+  string action_code = 2;
+  int32 capability_version = 3;
+  Environment resolved_environment = 4;
+  bytes data_json = 5;
+  string error_code = 6;
+  string message = 7;
+  string request_id = 8;
+  string source_id = 9;
+  string source_digest = 10;
+}
+service CapabilityExecution {
+  rpc Resolve(ResolveRequest) returns (ResolveResponse);
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+}

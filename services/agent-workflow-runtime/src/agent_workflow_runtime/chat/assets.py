@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import Lock
+from typing import Any, Callable
 
 from skill_registry import (
     InvocationScope as RegistryScope,
@@ -18,7 +19,7 @@ from skill_registry import (
     UseSkillRequest,
     use_skill,
 )
-from skillweave_contracts import CONTRACT_REVISION, TrustedInvocationContext
+from skillweave_contracts import CONTRACT_REVISION, TrustedContext, TrustedInvocationContext
 
 from ..ability_execution import (
     MODEL_AUTHORIZATION,
@@ -75,15 +76,15 @@ class ChatAssets:
 
     def __init__(
         self,
-        reader,
-        operation_registry,
-        owner,
-        conversation_id,
-        control_request_id,
-        card_sink,
-        application_validator,
-        data_validator,
-    ):
+        reader: Any,
+        operation_registry: dict[str, OperationSpec],
+        owner: TrustedContext,
+        conversation_id: str,
+        control_request_id: str,
+        card_sink: Callable[..., dict[str, Any]],
+        application_validator: Callable[..., bool],
+        data_validator: Callable[..., bool],
+    ) -> None:
         require_owner(owner)
         if type(conversation_id) is not str or not conversation_id:
             raise ValueError("CONVERSATION_ID_REQUIRED")
@@ -102,20 +103,20 @@ class ChatAssets:
         self._applications = ApplicationRuntime(
             application_validator, data_validator,
         )
-        self._admission = None
-        self._waiting_action = None
+        self._admission: _SkillAdmission | None = None
+        self._waiting_action: dict[str, Any] | None = None
         self._render_lock = Lock()
 
     @property
-    def owner(self):
+    def owner(self) -> TrustedContext:
         return self._owner
 
     @property
-    def conversation_id(self):
+    def conversation_id(self) -> str:
         return self._conversation_id
 
     @property
-    def control_request_id(self):
+    def control_request_id(self) -> str:
         return self._control_request_id
 
     def begin_turn(self):
@@ -218,7 +219,7 @@ class ChatAssets:
             applications,
         )
 
-    def admit_skill(self, skill_key):
+    def admit_skill(self, skill_key: str) -> dict[str, Any]:
         """Load one Skill and atomically replace the active admission."""
 
         candidate = self._resolve_skill(skill_key)
@@ -239,12 +240,12 @@ class ChatAssets:
         self._admission = candidate
         return json_copy(result)
 
-    def _require_admission(self):
+    def _require_admission(self) -> _SkillAdmission:
         if self._admission is None:
             raise ActionRejected("SKILL_NOT_ADMITTED")
         return self._admission
 
-    def check_versions(self, expected_versions=None):
+    def check_versions(self, expected_versions: Any = None) -> tuple[tuple[str, str], ...]:
         """Compare the current closure with admitted or persisted versions."""
 
         admitted = self._require_admission()

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dev.a2flow.management.storage.db.mapper.WorkflowDefinitionMapper">
+  <sql id="columns">id, workflow_code, specialist_code, display_name, description,
+    draft_contract_version, draft_revision, draft_digest, draft_payload_json, attribute_json,
+    created_by, updated_by, deleted, create_time, update_time</sql>
+
+  <insert id="insertWorkflow" useGeneratedKeys="true" keyProperty="record.id" keyColumn="id">
+    INSERT INTO workflow_definition (workflow_code, specialist_code, display_name, description,
+      draft_contract_version, draft_revision, draft_digest, draft_payload_json, attribute_json,
+      created_by, updated_by, deleted, create_time, update_time)
+    VALUES (#{record.workflowCode}, #{record.specialistCode}, #{record.displayName}, #{record.description},
+      #{record.draftContractVersion}, #{record.draftRevision}, #{record.draftDigest}, #{record.draftPayloadJson},
+      #{record.attributeJson}, #{record.createdBy}, #{record.updatedBy}, #{record.deleted},
+      #{record.createTime}, #{record.updateTime})
+  </insert>
+
+  <select id="selectByWorkflowCode" resultType="dev.a2flow.management.storage.db.entity.WorkflowDefinitionDO">
+    SELECT <include refid="columns"/> FROM workflow_definition
+    WHERE workflow_code = #{workflowCode} AND deleted = 0
+  </select>
+
+  <select id="listByCondition" resultType="dev.a2flow.management.storage.db.entity.WorkflowDefinitionDO">
+    SELECT <include refid="columns"/> FROM workflow_definition WHERE deleted = 0
+    <if test="specialistCode != null and specialistCode != ''">AND specialist_code = #{specialistCode}</if>
+    <if test="cursorUpdateTime != null and cursorId != null">
+      AND (update_time, id) &lt; (#{cursorUpdateTime}, #{cursorId})
+    </if>
+    ORDER BY update_time DESC, id DESC LIMIT #{limit}
+  </select>
+
+  <update id="updateBasicInfo">
+    UPDATE workflow_definition SET display_name = #{displayName}, description = #{description},
+      updated_by = #{updatedBy}, update_time = #{updateTime}
+    WHERE workflow_code = #{workflowCode} AND deleted = 0
+  </update>
+
+  <update id="compareAndSetDraft">
+    UPDATE workflow_definition SET draft_payload_json = #{draftPayloadJson}, draft_digest = #{draftDigest},
+      draft_contract_version = #{draftContractVersion}, updated_by = #{updatedBy}, update_time = #{updateTime},
+      draft_revision = draft_revision + 1
+    WHERE workflow_code = #{workflowCode} AND draft_revision = #{expectedDraftRevision} AND deleted = 0
+  </update>
+</mapper>

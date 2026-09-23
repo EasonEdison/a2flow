@@ -17,8 +17,11 @@ export type ApiError = Error & { code: string };
 export type MemoryEntry = { id: string; text: string };
 export type MemorySettings = { revision: number; enabled: boolean; entries: MemoryEntry[] };
 export type ChatCard = { cardId: string; conversationId: string; status: string; revision: number; result?: unknown;
-  display: { applicationKey: string; protocolProfile: string; rootId: string; components: Record<string, unknown>[];
-    data: Record<string, unknown>; actions: { actionName: string; inputSchema: Record<string, unknown> }[] } };
+  display: { applicationKey: string; applicationVersion?: string | number; protocolProfile: string;
+    snapshotMessages: Record<string, unknown>[];
+    catalog: { protocolVersion: string; catalogId: string; catalogRevision: string | number; catalogDigest: string };
+    rootId?: string; components?: Record<string, unknown>[]; data?: Record<string, unknown>;
+    actions: { actionName: string; surfaceId: string; componentId: string; inputSchema: Record<string, unknown> }[] } };
 
 const friendlyMessages: Record<string, string> = {
   INVALID_USERNAME: '用户名需为 3–32 位字母、数字、下划线或连字符',

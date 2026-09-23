@@ -1,0 +1,3850 @@
+{
+  "status": "SOURCE_SCAN_PASS_NOT_RUNTIME_ACCEPTANCE",
+  "records": [
+    {
+      "path": "backend/a2ui/application/A2uiApplicationActionScanService.java",
+      "size": 27612,
+      "sha256": "0ab45f65458cb1c767c851a14c84355336a62ce3f71ff6bff2f7987edb10c90f",
+      "sourceSha256": "075378e94ff8d00662408f4e5a4c25d82ed8536833572b896eb4a1b7546a53bf"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationBlueprintService.java",
+      "size": 6779,
+      "sha256": "cf5c458f62e64ff7784fdf4809974e6b3bf51990a0c3177a8687816ba8bb618e",
+      "sourceSha256": "1b5e24798728d62b1dad0ff037a06c652e97f6bcc32786d033bbc4594ad93427"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationBuildCompiler.java",
+      "size": 74259,
+      "sha256": "edb25392885ff2d21149236461ea31c10d3f90420a1404483b88d53080dd1e27",
+      "sourceSha256": "12ddb2e6dcd5a54f44707798660b4a3c99c3a192b09aef4c21bce4bbcfd088ea"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationComponentCollector.java",
+      "size": 2526,
+      "sha256": "bebae6a9114768ef45c6d4413016b2e9e9538475d694d5862b01c69ee4703e59",
+      "sourceSha256": "42c9b8c1b53cfd40ac444768f44c16317c2062cdb9935cb4a1cdd91136aa6f39"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationErrorCode.java",
+      "size": 3831,
+      "sha256": "932ae8a6d864b45984f513a08d85be3d2f359b8d781ab96fdffdc5641c7368f1",
+      "sourceSha256": "0576eacbb929c36ab7588d113f6869b223a84c9fa77cf88fab6c1f5f078f2111"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationHistoryRestoreSupport.java",
+      "size": 6028,
+      "sha256": "f9b755a87fa546b6a5c30039df26d104ad4d4121b27756d16ef3dbdc644b3876",
+      "sourceSha256": "2f3706057b8603f75b2bfaa1e8af7d0399536e082cca1aba1c77c4f54e0bb16d"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationManifestCompilerService.java",
+      "size": 17212,
+      "sha256": "90d433194cfe96d583b9fae9a9d66e0819a97291344e0870290d87eee3630385",
+      "sourceSha256": "a6b4242ab923b55c5e092abdd27a8c427de97bbe91c5434bc479588ab4072c6a"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationModels.java",
+      "size": 22900,
+      "sha256": "d988fee72d6b0c353cee0226a5e463599c322413e357c86416a60356c6c74457",
+      "sourceSha256": "73c354c24bf5604dfff173a69ff329694d747e495b40a2475e91c0d1b083b364"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationParamsSchemaValidator.java",
+      "size": 8087,
+      "sha256": "6174d166fd6994eaa5156bff9d8c2075ed9465050a0d6896d6fccb5614fc6af9",
+      "sourceSha256": "74ef01e9dc6590b1fa600353374d84b4d7816870076f5b237642f336d012841c"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationRegistryService.java",
+      "size": 13011,
+      "sha256": "ad54e9163cb76319ec7979304b233a5ef3d598485c757b91eff83e190079fc9f",
+      "sourceSha256": "96f7cfaac24c172f124a8ef40d78c132fd8f20bce45b0eb977635e35da9698b4"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiApplicationValidationException.java",
+      "size": 693,
+      "sha256": "bfd1281dda10326df51f7a65a439be3bd32fcc9051b697d94b7c856eb3bf5de7",
+      "sourceSha256": "72305a96d036a8882262a442f240c03f2b9327b149d01ca2c83e119f78e071f1"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiBuildIdGenerator.java",
+      "size": 492,
+      "sha256": "878495f31841474894dc9777cab4989578fe386280f44b7f3b9ade83922b5229",
+      "sourceSha256": "2ab3549ee567350029c4f44235c64678bf1f0615ea3a39ac8b75dcefc27efc1c"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiCurrentCapabilityResolver.java",
+      "size": 10883,
+      "sha256": "2e435d6228615abb9a12d19928f60a4c6a3f9cb35906e000202e714a24a178db",
+      "sourceSha256": "f1952989d3b0366b217a718d21e0ed11ec39abb0e1055d35768525c454a195b2"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiImmutableJsonSupport.java",
+      "size": 3183,
+      "sha256": "6720a98298b20f0d5ad253a6a538e119efd744ddd055f3528d082d5db15641e2",
+      "sourceSha256": "59e637f6b1331eabece6251b86280f84d2a5534b0cdeb69c45092ea7d0cc93fc"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiInlineManifestStorage.java",
+      "size": 3503,
+      "sha256": "e44528d2c1cb5568ef9368417f3693ea3511731f4826643a85748f362403b4e4",
+      "sourceSha256": "32e4b73b8b9012eaf3065c044ee36cabc378ea5480a66a25d7859b6946146864"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiRequestTransformValidator.java",
+      "size": 3876,
+      "sha256": "7886e3c0b8d6014fb456f6dc560e2f3346714a2eed6c4996813bf28d2daa5f5e",
+      "sourceSha256": "9926d3d32aedda42dc24289a2f86b85505c3735ab467c1b796206ae4404c63d9"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiReservedActionCode.java",
+      "size": 808,
+      "sha256": "dfbc868bb429bfed87572fe724295698c0d93c5b25e0ee65dcbca90a0de7ea26",
+      "sourceSha256": "980db1302ad8611db46c3b74dc31959515beaefe2817d5eae95a83ab1beb2c66"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiShowTemplateAnalyzer.java",
+      "size": 13992,
+      "sha256": "6faa0dac31fe07d50994228d5e28122fe8e6c43734550260ef2a76a550eb06aa",
+      "sourceSha256": "16404157af6db8c093939a5ee4a7a3e7a056b88fc200d0cba745004bd74a6a07"
+    },
+    {
+      "path": "backend/a2ui/application/A2uiSuccessBranchValidator.java",
+      "size": 4706,
+      "sha256": "fa318c7125c2d2f781075eef52971017bbbfd5f0d7ed33ed0a288c321a50a460",
+      "sourceSha256": "63ff7d28ac868de192d9ba3d8680691992458b54f804134970413263f6418eb3"
+    },
+    {
+      "path": "backend/a2ui/catalog/A2uiCatalogErrorCode.java",
+      "size": 1777,
+      "sha256": "f4364b3542d5cfabdae04fd2ef8b0f17a0cd78671901451ccb7b3c9175d1fff0",
+      "sourceSha256": "87eb87fa2e0980f6549c52ec442ab795fcd075ca98573e9aef9b3e86563fa9ce"
+    },
+    {
+      "path": "backend/a2ui/catalog/A2uiCatalogImportTransactionService.java",
+      "size": 8399,
+      "sha256": "933c6d794378a5b624edbfcdb62fb396c7ff380ed6882bcc7b8124790aed9da6",
+      "sourceSha256": "6d0fb4826853d6b4f9020cf3ef8692d5f79d3f9eec5bdf2c354e1ea04ca5fd01"
+    },
+    {
+      "path": "backend/a2ui/catalog/A2uiCatalogModels.java",
+      "size": 2407,
+      "sha256": "39bfa449b2da75ad76d8a7051a9269cd28722637529a3b5aace768bfb9a31218",
+      "sourceSha256": "9a6318c092dee1a096535887c01ad40e03d62b8201f017e2b7b06a16faf2deec"
+    },
+    {
+      "path": "backend/a2ui/catalog/A2uiCatalogRegistryService.java",
+      "size": 15478,
+      "sha256": "baad471f8de99aa07b9690a9005836ba64f507184b971205f09dc152ed68a20f",
+      "sourceSha256": "ad4e1303336ba514112a07873ac10641a98e347d95c4fc0a6f2b1f6354a59f32"
+    },
+    {
+      "path": "backend/a2ui/catalog/A2uiCatalogSourceType.java",
+      "size": 812,
+      "sha256": "2500280f9a5bf822f3148b6cb9714a672a8127aacaec656357348e9d5de24a61",
+      "sourceSha256": "9a30a21db4151f640877fe6afd75f20e5b6ccba962e9dcad6e50d5f69e495aae"
+    },
+    {
+      "path": "backend/a2ui/catalog/A2uiCatalogValidationException.java",
+      "size": 669,
+      "sha256": "705dda02e7c59e069434f4ff9f214b41d37090312c2c89813c56b7c050b90d45",
+      "sourceSha256": "c56fa6096012283466b9ab1c91fc79532f1e98b805fbfb9e6072ba612dcf2968"
+    },
+    {
+      "path": "backend/a2ui/catalog/A2uiKuaishouCatalogImporter.java",
+      "size": 25809,
+      "sha256": "433c0a78f9987285996fdf981e04a8a25f58932dc006beced8c4a4bed8613dc2",
+      "sourceSha256": "c6668760f27bf4cc291fbe82816442fe1be673f267e366e9b32b6aadb8873b24"
+    },
+    {
+      "path": "backend/a2ui/catalog/A2uiOfficialBasicCatalogImporter.java",
+      "size": 11679,
+      "sha256": "20f5c4d6315b5af273f8665d316be9ca53a4fd50b77ad1bb946b962c1aa40c92",
+      "sourceSha256": "05d9790a4bacf2e6288c13aa2c1602e15852f2bcf9e66a2d27026ecfc98b0fbe"
+    },
+    {
+      "path": "backend/a2ui/gateway/A2uiActionBindingResolver.java",
+      "size": 9087,
+      "sha256": "5c10d5fb572d68ddc851fc8932fe738885459c0cc8e996899912c6c5cb680126",
+      "sourceSha256": "1f3ed99d05617342be19b3cc7e3fdcc52cf740dc20146cfaac2b90d3ba0d7d16"
+    },
+    {
+      "path": "backend/a2ui/gateway/A2uiActionContextValidator.java",
+      "size": 4762,
+      "sha256": "c569d2c5bdeae6a20d61eeadf67bdb8fc4b23df6529cf3808fcd60d28a22a532",
+      "sourceSha256": "fd8a8115e629deb89aca6a41cfc344d39e84c9278918dfbe5b2b56d6d813d77b"
+    },
+    {
+      "path": "backend/a2ui/gateway/A2uiActionGatewayErrorCode.java",
+      "size": 1714,
+      "sha256": "ad84c2f1a2591952127eef84ea2e73da30f28b3beb0e557f70a9ca4f02c5cba2",
+      "sourceSha256": "4cd074be1c437b71e04ce7da916366a78d612c633e944c826d2ee0ad52c343ed"
+    },
+    {
+      "path": "backend/a2ui/gateway/A2uiActionGatewayException.java",
+      "size": 1024,
+      "sha256": "0955f44a5723a422c744213b0b3808a1617049ba597b61399d6a926b10d5ebc6",
+      "sourceSha256": "605ced381f960701c8dd986f73c6a188cb1582dd3b4deb4fb148d3d6cf5d7b4c"
+    },
+    {
+      "path": "backend/a2ui/gateway/A2uiActionGatewayModels.java",
+      "size": 1884,
+      "sha256": "24a31e52e02ee25b0012b405c5a8fcbf550ea5013b03a7c644cd75a69673ce7d",
+      "sourceSha256": "4f28db0e8fd8ea556bc8b17ab362443be5a585717c099b00a535e9d440e4d4d6"
+    },
+    {
+      "path": "backend/a2ui/gateway/A2uiActionRequestMapper.java",
+      "size": 8616,
+      "sha256": "3cedbd4f53946b958a9a8684058504fdedb5ee42ceb8caf0953ee1a39e0ec30c",
+      "sourceSha256": "d93cab167138d3b64c3ee1fef07bc9ac7895887fdfa0362c08f1474d9fe4ec24"
+    },
+    {
+      "path": "backend/a2ui/gateway/A2uiGatewayJsonSupport.java",
+      "size": 1832,
+      "sha256": "25b7add3ac35056cec6bb03a2d8c1c79762ea2cc1eb9faf40effb9b1cf559069",
+      "sourceSha256": "fda65e7dc96afce546798f1f3cbf8892d2199d802d15d56e97b284be8b24223c"
+    },
+    {
+      "path": "backend/a2ui/registry/A2uiAtomAuthoringProjection.java",
+      "size": 5752,
+      "sha256": "be8088eba81da8e4c876b7bf4dd26a43e6b6a19e90d934999815c88acbb6a829",
+      "sourceSha256": "0c330d7508a152b1d67a8c3ff74b6e7aa4543e8f453134eaed928f83605a2265"
+    },
+    {
+      "path": "backend/a2ui/registry/A2uiAtomRegistryService.java",
+      "size": 9951,
+      "sha256": "d96cdcc58c48ace357c64b006c7ac0c7bb59f40f5c5596f917f5e9de1834fed3",
+      "sourceSha256": "5a94b434e6990c96d07b1588aa6367491b04492d8d2a61768987da204fe8f747"
+    },
+    {
+      "path": "backend/a2ui/registry/A2uiComponentOriginType.java",
+      "size": 793,
+      "sha256": "efc28e22c15b8b40b7d4675b994960e05d0f73fbf2fb8b62c1a788463860f87a",
+      "sourceSha256": "cddd57947a5e6147df14a3be5e11e7191b3a46ce298fd34b7e6a42404bd4c2b7"
+    },
+    {
+      "path": "backend/a2ui/registry/A2uiRegistryCanonicalJson.java",
+      "size": 1700,
+      "sha256": "f8828de1722c9660175a758ab6838dc512e0040e25be5ff288bce7d1fa78bf86",
+      "sourceSha256": "1c1f494a50fdd739afdc30bcefd4daae7c1ab89c7397314aaaa19133d131a8fc"
+    },
+    {
+      "path": "backend/a2ui/registry/A2uiRegistryModels.java",
+      "size": 1069,
+      "sha256": "4d4ae777e672289ca505d1fbe7e9a7130879cdd75b95efc713ecd208d046c346",
+      "sourceSha256": "4c6884aab45a378321352afe827955d7cec3e37016b99ceec45e5529c33690da"
+    },
+    {
+      "path": "backend/a2ui/registry/A2uiRegistryValidationException.java",
+      "size": 621,
+      "sha256": "c588350acf3c5aaf4f2f73f07b188120e4691237033c67f4dbd19939a280e6de",
+      "sourceSha256": "39ffdff1a6f86e8a6550f51fbb5245db230271a9f079a5141f545c2f554adb49"
+    },
+    {
+      "path": "backend/a2ui/release/A2uiReleaseProjectionService.java",
+      "size": 12161,
+      "sha256": "5367102016873e81aa4f7473f819b1eefb8842e07dc4d79fe5e15cea6564259f",
+      "sourceSha256": "f88e4a2be48a245206afb7ea2cb5615e0a4f49bfd1386f74b068741661852e73"
+    },
+    {
+      "path": "backend/a2ui/runtime/A2uiGrpcService.java",
+      "size": 9552,
+      "sha256": "e1ab5e6521aa3e2e7237948d1cc3bf6f34799f916b641a7cf022beb95ecc7c8e"
+    },
+    {
+      "path": "backend/a2ui/runtime/A2uiRuntimeContracts.java",
+      "size": 2664,
+      "sha256": "1a8945d04baaea844641cc98d7a968d3f8f631970892f723518677c7bc608e14"
+    },
+    {
+      "path": "backend/a2ui/runtime/A2uiRuntimeFacade.java",
+      "size": 12422,
+      "sha256": "e4fc663f58f4a46d633b0194090b955a96c618eecc9d9cd2d4ea1a4c78bccc81"
+    },
+    {
+      "path": "backend/a2ui/runtime/A2uiTrustedRuntimeContextProvider.java",
+      "size": 2438,
+      "sha256": "74fb15c49f7ca1640325d036e9744078e96a7b144b284fd306c9f314b9c385ad"
+    },
+    {
+      "path": "backend/a2ui/runtime/action/A2uiCapabilityOutcomeEvaluator.java",
+      "size": 6033,
+      "sha256": "e5d2d6813b50d1ace711ffcb0fbf966f2fb9f40ae06020ab350a8d3b47d1228b"
+    },
+    {
+      "path": "backend/a2ui/runtime/adapter/A2uiProtocolMessage.java",
+      "size": 5154,
+      "sha256": "3a46d4da8134ad1ae13522349d39c34db1a26afbf7e559eac36ab6c22ecb7617"
+    },
+    {
+      "path": "backend/a2ui/runtime/adapter/A2uiResultAdapterEngine.java",
+      "size": 28430,
+      "sha256": "a8ba38bb8a27f48095b57f5de3975b214c913901966c208bdd864528d22678c7"
+    },
+    {
+      "path": "backend/a2ui/runtime/capability/CapabilityExecutionResult.java",
+      "size": 2131,
+      "sha256": "027218c018fda397912b63846efd6f27650933de14f598db62704b16b8e4fb80"
+    },
+    {
+      "path": "backend/a2ui/runtime/ledger/A2uiMessageSnapshotReducer.java",
+      "size": 18396,
+      "sha256": "dfaf46155407f53d79aefe3b84b06c589cefb78aaa96fda6bc927cdc27a4bd72"
+    },
+    {
+      "path": "backend/a2ui/runtime/ledger/A2uiRuntimeSurfaceLedger.java",
+      "size": 4350,
+      "sha256": "1c12a8f8f7cdbc21abef598c5ac1daf8782a4c33233ecc4a33b776a434516587"
+    },
+    {
+      "path": "backend/a2ui/runtime/ledger/A2uiSnapshotException.java",
+      "size": 554,
+      "sha256": "8f990624d00537c8bea7d7e896aa38cab1dbeff986918344bc2d3fa85ce41434"
+    },
+    {
+      "path": "backend/a2ui/runtime/mapping/A2uiCapabilityRequestMapper.java",
+      "size": 18762,
+      "sha256": "153bb8da184ff3d694a032dbabb48fdd2072726bf7162dedebfafd8a27537519"
+    },
+    {
+      "path": "backend/a2ui/runtime/PublishedApplicationProvider.java",
+      "size": 422,
+      "sha256": "8d65dbbce2e51979b75e09f3d72a7675799e07f51296ab335b48a4802c875f15"
+    },
+    {
+      "path": "backend/a2ui/runtime/README.md",
+      "size": 3547,
+      "sha256": "903e1a260e44bc33aa83bd9c0de599bfbe349735754dee2fb0fbc8781d14a4be"
+    },
+    {
+      "path": "backend/a2ui/runtime/README.zh-CN.md",
+      "size": 1730,
+      "sha256": "9b506019728aa773ad73a7895e80872c2ca0837f769959317817361e6b70280f"
+    },
+    {
+      "path": "backend/a2ui/runtime/ReleaseStatePublishedApplicationProvider.java",
+      "size": 5631,
+      "sha256": "2966a1677b65e95b517ae6f5d2d9bef1279257e085890690f8dbac25896d7b1a"
+    },
+    {
+      "path": "backend/a2ui/runtime/show/A2uiApplicationShowRenderer.java",
+      "size": 10704,
+      "sha256": "350a7231084c30973d085d8cada81e6460827e4d3a8027d1504ea0e8710e1bd0"
+    },
+    {
+      "path": "backend/a2ui/runtime/show/A2uiJsonPointerValueMapper.java",
+      "size": 10353,
+      "sha256": "9f6852b49880f131e58d8e03d164c85183237ba376cc0a63eb54659292af46e5"
+    },
+    {
+      "path": "backend/a2ui/runtime/show/A2uiJsonSchemaSubsetValidator.java",
+      "size": 26511,
+      "sha256": "a3cda864c5cefa94421ab662d4a9baa2bbdb8a4046df3b66d7ab18833d546b1a"
+    },
+    {
+      "path": "backend/access/AssetAccessResult.java",
+      "size": 625,
+      "sha256": "9a43d7cc1e7ec518362c3fc2d240cf3be00f6e4a07c0016f4041d26a4c3fa2ff",
+      "sourceSha256": "99ef912c9907cc18baa4f08643d6e0df5f54e053fa88881ea40c641c8e916e8e"
+    },
+    {
+      "path": "backend/access/AssetAccessRole.java",
+      "size": 310,
+      "sha256": "ca513c046d1b2944510423bccd614546c2cfdc3990cada457ebf86b18014657c",
+      "sourceSha256": "cdbaa06c436908a6c3c31662a186522f6f21900c94b55266ef2665e438cca5da"
+    },
+    {
+      "path": "backend/access/AssetAction.java",
+      "size": 392,
+      "sha256": "93879bb02a634f8b3723a218700b9deba2003f2221bf3df118894a86a5f4db8c",
+      "sourceSha256": "30ba0347438ea96e3e4eb1b326ddc7b1b11f949b77d54b92ae72187176d90e70"
+    },
+    {
+      "path": "backend/access/AssetAuthorizationService.java",
+      "size": 12644,
+      "sha256": "368198af785ccd57cf6a972d8443de4c92f5e10ea7ee6504f6907df2fc255c2f",
+      "sourceSha256": "51cdf95c554c24a44a0e362173e3884e5d31a5a0045aefa3748edc851b3d9e88"
+    },
+    {
+      "path": "backend/access/AssetCreationTransactionService.java",
+      "size": 7441,
+      "sha256": "adad3f730fd27ca80b8efe184e1c1135ba2f4ee287c0ea7f06cbcec08ab384a0",
+      "sourceSha256": "98ff5808964e8b60f16a31e84b367826bafc8a410410efbcdda1327f04014355"
+    },
+    {
+      "path": "backend/access/AssetMethodAuthorizationService.java",
+      "size": 8622,
+      "sha256": "21b391b6501434b6bb1d55277623b4f4465d8483653f010a4ae8cbccb25ffd31",
+      "sourceSha256": "ea4f1883396e7708cf98504e9c28062a5124fed77481e8b461424593149dc3f2"
+    },
+    {
+      "path": "backend/access/AssetNotFoundException.java",
+      "size": 1123,
+      "sha256": "6a839ffce26cbe2e76f2d3565df3e0578decc45d59fe2c6631b7dc361a9e4d30",
+      "sourceSha256": "98e81eeac6197a37d355a8a634acb3c6eaf7a45a9e54f39af5f9cfe55e16b9f9"
+    },
+    {
+      "path": "backend/access/AssetPermissionDeniedException.java",
+      "size": 1525,
+      "sha256": "3fb95b8cee450ade85498f34eaacf80f25f350541d24d8744fb6b1026e254112",
+      "sourceSha256": "c9fa8ed60dfc680e6e6d83f7554e42301682d320840433c08334314231187e2f"
+    },
+    {
+      "path": "backend/access/AssetPermissions.java",
+      "size": 435,
+      "sha256": "9e827a71c6d0f953d59037a725c107a8c3a4a2a874c842e0972e5d8bd52db4af",
+      "sourceSha256": "e2ccaf8451cf5629fe598d18e7f5b705c3a5cc8b00116d7845db61ed25c56621"
+    },
+    {
+      "path": "backend/access/AssetPrincipal.java",
+      "size": 433,
+      "sha256": "8b3e05911733c6dcd9b8f54e139f806bbbbe2ad8b6375c3b4f29ffff6ee851e5",
+      "sourceSha256": "def7bf634b86ffad3519955318fee1c19a7d448db4512ba3f22dfdf22b9d399d"
+    },
+    {
+      "path": "backend/access/AssetPrincipalRole.java",
+      "size": 248,
+      "sha256": "fe8734a212ef59464287a28a03ac141e54157bf6cb1fbe1cb87af70dbf0e9901",
+      "sourceSha256": "16d504d1e84c42e71bc77f9ea7578e2543d36a7d39fb2f49d71e378cf3df5dc4"
+    },
+    {
+      "path": "backend/access/AssetPrincipalStatus.java",
+      "size": 154,
+      "sha256": "dc4d9ce250cb1ee6962766342121266aa3f6e83dd3212163c161e20457b0632c",
+      "sourceSha256": "9ccce00ea88752895efd17da6e088cef7fbd6c326037862d250d52a009845aae"
+    },
+    {
+      "path": "backend/access/AssetPrincipalType.java",
+      "size": 242,
+      "sha256": "e9c36654bf3bfd2e82598ff56e23017ea3e37d2f5dbd9f9ab8389864c1a17e8c",
+      "sourceSha256": "bc9f7fe83804baa7b7dbefac45a1e190183975b0d17d518dbc09d69e41ae9df9"
+    },
+    {
+      "path": "backend/access/CookieSessionIdentityProvider.java",
+      "size": 1813,
+      "sha256": "886a85f284f94195f1171f91445cafda945a4171ce14e4cf023d70712a8ec9a7"
+    },
+    {
+      "path": "backend/access/DatabaseSessionIdentityResolver.java",
+      "size": 1940,
+      "sha256": "dd5666471ebb2120a708cbdd5b87ea987efc39c18be2c2d455bc1a2b60188527"
+    },
+    {
+      "path": "backend/access/ManagementIdentityProvider.java",
+      "size": 550,
+      "sha256": "d32972b9acb4c98c8358ba01bcde91c6a855a68caf845ccb3725b13877fd2b78"
+    },
+    {
+      "path": "backend/access/UserIds.java",
+      "size": 827,
+      "sha256": "a4730255e6226adc3006929d2ec77950dc0ec0a1bcaefabae5ccedb0bbf43e5a"
+    },
+    {
+      "path": "backend/access/UserIdWireDeserializer.java",
+      "size": 1008,
+      "sha256": "09eef0aebe61d4000e97e658fd7a66aa8cf916d2431cedda3d1b0de1210ccc8b"
+    },
+    {
+      "path": "backend/agentcore/api/enums/AgentEventType.java",
+      "size": 248,
+      "sha256": "3102181ce5c0dfe12e4cf6b4872e86a5a10ca8569dfdafb1f33a3c4e5913393a",
+      "sourceSha256": "9bfc6069dee773f72039aee4983dcded0395ac19371ca7fa3581ebe03e1032fd"
+    },
+    {
+      "path": "backend/agentcore/domain/AgentService.java",
+      "size": 337,
+      "sha256": "0eef4447be9b632e72f8292680ffb9c326658bf56f94d5f811c3c9166db953d6"
+    },
+    {
+      "path": "backend/agentcore/domain/SessionService.java",
+      "size": 1671,
+      "sha256": "60fb86b7a283d79cab7b53fc32259576e8707fda71f791d1d6799b5bb76f9631",
+      "sourceSha256": "5bc1b2621aa1a56440e896930c0866cf752a516036e712f6701cbe449430cd0e"
+    },
+    {
+      "path": "backend/agentcore/entity/Agent.java",
+      "size": 789,
+      "sha256": "6f70b86d8dd8120f5ff976db740f77acc987cdf51b7a8f40f2bbe01f01baa312",
+      "sourceSha256": "cec334593be8dda69428d4389f28cabebaf75ca3a54dced26c44fb24debe1b7e"
+    },
+    {
+      "path": "backend/agentcore/entity/Session.java",
+      "size": 690,
+      "sha256": "46e8973afafcfa33ad6107a09427210a9486ea8ce7b85e2b22345010073f6382",
+      "sourceSha256": "dff4fc6806f76df73d23bce623ce647aabfa757939ac4a5a39cdd9ed6eb1eec4"
+    },
+    {
+      "path": "backend/agentcore/enums/DeletedEnum.java",
+      "size": 675,
+      "sha256": "11e8ce50f5d41315e4fb35a396914b36cf6d8dbe0629ad26d44e8006b900e7ee",
+      "sourceSha256": "0a3888aed25118e8d84040c78ea8885b02071832fcfae4615a535873b1bba420"
+    },
+    {
+      "path": "backend/agentcore/exception/AgentServiceException.java",
+      "size": 1334,
+      "sha256": "87bd2cfb4b7e7366325dadeab5c4c94c7e24cfc9fec2290433a886aee8c2d63c",
+      "sourceSha256": "711d8728499351835052767b62e4e77fed18344549b00684375dfd7ca407315b"
+    },
+    {
+      "path": "backend/agentcore/exception/ResultCode.java",
+      "size": 1321,
+      "sha256": "e8c31c544d0cbdc224330f5a9956569b70e593b6407d168766d717879eedfd6f",
+      "sourceSha256": "32818d9ce511016e58778c73679b9984732b641387f7a722e335d44bd7026e5b"
+    },
+    {
+      "path": "backend/agentcore/infrastructrue/kconf/model/AgentMemoryConfig.java",
+      "size": 915,
+      "sha256": "488f77bc68d9b6b8f33c3f2169c4cc8b478b175bdb8b6a5736b561baabdb3fcf",
+      "sourceSha256": "71dfe6b633ab28b00eecf73d0dddef700b447b56620d659b678e283d8a97b478"
+    },
+    {
+      "path": "backend/agentcore/infrastructrue/kconf/model/AgentPropertiesConfig.java",
+      "size": 1815,
+      "sha256": "4742c1d81cca8b2d5d00fcc6b544ec55c31d9df1282c355bee96a6a0f9c3367b",
+      "sourceSha256": "214c3c9a1ba840e01f0a1f53b7ea2ee19dcf3a9ac3f729ffda54a18cb65f454f"
+    },
+    {
+      "path": "backend/agentcore/infrastructrue/kconf/model/LLMModelConfig.java",
+      "size": 1278,
+      "sha256": "3096c2baf77ac606d48e92928e3eab158d4b1d601e3c3a38ebf94b55d353a4e0",
+      "sourceSha256": "70c074f19307fa8ee12bd10c2216b2d0517c2a5ded0fb1e9f05c4c61af80e95e"
+    },
+    {
+      "path": "backend/agentcore/runtime/engine/AgentEngineExecutor.java",
+      "size": 1370,
+      "sha256": "29cf2da1cdea8a49c79df232c3e46e068401aa642ce4b3aee4e21b64dd0f7674",
+      "sourceSha256": "a4f5691ab8ced39730d74d92d8061fdb2440cda12e444907ac44e74d3d63af77"
+    },
+    {
+      "path": "backend/agentcore/runtime/engine/model/AgentEngineContext.java",
+      "size": 2767,
+      "sha256": "14902ab3f18f10c8832ed35cfc06292bf6d3f7b4f170c412ac2ff516668eef95",
+      "sourceSha256": "fc6b0a250bd415af0a0a3bf9ce592549c576ef1afbe071f02de5c22b9e8393a3"
+    },
+    {
+      "path": "backend/agentcore/runtime/engine/model/AgentEngineResult.java",
+      "size": 1988,
+      "sha256": "f36aa327396db0c37f7a2115d8934a798421c8e4b398454ce512f0171636702c",
+      "sourceSha256": "9e74c58d992548045b7e95ad20ac44c990ac36d31c2d728c997daf5977a438d9"
+    },
+    {
+      "path": "backend/agentcore/runtime/engine/model/AgentEvent.java",
+      "size": 5048,
+      "sha256": "88e0e5e2de08035d8bf859e0090054d84aa337ad66fa626c90221f2c818baa53",
+      "sourceSha256": "3e757480703bf83c7ddb218d5eb161a1741cbd3545da280ce2e4ec102656d78a"
+    },
+    {
+      "path": "backend/agentcore/runtime/engine/model/BaseAgentContext.java",
+      "size": 701,
+      "sha256": "e53b64d00f9e58143f0fe2fdd6be1cc97ebd772c49f4b84d3123873a6e815d77",
+      "sourceSha256": "ea4411ae4dbe77fa499c3400da175ac3ba947bcd286493fa881721d063b8ffe2"
+    },
+    {
+      "path": "backend/agentcore/runtime/engine/model/SubAgentInfo.java",
+      "size": 372,
+      "sha256": "fad0c8ceba5cb15a3d5f3ba1f95eb608ba7017b76bb0245940e74ea92229b78e",
+      "sourceSha256": "23c3c44ada0c397931d8ff7b5fb98d553708bfe9f00fd77efc792a3f2058fc37"
+    },
+    {
+      "path": "backend/agentcore/runtime/enums/AgentEngineResultCode.java",
+      "size": 540,
+      "sha256": "b10967caaf27bcbea1f3697d832bf6a3746d82f65c376ea0afa04d1ac2814ee5",
+      "sourceSha256": "d688971ea8781a8162e27038117f9dc06e0c4daf59f226fc45beb99dff002685"
+    },
+    {
+      "path": "backend/agentcore/runtime/prompt/PromptManager.java",
+      "size": 2782,
+      "sha256": "a08e9f5c35b0717b5e1831a244bc4d43cd0387685f4ebf9107ccdc4196165df2",
+      "sourceSha256": "c8d5e210e80a4766a700b2862678fffba1e85d21e58287e2a73fe6a4fa577eda"
+    },
+    {
+      "path": "backend/agentcore/runtime/session/AgentSession.java",
+      "size": 4291,
+      "sha256": "729aeaec081053d56f595acb01b35e612c7c4cd4faf51cdacf92f7bc2ac70324",
+      "sourceSha256": "74a9c84aa8a92b1f617388714f25dec75a8f4355fb52b1615a6f7d56ca346646"
+    },
+    {
+      "path": "backend/agentcore/runtime/session/SessionManager.java",
+      "size": 14438,
+      "sha256": "e3fadb566d81af4be96c62a7cc711fe940d256ae6bfa1796878735123daa1039",
+      "sourceSha256": "f09ba4d44cbaab0b018ee69dc753d1dedc4768f470c70123b3fc6e89d044107f"
+    },
+    {
+      "path": "backend/agentcore/runtime/skill/SkillFactoryMountedSkillResolver.java",
+      "size": 5757,
+      "sha256": "a685f35a34cd7eab76a854363994d46246ee272d551843b0daafeeb46664459d",
+      "sourceSha256": "15239393867c1333e391d5f5b9b9a6733a0dd4eab49dd6534c04a48feec3cae6"
+    },
+    {
+      "path": "backend/agentcore/runtime/skill/SkillManager.java",
+      "size": 2865,
+      "sha256": "95911b322a4bbaf2d4b1e37759e4f3cf8d6de8bea40df161a008fe1b3fc0539a",
+      "sourceSha256": "d2822706594800955821b1c0976fe6d61e855ad8bccbd821f53adb11d0f41fab"
+    },
+    {
+      "path": "backend/agentcore/runtime/skill/SkillMetadata.java",
+      "size": 884,
+      "sha256": "66428889c59609d1e33bb0511c40572637e2aab6c8545f2d8e8c2fa6c8b53c44",
+      "sourceSha256": "6c00905490c302a6a5315de16b0d1ad7b388f7ef6c094b117b121233485f4dc2"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/A2uiApplicationToolContractService.java",
+      "size": 6494,
+      "sha256": "a5bdcdc5fc00f4b574ab52148ba91dbff3ead05eafc9aaad8a9c5970b272ac1e",
+      "sourceSha256": "97b0da40b26153d85e9209ed9b45dfd96fdd32944ab4bc9538d2702ad7462a34"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/CapabilityActionExecutor.java",
+      "size": 25796,
+      "sha256": "a52fab3a5c7b9824ccc2e2a466fd479bdbd25fbfc5cd6e68faae64606f571f58",
+      "sourceSha256": "f4c12e9eb8c6cfec351a8705e52ab5c4a19ee2b4c0c1869ee81481669a75ac78"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/CapabilityActionToolProvider.java",
+      "size": 48842,
+      "sha256": "0e15e2cba914a8ee1d21c17ce52839ac32142d57d84d6f5de680553253805d3b",
+      "sourceSha256": "24cac4c1842aa7da99aa2779f4d2c7b2d84e5f277c7a65f3ec13159520875c6b"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/CapabilityCatalogQueryService.java",
+      "size": 23170,
+      "sha256": "8789256fb7560740907be90cf387bf20b991f96efa2d81234dbabc2bc6a897a8",
+      "sourceSha256": "3b60795a2bc20a601dbbc778876bdd1599fcfab86e5fc54623b99cf227a96109"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/ComponentToolContractService.java",
+      "size": 11436,
+      "sha256": "bac6df4502c22b932d7b4d80952760ef25a5542933481da745a0e861b3848bf8",
+      "sourceSha256": "045bf5236c24d57b0f35acd1b22548b483eb90a7acbb8e30ee2bee4eef9e1259"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/ExecuteBusinessCapabilityToolCallback.java",
+      "size": 9028,
+      "sha256": "bc7764a4ccd55617e58b323a0e4e103ed262a5ce23d9c599141c1f9573480986",
+      "sourceSha256": "f113c7f91a000302e25d68ab1cdb347f714f76fef320b52cafb622a7ca67f036"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/model/ToolResult.java",
+      "size": 1313,
+      "sha256": "50f11fdd7b04ee64d8da710846b8793f3d7c943756c0bec68950422ab52a2088",
+      "sourceSha256": "eb5f63dc8eb6a6a32d6bb24176f41d058c9aa17082da55650155aad335d633ab"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/QueryBusinessCapabilityToolCallback.java",
+      "size": 10600,
+      "sha256": "ceb9d88878d97249c88aae99727d9a7836f5ecd10f6955d41b28da07272ecdf8",
+      "sourceSha256": "b98873c18c0c2e55d44d5b8e649efde34d80af5fd67caf9eae7c52cd54fd2997"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/QueryComponentToolCallback.java",
+      "size": 10345,
+      "sha256": "721b938d4804240bf808ac0a599fab5bf7d43d99706d6f8a82dc0d469569cfdf",
+      "sourceSha256": "f1a808ddead13a1f0479f18b3154b691b1c252fb132967f0ab25f4bb72773bfd"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/QuerySkillDependenciesToolCallback.java",
+      "size": 21591,
+      "sha256": "7fc26ab7e90ced46f2934579f1dd74659249ff21d45e1b1d99d433123989a9b7",
+      "sourceSha256": "b4c8530e453c73790edfeb87574a59c029635d540e807c426b33cbb1f9abe0e5"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/ResolvedCapabilityActionToolCallback.java",
+      "size": 2380,
+      "sha256": "052c959dcce95b1128d2ef90611e076de14ef0acdcd0cd7de8eeabfb3eeac1b4",
+      "sourceSha256": "6c71d9c2cc801e582ef0b3750a47a124cb25a424c67a98f9b89f623474975324"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/ToolException.java",
+      "size": 819,
+      "sha256": "c92b454bf9cbc7d9d67510bf96f2abacde1ed8bda30d10979986a89c79df4dcb",
+      "sourceSha256": "3901272a8dee91d19fd4ab73371dcdef27507b9ebf9ed4a6736fea3c5e1bca47"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/ToolExecutor.java",
+      "size": 3864,
+      "sha256": "68652ed54e45605bf7fb0623cf4c0a7f7f8170ecfeada2fe9ec657b36349c184",
+      "sourceSha256": "8e4133d1555525e7e43a9630849adf206c757ebc3d7fc37e37357d49bc9e7937"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/ToolManager.java",
+      "size": 2379,
+      "sha256": "72687d4db9c4f47c0200be5194bdb5ecb960305b2bc372295f1d8ab81230d01b",
+      "sourceSha256": "c7c3ce3169ea64c32a60e78e0940c884d487e3821b52d1b2fdfdba051667f680"
+    },
+    {
+      "path": "backend/agentcore/runtime/tool/TrustedToolContext.java",
+      "size": 3571,
+      "sha256": "8fb5f9ff192ade6261d09bf1cf6ed807ccbb34ac2a0350e5ae88928c8036006e",
+      "sourceSha256": "be93c9164e988f0c9bab25599a831fa1b1a80915d979d4f92b710533c7fa18d2"
+    },
+    {
+      "path": "backend/agentcore/runtime/util/PathUtils.java",
+      "size": 584,
+      "sha256": "0e9ee87842cbded78abd5add756c3a038e7cbb88638164f1c4326571ec8e29f2",
+      "sourceSha256": "055daa2e3e3246703bd326f7514fedc7ffc5afc3f2eac3a76c92092e17bfe8bc"
+    },
+    {
+      "path": "backend/agentcore/tool/AgentBizTool.java",
+      "size": 1798,
+      "sha256": "41a2b357e3ab3402417cd77b74151d2b0ed96851e4a26868c8ee825ae0ea817a",
+      "sourceSha256": "055f116761f2ccb3899985f5da22571abe50ad22d72fd1d583bfed407cb02b24"
+    },
+    {
+      "path": "backend/agentcore/tool/Constants.java",
+      "size": 1153,
+      "sha256": "e5cc478682471ca12fe08b9a665a5c3c31d7647abbe4c3bb94a4ecb67fdf9f4a",
+      "sourceSha256": "d49736849a649e7686e185f824c48516208d4926ab9fd3e13a1f71941e87502d"
+    },
+    {
+      "path": "backend/agentcore/tool/lock/Locker.java",
+      "size": 1026,
+      "sha256": "1660ef8d60a5a76eb95979035d56dfd308515d8f1e168d83fd6ea7d4d5fbe945",
+      "sourceSha256": "74c1a2c94e37880f3314c6c6fe8912d639dc0f30f96c422862a444349234a6e6"
+    },
+    {
+      "path": "backend/agentcore/tool/lock/RedisLockFactory.java",
+      "size": 1786,
+      "sha256": "d1164f7daee08ec5f1f74aee1d8550d5a3ee883ef99cfc0627e149545127e37e",
+      "sourceSha256": "b02b4c19ce4bd227a04d937c1b6c2a553e6194cb76517b3089948fb50035fa4a"
+    },
+    {
+      "path": "backend/agentcore/util/ToolUtil.java",
+      "size": 640,
+      "sha256": "e60da05cb71884e4b964bcc3816a6126973bb100ed3063f3b0eb436fd6e7d77d",
+      "sourceSha256": "9c6c59392e71941d3491b679d172205e0ef03055c53b70a0a46b507b2862278a"
+    },
+    {
+      "path": "backend/aicoding/AiCodingActionCodes.java",
+      "size": 861,
+      "sha256": "adf470aa6e716fb71bebfc1e99c91f91bb58de30c9217aff933f7d0b36ff3d6d",
+      "sourceSha256": "6167f64997b2d0c86f7664443f6fe8faf0e827046702f84f40d3ca15153659e6"
+    },
+    {
+      "path": "backend/aicoding/componentauthoring/ComponentAssetAuthoringService.java",
+      "size": 44426,
+      "sha256": "9e7986a71b6e7617076275d4c16ef9b572234ba2edfad51921c6b86657531e74",
+      "sourceSha256": "6a8ac3a2a8af8a7f60798a8f558cc3ea3a41fdf43cc12808879eaa88672d776c"
+    },
+    {
+      "path": "backend/aicoding/dependency/SkillAuthoringDependencyService.java",
+      "size": 62376,
+      "sha256": "8711291c750d0ee4a61a9c0f5637665ab7c6b894f303c75b3754e2a05dec2525",
+      "sourceSha256": "05d0ba26bffc1ef89e9258ae07af1113dca6fdd8a1a7e449464b65fd867ffe78"
+    },
+    {
+      "path": "backend/aicoding/domain/SkillFactoryPatchApplyResult.java",
+      "size": 2251,
+      "sha256": "3ef25d1170b5073f6c693a02b7c060055ebfddcae095d53160ec897c510347d4",
+      "sourceSha256": "66070597343d1f617d33579753c0528d0b9e7520554b01c730547a5a028a3c6c"
+    },
+    {
+      "path": "backend/aicoding/domain/SkillFactoryPatchMergePlan.java",
+      "size": 832,
+      "sha256": "81bff86f15c60dfefeaf7fbbd6ab5e4e812e3a4eff1a557777b72d9fb72d3ab3",
+      "sourceSha256": "546ece1311a35771f8708383699191bae3b18f94cdd2669c77f1135de28f01f9"
+    },
+    {
+      "path": "backend/aicoding/domain/SkillFactoryPreparedPatchChange.java",
+      "size": 1697,
+      "sha256": "65ba5d4c04cb6eb9efce05ca8dd03380aa9141bd265efcc58d3ffb4d59c96232",
+      "sourceSha256": "8b7c3bca28e836cea4c016d680cc96207c38b73f687c0f85329cb98d7726f033"
+    },
+    {
+      "path": "backend/aicoding/engine/AiCodingMalformedToolRepairState.java",
+      "size": 3057,
+      "sha256": "11220c181d633f533e215da7788104bc9a5d6d0b0814f64e4b351fa7f842b6c3",
+      "sourceSha256": "65a987525fd7bc52c257a4aca978386aa9feaac99f622703e28e98f97b400190"
+    },
+    {
+      "path": "backend/aicoding/engine/AiCodingModelStreamAdapter.java",
+      "size": 1352,
+      "sha256": "ba6bce0861c0c0fdeb221624e64971a3e646765e4db773db70b222acd49ee824",
+      "sourceSha256": "8f1cd8d69d49417851a6d57a0d2b17c769b60726bda75e5c720581b5e8c469d1"
+    },
+    {
+      "path": "backend/aicoding/engine/AiCodingModelStreamDelta.java",
+      "size": 2919,
+      "sha256": "0e0d09516de42c34058878bf1af6737651a6b88449782445d96938894c395c45",
+      "sourceSha256": "852d1e8d2d6c8069f201ac39947e714e5dd30449a9c4b0b8c8e71ae97a2fdb5e"
+    },
+    {
+      "path": "backend/aicoding/engine/AiCodingModelStreamParser.java",
+      "size": 881,
+      "sha256": "48ebc87f1434ff108b6f25fa64d96cabed39ced15caaee7db3ef66b64054105e",
+      "sourceSha256": "54da4ae95e9f7ce2505894f5a9ff95319b28a90e8022ae789ce2f36d7e9b1403"
+    },
+    {
+      "path": "backend/aicoding/engine/AiCodingReActEngine.java",
+      "size": 110857,
+      "sha256": "6addc6e890bbd24c8212021fb465a470a4ce6dc3cc58ab58e0dddcd3d875a2a5",
+      "sourceSha256": "7edcd98fc542dab71c4d83d7715e7e2aa78213d5e9567faf8f64e97ba4e18e04"
+    },
+    {
+      "path": "backend/aicoding/engine/AiCodingReasoningContentExtractor.java",
+      "size": 2000,
+      "sha256": "fa20543d7b8c24df0ce3556031fc75c561e0f5e0dd3a3f96574e2679f1598e97",
+      "sourceSha256": "dc7673051e49290e4c9cad0f4debb8d20abff51931212ee6b37adf1757f9c96f"
+    },
+    {
+      "path": "backend/aicoding/engine/ClaudeAiCodingModelStreamAdapter.java",
+      "size": 5662,
+      "sha256": "4de649bb484b9b98902d2e90e822f479dbbff462a5afaf21c1cc07658404a731",
+      "sourceSha256": "eee21983525f0cfff1a82f49151015798c169c4f9e1b2b9036dcec61688cb09a"
+    },
+    {
+      "path": "backend/aicoding/engine/DeepSeekV4ProAiCodingModelStreamAdapter.java",
+      "size": 1974,
+      "sha256": "84f3476736145924e99d1a262152ed1cc7aeeef3aedea115c0f12d6be44c6d5f",
+      "sourceSha256": "41ee1a6dc092ca349bfe919d7770f347f9d92263e897d812e02d4ea6dbe5a78a"
+    },
+    {
+      "path": "backend/aicoding/engine/DefaultAiCodingModelStreamAdapter.java",
+      "size": 2770,
+      "sha256": "632c34fef7c1454d41148a3e56066a24ec132f6ae5123e2164124120ec344c5a",
+      "sourceSha256": "67201778c97018d86cc872a629595f70d8f1c4164ccb2ded8c23097dfdf39970"
+    },
+    {
+      "path": "backend/aicoding/engine/SkillFactoryAiCodingModelClient.java",
+      "size": 617,
+      "sha256": "99bd895d277957bccdb03dce85913ce6345d5266aca4199d434dc7b932f7e7ea"
+    },
+    {
+      "path": "backend/aicoding/run/SkillFactoryRunControlService.java",
+      "size": 929,
+      "sha256": "805fe8d0f653f06daf9d683294776dfd0f608f78edd221170a4c5c141c4efba3"
+    },
+    {
+      "path": "backend/aicoding/run/SkillFactoryRunStatus.java",
+      "size": 1189,
+      "sha256": "23ecd3cf9de556494a89c27cb4c074491ea35a5d6308173360b2d7a60f1ae36e",
+      "sourceSha256": "1cc35e54c1df64c34e080cd8dac9bdc3055bb244638bc8c24ab5357159105bd8"
+    },
+    {
+      "path": "backend/aicoding/SkillFactoryAiCodingService.java",
+      "size": 90896,
+      "sha256": "af4b1e1d87ff4b115915bf065450ebc94d746a11bfae42f73d2bb955e4838736",
+      "sourceSha256": "6222618d77b42d8915d0d873b2980d672846ad052470f6c524603c0ffc6dd0eb"
+    },
+    {
+      "path": "backend/aicoding/SkillFactoryManagedSkillDocumentService.java",
+      "size": 11446,
+      "sha256": "95d09f60ff6236d4b9e765ba089b7a4209aaf6085d993f56015de0166b855508",
+      "sourceSha256": "1e8eb6ac83ca8fa66002ec7f15dde0825d08a9557ba20f1d037dc76eb983d69d"
+    },
+    {
+      "path": "backend/aicoding/SkillFactoryPatchMergeService.java",
+      "size": 5159,
+      "sha256": "c37ad83bcc9007af466e8a8a934b0cf3f322f9d00c6e9bdcf63531fc13d07a03",
+      "sourceSha256": "c893eed2bc1ead1434f5061a4a92b3761c46534b3e28bf1d8dc08597ce69f3fc"
+    },
+    {
+      "path": "backend/aicoding/tool/bizcapability/SkillFactoryCapabilityDryRunToolCallback.java",
+      "size": 6692,
+      "sha256": "a5b92550ac9b1d656842b82e5d87be1a8dbc8d7e1741943ecac2c4e9aff23615",
+      "sourceSha256": "777f31a710833e92586745da826b4b7f97617c7d9799919d079e516624b52d0a"
+    },
+    {
+      "path": "backend/aicoding/tool/bizcapability/SkillFactoryQueryCapabilityDetailToolCallback.java",
+      "size": 3167,
+      "sha256": "577de967c4b80aff0753e0df88b51c9c89a160727e02db8ceca431fb42d3745b",
+      "sourceSha256": "604471d1d178cbcf1f9d9de46f88ec441ffcba9ef7afe71813a380064745a12b"
+    },
+    {
+      "path": "backend/aicoding/tool/bizcapability/SkillFactoryValidateCapabilityDraftToolCallback.java",
+      "size": 5996,
+      "sha256": "f39671a8aa38b999729a62bfa88f88c16fb4012d88236f62546737ba6e1c9a54",
+      "sourceSha256": "e6377a13cb9a7be41cd94f6f897fbfcd1e522661449150ea785d06989782c92e"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryCurlToolCallback.java",
+      "size": 27171,
+      "sha256": "5b65aa98c5dabc9d0f68e0602000609b92e96d6331a8d3b1455daa1a45d57435",
+      "sourceSha256": "9d43bb84c0bd1fcd03ff21b6186c4739185b9c3613c90ddd34579a2f26cd443b"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryFileTreeReader.java",
+      "size": 2289,
+      "sha256": "0af1ddc7e7869e762adabef3490c90d1b257f2e65d44b7483b754819984771c0",
+      "sourceSha256": "3c71369116de64eda81ab26822d3e2ee488094a3d323fa01df59aff3f9e1fa25"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryGetAuthoringContextToolCallback.java",
+      "size": 2329,
+      "sha256": "bf154b6c87f40b00244ab807d32659c94c2878924470a3aacaf8a9f5fad46397",
+      "sourceSha256": "fc01aa1535b7ab48cc945265827b6a5d6923ec4462e4d2ac82d3765ce66c73db"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryInvokeAgentToolCallback.java",
+      "size": 7208,
+      "sha256": "5d2cbef018d212304b8755000ecb44896fd5c9251154ed1045274d8e9a7a5372",
+      "sourceSha256": "f01ec75c03f1266b3398b04825bd9d949b71c6b3be2067581bccf935184faa96"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryProposeAuthoringChangeToolCallback.java",
+      "size": 17044,
+      "sha256": "32ea19095efce63de7eb93d5579d5586f8db61f377e35e1070d041eb4e9d7083",
+      "sourceSha256": "90f98dd96a27a6b268ead0d2ac40045e9a3307ecccec3f35c88c132dc6039157"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryProposeFormPatchToolCallback.java",
+      "size": 8500,
+      "sha256": "4775fbea6384e9ee7ed6d7aefe2e0c34edfccdb5c5f01dc5cc637480277eea62",
+      "sourceSha256": "b72ee48323bb368e6cfeddf09144abfc6899df1bf53fb287b3e00c5ad951324e"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryProposePatchToolCallback.java",
+      "size": 7095,
+      "sha256": "f2e9ade4fab0178518da63df68f74967c7bc944cb1763413b5e924b5f501c2fb",
+      "sourceSha256": "063ba2c1259ff6f789550f9253576577c0f2743413c4f30409b21325d53317de"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryPythonToolCallback.java",
+      "size": 11046,
+      "sha256": "bf5fdf5545ea12876a6d482e076711827104df867a8c55bbf4adf3930aceac65",
+      "sourceSha256": "18f9054c69607ccc018a75d69501c25ece3b936750751b7f7e608df7fa540ac5"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryReadToolCallback.java",
+      "size": 2949,
+      "sha256": "6142a198969fc7112389d19c69b56aab952e4aeca71d84dc043381b072badf6c",
+      "sourceSha256": "0588aa348be8010d1b68ccf0551c9cc53085530702d4c5f6bb52ea87bb4781fc"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryToolPathResolver.java",
+      "size": 4817,
+      "sha256": "05300f186eff8b1291f9c9ac4cb73be5b8fccaa766436d48438d8cdc7bf6d125",
+      "sourceSha256": "a5166a28b1bf955d0e6f75ee18d2091f85c9005e7addffee7712ee4363f06e51"
+    },
+    {
+      "path": "backend/aicoding/tool/common/SkillFactoryTreeToolCallback.java",
+      "size": 2980,
+      "sha256": "f71786021a4f80b6c484dd30e9f638452555a0b7072fd74c32aba51e92cdb5c7",
+      "sourceSha256": "737dccb01bb80e8028a884006e709ee8c8fb426f122869802f28173d824b1cfa"
+    },
+    {
+      "path": "backend/aicoding/tool/component/SkillFactoryQueryComponentDetailToolCallback.java",
+      "size": 3137,
+      "sha256": "06c752fdd1f2adeb44f2aefd44c1594dbd87ccb60259c2f421288cc523549fab",
+      "sourceSha256": "bb43e023214594859a919a58053c9a0ff73587b6ad416d5824da2a5aee3cc2c8"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/QueryLabMessageListRequest.java",
+      "size": 1066,
+      "sha256": "41df722bf071d6d8e18ce45ce761c07d7aafc3b37f283b3921346964f1c7a5f4"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/QueryLabTraceDetailRequest.java",
+      "size": 456,
+      "sha256": "42e8506ee6fe54b94cf85c05a069f2b4e8617b87f67dc00cf10773af225291a1"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryDependencyToolSupport.java",
+      "size": 4662,
+      "sha256": "2669234e54b4b169721de27073c7f1b6ff889a7bb0649914b1680853698584fe",
+      "sourceSha256": "66419a616a2fab4792dfb96a904a4867012f487a989564bca8e2e9f56e6aebc4"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryInspectReleaseReadinessToolCallback.java",
+      "size": 3634,
+      "sha256": "da6093b1e23ef455f4096bc6b0b11039b6b4f4d038420f7065c5dcfecb2a3de0",
+      "sourceSha256": "e8605a7f0c365718972f1ae3f7c883768f1095cab4cad6deeb03310f9d15c350"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryLabRuntimeQueryClient.java",
+      "size": 408,
+      "sha256": "b971b224e6e3cdcb8b6f505c497ae1148324142faac386f0fdd5f241ee4434bc"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryLabToolInputSupport.java",
+      "size": 4915,
+      "sha256": "40c7cddf4417603e6a3aea5a6aa67eb7e04d711f75741604315b3f3f25514f47",
+      "sourceSha256": "fb5e56e7c015e9946137e0abd0114f07be0b152105f9c1b5a95125d91508c741"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryQueryRecentSkillRunsToolCallback.java",
+      "size": 8711,
+      "sha256": "7280d510f4b519cbf07ce1d908e27e9afdcd8d7f9495526a607713716785f7f4",
+      "sourceSha256": "23172e5086fd3cde91b0b10e8b49df8bcd3f76c301f919725e8c1189abe0d014"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryQuerySkillRunDetailToolCallback.java",
+      "size": 11369,
+      "sha256": "280118a47e0b5be0405c4a8bc01bf1e2965615f85e621f2ff44c43c254a3adc0",
+      "sourceSha256": "2258465cafeea5e50ebbc07759755e615154fcb5607afe102300c178383d5730"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryRecordReleaseGateEvidenceToolCallback.java",
+      "size": 20627,
+      "sha256": "d2ad7b5fa9087d5d26802140af7447dcca3116aafe52770aeb7b7c72a146bd2b",
+      "sourceSha256": "c13d413c40f22d16a4f2456ed528c70d1a756c2a36cbef8f2396c50b982de2e2"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryReleaseReadinessInspectionService.java",
+      "size": 944,
+      "sha256": "b09bc420f3bc1b1b0119901a4584bd3bd10548d8092587f27c8db713b4ca9a26"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactorySimulateSkillRequestToolCallback.java",
+      "size": 5317,
+      "sha256": "501c8a395b91f0204db441b978340516b00f5dd6da4d2b7d0536406cf55e68b1",
+      "sourceSha256": "3a604f1ab7c62db0e9c5c4aed154023595978c91253e275388264491f5774c41"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactorySyncDependencyManifestToolCallback.java",
+      "size": 7231,
+      "sha256": "1c36e545c3b438612227ec6cc4cab7a075b7380e9c4a155b65abc10c77bf7e55",
+      "sourceSha256": "622e436a0a12e8839a1c8a3c30ec7265cf1a63454fc3946940b26b89f1eb9fec"
+    },
+    {
+      "path": "backend/aicoding/tool/skill/SkillFactoryUseSkillToolCallback.java",
+      "size": 10609,
+      "sha256": "81ef045604475084f872470f5e22d46be65baa72d70dc4d86a613ab4260ca0b3",
+      "sourceSha256": "47a60b9b76112876cde3e225d117dde69af2e1a02be2f98a0199745d39532ee8"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillFactoryCheckAgent.java",
+      "size": 24627,
+      "sha256": "75ecca67d6701f24775abb4629af20e88a7ea3bb25e73f04406301c6b48ac91e",
+      "sourceSha256": "637627a1e08972094f497d22213d1979301b9120e0930746fcabe36c4af5a1ac"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillFactoryPeerAgentEngineInvoker.java",
+      "size": 3088,
+      "sha256": "f3cedd25bf64caa58c363bf69eac0cad81bb2d66339daeb97db52e4a74897cc3",
+      "sourceSha256": "53bec312249f7c3831157b466c11346be4d8b7443ae235273fb59564435746e0"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillFactoryPeerAgentInvocationService.java",
+      "size": 34662,
+      "sha256": "41ae7fce7a00acb76272b076dd10e590af527afb95e6a2119641180b18bf4ecd",
+      "sourceSha256": "340861553f22a165d51bb4ae5988e35c6c5139d6587c9459519c935517327b75"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillFactoryPeerAgentRunCollector.java",
+      "size": 10094,
+      "sha256": "ae2654113fb6b26088fc2c48005e2fe43b7f38de1ce361260a263b70a1e51252",
+      "sourceSha256": "f29002f3f9ed6b0c851ea6f9a9ea50ee0fa8be3448e739aa08d651c0f26069e5"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillFactoryPeerAgentRunResult.java",
+      "size": 1208,
+      "sha256": "87ccd0c21708a37aed400be3e4e746a86e8c49d8a8c5e69a8cc5e439c4774033",
+      "sourceSha256": "8ded7b95928fbc0692d449bb46abecfc51b5a5b2d77dc183b3365c904d7908ac"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillFactoryPeerAgentStreamEvent.java",
+      "size": 778,
+      "sha256": "e7db00f16c5d70b12a2fa0a15e42d1b50bd29e6343723897fe61e6eabe02630c",
+      "sourceSha256": "f83c942d791c2495382218601714311eae9c521f7e6b6d439a9b77d8c414af3b"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillFactorySimulateSkillRequestService.java",
+      "size": 7981,
+      "sha256": "ffe7f697419dabb298d4e1a48472d61c6cd7f3e9ed97a6acfc8acb6c01365b8f",
+      "sourceSha256": "87fa8600d77e07bd2e502413d95a763d128891137dde1f07eae8f8f2f31a7694"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillFactoryValidationReportStore.java",
+      "size": 1631,
+      "sha256": "5994095d83af864f17819e77e957dc354582f6af6c44d804df4f347d5fb72c57",
+      "sourceSha256": "ea771177619b6786e880a1c5fa057c4a30125623158fafba5f059c880b5469c8"
+    },
+    {
+      "path": "backend/aicoding/validation/SkillSimulationResult.java",
+      "size": 1202,
+      "sha256": "ddd1254352979991fc06f185c04f0be49346700061593da8cc6edcf1a3fa1fa2",
+      "sourceSha256": "af06ed6c20b3dadc94c04a4d76fe2a3de1cb9d5290f6568eee48a8c46a33c988"
+    },
+    {
+      "path": "backend/aicoding/validation/ValidationReport.java",
+      "size": 2122,
+      "sha256": "5c72c6691956db91fd328ca13cb840327675eb5410f448fd0f456ab93e3907f7",
+      "sourceSha256": "162b9a02893c575dc4b48446a480877c15fae1a8a3dea5e72b633b437b72a3f0"
+    },
+    {
+      "path": "backend/aicoding/validation/ValidationTaskSpec.java",
+      "size": 1295,
+      "sha256": "b34fc4910dbc69bc79a44d3218fcffc532f6c1908c879a5c045ecf95073a88c3",
+      "sourceSha256": "120dd7fbc53c944bf4d9cf661fadcf32f6a5f0915ce855ae4d66169b684b41dd"
+    },
+    {
+      "path": "backend/authoring/form/AuthoringFormPatchProvider.java",
+      "size": 1014,
+      "sha256": "d0023c5d9959b7861f800b83b1aef6012d4d7872640ed035c666d5be16f6f7a2",
+      "sourceSha256": "a7e5342c85668d7eb46702333c371925ea3fd7d01f9bcf0ed3c1a768e6761f59"
+    },
+    {
+      "path": "backend/authoring/form/AuthoringFormPatchService.java",
+      "size": 10646,
+      "sha256": "f44015e2f9e3e4be179d61015d5484bf4dd40df8a09f48417a7a6a34791f5d0b",
+      "sourceSha256": "3a843feaa8e49d5bb3860e5cac22a70e7b53d0263e55b2407699d9eddc90d79f"
+    },
+    {
+      "path": "backend/authoring/form/CapabilityCenterFormPatchProvider.java",
+      "size": 3528,
+      "sha256": "a150e407574b231058b2074c6f4f3fcdc7d7e1d5f0d658fc6247d6dbcd7db49b",
+      "sourceSha256": "36085a77f9e67b4ace059a2c2f29312e1d6036d2b981933f716c435f94fff028"
+    },
+    {
+      "path": "backend/authoring/form/ComponentCenterFormPatchProvider.java",
+      "size": 7324,
+      "sha256": "e9cdee4f4765a00b9a28dfdcc3f8a7713cc39aba29dcc28a0d68416e69a4cbcc",
+      "sourceSha256": "ea34b2705eea3ca6728c60003e38f2f6bf2c9f9c6c4b8aa72d87b024a0d55b3e"
+    },
+    {
+      "path": "backend/authoring/session/AuthoringSessionService.java",
+      "size": 33628,
+      "sha256": "12cf8d5858f276fb9000d52639fbf35803b867b8363a3aa3ad4e8969c1551c90",
+      "sourceSha256": "2c8fd9609a93b73894241e63f0de889444045b71dc815c06ac6a0fa9f284b2ad"
+    },
+    {
+      "path": "backend/authoring/session/domain/AuthoringChatTurn.java",
+      "size": 748,
+      "sha256": "3a874d865747cfde6e8860f905dc4b25fbb6754949835a6321aa2fe3777424f4",
+      "sourceSha256": "088ae11ea1e2e7259c70ff47f9b371ae93c9273d7f99382252fd78ab83aa0f33"
+    },
+    {
+      "path": "backend/authoring/session/domain/AuthoringChatTurnRepository.java",
+      "size": 628,
+      "sha256": "13917a2d716a7365e53c3cbd93aa5058a390ea1182de423e6ba7c8bd18e0ee25",
+      "sourceSha256": "a989404eb7e94ca07618a53ad100dc73a857dc35a07d8f109dffafb24271cfad"
+    },
+    {
+      "path": "backend/authoring/session/domain/AuthoringSession.java",
+      "size": 875,
+      "sha256": "8f7e93672748f7816547b60e9f7a35d2f9407b6d44b04a43421bfcb5c55bac67",
+      "sourceSha256": "fb14332438214ba864d3aee9ae2e1a329d5e5c529622944c28b9c72c51ab1ea3"
+    },
+    {
+      "path": "backend/authoring/session/domain/AuthoringSessionArchive.java",
+      "size": 729,
+      "sha256": "b998e716097f2c930775806e4ce2d97ed6c7c468f99ed35047293da243084dfd",
+      "sourceSha256": "0964a0ba0194036bed39514604c5d373d6d2c1670dd36ab36e816591aae80f76"
+    },
+    {
+      "path": "backend/authoring/session/domain/AuthoringSessionRepository.java",
+      "size": 1645,
+      "sha256": "c65fb41a86395a3a32839257ff418d8b5989725c47f4c4ecb8d43eff0548b32a",
+      "sourceSha256": "b5c8d5c3594b3ad96ce0d557420851be8010044d7f64902e6009d83e9845dd51"
+    },
+    {
+      "path": "backend/authoring/session/domain/AuthoringSessionScope.java",
+      "size": 1100,
+      "sha256": "259250211ea026b5097cacde172a46da9189727f5324cfa7008eee200f92b3b7",
+      "sourceSha256": "81e5a91276f494e1f3cb90a21760d5ec96d4bf534c1decff3a8452ee5bcf99d0"
+    },
+    {
+      "path": "backend/authoring/session/domain/AuthoringStreamEvent.java",
+      "size": 1431,
+      "sha256": "b07c3a3fbec7b060673e1a41ed26892402718a6ed7c8959646a735e57caeffe0",
+      "sourceSha256": "15fd054db32e78f9f903eed9cb5228db4c481371bc86559d3b8757bc44765b95"
+    },
+    {
+      "path": "backend/authoring/session/domain/AuthoringStreamEventRepository.java",
+      "size": 829,
+      "sha256": "d074c97c66c04203bab90f1b89bf473fb9322ab002ebc0b0e213db0a9dac0a70",
+      "sourceSha256": "c4cfafe5fbf0b78b0972dd97b84478d2c0527ab8bfd0c96d97a21d8c174f6a0f"
+    },
+    {
+      "path": "backend/authoring/session/model/AuthoringChatTurnResult.java",
+      "size": 680,
+      "sha256": "95a7357cc7326148229cfabeb633812d399bcc92c1dc7bfc4cd8cf2927786325",
+      "sourceSha256": "2d2a0597755f53b3eecb9b97a7f40f8774f32aa27eeb465e081ac86a71a01395"
+    },
+    {
+      "path": "backend/authoring/session/model/AuthoringSessionCreateResult.java",
+      "size": 375,
+      "sha256": "a648a0305929bd63a5cd079399aa431d10f6444a45aada9d51f318e7d90f371c",
+      "sourceSha256": "d15799967ffc232d85ffb8f51abd8d087caea976781feeac8fe37c1273d1331a"
+    },
+    {
+      "path": "backend/authoring/session/model/AuthoringSessionHistory.java",
+      "size": 952,
+      "sha256": "d782ce02b9276d5092655d37c666f4a7137e962ce5adecacfe8f62483efc0145",
+      "sourceSha256": "4e17aae1a14e89196219a306157100a1f0c09ba4414086dd960897e6d8b16f99"
+    },
+    {
+      "path": "backend/authoring/session/model/AuthoringSessionSummary.java",
+      "size": 903,
+      "sha256": "3f1994538cbf02de14cca76892215e86381d75a1f3c49b3ad9b0a31a1a1113e8",
+      "sourceSha256": "25e39313213662fa5159db9faf8be8378e8bc29f28d452b2118d0cf52f9fd228"
+    },
+    {
+      "path": "backend/authoring/session/model/AuthoringStreamEventResult.java",
+      "size": 1332,
+      "sha256": "ae503a22cc28e1853f8d2c9037115fa20f560a47c4b8e3dc641adc9091e2530b",
+      "sourceSha256": "13b90a0b5615b6125de325484349c79aac4ee241d89db46a412163504b5550c1"
+    },
+    {
+      "path": "backend/capabilityrpc/CapabilityExecutionPort.java",
+      "size": 460,
+      "sha256": "940fd8cbdee04eca808e25b184ca078b8e6e14bcba85c89e3823222fe991d329"
+    },
+    {
+      "path": "backend/capabilityrpc/CapabilityGrpcService.java",
+      "size": 4033,
+      "sha256": "42998fda2529e785f0c5f25aaead1426ef2e7e0cf7f3586140baa7fedcfd2877"
+    },
+    {
+      "path": "backend/capabilityrpc/CapabilityRpcContext.java",
+      "size": 1596,
+      "sha256": "d799f7a96e4dfd3aaf491e908de1e37dc5c897c574813080be5a5e82965fc561"
+    },
+    {
+      "path": "backend/capabilityrpc/GrpcCapabilityContract.java",
+      "size": 6107,
+      "sha256": "0ca8f77d9da116a57a6867b30877e0ea7f41da7d5dd468951d1715f5c0ae7e27"
+    },
+    {
+      "path": "backend/capabilityrpc/GrpcCapabilityTransport.java",
+      "size": 4495,
+      "sha256": "130dce1bb48e02fdd4893ccc0b1f88dbc863fc5e8cf6ae5292c9a6517138354a"
+    },
+    {
+      "path": "backend/capabilityrpc/GrpcTargetRegistry.java",
+      "size": 3567,
+      "sha256": "f3d00460ab57098ee97c71affd6e9d9320a1eff255595d24a6d2b94e5c2b2d5d"
+    },
+    {
+      "path": "backend/capabilityrpc/PublishedCapabilityExecutionService.java",
+      "size": 3753,
+      "sha256": "a61037f12e61bdd0641376ce9e80fda474af5f14d5b507e7239a65d5bf439550"
+    },
+    {
+      "path": "backend/capabilityrpc/README.zh-CN.md",
+      "size": 5100,
+      "sha256": "f4a4a64fa0cc19b0df01a6522c952c30aa316e24eca835497986f70f4bac3a7a"
+    },
+    {
+      "path": "backend/capabilityrpc/RuntimeRpcConfiguration.java",
+      "size": 3274,
+      "sha256": "2817d6b86b332986b2b7b50efdc02acd07670654d8e759de845123a873d38386"
+    },
+    {
+      "path": "backend/capabilityrpc/TrustedGrpcServer.java",
+      "size": 1593,
+      "sha256": "6ef2a6e0a9cd859025024012d35ca8abf0be27342d51a5c3219814ef6664d7c0"
+    },
+    {
+      "path": "backend/config/AuthoringGuideConfig.java",
+      "size": 1194,
+      "sha256": "db8f1c6b761dfbd6609770a4e9a248775300d612680110980031ce12613e7957",
+      "sourceSha256": "0b78fca58b6f6922109e4a2a7da61239e67a4e618b81f95dad267ba8e8edf89f"
+    },
+    {
+      "path": "backend/config/CapabilityClusterConfig.java",
+      "size": 1596,
+      "sha256": "a9084ec3ae746b405773ddef1c05c4b8cc822c922ab7ed36d1e12ae3a08d98d7",
+      "sourceSha256": "ff17666bb32f41af1f63bb1bc25187468f7811969e713c02ea47c1334c553ee1"
+    },
+    {
+      "path": "backend/config/ManagementArtifactConfiguration.java",
+      "size": 584,
+      "sha256": "5e66e8eaa0c82d0351ab9eee7b2537e0e2a60ef823f898df2ecb9abf42ce2c75"
+    },
+    {
+      "path": "backend/config/ManualManagementConfiguration.java",
+      "size": 2169,
+      "sha256": "b09f6f2a15e4bc5295642a1b6ee14b7db341d43419a8e83f0d018a47fe046c97"
+    },
+    {
+      "path": "backend/config/SkillFactoryAgentBizSummaryConfig.java",
+      "size": 779,
+      "sha256": "ae60ec552ca1288af79bcaf7d3c91eb6e67f8c23a5393ed01e5cf0c7a70fa5b2",
+      "sourceSha256": "d81d48e79459aa2e7b9662f5f63d809f9ce00123f8bf3163ebeb96231deebce4"
+    },
+    {
+      "path": "backend/config/SkillFactoryAgentPropertiesConfig.java",
+      "size": 1653,
+      "sha256": "bdd74e99530beef5cb2adfb169cc608bd711b457815971bf1234aba1390cd325",
+      "sourceSha256": "c3a6f3d4d279f0a273f3f13c19fa366791445663c525db99ff19df0ce50df223"
+    },
+    {
+      "path": "backend/config/SkillFactoryAgentToolConfig.java",
+      "size": 557,
+      "sha256": "b9fa5fcedcdc1a85c71f38dc30351ebd3d06d368028925af394041fbe40400d8",
+      "sourceSha256": "8403b3e7298dda95d382bb48e2787f1a427973b0258f2cf013eb8ea314a36a6f"
+    },
+    {
+      "path": "backend/config/SkillFactoryConfigReader.java",
+      "size": 9091,
+      "sha256": "ae323a6eafaa7ded98e680989885fe254df3bdefcee393933c4d93db533bc8ff",
+      "sourceSha256": "3ba188ee3298b095db503aa9fae3e6ef75a002ef6ad3d76911b8fccb9732742c"
+    },
+    {
+      "path": "backend/config/SkillFactoryHttpDebugConfig.java",
+      "size": 573,
+      "sha256": "58c63830a17392f6d2f9012b3055879aef3e0526e406c00a8ca81d85affcbef8",
+      "sourceSha256": "492feaa20646830ced8348c66f0341225cd3dd4c962b408512fcbbcc43033c2b"
+    },
+    {
+      "path": "backend/config/SkillFactoryInvokeAgentConfig.java",
+      "size": 631,
+      "sha256": "561d58d7315667c567034e0d3b433fa7a0dc91b5a8ea812f9c7b059440c9156c",
+      "sourceSha256": "d5bc9df48fff54e0ced8441c3855942de45c5dab92cd3d592baf0ec7de2bb550"
+    },
+    {
+      "path": "backend/config/SkillFactoryLlmModelConfig.java",
+      "size": 1455,
+      "sha256": "2aa55107dfcc8e57d35cfb1e77f4c4e2b6eb69b51cc391dd3f531d41a6b333cf",
+      "sourceSha256": "2a8bbfd6a9cefb83dbcca29a1465ff5564aa6cd888ccb3a8ae4eab295911a84e"
+    },
+    {
+      "path": "backend/config/SkillFactoryMemoryConfig.java",
+      "size": 874,
+      "sha256": "ff707708b0d3cdc6607f3479ec403398e0ebf7acc54ce02fa8df40e35e0a210e",
+      "sourceSha256": "ef5581cf59251b34e611e8deb1acb3beea74fc6b3928039f669609717e172aa7"
+    },
+    {
+      "path": "backend/config/SkillFactoryPageConfig.java",
+      "size": 1128,
+      "sha256": "afda1c1265d28c1b671b6811dedbcecdc394e9dd2afa4ec71c085274d085bece",
+      "sourceSha256": "8c147628cab43c0c7fae3c0caba007c331d7ae348df9f6a14ed4f5d1f865ca98"
+    },
+    {
+      "path": "backend/config/SkillFactoryPeerAgentConfig.java",
+      "size": 956,
+      "sha256": "5cd73f64c6244b2cda7b38cf316740cf546c9e10d532af3ae14611c01fc88a20",
+      "sourceSha256": "bda26dc877ec9362090091f57d1d397ddb61c3662e8556c096fdf2b1ba9be9c5"
+    },
+    {
+      "path": "backend/config/SkillFactoryPermissionConfig.java",
+      "size": 594,
+      "sha256": "64ef5e4b64b7028f02afb9dbb10e768f72f6f51599992dd30bad062163fa5499",
+      "sourceSha256": "e9ad929ea9f1549b29f1347672fb3a2ab47c92129f5f688886d3442fc4df416a"
+    },
+    {
+      "path": "backend/config/WorkspaceChangeGuardConfig.java",
+      "size": 1767,
+      "sha256": "2141b07ccfab7201933ec895128a4f76f8f402cbbbbc88603664818c88997b63",
+      "sourceSha256": "65f1dd72c62338addef39b2594f33e4c7f3b01b7b19c84d23649d3078bc6b5b7"
+    },
+    {
+      "path": "backend/entry/ManualManagementExecuteService.java",
+      "size": 1639,
+      "sha256": "4ccb5de7f34ccbb30648f85fd20723122ff045c286f07518d84497f9596d1775"
+    },
+    {
+      "path": "backend/entry/SkillFactoryChatRuntimeService.java",
+      "size": 35037,
+      "sha256": "2aa3998c17f5bc475182afde4163360300f4532f664613d9e4f7a2b8e07f9f1c",
+      "sourceSha256": "c73665086d54144ed37f82e698b10c783a6a18c4874b0304ce6fb343512aa54e"
+    },
+    {
+      "path": "backend/entry/SkillFactoryExecuteRuntimeResult.java",
+      "size": 1305,
+      "sha256": "ea457113914e2cdc4f541a882a2d00309a7de6a956a15042837cbbddb61f142e",
+      "sourceSha256": "e4fb33c0917b935877eaa123a3c1e1aeda2efd10e5162e235ab61a23b57e79fd"
+    },
+    {
+      "path": "backend/entry/SkillFactoryExecuteRuntimeService.java",
+      "size": 11654,
+      "sha256": "f72f7129a6cd4937ece0457e17b7c05e87853cd2f8407b8e2949b9b109088773",
+      "sourceSha256": "6db40238cbcf75c88157b3ff3cf333ed7054235465d24d824fd3f05614c31509"
+    },
+    {
+      "path": "backend/entry/SkillFactoryRunCompletedEventGate.java",
+      "size": 1888,
+      "sha256": "7a0ad601fbe2f07ed60df1bdfb80a68efb7dcad51f19f8543cf38f1f1e25fff2",
+      "sourceSha256": "f83965f02bec8766e17c29678bc17f35f802e982e800cc1aee3ad1bb0dedda80"
+    },
+    {
+      "path": "backend/event/AiCodingAgentIntentBlock.java",
+      "size": 844,
+      "sha256": "0c755adeef0e9ec50f1df644bb6ffb2aada8b2650a61046c4f1243515920c9f0",
+      "sourceSha256": "360466e127b717a5c04ce9788e60af08b2ce976be6314c12cf0e7731947d4658"
+    },
+    {
+      "path": "backend/event/AiCodingEventCategory.java",
+      "size": 1120,
+      "sha256": "f530a69944c1056d939435e739086abbbe45f1138c3959b2454f87183aa47f48",
+      "sourceSha256": "d751a143e26a7c5a0867cca5bf2542b12909aa1a09a12de1577fa5465e2e23af"
+    },
+    {
+      "path": "backend/event/AiCodingEventCode.java",
+      "size": 2570,
+      "sha256": "cdb1a42b7e7382fe25fd371b1bc80ef0ab0efc309a043a8d4470fd9e6c8dd50b",
+      "sourceSha256": "66be39126a6075c7c17409dac18fb547e244b921ee6619d056442675889ba391"
+    },
+    {
+      "path": "backend/event/AiCodingEventPayload.java",
+      "size": 1922,
+      "sha256": "fff327e5ea2082fd42f516176a0374f1667bbe7fede407fee46c059c186fa13e",
+      "sourceSha256": "139e361b9edd08ba0656573e03256de5b47330daf313145c87f75caf5b3f4535"
+    },
+    {
+      "path": "backend/event/AiCodingEventPayloadCodec.java",
+      "size": 750,
+      "sha256": "37c0f46d07edb20c360eb510c1dd6cfa14d154e05a90cc87c1e4c57052123c0d",
+      "sourceSha256": "9f3687573118dc12362f3ae63d028693cc5c98c963b0f9b26f6860b5e269aa29"
+    },
+    {
+      "path": "backend/event/AiCodingEventPayloadFactory.java",
+      "size": 19269,
+      "sha256": "e01de35da162ef3b64fc415df27e001c6f8eb93b63983e2a9f47ec98dedbfc9e",
+      "sourceSha256": "837a84cc20b8933568f2e6e70b03a5fcf7539928c966828048c4b0c3496eca34"
+    },
+    {
+      "path": "backend/event/AiCodingModelContentBlock.java",
+      "size": 1982,
+      "sha256": "3af8a6aaff879451196e3dfd59e89072bf01d1f76a7b9bf77f0f5a0c0106aa51",
+      "sourceSha256": "9e67a475fe1b8e215ff20dc0f71e8c58193197cb297ff33278d9bd33d2d73da8"
+    },
+    {
+      "path": "backend/event/AiCodingModelContentEvent.java",
+      "size": 775,
+      "sha256": "0a890528cb52a81abd288b396658572ec71f73f2492fc838a457f33768b9d995",
+      "sourceSha256": "2f4c0128dbfc6ae14a211393e15e196c8df4a6f960696e9f50b1d2e183f2981a"
+    },
+    {
+      "path": "backend/event/AiCodingRuntimePayload.java",
+      "size": 734,
+      "sha256": "c2073e11943da6e38323bad1070e1ac391de102454ae72f17203c1ed49a9ad17",
+      "sourceSha256": "7990cb8666d5a5ebd978bb55d3a83fbbfb577eab40bb4051438df5dd773fac36"
+    },
+    {
+      "path": "backend/event/AiCodingRuntimePayloadEvent.java",
+      "size": 1593,
+      "sha256": "e4d56e60559d6c56fafe600674084a4af451b054798b6d3bee1b98fba6e9147a",
+      "sourceSha256": "36a3b8190c59e244821d0281e84e995c5f5c7f2d90834180035f83b143ac3205"
+    },
+    {
+      "path": "backend/event/AiCodingStreamEnvelope.java",
+      "size": 1105,
+      "sha256": "6c1e47600c39e6f0620df2bce956755cc5149be16830e42bc8a9fb5bdbc7e1f0",
+      "sourceSha256": "e2ed82cbd5d47b446fed2efe05fc487ac5ed4825760467ae1af31d17cd5db602"
+    },
+    {
+      "path": "backend/event/AiCodingStreamEnvelopeCodec.java",
+      "size": 5396,
+      "sha256": "a92545b0840e85fe398aeda6f995ec584f2d3c8e5f89d502a4d4f4dda7bd54b1",
+      "sourceSha256": "963dcae9ffa5294c7a40b4f95e2b40c78b7cb088ea7e4de1f4b1e7cf565dd3ab"
+    },
+    {
+      "path": "backend/event/AiCodingStreamEvent.java",
+      "size": 1529,
+      "sha256": "7967c0d8ad67e155b5a4980953649634580533183aaff0025bd568a9ee330cc1",
+      "sourceSha256": "9559388940a4fdffd74e2ca4e39293976bd1cd30e1928e748863b095a99fb918"
+    },
+    {
+      "path": "backend/event/AiCodingStreamEventFactory.java",
+      "size": 18222,
+      "sha256": "7180672b0162f7d7be7d5d9d6e967e4419f258202067368e5887a60aa521da90",
+      "sourceSha256": "78a52143e641c91cff05154aa9ca48ce4e915a81ba9b40ef46ba2b2de8750602"
+    },
+    {
+      "path": "backend/event/AiCodingStreamEventMetadata.java",
+      "size": 871,
+      "sha256": "db433b7cdfd1ea76c4f95d92ea2f9ae8485a620358919357e9566af8dfeddc37",
+      "sourceSha256": "c69f9aa6a35cf43db5c1438f67e2cd14e5572277c5ca7908bebbbcfa8d00e4a5"
+    },
+    {
+      "path": "backend/event/AiCodingStreamResponseConverter.java",
+      "size": 6351,
+      "sha256": "6a448858eb073307bc55b797f6e6e9949c622afd26c8c53f2115037867d1e41a",
+      "sourceSha256": "0ec26ac7314d03814f06406309d442aee85f09ad6970c40436d124dd2984fe79"
+    },
+    {
+      "path": "backend/event/AiCodingTextBlock.java",
+      "size": 693,
+      "sha256": "084fd04a198094996f18618680be8f855ae910a4eed8adf102526c9c5f06286a",
+      "sourceSha256": "e6469d9ed038ff2c55b062afdbd9329572a299b4a25c053013583ed00513671a"
+    },
+    {
+      "path": "backend/event/AiCodingThinkingBlock.java",
+      "size": 731,
+      "sha256": "f350e303f07c788fc6eaff8a5df33dc868b3d3aa84efb662576feec68b32667f",
+      "sourceSha256": "ff90610e75c5455120018cb4ea15126fe054ae07defe3b4970ee97d52ea90629"
+    },
+    {
+      "path": "backend/event/AiCodingToolUseBlock.java",
+      "size": 891,
+      "sha256": "20c33a91f852aff5b0789aebf7a816a0398310343c1d34e79ddda763606053c9",
+      "sourceSha256": "e2407c5c189dccc1378411625ae63fc7c730ee166c71910b5ac13da33d396d32"
+    },
+    {
+      "path": "backend/fileguard/WorkspaceModelContext.java",
+      "size": 558,
+      "sha256": "4edbdcc24ed73b7d3951aa9cf6d09f108e8fd4d1729c5dc60389e8b780d780ad",
+      "sourceSha256": "0df909ad66298f1723a14ac7e599fd54e14dbcb962d19f9e4cfbc017d650509a"
+    },
+    {
+      "path": "backend/fileguard/WorkspaceSnapshot.java",
+      "size": 1231,
+      "sha256": "f3d16c819f1c9482832ddbfb4e478077c3eb19608cb82dfe50fd1ff20e8cab82",
+      "sourceSha256": "46eee14fb9d6a68fcf92a92ec9a556e3136c585d2630245c456ceb86dc8b2a38"
+    },
+    {
+      "path": "backend/fileguard/WorkspaceSnapshotDiff.java",
+      "size": 920,
+      "sha256": "d97a8791f65321185a74eaef91b527e76880de08cf83afff4a8c6ff43e4339e4",
+      "sourceSha256": "627c41089224fd498456db18218a463e8f637bfb96087d71a16ba669f6ac26a3"
+    },
+    {
+      "path": "backend/fileguard/WorkspaceSnapshotService.java",
+      "size": 9471,
+      "sha256": "26d6e59a7652f5c06e6d36467a5d87d2ce5627d68bbd7dc92979fbcde3c1a66e",
+      "sourceSha256": "ffe487909d1f2bdd8083bd34380522b8c5a5d94ba7a549878c5d5528ae6094aa"
+    },
+    {
+      "path": "backend/fileguard/WorkspaceTextMergeResult.java",
+      "size": 1433,
+      "sha256": "aaabf9b14860f76a5a8743bf92ffc46bb7ff6a16d98f106fa604f3622ef9f5bb",
+      "sourceSha256": "da751b9e63807e0c238dab31ed29b7568ff08b568218c15495923d58ca7003be"
+    },
+    {
+      "path": "backend/fileguard/WorkspaceThreeWayMergeService.java",
+      "size": 3329,
+      "sha256": "8c7e4168130de0cdc2754e45521305180a1375cf7d1e96f854ff90e544b08844",
+      "sourceSha256": "89a4018114f4adde4fec0229e7be1ec53b14325d1eac3e0f1529eef3453a79f4"
+    },
+    {
+      "path": "backend/host/AccountLoginProxyServlet.java",
+      "size": 4303,
+      "sha256": "85f45bfc3e21de1f552ab728abaf6a5205816cdcf0c4650a5a34af7b87c3a298"
+    },
+    {
+      "path": "backend/host/ManagementApplication.java",
+      "size": 3597,
+      "sha256": "2c3c01afb004735eb9d8661a711c905799dd1739ade83beafa82c9308659ffff"
+    },
+    {
+      "path": "backend/host/ManagementHttpPolicy.java",
+      "size": 2608,
+      "sha256": "4883cd8483196797d311b572cc59a221cc2f0afb43ca82c06034ea958d164329"
+    },
+    {
+      "path": "backend/host/ManagementHttpServlet.java",
+      "size": 6161,
+      "sha256": "1537b5b3280ed0fe798a0c99c4628430cd7f6fef3cf3b86f5a5bcce96be630aa"
+    },
+    {
+      "path": "backend/host/ManagementPageServlet.java",
+      "size": 773,
+      "sha256": "1018023c748f0a3f65bf779f9e625726f8605541da5bb5a453c037eacc6b33f5"
+    },
+    {
+      "path": "backend/lifecycle/artifact/DatabaseArtifactService.java",
+      "size": 2018,
+      "sha256": "aac5b5c8b3267dc66ba898d83f8e282be1fedf1907f84f228b969890ec27d1fd"
+    },
+    {
+      "path": "backend/lifecycle/artifact/SkillPackageArtifactService.java",
+      "size": 35138,
+      "sha256": "9975e05f9be54681fadacde5f6c21c7f6987cf61ba06ae0b8ad4a925d3d00eef",
+      "sourceSha256": "16e560a2ab9fc050cf0bd422bd0361de0ac5d1907d49eda61d028dc6863cc7e0"
+    },
+    {
+      "path": "backend/lifecycle/artifact/WorkspaceZipArchive.java",
+      "size": 6147,
+      "sha256": "84e406e91ca3fa35a7aa2401639f8c762858951759a6c1a8e49e13f4d3f42e12",
+      "sourceSha256": "d65132b5dee8128e4ac4cb96bee722fc27f11b10f5e872b8c2fb37dfce839a6d"
+    },
+    {
+      "path": "backend/lifecycle/assembler/SkillLifecycleViewAssembler.java",
+      "size": 8647,
+      "sha256": "27e180aae8b56113273b81d53f4a61df6f5af45a6d73c4f3d33a9992ca80fbd3",
+      "sourceSha256": "12a3c3af95250a30883462e4c3527bceac48b5936746c8a8f3e019ed657ec635"
+    },
+    {
+      "path": "backend/lifecycle/AuthoringDraftChangeService.java",
+      "size": 15425,
+      "sha256": "8659e0f3e63d654708e255a3f7ec7e755a068728f140d1bc07af34cd44484e97",
+      "sourceSha256": "44fbf165e41d39cf8669000fec5aefc2439d483e982489436f2403ad822a36d5"
+    },
+    {
+      "path": "backend/lifecycle/CapabilityActionClassificationRelationService.java",
+      "size": 16168,
+      "sha256": "b694fdc16fb46ea29d65296b1644a707fd55dd2ac4a59282934d460d49f32fdf",
+      "sourceSha256": "497c5d565cce12b644a14ca1838c6e4bcaa5a99600735ba663226249a6e6b680"
+    },
+    {
+      "path": "backend/lifecycle/CapabilityActionDraftService.java",
+      "size": 86410,
+      "sha256": "e4a36238d2140833c4167a064415a350891d81475ada048d5c351ae9a4a89be9",
+      "sourceSha256": "39b281778ebc34fd80b9aeae12d58455c8d05b12f3fc09af0c683b113fb5908d"
+    },
+    {
+      "path": "backend/lifecycle/CapabilityActionDryRunService.java",
+      "size": 16466,
+      "sha256": "a9a1f2d9e172b16fd0e90443ab54c6151f8d10b72d41fa4fd6e49ba32519eb66",
+      "sourceSha256": "0d66bb869b6b2401951d8bdc98be0212b1d1de4b5074a090c806ace0e7789876"
+    },
+    {
+      "path": "backend/lifecycle/CapabilityActionDryRunValidationException.java",
+      "size": 1657,
+      "sha256": "724600b2e661af398f793c79ec4ae7ba0b6b37dae09bb8e80fbf3fd278923c08",
+      "sourceSha256": "c2b41aa91072f417f749f6208efea7d15791bf1615eeba7aa03500a7387fc26c"
+    },
+    {
+      "path": "backend/lifecycle/CapabilityActionExecutionBindingCanonicalizer.java",
+      "size": 7075,
+      "sha256": "cd631b6b78821666db0ba5ac461f43d96fe6f5abdb107b3dee160ff4cbfdcf7a",
+      "sourceSha256": "f09862bc669eed0630581e9cea6fb340bacc12f5a6349bf2ccdd7be702dba99e"
+    },
+    {
+      "path": "backend/lifecycle/CapabilityActionMinimalRegistrationDraftFactory.java",
+      "size": 2829,
+      "sha256": "b6e9e0041c286655276838d273c488f6e151ea78c9b9a783bd22c0acdd0b08c3",
+      "sourceSha256": "33acfe04a22b4ac9b2b5cf677c2e15aefe1550adc430144adde7e4d251f3b2f1"
+    },
+    {
+      "path": "backend/lifecycle/CapabilityActionMutationTransactionService.java",
+      "size": 2637,
+      "sha256": "25073c1c11a86e1ae4f16dfa14c4210d6563e600addafe3fa4f02d823f9e2a0d",
+      "sourceSha256": "3e5ec338a2e6d1788d4ac068835db775c7ff76b18b80549a662abae5ccc8d8b0"
+    },
+    {
+      "path": "backend/lifecycle/diff/DefaultSkillReleaseDiffResourceProvider.java",
+      "size": 12056,
+      "sha256": "a1eccee9d7cc2a6373a6880d7a32228ee91ff9b21817eada6c81879ec3d8c174",
+      "sourceSha256": "35c539d6523cf17f8242982bdbad02dad154877f4ce219ecc36cb1e14ad0edd2"
+    },
+    {
+      "path": "backend/lifecycle/domain/ComponentAsset.java",
+      "size": 2411,
+      "sha256": "126fb9de6fc54cc7705b6fc8d765729a688baecb69da2c93744aeae349b125a0",
+      "sourceSha256": "4f211ab1a8dd8ca2ea7bc83162a50b2ee137e56e0d79854c2a6c96718fed81e2"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/CompiledEdge.java",
+      "size": 4052,
+      "sha256": "0d6b41d02adf4745a8bac0c7c8c8bbe5f6c820385e8a3701090eb16b70e7f616",
+      "sourceSha256": "126ea5bec56a7e8f0d3072c4015257aa1c04a188f67a87649e20e48d56362269"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/CompiledNode.java",
+      "size": 4370,
+      "sha256": "31864a3e2a77ede29c3c9736b1a6aca97737a0739f903681d84ff7910f3d8d4d",
+      "sourceSha256": "7d1bfe32de05d578477f2ffc2ee56fc3029aaac1c5274d14b88f751dd38a6b93"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/CompiledOrderedBranch.java",
+      "size": 983,
+      "sha256": "19e244bef3397575467c0a25fdcc0ffdd79527898d530c3bf11affaecfc3df6d",
+      "sourceSha256": "8ea31fca40cda5e392b75192cd091695fdf614647037896cba0e497f9495cb93"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/CompiledParallelDefinition.java",
+      "size": 1708,
+      "sha256": "9597c60de6325b0cd72540a8da736bf8a59bbadfa1e9d422fa7e3ffac6935df2",
+      "sourceSha256": "06426fa714803c229ba1c9fec909b9b58d5145f7a65c06a0f80df348e15d98e1"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/CompiledPlan.java",
+      "size": 18464,
+      "sha256": "3ae44c62081f619b1aa581fcf791e7bcd4757de3185911a76ed255cfe83c4aaf",
+      "sourceSha256": "3a10f076905793e84b5a40fa8995899942542b493e3208d702dcb2c49553d573"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/CompiledRouterCandidate.java",
+      "size": 976,
+      "sha256": "28d4c94c0ad103abccd163c45cf13757d3bbdfe5911acde83dda90e2905e32fe",
+      "sourceSha256": "1fb4709403cf62e219a1f4704762c591bb03c9b44272359ac686a91cd5c5385f"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/CompiledRouterDefinition.java",
+      "size": 1808,
+      "sha256": "d513546708cb1b9ac3a78c3eb8aef49e2574f1d4c4f784f1b4b849f06584baed",
+      "sourceSha256": "5230b8b38ea94f653e689916017e3d55bccdd9e52cfbdd1e36a31ac20e2f8074"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowCompiledPlanBuilder.java",
+      "size": 50161,
+      "sha256": "ce11051684be5b06e9113fd235c5971fb34f4bfedaac6470eecf448070d48f9c",
+      "sourceSha256": "5e222d1645831dbe1e83fa808a72a845a09571bb4010e1148a38ffb0936cf528"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowEdge.java",
+      "size": 2442,
+      "sha256": "b936d4979123f2143d48c58573a062793a252b6aa8025801217009b33d869f79",
+      "sourceSha256": "280587bd70ddda624619ea9827f063f997a7fec54ec87fd32bf8ed01a2a8bbc5"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowEdgeType.java",
+      "size": 1633,
+      "sha256": "444ea1e1f63c91dba37be987397947ae9b5de8e83de2308fb6ae82be6fa02fcb",
+      "sourceSha256": "d1c0072f308a45c50c13ad58690cf3661de11406f23e15da3b607c79d29f3665"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowForkNode.java",
+      "size": 1290,
+      "sha256": "583e63450c10720cbf9983e639b95a69c5485894336faa396bbf1c067aeeecbc",
+      "sourceSha256": "cd85a23da58b9fecd8655a2fcfb428bbbdd4ec5e83dd1b7a9e27f96368188751"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowGraphAggregate.java",
+      "size": 1843,
+      "sha256": "699e9ca4c9120dc4ba508f29a91bb57663c8d8e3de90acbcacf00feb8ebebc02",
+      "sourceSha256": "c3a6dcfa3df45553c1ce360db86022ec1a0fb15d2d855aebe83c112c2a6f3f0e"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowGraphAggregateParser.java",
+      "size": 37491,
+      "sha256": "1c5fd60f0c3835271f2b77f9a3d7ee5f9d653943546c812a2c27d7f13c74542a",
+      "sourceSha256": "d949111fde0990e4a7d07e27535a6c9242ed413409e2be0dcd00970ffe46e325"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowGraphCompilationException.java",
+      "size": 2011,
+      "sha256": "292da4fe1c74541e8be5731d62ddaa147417f45050d062c0302c90b010422df5",
+      "sourceSha256": "6313799a834eac78c39987ad3273787a28107ff44ca7ee5d9aa9f798b32ab0d6"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowGraphDataException.java",
+      "size": 1035,
+      "sha256": "beb4937e25154adea20b5fb814c64fd705b25adadf798646193e4c1d2ff60eea",
+      "sourceSha256": "3edba39f79691bc9ac286ece33d5ff515cad6d069335fceb3f3760d0057040ec"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowGraphValidationError.java",
+      "size": 1304,
+      "sha256": "91c644f69201210a89bf08b3845d1f95615291d1ee1985bad8def218c7e56f6d",
+      "sourceSha256": "6e4cc6eebd9c5a88ab4a0558b1b107644374b6c0a548aa7b530ef95065944590"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowHandlingSuggestion.java",
+      "size": 880,
+      "sha256": "9d3ccc13e5fce106b60765a77f1d358b7ea0eb98461ad600913086687d54998b",
+      "sourceSha256": "7ac1677cd83b84ca31fd109171903c5ea972e1cb83fd8b95d94e88a51e4e0183"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowJoinNode.java",
+      "size": 1143,
+      "sha256": "02954e477961ee51eebef0ac2efd1b614f5ada39b0f07c28b31bee5df7570a19",
+      "sourceSha256": "d979f3669288e4e14951821c5a4ba6ab9366601e6367b5b9fc0d3897eeeddbf7"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowNode.java",
+      "size": 1194,
+      "sha256": "78b77a95e77343c2ca18b4d1f685183361c81d4869523eade6b98be444f039b4",
+      "sourceSha256": "aba55a073c37fb3a5adf5d9a5488e4b10f3a0f7c224ad5e001de2906f8be6918"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowNodeControlPolicy.java",
+      "size": 807,
+      "sha256": "21319fd17a2cc13eeb03d091c6634475457976c2621957bb5f4becb01ca4d190",
+      "sourceSha256": "16d5a911f653bbb44fea15a6cfc517b9dcbb1c10eccece805c6bb87e838fc505"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowNodeType.java",
+      "size": 1871,
+      "sha256": "666cbc8ccaa08f33403ce3cc9187f34031a8677753da702fd86351fa768a9d08",
+      "sourceSha256": "34b645d23e7aff4588fb8367ae57a88cdd088a900465dff11b5759d73574fede"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowRouterCandidate.java",
+      "size": 915,
+      "sha256": "3958f878d4264b87bf7ab58f9672c646296d5c2c398271760a93875c2e060a04",
+      "sourceSha256": "90499ffb0461c6167661ba6bc16c344c2e72e5f181cb30f3f1ec03f2260d9e6b"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowRouterNode.java",
+      "size": 1400,
+      "sha256": "d42019b2f7510abf012e657559a0f9e4ccf61e4a9a7fe2b3f4f8c7b48d1f4010",
+      "sourceSha256": "855df0cf10e9fceb0e331fa6f85c60a24cad84e6646baeb3b7b17837b05a97bf"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowSkillNode.java",
+      "size": 1630,
+      "sha256": "d7c55a67360edd0fb1a653e194ae00fea65a54333b6cfa7884cc03e3139d41b7",
+      "sourceSha256": "634887b55bd5d9cd3fd8f80f7e07a563ab4fa8d0bbd4ee5753a0dc5d2eba7d58"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowSummaryConfig.java",
+      "size": 1198,
+      "sha256": "47c0017a55ce4b918206f1eac3625d6be736a1f93da7f15b0df834cb8f92e2d2",
+      "sourceSha256": "6bc47abd8c747e261afd9d0e1a941c719ea65c3334ca1c454a36b6e10b27553b"
+    },
+    {
+      "path": "backend/lifecycle/domain/graph/WorkflowSummaryNode.java",
+      "size": 1197,
+      "sha256": "fb0a6f8d7f83c83698c5ce0010d4359565cc7bd915781d6f040a27966bfdb038",
+      "sourceSha256": "a786e76e5f44742e08bcc2d35205aa36e4b2894499d80e6a7413185c2a0e794e"
+    },
+    {
+      "path": "backend/lifecycle/domain/SkillDraft.java",
+      "size": 1331,
+      "sha256": "7b2b93f8888692f4ac649bc4f4c1aed80b3fe55625be78e6658d6ba0af8f9bce",
+      "sourceSha256": "3be3993d1a55955c118b5910dc6f3f221b6b9b54b4fd6dd865d86dd1f879b5c6"
+    },
+    {
+      "path": "backend/lifecycle/domain/SkillDraftMetadata.java",
+      "size": 777,
+      "sha256": "ed71d1c963ae0414c85f64925005c357776e18444a11ff2904ef915aec71dfb5",
+      "sourceSha256": "a9f926ceb21b97755279eb8b570c288dc8c8b2e458c9f024811bd801478ef9b5"
+    },
+    {
+      "path": "backend/lifecycle/domain/SkillWorkspaceFile.java",
+      "size": 635,
+      "sha256": "6d1ca9ec82e1cdfd3ef895511eac81eb3f3a9d1073c39e3cac47f6d08f86082e",
+      "sourceSha256": "23a19b77354a1e0e59ea88a01a0e4fab52fd62f0d0d1c0fe83efc60037c8cc4d"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowCreateResult.java",
+      "size": 867,
+      "sha256": "e21db7253e045e5d4fdfec92fc353a7cba56286fb9011a0a83f1df1e0d6f22a9",
+      "sourceSha256": "f2c8f33318e253f0399c4f03ac4de013b5a911fc6d9c0a38c43c34c5db9188aa"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowDefinitionView.java",
+      "size": 1384,
+      "sha256": "10ff3c8e141fe15500679856640593cc1f0e9dc2bd58ff8073250dc3eeecedb4",
+      "sourceSha256": "c1bf71aba1d4945e464ef5e6210d4b6d10d08953e44571c1e21449260d2de42d"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowDraftPayloadView.java",
+      "size": 784,
+      "sha256": "414d024c0eb6ad507336e6d8a1a6a382581359ac765badca2e4b86cdb09e66b2",
+      "sourceSha256": "fd8b9e526e986f7e7645b3c6322fb064d3cf7c609fbd8418cad3537a6b975d8a"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowDraftUpdateResult.java",
+      "size": 693,
+      "sha256": "1b4b713750720a4afba5c7e4695cdbd1ccc935a9827c9dc4f50f7786f159e252",
+      "sourceSha256": "a64e650c788c9aaa66fb4bc96a228293d29a8635567cb3a3b122fc3c93d3b1f7"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowGraphPreviewResult.java",
+      "size": 824,
+      "sha256": "8ebfd456e46b799c7d6a7b3ada35161ed6c0e40c8ec981a9bf8db1df7492355b",
+      "sourceSha256": "6a5374066224cd9e6135ef02da6e1088fef0bcf5254ef5c5e85c3d67d786bc47"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowListItemView.java",
+      "size": 703,
+      "sha256": "e0bd91929db6301b10b2198b59bea0faae6e628937ab594984b47085f52df0a9",
+      "sourceSha256": "6b85a0d6001745625bf75f5315f89c10d0563012db954286e784d92365db1e67"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowListPageView.java",
+      "size": 613,
+      "sha256": "aa967d160a49baecd77c4e866bc327b50e8d6f360ccb4b662859233e3ae69d1f",
+      "sourceSha256": "19eb41cc1f83d145056ba5b160d7117cb2e2ae5e50bfed7f5ce18ccfe26860b4"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowReleaseSourceView.java",
+      "size": 856,
+      "sha256": "a36620c5620ee1d31e702a5a32c9641b296d0cbfe68cd291d2173a763ac8abe9",
+      "sourceSha256": "747d56201a285e5fcaccfac16b99526c29b1c2848513516124da901269601efa"
+    },
+    {
+      "path": "backend/lifecycle/domain/WorkflowSkillCandidateView.java",
+      "size": 895,
+      "sha256": "367411438f458bce2fa8bf5b8df35f938e3a56dbef95218cd91ba027b8978bcf",
+      "sourceSha256": "523078fe7339d17a808b7f16d8410e325d62e798a8094d012bec8285f293fe5b"
+    },
+    {
+      "path": "backend/lifecycle/publish/HttpRuntimeSkillPublicationAdapter.java",
+      "size": 5976,
+      "sha256": "530ce5cf7b45fd72212614d9826dd7815ea901f3b2d128b7bb9aacee99fffaad"
+    },
+    {
+      "path": "backend/lifecycle/publish/RUNTIME-PUBLICATION-MAPPING.md",
+      "size": 4672,
+      "sha256": "f4bec2290adfca1e1191187f01bebb96f718c521ebbdcd5d30e46420ee542817"
+    },
+    {
+      "path": "backend/lifecycle/publish/RuntimeAssetPublisher.java",
+      "size": 3268,
+      "sha256": "3d595d1b06907b7f8953b93b0c2dd962026246d9a23e5e45699420ca89781747"
+    },
+    {
+      "path": "backend/lifecycle/publish/RuntimeSkillPublicationPort.java",
+      "size": 888,
+      "sha256": "adba8dbe629e8ed5fa370dc52b3402e4c467c6b318c41de1680303e98e26585a"
+    },
+    {
+      "path": "backend/lifecycle/publish/SkillDatabasePublishResult.java",
+      "size": 1091,
+      "sha256": "df5849dcc4c57a157ac7e66cce8297f9b818c7e88f12d1d60dc879536f8af0ef"
+    },
+    {
+      "path": "backend/lifecycle/publish/SkillDatabasePublishService.java",
+      "size": 2751,
+      "sha256": "9976a57a59c7c546d9dbc7806f4dfaa5559434b33973f94a7222544745dbd431"
+    },
+    {
+      "path": "backend/lifecycle/publish/SkillPublicationInput.java",
+      "size": 627,
+      "sha256": "70208ca9085706dafe727487007bf3844719ca85d143bf40a334fbfd68e05d02"
+    },
+    {
+      "path": "backend/lifecycle/RegistryComponentReleaseIdentityResolver.java",
+      "size": 11092,
+      "sha256": "bcdf7cb777ec27d186130d7226c994ccba0f0dee5714f4ad0baabc644d53501f",
+      "sourceSha256": "ce0423dcb49eb78b86860d4858ba638258d5908126fcb5ac0ba034543047c5b4"
+    },
+    {
+      "path": "backend/lifecycle/SkillBindingCandidateService.java",
+      "size": 16018,
+      "sha256": "5c57449de8527007b5aa11706f0ae3060c8afa1c37837e9d5f5f8534786ee126",
+      "sourceSha256": "0b442f296d678f8e164cc2f95a84b2a720217313c2f5393fc7b817dbbb67a76d"
+    },
+    {
+      "path": "backend/lifecycle/SkillDescriptionValidator.java",
+      "size": 1611,
+      "sha256": "76f070c08362fba66902e983107adc82b15fc3bac73246d190e1fdc6c61b1d0a",
+      "sourceSha256": "908932612f4b8eede06e7f78aa38b561f336120343cedf7004f6e6cf95da4a4a"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryComponentRegistryService.java",
+      "size": 85191,
+      "sha256": "cdbff970f24e9748a615eadcb01416bef92f4009e5c9a2971194caec763546e6",
+      "sourceSha256": "c4c113afdb0e2b732d433272a9b7b9f69037d6dba1f70a8421a6a5985e8e5622"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryMethodDispatcher.java",
+      "size": 50244,
+      "sha256": "eb6e2b050c23718c97436886b166f89e9a606027ade246e8826fabd475cc9ea8",
+      "sourceSha256": "3e50df5bab660133697d8cea9dd3e44a80d007431617dc7e9de85e6fe0703a5f"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryPageConfigService.java",
+      "size": 32636,
+      "sha256": "e6803f4e3134503984e89142adfb511fc86e33a694054269b5ee424b1a699f6f",
+      "sourceSha256": "84331d7671aa901a0ac2040586790a7531138b007414c56d0a1701d8cb5a7846"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryRenderComponentBindingResolver.java",
+      "size": 4572,
+      "sha256": "a5f5ccc145a009f0a290026b1846415594470912ced86479e37f4e125cf2a1e8",
+      "sourceSha256": "1ad3eb87a9c6627d0212bc17a05632e44bce3de1e0b28a9a0ec27fd3646a896b"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactorySkillMetadataService.java",
+      "size": 3122,
+      "sha256": "f0c03416e105fdf63ff7cf3cd7623ecabd603fd3afc3d641461a7b3751e06f82",
+      "sourceSha256": "f85a393cdb5fbb27e5258a86c5efcc20367d2b381eb8b6794eeecf24eb41771a"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactorySpecialistRelationService.java",
+      "size": 13279,
+      "sha256": "05d7b9a6d73ba685ebe4e07fce41becb7b398e92847354edb512f5b540d5d30f",
+      "sourceSha256": "f6f6c03c2c3cf0b53c54e00aa531ee6eda2ca25ea9d2e6f04ebfb6b4d2aeecc5"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryValidationException.java",
+      "size": 1747,
+      "sha256": "495287e288acf47bfe8b29fb1d1b0ee79783383c436f2460b0f224601fe2b385",
+      "sourceSha256": "66bf96cca3e4075f38d17ca92c2db7bcfe685129fe49cc433885a12b99c0a6e0"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryWorkbenchRuntimeService.java",
+      "size": 56762,
+      "sha256": "0324630eb5f1d204e46305eb69a3cb3aa146b0d706e802efbb60db9c96aa159b",
+      "sourceSha256": "91978535437d866bcb39549a34945d97ecdc7bcde7ff8fa70c2d6ec0f7906a06"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryWorkspaceRegistrationService.java",
+      "size": 3878,
+      "sha256": "fa59029e1de6fb9b0e0a07b037b36839cf0b382c89986d68cd17c84334772210",
+      "sourceSha256": "2c531de6620dd28e5e13d3a2e00bda933fb68e78f880661f252f850149ffef72"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryWorkspaceService.java",
+      "size": 114342,
+      "sha256": "f2857021ee82f9bad5fe95d5b3c6887094f716c35c9abf17276d342739c004fc",
+      "sourceSha256": "8aa28fcaea3e948443622d1eebd03cf55730dbdfeb8dad3bd50165d25644a45b"
+    },
+    {
+      "path": "backend/lifecycle/SkillFactoryWorkspaceZipExportService.java",
+      "size": 9283,
+      "sha256": "108268d8b0f41f8d2fda811f41ca8ee1b024af0900b714957f59ccf434e3a6f4",
+      "sourceSha256": "899c623c2ce9c820460ebcaa7c925b33158d981ad1afe948ca047cc888587b9a"
+    },
+    {
+      "path": "backend/lifecycle/SkillPreprodBuildRestoreService.java",
+      "size": 19028,
+      "sha256": "890d006cd4c50e81b1d7f5609e1d5788e4db1d92e75a2789f27adb060464ad96",
+      "sourceSha256": "a1c76eb85d47b803b838642ab6c1a745e3940aa4ee27153605ca81fe9cb021f6"
+    },
+    {
+      "path": "backend/lifecycle/WorkflowControlPlaneException.java",
+      "size": 1275,
+      "sha256": "1f1f2c45d4fcea926664134bd0d006cc60934b42244984581180208a7f14c51b",
+      "sourceSha256": "0fab7ca44e9eb06b3f7c8ddeb6b289d16783572b8d8aaa5bea1e241ea03a8e0d"
+    },
+    {
+      "path": "backend/lifecycle/WorkflowDefinitionService.java",
+      "size": 31383,
+      "sha256": "cbb85fa3eb12d000a7b7060ef62aee048d0476ee0ad3328e325461dee28042ff",
+      "sourceSha256": "f586a2ad39cd77585c10837c8fe0a4b33ff75c5f38e7a791115a994a27007c9b"
+    },
+    {
+      "path": "backend/lifecycle/WorkflowDraftConflictException.java",
+      "size": 1081,
+      "sha256": "8770f4bdc95fa5177151e72a9d267968ff945f86daa63bb7c508b40f4591f6d4",
+      "sourceSha256": "1895f0f24340867535c74da3dc3d844c9082e9011189c7c04dd3e468520f1285"
+    },
+    {
+      "path": "backend/lifecycle/WorkflowGraphPreviewService.java",
+      "size": 5135,
+      "sha256": "af513976c4e7df6c45b59a7e934d3cb44e58f5268dd85ee49b299e38b4891a73",
+      "sourceSha256": "fa36cf3d4a65611ba1b23e9cc826136489fcb6f6d5c0fedf8cc6670f1eebc5fd"
+    },
+    {
+      "path": "backend/lifecycle/WorkflowSkillReferenceValidationException.java",
+      "size": 1827,
+      "sha256": "fa8c49352493dc5872a4116bb515e66c5320683d594004e4c7e8fe6c66c638f9",
+      "sourceSha256": "b22611fba8e9c26367ffc81756efa7fd76065fca1298ac7cfc6c370e4710f1b3"
+    },
+    {
+      "path": "backend/lifecycle/WorkflowSpecialistSkillSelector.java",
+      "size": 12872,
+      "sha256": "92fba351c36fd8914b33c5b5acd81a5fbf256f6408b86e49383ecefe0e28fdfb",
+      "sourceSha256": "3544be25e828316fe5fdede2bba4165ef2aa446ec7c5cd56d90d7321cb0e8779"
+    },
+    {
+      "path": "backend/method/SkillFactoryMethodEnum.java",
+      "size": 3242,
+      "sha256": "e577d1252687455a4aa465f86f4b3db0d1816f75ae1343d929a10a22bbaa7ac7",
+      "sourceSha256": "1cb06546cb8cb97838c296dade9974fab5282d99d82480c562b356e7de7084c0"
+    },
+    {
+      "path": "backend/model/A2uiApplicationToolErrorCode.java",
+      "size": 467,
+      "sha256": "ac48792aadb57a70f5feed5185b40101edc468b1dc1647fc19896e0f0582b82c",
+      "sourceSha256": "f50830d9620f3737ea0fe4f0194b25cd81dc88d32fd63e6ee3773655516cd6ad"
+    },
+    {
+      "path": "backend/model/AssetReleaseEnvironmentFacts.java",
+      "size": 1194,
+      "sha256": "896f1dc2644693324c3f4444841dec8dff6c7b7938b1263af73d0312294065c0",
+      "sourceSha256": "ee4c3d313e42bf2d27b10f7240d89fe846da6641973ec980694661454e37a5f2"
+    },
+    {
+      "path": "backend/model/CapabilityActionDraft.java",
+      "size": 1439,
+      "sha256": "fbdc7df447be9f4997dad20f18a2c88340519cf61cbf9e902e9f4591b908ed1c",
+      "sourceSha256": "236631a7bb51f04acea66860947a40287bcdb64ab090a59482262fcf76e8744a"
+    },
+    {
+      "path": "backend/model/CapabilityActionExecutionPlan.java",
+      "size": 2642,
+      "sha256": "7a771b166ef0dcb6000f17d05c151fe1575bbfb476e26b3353000e8aeb2c9de4",
+      "sourceSha256": "2ddfeac058089a18921f203755b606552610c49fe10e85774e97c4b57aa0cccd"
+    },
+    {
+      "path": "backend/model/CapabilityActionExecutionPreview.java",
+      "size": 839,
+      "sha256": "957fd82e5bfa799535b20fda6937aa8c65350aa1c54fc5f51628caf22d384e61",
+      "sourceSha256": "bd818d98627d4993fbb11282fc88048901a3d7cafda1e983a19d062182528548"
+    },
+    {
+      "path": "backend/model/CapabilityActionValidationResult.java",
+      "size": 866,
+      "sha256": "d29ad6fd75f307b5ecf8104efbcac1e3a0847f70193e16cdff692b4963406ff7",
+      "sourceSha256": "515df50844728aaf02b4967394959c007405d7a32aee0a8eb8cb972fc4dbff95"
+    },
+    {
+      "path": "backend/model/CapabilityIntegerSupport.java",
+      "size": 2252,
+      "sha256": "4ccc17352f0161c8f3081b5f5f01a98e1c3cb39aa6a2393392d368d636f6b74d",
+      "sourceSha256": "1d48c1db7000eedd79fd5d31935074ead9df4ced8902a633c9509f674ba89aed"
+    },
+    {
+      "path": "backend/model/CapabilityToolErrorCode.java",
+      "size": 1049,
+      "sha256": "cda3a7f9ce62a5117e40c81614d063a8dfe093a92546155ae03453f1472b14b4",
+      "sourceSha256": "8f11f6461dc233f24c9cf5ab04d14875c9b8c7167f325cd38ef71c7926a9bf07"
+    },
+    {
+      "path": "backend/model/CapabilityToolResult.java",
+      "size": 1108,
+      "sha256": "2b472f8eb269c21afc4d20e10976346b560fb32fc31f568318227713a59cf900",
+      "sourceSha256": "7bb66d33944f5cc14000be84c94a82021ab4086d4b36a79e7a70e71756cf7edf"
+    },
+    {
+      "path": "backend/model/ComponentToolErrorCode.java",
+      "size": 596,
+      "sha256": "c5f9312b2aeafc85a86ba0a2ccf8825e9f3ebf1a7502302ad60188d17a54b7de",
+      "sourceSha256": "3c6c5453316dc5e1ddef2843ac23f070ed4bbc7540d6c61955fa91aab37e50a4"
+    },
+    {
+      "path": "backend/model/SkillFactoryComponentAsset.java",
+      "size": 1579,
+      "sha256": "2ba732b63177af3bc397e193089e50d90c6e5fac640fbba3b7cf2dcc69bd7f69",
+      "sourceSha256": "d987b9e8143b68860496f4ea5e318f0d8f1b530e92317311d8b8b184d63300f2"
+    },
+    {
+      "path": "backend/model/SkillFactoryComponentPreviewResult.java",
+      "size": 1019,
+      "sha256": "3157ad727b46da684ed17b4c5033cce150548b1e1e55c65976cda5a83703fbf3",
+      "sourceSha256": "dcd4c50d0d412c9a53608d9cdab877d46d6a883b23cf78b076189fb50e4df4d9"
+    },
+    {
+      "path": "backend/model/SkillFactoryEntityRelationConstants.java",
+      "size": 1957,
+      "sha256": "1257cdca218bda032e559aa345254942a9d7155db39c64aeca52f820cb371ec3",
+      "sourceSha256": "85a067a7334cf769d001907fb091de41c6c479bc39356bf31227793438be1eae"
+    },
+    {
+      "path": "backend/model/SkillFactoryExecutionResult.java",
+      "size": 1193,
+      "sha256": "474e951d2e308a580e3c913a5a2e0046c25faf90f5910ed8deb10c9e4de7816c",
+      "sourceSha256": "0cad3e41c24fb79a2914032e385531364a373e460472c9b0e60a169924add338"
+    },
+    {
+      "path": "backend/model/SkillFactoryRenderPreviewResult.java",
+      "size": 1086,
+      "sha256": "dea30d89dda50b6b4c4b98e8cea71558cb52f1d9b5ee33bf5575c3a0884e5ae9",
+      "sourceSha256": "4cd38e1e9b7b8bf68121a6f64a3679927f9a9af796ea2f255e7270524cf4f155"
+    },
+    {
+      "path": "backend/observation/AgentObservationService.java",
+      "size": 7268,
+      "sha256": "aae841162d723fb878a13a03e79a089555a12b9f555511d69fadaacb9e5b61c3",
+      "sourceSha256": "067cb3e0a379c556782a424e084d1864ec5f7904a06f4246a6df80bb9be44033"
+    },
+    {
+      "path": "backend/protobuf/InvokeRequest.java",
+      "size": 1812,
+      "sha256": "35a9d6783bbe3afdf1b3b38500da6df1af9d8c23e88971dae9aeded339d57501"
+    },
+    {
+      "path": "backend/protobuf/RecallKnowledgeParam.java",
+      "size": 1193,
+      "sha256": "8414e52f5dadd3794954e0928fe1bc8895907c3120d69cd9d991ea3c28405a84"
+    },
+    {
+      "path": "backend/protobuf/SkillFactoryChatResponse.java",
+      "size": 1797,
+      "sha256": "bd015e3afb203cb64ee20cf505e852b236dbb32b39e1df6eca35818fbf39e52d"
+    },
+    {
+      "path": "backend/release/A2uiApplicationAssetDependencyAdapter.java",
+      "size": 1466,
+      "sha256": "b929d5e01ea39f42eff9c17f1893e8ff61bc3165382c92308f28d4c0fcea63c3",
+      "sourceSha256": "efdbf7776ec9c0e5a33d1ebdc818ce27eaff1a05885735417eb2f27081530d79"
+    },
+    {
+      "path": "backend/release/A2uiApplicationReleaseAssetAdapter.java",
+      "size": 18332,
+      "sha256": "db2d2b375833d66ec1c9536eb0f0b11a67f3c2cb38440ec3becf2dcfc70bdcfd",
+      "sourceSha256": "3d9f88b63afb52ab112b20904c2c8924ee01269b7c1b8e18609562be03f6e547"
+    },
+    {
+      "path": "backend/release/A2uiCatalogReleaseAssetAdapter.java",
+      "size": 9010,
+      "sha256": "2f666e15d5dc84700021f22b78f2981d32a6284af5bd3cd20a064e240254bbbd",
+      "sourceSha256": "c809fd254e05a4032c0c393632037e2675049f85066a105ef0f2b478e60b12cb"
+    },
+    {
+      "path": "backend/release/AbstractReleaseAssetAdapter.java",
+      "size": 5241,
+      "sha256": "225bc844c7087a15ad5cefdb6eb0b399f68aa95f9d6c4c2944b7229eb9d187eb",
+      "sourceSha256": "746dc52f9d470bc33629e457e893dab1a42e53c5b261ebda66129362d5f92cc2"
+    },
+    {
+      "path": "backend/release/AssetReleaseApplicationService.java",
+      "size": 98438,
+      "sha256": "02eca9b9fb1cfdc6530b7b6c6e381e8ea508e5e808474e35d920f6d64dbc724e",
+      "sourceSha256": "119ab568924ae425db9ede72c647cec852a1b91e23cb777cb2d14f95fe858e88"
+    },
+    {
+      "path": "backend/release/AssetReleaseEditGuard.java",
+      "size": 2568,
+      "sha256": "f0ab3ad0167069c9270a7a866ca5cad82ae6a10949085fe70f10c0e35610ac9a",
+      "sourceSha256": "67b380c485b477bf14ca04eb3af72f5d90ace6e14c4022d57fe113ccc64b390f"
+    },
+    {
+      "path": "backend/release/AssetReleasePointerQueryService.java",
+      "size": 4852,
+      "sha256": "5cf6962e8691f75a30cc7cafe8803b5fef85138b516763830a8b17c0c8a9c6df",
+      "sourceSha256": "b8a8d6284157e72fd62bef50bf62ec2f6ca6fdba9b667d4373dac3d32fc03d44"
+    },
+    {
+      "path": "backend/release/CapabilityAssetDependencyAdapter.java",
+      "size": 2017,
+      "sha256": "b6fd4bddd6efe26528ab944a1b7f2d0fefe9c8b9886107afdce76f4a80de430c",
+      "sourceSha256": "6aac022d2e595ee3835d751848c53d7b4afd2bba45192525297a5efa79473b1d"
+    },
+    {
+      "path": "backend/release/CapabilityReleaseAssetAdapter.java",
+      "size": 19325,
+      "sha256": "c29adb1bc65ff831507fe5fbc3c2400bdcb68486b64453158aebe5bc5b03f9c3",
+      "sourceSha256": "78ea1980008f84a29c5e54232051d20b83b871feee5c0e17925c6b2604bd8cf0"
+    },
+    {
+      "path": "backend/release/CapabilityReleasePayloadAdapter.java",
+      "size": 11630,
+      "sha256": "1e983cd452eb7ce4d9ed7cdb794bce717d9e71a956f0144b516b8abea4230f0d",
+      "sourceSha256": "605ac20318df35e7f09f2af2fddd7d5ade4fbc0e3f939c4c2bc27e9b6b5acd2e"
+    },
+    {
+      "path": "backend/release/ComponentAssetDependencyAdapter.java",
+      "size": 1595,
+      "sha256": "f94cdb8d64148ce633f994e0bbb3f53d085b9328b9e4ca7ce1e3868e3dd2e0f8",
+      "sourceSha256": "3f6f1b3e8bf9df1fb41467b738063ee8e206c0f005988bdd5041d939e9d8a760"
+    },
+    {
+      "path": "backend/release/ComponentReleaseAssetAdapter.java",
+      "size": 7945,
+      "sha256": "87e7a8f50e78eab3c9b6499433c2dd98ac70fd144178ba0a72316f554b154380",
+      "sourceSha256": "d26482be5be9c6eb7ca36d57e212128b2a9bb3ea562427dcd52a1cf3e111171e"
+    },
+    {
+      "path": "backend/release/dependency/AssetDependencyAdapter.java",
+      "size": 1327,
+      "sha256": "457446153a4c367a1d32d23e776f0cf8f845a55c93be8ad28b2f7dc2cef38237",
+      "sourceSha256": "20b7563fd6f870bfc9d406eb7b6902edc1b79d86db2db4dab18aeb6f99752250"
+    },
+    {
+      "path": "backend/release/dependency/AssetDependencyAdapterRegistry.java",
+      "size": 1532,
+      "sha256": "1274c241aa3cff1468ed9570344c51ce34fcc2cc575a6d37fcbecff226cf301a",
+      "sourceSha256": "a74d1eaf4cde1a4939e107af2c0547d51c5f6b3387c0a55313af647e95a8b22f"
+    },
+    {
+      "path": "backend/release/dependency/AssetDependencyErrorCode.java",
+      "size": 715,
+      "sha256": "81154a54666cb515449de9d909e22bec5173566874c318ac1e97bca7428e83d5",
+      "sourceSha256": "ef5886374bd8f4c0c89c580790c80c928e48972b6f4b30e6fbf8461b9205f6ac"
+    },
+    {
+      "path": "backend/release/dependency/AssetDependencyModels.java",
+      "size": 4040,
+      "sha256": "c60dc8b81245b8c798234d02a31ca80e8e72c84be6c0d21bc63384d127e66856",
+      "sourceSha256": "ef0add7aab4c2bd2224441f5112a9d2f6e05243067bc261b06f47e1c96177b43"
+    },
+    {
+      "path": "backend/release/dependency/AssetDependencyReleaseValidator.java",
+      "size": 728,
+      "sha256": "4efff0ca08b6c2b61bb028099cc6912f5066340122d401805cbc8f68075ffdb2",
+      "sourceSha256": "a564b31d3b1209d6c55e7be42a5dc2a523d862347b0e7131f823f492023a50fc"
+    },
+    {
+      "path": "backend/release/dependency/AssetDependencyResolutionException.java",
+      "size": 2179,
+      "sha256": "24221e023f467577eae84b35d36818658fcb18019fedd59321757d4fdc727194",
+      "sourceSha256": "6beb5b8be993345de849a214f26747dc2e9d514122e06a983e795f49df039d75"
+    },
+    {
+      "path": "backend/release/dependency/AssetDependencyType.java",
+      "size": 516,
+      "sha256": "792b5e951fb8b8ab55a762d479e7f4dab2e639d1ae388075e34eb74224ee7793",
+      "sourceSha256": "4e622ae02bdbfb5c1990bbf207e23ac680daa7d443969d1dc2d628efa0c4689a"
+    },
+    {
+      "path": "backend/release/dependency/DefaultAssetDependencyReleaseValidator.java",
+      "size": 16598,
+      "sha256": "500514be3fcd2993ef16cf1f2e899aaa09e2ed4bcc7cc58eedf5131b6b4720d3",
+      "sourceSha256": "9d1f8990ba6693b8a99873f4e5b06846547d9dff29207ba3156da6ddc943468d"
+    },
+    {
+      "path": "backend/release/dependency/DefaultEnvironmentAwareAssetResolver.java",
+      "size": 22468,
+      "sha256": "5b559a14d3f600a9c0b6e03263689ff685255a8339efb8806231fb7d2c73b567",
+      "sourceSha256": "58703bdcdd88034813f781cc3a476216ffe9daa1acf7583874821008c3c13fe5"
+    },
+    {
+      "path": "backend/release/dependency/EnvironmentAwareAssetResolver.java",
+      "size": 1633,
+      "sha256": "05845b631dd3e0d08dd56235f531d652602cf2734fdd9975e7f35bd52dde3ad0",
+      "sourceSha256": "8e4cd0bad28c017a32e05c6b3a78fafd708332af53a45be5f9e42a1e1bf11075"
+    },
+    {
+      "path": "backend/release/dependency/ReleasedAssetSourceType.java",
+      "size": 352,
+      "sha256": "e4b6c0c38d23df3bd4fa13c94abca99ab7abf6d0316b74e860ccbf3c11dc575e",
+      "sourceSha256": "13f25b13ae662df56a535f2513b0e021b0925e228a558a6a9985e09d70e36049"
+    },
+    {
+      "path": "backend/release/diff/DefaultReleaseDiffEngine.java",
+      "size": 29756,
+      "sha256": "e5c620cc6222b1acaf41f82cf033545ddf6b65cbe39eb106d9bb4252be1d7fb2",
+      "sourceSha256": "6b9cd580d8ebe0d06e6f9e70e2755f2524d2496be28df987c6b188612fcf8cfb"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffChangeType.java",
+      "size": 317,
+      "sha256": "46795d8d1d11d18c392b90bc55b1812da53f973b34f01192c13c60c99efb50c8",
+      "sourceSha256": "3f9b8c23f53ac982d358582cd9e31548e7479a3a2ee9c074e6bc7bd53c673d01"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffContentType.java",
+      "size": 296,
+      "sha256": "326996cb51b1536a8140f5618f521d60f6f34978c88013c5d7a450cfd53aabc7",
+      "sourceSha256": "7508ad65af65945488c5565d946ac0ade1883fecd7b790adc1cf8e418627dcae"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffDocument.java",
+      "size": 930,
+      "sha256": "bfcc2ce4f0a90d0963fdb72d3a2475453b406a943ddfd42b51c9a3b1356a0e7a",
+      "sourceSha256": "e9726941feb11d9f4d2740e920ebee4730d1b266e13609d5bf4a4c0950f07123"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffEngine.java",
+      "size": 889,
+      "sha256": "05abbf88dfbdd930b6631e4e5162b032cfee5e460c6748779ab2270bfc79d56b",
+      "sourceSha256": "3f76313139e31d0082c66d9e1c587b4073578e5b7dbf82b99f9fc5e6abf3092d"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffEntry.java",
+      "size": 1149,
+      "sha256": "64a5a1652f6be8f3f036238c2bca9de4b7002d8d563064f30448b97fd10918b6",
+      "sourceSha256": "3e4d7a5a4ce8bc41cbaf35d37599f4db1e3c28d0c9b23c5c809215b1bb28debc"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffHunk.java",
+      "size": 615,
+      "sha256": "366214fe6164f8afd3f3e39cd1d30e1410381dcb220cfb37f3dcd9c08cb2a323",
+      "sourceSha256": "9803b1f529e04dff977458d1e691a07e1456c7eff36705119167d41d02157212"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffLine.java",
+      "size": 473,
+      "sha256": "fe542c9a0f4c8c502832bfe70d9085f1b1b9f3c2fecb0e9db782910dbb51a76a",
+      "sourceSha256": "e3198905020f4f641356f9e946386c6d770f906287b7f4f77a22c76dc19e34b4"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffLineType.java",
+      "size": 265,
+      "sha256": "1340b0929451c6d91436d7983d880f169b7a5cf48cc834dc7570ece9895903b2",
+      "sourceSha256": "bf36357beb3781174652460b5576ca14be8840347c49d3c973092d717adfb708"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffQuery.java",
+      "size": 605,
+      "sha256": "8c88c6243706e1c6bb0243579028affb7b36c8d468866647178117d0e644a6e0",
+      "sourceSha256": "126b6f9699f6c28644803df417df45ad8bfa5a7eeca41647a5069fb9e60030a6"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffResource.java",
+      "size": 774,
+      "sha256": "8df0e2ae48f7650ecbc34533a8cdfa0a16546bb28f3bc22f008809f0060040f9",
+      "sourceSha256": "718884a7fe32e1227355e72abd327fd4e1fdc7f558166045882bea0b624c16de"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffSummary.java",
+      "size": 623,
+      "sha256": "370797bc8a335ba23c979bc1f9dd1974ace76573bb7f9c10a62b8561c40a7b01",
+      "sourceSha256": "863a16d48ba03cb53fcd029fdd4b893b467c3e59840e5df579ddc06e4d419071"
+    },
+    {
+      "path": "backend/release/diff/ReleaseDiffViewMode.java",
+      "size": 282,
+      "sha256": "9d467db8ab230db6491db80d977708b4e0d568a11bb57a2cc331a4672719ac2b",
+      "sourceSha256": "2bc696570a9b25f7cdf9d135135d26a74ce4ec2caaf68619527c5a91f5ee1f3d"
+    },
+    {
+      "path": "backend/release/diff/SkillReleaseDiffResourceProvider.java",
+      "size": 1047,
+      "sha256": "cb8ee1412a9db81e0613cc1c712b216cd55c8047ee1d56e5bd81b168b1581426",
+      "sourceSha256": "6d6445e2a815d5bd671cea6d856c2e44fca56fe1ef8b9dbea6db1465df37b48b"
+    },
+    {
+      "path": "backend/release/GrayReleasePolicy.java",
+      "size": 431,
+      "sha256": "468c495bfdc7a48dcde004dc6efcefb0a5bd3c1e60a623f2a16bfefd7c285825",
+      "sourceSha256": "e410361efb51bf8fd2388db6edc8df4c57c1b3a95171da936d2e471abc7bd3e4"
+    },
+    {
+      "path": "backend/release/GrayReleaseRequestParser.java",
+      "size": 3426,
+      "sha256": "1806e8d7a6ed2ce579f27fa7e28a04aea499d61ecde2b5427e2b3cdb416853bf",
+      "sourceSha256": "5cc893d9d04fa27ebfd8e2fc903bd780e449993d5d106393a923c6618db011be"
+    },
+    {
+      "path": "backend/release/GrayRouteReason.java",
+      "size": 367,
+      "sha256": "e284bd0a9e83cc3211e05c4489967047c8d20f00b8561827dac6e135e4d00e15",
+      "sourceSha256": "f2f16ca6e87a5655d10405b8858b9584ec942c374cdf728bbf3ff25db3fcc2be"
+    },
+    {
+      "path": "backend/release/PublishedAssetQueryService.java",
+      "size": 8139,
+      "sha256": "f49c3c9ed59707f0d2ff84ee7f93b10b71083d8c76c128627f1d115de95d012b",
+      "sourceSha256": "094f1cf38f86e22ab95d59e58cfbe8734822267cd6fef6237f34bf2b9bb468b8"
+    },
+    {
+      "path": "backend/release/ReleaseAssetAdapter.java",
+      "size": 10602,
+      "sha256": "f97fc189030fa5970d9a6af2f7be29a8147a22652a81a68426b5957b86f28f10",
+      "sourceSha256": "dd2767ed3560e2f9ad421adf92cd0b216c5d7efcdf126409c0c81ee2acca2c93"
+    },
+    {
+      "path": "backend/release/ReleaseAssetAdapterRegistry.java",
+      "size": 1308,
+      "sha256": "08c594e7219ed292f5e142e6c3484e42752666fd687e336e60a4e02bd70c8fc5",
+      "sourceSha256": "7297e20c29c583deef5558e45155ce72d5c59c683868ae10355a4e7e2ec9732c"
+    },
+    {
+      "path": "backend/release/ReleaseAssetType.java",
+      "size": 961,
+      "sha256": "1d0ad22682d0631a14b51bd1ee81e29511f0830fdc7ec5375cca4901c3704b09",
+      "sourceSha256": "064ecd7e3626a325664d0d2e511fd7e5cb9906ca9c18758796498dde82aaf700"
+    },
+    {
+      "path": "backend/release/ReleaseDigestUtils.java",
+      "size": 1127,
+      "sha256": "12042b4d18cc6f05f74991186023ff8779423c398ddd64e1391013c3909b1e05",
+      "sourceSha256": "63fc5cf21370c56b69651a1107d896108073657191430325a77fee135dafeaac"
+    },
+    {
+      "path": "backend/release/ReleaseEnvironment.java",
+      "size": 268,
+      "sha256": "bfd5d4706cb6cdf06b815aba68d20b44f148bdfeb4cfccbbc4bc73b4542fc38b",
+      "sourceSha256": "e6ff1a4f7694afcc9ba5a5c90610f82c3b112cc64f499f16c912fb73ad140dd5"
+    },
+    {
+      "path": "backend/release/ReleaseGatePresentationSupport.java",
+      "size": 1375,
+      "sha256": "9a21b75117309f1271db476f5a1e37c8eea3e342db07791da2e9c31af737edf7",
+      "sourceSha256": "0c867a9e498c89c376a27cdd926f1421beaa08ac8a4de6a36a3b2001ed226138"
+    },
+    {
+      "path": "backend/release/ReleaseModels.java",
+      "size": 17111,
+      "sha256": "34d652feb1d6c515efcb4289abb98744fde359eab7eec41f5fddeb9a5917ec1e",
+      "sourceSha256": "2bbada21f49b76206188af643f7be4bf752b6e6eb3d703396a216a1810e75700"
+    },
+    {
+      "path": "backend/release/ReleaseOnlineRecovery.java",
+      "size": 4252,
+      "sha256": "a064f32c85d5c5120a08fd92a8945ce33ce7bfb67a3a706341a3da77125cfeac",
+      "sourceSha256": "f91a4c0b9e60014aacb26f61a95ddac6d3cf23001cb2128516e161b7afeff37b"
+    },
+    {
+      "path": "backend/release/ReleaseOperationContext.java",
+      "size": 1074,
+      "sha256": "58d9a4cef293a1a302320436c3e519aaae2723f922f1c1eae4690826ebda9d99",
+      "sourceSha256": "1a6b989c0eb4fd6096d03eb2453fb713f819ee64ff6a58033640efc2b31fc6db"
+    },
+    {
+      "path": "backend/release/ReleaseOperationResultFactory.java",
+      "size": 2095,
+      "sha256": "9bc41edd88b06ca38b20d30f7008804529a09b5f912b7afa54930c6cc8194c39",
+      "sourceSha256": "c81a6922d11dff856147828294fc7ae11dc050fec9f3220237d38e602f83f89a"
+    },
+    {
+      "path": "backend/release/ReleasePublishingRecovery.java",
+      "size": 12193,
+      "sha256": "30fa66c6b68ab885f6f79d6c699333bd9acbd28dd8ad54ac2b2a2fce519272c6",
+      "sourceSha256": "39204e9330eddf82c6f7d163892c0969e03744afef829c0131c8cf0d1ca657e7"
+    },
+    {
+      "path": "backend/release/SkillAssetDependencyAdapter.java",
+      "size": 5017,
+      "sha256": "6f9a9e339c2e43a13038b8b539f81b2f22aadb767419c0a9d8997bb2efc3aee2",
+      "sourceSha256": "06c842758b290566d3da844c294556ec5d035e8dea9786c8aa4ef83a297b5d72"
+    },
+    {
+      "path": "backend/release/SkillDependencyReleaseAuditService.java",
+      "size": 10758,
+      "sha256": "cc3588836ced36bdc75181b5642c4037e08041c689e1f37a1c4e6f3ffb8dfd00",
+      "sourceSha256": "bc91eb194f3a8ac1528937183c3baf32432798635980e7be58b38e0e7820d0cc"
+    },
+    {
+      "path": "backend/release/SkillReleaseAssetAdapter.java",
+      "size": 22355,
+      "sha256": "c853f07fce01af26edbc1586c25ac16e1740d1f74fc054d4f868ed2cf6d644cd",
+      "sourceSha256": "ca10159990929f63c6e8925359a181074103e2596981faaf4543835e9034a7e5"
+    },
+    {
+      "path": "backend/release/SkillReleaseBindingSnapshotReader.java",
+      "size": 7532,
+      "sha256": "1cc1ca51449b4b0438c5ed9c496f012b7f0b7db45545f793749706f6170bedd2",
+      "sourceSha256": "58498bd1bc545c0cf4ff5d82a7d8496e33c8d4d7a2259cb79499781224d4ae7f"
+    },
+    {
+      "path": "backend/release/SkillReleaseMetadataSupport.java",
+      "size": 8542,
+      "sha256": "9f9b56c9da847522dbd375d8d6926f77b03c29fe2578c23d4bcfbc8963d2891c",
+      "sourceSha256": "f86e568749fefa73cb546ec4b885af3e4eb78d593551a3f31e689df7129d6b52"
+    },
+    {
+      "path": "backend/release/WorkflowAssetDependencyAdapter.java",
+      "size": 3437,
+      "sha256": "25ed04dc3e1398cdc875783a293949195606671bd32ac8503154ed34dbfb0353",
+      "sourceSha256": "6fe89e48e56caf662297b983b29799c5ba51b7f1be9a6c0d8e539070b6cf4647"
+    },
+    {
+      "path": "backend/release/WorkflowReleaseAssetAdapter.java",
+      "size": 35373,
+      "sha256": "9cdb3d65983685a90f0055dfe26949fd510138445b9593aeb43d23a7729ba8f0",
+      "sourceSha256": "f8103b6bd523e85971c6584fb4dc3366fd87ed9df57b128a5a3ae6ade5e3a566"
+    },
+    {
+      "path": "backend/release/WorkflowReleasePayload.java",
+      "size": 1360,
+      "sha256": "7064e3c1d66b7b89a7bd8abd33435cc6066b984688c6c7aa7fad94fda5944668",
+      "sourceSha256": "4ce2ac5855329a5a8da00a6cfea56b1371bc6c2aac2bbcce775cdacaed9055d9"
+    },
+    {
+      "path": "backend/release/WorkflowReleasePayloadAdapter.java",
+      "size": 24896,
+      "sha256": "d681b7e3631542745020de653656a7559d5d8de49eb4cf60602ac0bceff65159",
+      "sourceSha256": "e1c20db82e4c5eea16c23c0e63b967d6de9d48c92384858cdb190335b2eb8071"
+    },
+    {
+      "path": "backend/release/WorkflowReleasePayloadValidationException.java",
+      "size": 1238,
+      "sha256": "417e4c68e5f07bd495ec29a53d1678900205afed1e26dd2007ac1361ba57c1f4",
+      "sourceSha256": "f57a099ba91ee4107efc87253938524092a654612841a556bb59ab25ec649f52"
+    },
+    {
+      "path": "backend/storage/db/entity/AgentObservationEventDO.java",
+      "size": 3439,
+      "sha256": "90f38e15dee0d6828f78ea60c83b3a415543bc26d217f470f3e7f8112bd51ec0",
+      "sourceSha256": "43fd400a9320e4b52b84d602182a86431a53b3412b246203c3ba3e4639e10f5f"
+    },
+    {
+      "path": "backend/storage/db/entity/AssetReleaseStateDO.java",
+      "size": 1289,
+      "sha256": "e4819abb878aae31417c197cf3f113e2adfaae64fa7f70225e96bff6461d7145",
+      "sourceSha256": "6544db3499f5e57f53139afd07040163386e70183a374d3e13a6802bae968017"
+    },
+    {
+      "path": "backend/storage/db/entity/CapabilityActionDraftDO.java",
+      "size": 1887,
+      "sha256": "6c198ddb491eeb7333e3104d825a2a57657ba0d4892ebc46a4ab1dfd3af7e488",
+      "sourceSha256": "009a667936e5e5c9dcb0c9e5ab59dcb9ae7a3a5764791d8747509cc43728d730"
+    },
+    {
+      "path": "backend/storage/db/entity/EntityRelationDO.java",
+      "size": 2865,
+      "sha256": "7a2168f48057b578017586c6310881d67d5b1c0747d692201e10fd0b50bfd07a",
+      "sourceSha256": "31a3403d7040d2f5c271344b33d18c7eca33b7291798cad37966a75326ac8bed"
+    },
+    {
+      "path": "backend/storage/db/entity/SkillAssetPrincipalDO.java",
+      "size": 2041,
+      "sha256": "446d5b094c863f252ea05faa1a1f93e0c9be97d8ce341617ea65a873809b7df1",
+      "sourceSha256": "159cb13260d4b678441a0d8bc2eab54e8d76c38ccdf6f07c9b0b71e398f41bd8"
+    },
+    {
+      "path": "backend/storage/db/entity/SkillFactoryAuthoringEventDO.java",
+      "size": 2838,
+      "sha256": "57479fd18cf4474b23beb14d7e52828ecfe182ca8d12b7bbe4e7732e536cdd8f",
+      "sourceSha256": "2f50ead198501277c70a91eb260dbb58086515c4b869c16b3065c8afccdc4038"
+    },
+    {
+      "path": "backend/storage/db/entity/SkillFactoryAuthoringSessionDO.java",
+      "size": 1653,
+      "sha256": "b3e49272b729850e96478b10035e62cfd84afd184b940f8dfb7665ad3cb987e2",
+      "sourceSha256": "f487254dbe0c2d39aad2b395ac60430c9a482b5eb668c1483099b48a1984f231"
+    },
+    {
+      "path": "backend/storage/db/entity/SkillFactoryAuthoringTurnDO.java",
+      "size": 1395,
+      "sha256": "a796ac10842d88a5bb169c0f23230630304a0d26631ffc51a8b3f0c82497e153",
+      "sourceSha256": "844da38f5eefdb54fb738cb9d1e0ab0b3081668f87b9a49173234ccae09fab48"
+    },
+    {
+      "path": "backend/storage/db/entity/SkillFactoryComponentAssetDO.java",
+      "size": 4451,
+      "sha256": "4817f97afb1ea7ea8e0ca3a042cf78456698b7b6f2a8921bd3a6121d3923ff8a",
+      "sourceSha256": "6f67911a80c20b14572a4f549d18dcfafdfea13e790a8e142b2d2f5edffa7dc6"
+    },
+    {
+      "path": "backend/storage/db/entity/SkillFactoryWorkspaceDO.java",
+      "size": 3984,
+      "sha256": "3fb233027e8a9d62e6a2d51f6e6bf6d297050061f18502df9319f4c622162c0e",
+      "sourceSha256": "ec95a18eee407e328cb031b544c3936774d721b9ba6b03839cd00005a395bc1f"
+    },
+    {
+      "path": "backend/storage/db/entity/WorkflowDefinitionDO.java",
+      "size": 2093,
+      "sha256": "25cc5ea568b6e6911a94791bbb9cf1564043f8d959a16d414a0effc93ce0a17d",
+      "sourceSha256": "964c351b56435a1a54f1b633b3e32267813e3be5e77a8ac116b3587752f7d51e"
+    },
+    {
+      "path": "backend/storage/db/ManagementDatabaseConfiguration.java",
+      "size": 3476,
+      "sha256": "288c69c658a82fd73e95d2c026a02444dd30da48d6d0854fbc165c4d87961ae8"
+    },
+    {
+      "path": "backend/storage/db/mapper/AgentObservationEventMapper.java",
+      "size": 595,
+      "sha256": "fc9aa8822ab8cd51bdeca4ba73e6943b07872dbb343499f53d65607b2be76d99",
+      "sourceSha256": "3b262698d7c81f28b82938643a3c9715c968439da6a865d9667d3a33d5e4ecd7"
+    },
+    {
+      "path": "backend/storage/db/mapper/AssetReleaseStateMapper.java",
+      "size": 496,
+      "sha256": "5911be16e583770792b0c337bcc6091494ae9db0b20a26aa27ed249fd6a019d3",
+      "sourceSha256": "0c7c374012f021828876687a24c94c68bad479b4b0d85c5e7bfa802da0c4611d"
+    },
+    {
+      "path": "backend/storage/db/mapper/CapabilityActionDraftMapper.java",
+      "size": 568,
+      "sha256": "37c350bb83cc36a1de4aeb7d962e7ef0b7ad11e74f6580b9c38c29d5d749b054",
+      "sourceSha256": "a79df772096d0ebfe8e1a5d517fcf12128494c46ed2ba614281046339573c2b2"
+    },
+    {
+      "path": "backend/storage/db/mapper/EntityRelationMapper.java",
+      "size": 602,
+      "sha256": "107c74df3a67a0038e0284a334dac197eaf9b86ec01f1e5f93c21f0515ed50fa",
+      "sourceSha256": "f15aab333732ab5e139834763b13c099e278f09cf72fd88b817d489f500355c2"
+    },
+    {
+      "path": "backend/storage/db/mapper/SkillAssetPrincipalMapper.java",
+      "size": 546,
+      "sha256": "1149eff6cacca05d435a9a929468a40044821fe76a853cfcb0e31e4ef7436227",
+      "sourceSha256": "eabfd3fa64e97f98c2cc99b225ec6dabd80c2b40a324cd81e9ce4aa45fea6b5d"
+    },
+    {
+      "path": "backend/storage/db/mapper/SkillFactoryAuthoringEventMapper.java",
+      "size": 469,
+      "sha256": "e55c4862f64fbd5e3c46e27c2cadebd8e223f754d78b93cddc7ef056c26fa7d4",
+      "sourceSha256": "c4cd2c2431946ea99f5995e426e36d086b7a1aba89375be06f95f32ec53b2306"
+    },
+    {
+      "path": "backend/storage/db/mapper/SkillFactoryAuthoringSessionMapper.java",
+      "size": 460,
+      "sha256": "eaebd65b298b43110deb24e119b9c88b0fc93d0aad917e3fc40875f9ca0d0841",
+      "sourceSha256": "5c06a6a31995e29eee594f029ce4deb092fdb7663a2d3f688c8f3cd6a4d4c165"
+    },
+    {
+      "path": "backend/storage/db/mapper/SkillFactoryAuthoringTurnMapper.java",
+      "size": 456,
+      "sha256": "3a8e216936773a181ca1db6bfda17f21a211aa975845fe6bc78b584d4f3ac34d",
+      "sourceSha256": "bea368ebdb1bf7af6bb24877740a3156769b1d8c4cb8c6c85fb1b8102b1c7c47"
+    },
+    {
+      "path": "backend/storage/db/mapper/SkillFactoryComponentAssetMapper.java",
+      "size": 604,
+      "sha256": "bcbe74ad31a0d5163103ca82dac675d546338ebd62e7fbf49cbd4b56be2a3724",
+      "sourceSha256": "37201e0b8f9c4006dcf42ed7966c143e12a0db7fabe268deff81af5266437440"
+    },
+    {
+      "path": "backend/storage/db/mapper/SkillFactoryMapperConstants.java",
+      "size": 535,
+      "sha256": "5a391c0f914e27322ea1487d991df916c1c1e3478f2ba534be80ede212f411f7",
+      "sourceSha256": "2c095b7dc838648c4e25a05731b0b4f4c8f5c9004e8597726e238daf0841654d"
+    },
+    {
+      "path": "backend/storage/db/mapper/SkillFactoryWorkspaceMapper.java",
+      "size": 646,
+      "sha256": "7146da3fa6291a0905fa89d209d188e7f27cd57cfbd69084d1d00ef503699181",
+      "sourceSha256": "23c5a9446bd8422c23f1098a3a7f700292479b167273ac5f562f6bb0e12fadc9"
+    },
+    {
+      "path": "backend/storage/db/mapper/WorkflowDefinitionMapper.java",
+      "size": 3031,
+      "sha256": "d938095c046bdc62a306183dbb2d526bb9e0497e8c2e3f6e21afcd7c1a3b9993",
+      "sourceSha256": "42657c7ce6858888e9384a55d4302e26421db46a271c9fa0d8c0658080d86be3"
+    },
+    {
+      "path": "backend/storage/db/mapper/WorkflowDefinitionMapper.xml",
+      "size": 2638,
+      "sha256": "37176022c640f9b1218bf41de1e6cc7c63d551718e29dae2d12b98e7b0d8f421"
+    },
+    {
+      "path": "backend/storage/db/migration/ExplicitManagementMigration.java",
+      "size": 6236,
+      "sha256": "2221fe73af9295cc21140b6e257f7aa642d716e176499ffea81910bd095f6455"
+    },
+    {
+      "path": "backend/storage/db/migration/README.zh-CN.md",
+      "size": 3590,
+      "sha256": "b318086b28bce0e029c9b4e199767f687802eab4b5c4e434a5f58f7de2fba5f6"
+    },
+    {
+      "path": "backend/storage/db/migration/V001__management_baseline.sql",
+      "size": 9783,
+      "sha256": "5278d83d9b575e86d0085c0ea90dc1a861150c6bd8c070c5d474a34130202ce7"
+    },
+    {
+      "path": "backend/storage/db/repository/AgentObservationEventRepository.java",
+      "size": 7912,
+      "sha256": "8f3c37f0f2087ecb60b333565f9603fa9df2a0531d16da791be37d81a024e53f",
+      "sourceSha256": "4c4331669485f32fc05297b218c101fdf75607d623d902fc938ccfbb277b822d"
+    },
+    {
+      "path": "backend/storage/db/repository/AssetReleaseRecordStore.java",
+      "size": 14325,
+      "sha256": "02882175e020e1802dd68ff4b0cefc7e01a5fef899c5b339f8331c3224b2f8e7",
+      "sourceSha256": "0354a801f610f2634a403aa733afd8de81740cc21b1d23bcb9b01bf0ea80e945"
+    },
+    {
+      "path": "backend/storage/db/repository/AssetReleaseStateRepository.java",
+      "size": 9428,
+      "sha256": "6fbe5c1ca302136f1f5587c4471fb1a2acdf7b38473d73a3a0cd708741e23d98",
+      "sourceSha256": "1af8ff7d1d2e423f391bd16bd1cda329ddffc47cfb7b9e54182c69c81e8a304c"
+    },
+    {
+      "path": "backend/storage/db/repository/CapabilityActionDraftRepository.java",
+      "size": 12561,
+      "sha256": "ad97327c4f9bc7fc566f9db18166b67b098326b1ae754daf1844ae83ef1dc168",
+      "sourceSha256": "83cef094dea74fb2db8b2d2d90243d5c789bad23dbb4ca3e438ba0929913c1a7"
+    },
+    {
+      "path": "backend/storage/db/repository/EntityRelationRepository.java",
+      "size": 13659,
+      "sha256": "c348719fd41a6d51d095e602889eadeb5838da0153811d57d83a1cb7f15857e8",
+      "sourceSha256": "0f15f280adfbc2294aff4e8336355bce9cc10caa5eba40191680ef4404c469c3"
+    },
+    {
+      "path": "backend/storage/db/repository/PostgresArtifactRepository.java",
+      "size": 4832,
+      "sha256": "c63bf4c5733418ee59fe5f1ee009eb7f185fd915d481649e91b50f7d6279ba7e"
+    },
+    {
+      "path": "backend/storage/db/repository/PostgresSkillWorkspaceStore.java",
+      "size": 12502,
+      "sha256": "9567410dd57413c80de676b337f2fc4f270446f3a373d9fca35a8e6c6cc2db07"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillAssetPrincipalRepository.java",
+      "size": 11295,
+      "sha256": "565f45562ed77b498e9e1b22ba7fa5cadcf332df610f14c4aa2ad8b1711cdc81",
+      "sourceSha256": "dd6ffade717bc4394576a9669bc2defa6911971e6fd8b6797a48b1d0e415e0b0"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillFactoryAuthoringChatTurnDbRepository.java",
+      "size": 4670,
+      "sha256": "4068e78774c98e670e6a1ff1b29f15283d07d07ded1d3c83d125f792a59c94d8",
+      "sourceSha256": "5ed54cae9f0b5388a13f898c4951f3eb03337f62ccaa2e574ba2ce721fe92f3e"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillFactoryAuthoringSessionDbRepository.java",
+      "size": 13808,
+      "sha256": "f511cb8811f2ed48f4560f8b14823f6784291e9fc1c540b32e2d2b5a82f6cdff",
+      "sourceSha256": "65cd74d1c5f3ec96acce46206bd337ec9c5bd191da68e8ec09037c6d91884811"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillFactoryAuthoringStreamEventDbRepository.java",
+      "size": 8655,
+      "sha256": "95b234cdcb8564913bfb8e12f8726d3dfa2e432395790d4b004d191d3e7ef483",
+      "sourceSha256": "bea7dead2e6bbe3e911e3cc2ac26cd239ef03edb6a7666750e9921532b4d6128"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillFactoryComponentAssetRepository.java",
+      "size": 21295,
+      "sha256": "5506569e0e3db7c67a19f3e6ecf556cc0bb6a7977dec32d0cadd4b4a1cbc2d32",
+      "sourceSha256": "85f006c06816fb1cc1ae8599044fecfe898f0b5b6ddb7358cb624fd1ac19a3be"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillFactoryJsonColumnSupport.java",
+      "size": 1607,
+      "sha256": "e926ebb687db9f2f259ea7020b1163f99919bd26cee64a07942f97beebe2cccb",
+      "sourceSha256": "b8fbb22af2fd615e14dcfc1eb336fe14c7cc8a31537a2f02547ece2e551f26fe"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillFactoryWorkspaceFileRepository.java",
+      "size": 12581,
+      "sha256": "254e43c8f16ebc1b64347e307d64e5ca30bfafcd4da95fd0bfdc0649de981785",
+      "sourceSha256": "3af7d709079b07b495151f83b098355a41e0b7358eb38f129fc9e29301ae4543"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillFactoryWorkspaceRepository.java",
+      "size": 45059,
+      "sha256": "2e38ae3c9c4da10033a3acb491a4c6f0c292038f59ceb36cb6944861d7010ae1",
+      "sourceSha256": "639ae10be6285a51a81adee9171305dcba1807a9ae3023bf2993286338446cfe"
+    },
+    {
+      "path": "backend/storage/db/repository/SkillWorkspaceRequestSession.java",
+      "size": 7507,
+      "sha256": "5be2cc48d91aa5bc67be2306e553862f316b138746959577b0ad2ce860ad974b"
+    },
+    {
+      "path": "backend/storage/db/repository/WorkflowDefinitionRepository.java",
+      "size": 5961,
+      "sha256": "3c06cee92a7d1269b63691a68b65e63710ef2883203d7517d627b2bb23abbca6",
+      "sourceSha256": "f82244c9c61ea4680a6817effc79b9b6375fbe10a709254cdcf2e7ee3a6589fa"
+    },
+    {
+      "path": "backend/storage/db/SkillFactoryMapperScanConfig.java",
+      "size": 428,
+      "sha256": "23352d126b32a388af92f8ed7a68637767b52c4ed50d452a6b6b0c41f8b746e8",
+      "sourceSha256": "55e36d1edafebf5c8b88656c2a96a8b92c317e6ccb295e6ce159c32e4af13dac"
+    },
+    {
+      "path": "backend/storage/db/SkillFactoryStorageConstants.java",
+      "size": 490,
+      "sha256": "b41005daaa08f1c33253282c48a1ce0988e3d57b41220cec334042042fa21346",
+      "sourceSha256": "626b48e35f0bc2034415a93994c50affa6b361a7bd9f29d6029ca1c9ab2ed0e7"
+    },
+    {
+      "path": "backend/storage/db/tests/CapabilityGrpcJdbcProbe.java",
+      "size": 14924,
+      "sha256": "ce038fb3f128a977282f9a36d15e13cdc362d3ad8363f2dcb8331fe8aa7a4d91"
+    },
+    {
+      "path": "backend/storage/db/tests/ManagementAuthorizationTest.java",
+      "size": 2732,
+      "sha256": "0d95e14e21179cb3006129999d0e331fa740ba1c14f06cd332db00c604ba8829"
+    },
+    {
+      "path": "backend/storage/db/tests/ManagementDatabaseConfigurationJdbcTest.java",
+      "size": 6412,
+      "sha256": "011bf68afd8b846deb24d975ed3047089d2ee586d3e18aab7c8414d23549dc81"
+    },
+    {
+      "path": "backend/storage/db/tests/ManagementSchemaMigrationJdbcTest.java",
+      "size": 9106,
+      "sha256": "fc4255745be22ed2173f0088f894e1d1e8137d9a185039ce0877632860b229df"
+    },
+    {
+      "path": "backend/storage/db/tests/PostgresArtifactRepositoryJdbcTest.java",
+      "size": 3062,
+      "sha256": "ec0e45b6d4b078ffafb0d1a27e7fef75561c2d5bf7a8ac9db2f5293a52c05405"
+    },
+    {
+      "path": "backend/storage/db/tests/PostgresSkillWorkspaceStoreJdbcTest.java",
+      "size": 4481,
+      "sha256": "c632f16832625cbdaab01725ef709b170a6acf37fee5b4a30a519afc56d7f5e6"
+    },
+    {
+      "path": "backend/storage/db/tests/PostgresSkillWorkspaceStoreLocalTest.java",
+      "size": 3968,
+      "sha256": "bd0e0adc75ee448afac6ed94202c284ff545f63c3677d57c2575640612fb7460"
+    },
+    {
+      "path": "backend/storage/db/tests/PublicationHttpAdapterTest.java",
+      "size": 2173,
+      "sha256": "7088855eb7a02ac84fb48c6e520d47401f5ef2999dc8db5135db4a8cf830dbe2"
+    },
+    {
+      "path": "backend/storage/db/tests/run-capability-rpc-probe.sh",
+      "size": 1167,
+      "sha256": "e81116fbacbc25d42d2a0ee66d0bc853af5ee5941891ce4f7b791172a997b1a6"
+    },
+    {
+      "path": "backend/storage/db/tests/run-local-postgres-tests.sh",
+      "size": 3878,
+      "sha256": "9db7d445a11a99999532c28358f897a24b4b34d69b90fa1126d6a246b3efd00e"
+    },
+    {
+      "path": "backend/storage/db/tests/run-schema-migration-tests.sh",
+      "size": 1095,
+      "sha256": "f16c66d10e30370ae63effa01169afaec9e1c19503976d149dd3b27c42275ee2"
+    },
+    {
+      "path": "backend/storage/db/tests/RuntimeGrpcHostProbe.java",
+      "size": 2323,
+      "sha256": "4434ee73e4f79d0391fd6e79ecd475ffa6c1cb032ec7752c31c1afa3b750e9b5"
+    },
+    {
+      "path": "backend/storage/db/tests/SkillWorkspaceRequestSessionJdbcTest.java",
+      "size": 6693,
+      "sha256": "d508fbb868f882672c7783d2edcd80204c71c969c4efa6faf3dd4bc500084f8a"
+    },
+    {
+      "path": "backend/storage/db/tests/UserIdentityContractTest.java",
+      "size": 3429,
+      "sha256": "3c22ae302a63e90a3229d6b0499aa762fd9a98e7b672d71ae53339fbe6dd4a4d"
+    },
+    {
+      "path": "backend/support/BoundedExecutors.java",
+      "size": 987,
+      "sha256": "16dd22b971a1a59f8a35a7025c8faf3169c2aa867699c15dcb8bb466ca81d1a4"
+    },
+    {
+      "path": "backend/support/DeploymentEnvironment.java",
+      "size": 649,
+      "sha256": "80557481f3e844b75edb3091828be64641f225e7ee6b45f72997997087f2e8df"
+    },
+    {
+      "path": "backend/support/JsonSupport.java",
+      "size": 1420,
+      "sha256": "1eb61f0318aee9332c642aa67961a54b096dde9433e3c5d57c8f21ee5a6da275"
+    },
+    {
+      "path": "backend/support/TraceIds.java",
+      "size": 435,
+      "sha256": "d7443e2fb4445e1480cfdc7fe137466051851859d96b9a51bb83ee14eff9c899"
+    },
+    {
+      "path": "frontend/.gitignore",
+      "size": 28,
+      "sha256": "d7aa963f7f0eb1272e445752499d95e81a0db9603c739962bf1448d851479977"
+    },
+    {
+      "path": "frontend/A2uiActionAuthoringEditor.tsx",
+      "size": 44157,
+      "sha256": "331663b4a86c785f3977e1d581ec9d74750bd066bca0f74d00ba2daecc7509c3",
+      "sourceSha256": "b297628cacca236707d5412d43ee827ac281277e7e75b35a4aadbd1b85646b08"
+    },
+    {
+      "path": "frontend/a2uiApplicationAdapterValidation.ts",
+      "size": 3286,
+      "sha256": "57e832debbef3d4f5e3e9793f62bbe54c8aea9f3e8f97235f32744ce5a9feae6",
+      "sourceSha256": "57e832debbef3d4f5e3e9793f62bbe54c8aea9f3e8f97235f32744ce5a9feae6"
+    },
+    {
+      "path": "frontend/a2uiApplicationAuthoringAdapter.test.ts",
+      "size": 2445,
+      "sha256": "00e94a99b361fa2ea6e1094ba75b0fe45df9b16cac5e368571d9890effd847c9",
+      "sourceSha256": "00e94a99b361fa2ea6e1094ba75b0fe45df9b16cac5e368571d9890effd847c9"
+    },
+    {
+      "path": "frontend/a2uiApplicationContracts.test.ts",
+      "size": 28971,
+      "sha256": "d5fc8889858d5e84a1065fd7442b1f0b392c4bcc71e1f7cb0fc6e0ffec897f24",
+      "sourceSha256": "a3a91459544452d8cf30deee1b28a4913d5c629b39a8d61fada7dd00ce6a64a4"
+    },
+    {
+      "path": "frontend/a2uiApplicationContracts.ts",
+      "size": 28124,
+      "sha256": "54a6c561c0c6690e873196fbcdeace7602ab5e198238d81c7f95538826af4e1e",
+      "sourceSha256": "8bc63f50cfb44d2fad1fe1a79748d0c3f33525261d325e3bc267e5dadf16ff62"
+    },
+    {
+      "path": "frontend/a2uiApplicationEditorModel.test.ts",
+      "size": 21512,
+      "sha256": "a337d4a2366fc2596ba7f506135c28ba9e571769b92818371df8883426403c73",
+      "sourceSha256": "d102ac4c23fc1e3570ea0bfdaea7400d776a731506edc1b972574eab2aa3ec36"
+    },
+    {
+      "path": "frontend/a2uiApplicationEditorModel.ts",
+      "size": 22582,
+      "sha256": "a857d363ed6113b55f8f87734449a8adfd72c083d92078f2c63dc1ce8e75d18f",
+      "sourceSha256": "696ea8569bd6027aeb6e18e520e9fc1042b2933077d1512ce29f133edbf70f73"
+    },
+    {
+      "path": "frontend/A2uiApplicationEditorPage.tsx",
+      "size": 47555,
+      "sha256": "7c6f3be6065266d368dc48647cfb55296cb8e70fcd0f664fc82aa76e2cf265ee",
+      "sourceSha256": "534eaff22a9d897eb1a1a72f962d23604da6476c6f2c28d4ad257fa20d2e835c"
+    },
+    {
+      "path": "frontend/a2uiApplicationEditorUx.test.ts",
+      "size": 10094,
+      "sha256": "33e28821d0d7d0ef8b05be2c85fcb4b7d46ea44599a8716b4d5b89104e8738d2",
+      "sourceSha256": "01eb0af0822337e2f497b8578a0ef99bba05ff607b6c0b5e279945d93ba1c9a7"
+    },
+    {
+      "path": "frontend/a2uiApplicationForm.ts",
+      "size": 6925,
+      "sha256": "ab751aa264a4456c4b758cacc70f89d35a654ca8cb858bcc02f6526f9b26dcd9",
+      "sourceSha256": "ab751aa264a4456c4b758cacc70f89d35a654ca8cb858bcc02f6526f9b26dcd9"
+    },
+    {
+      "path": "frontend/A2uiApplicationListPage.tsx",
+      "size": 6123,
+      "sha256": "b4a4d98c72f94902ef0e508f3c687ff38048c7ec96e463bb63a709801bf55f84",
+      "sourceSha256": "f7479c05a4655ef272eb2935412fa51e1c9a33cd2c0879211ef668ebc51a561f"
+    },
+    {
+      "path": "frontend/a2uiApplicationPreview.ts",
+      "size": 6133,
+      "sha256": "44e272ed886bcd21ac0595e91593fcb6020aff7872e5d9f8046ca367194c8088",
+      "sourceSha256": "44e272ed886bcd21ac0595e91593fcb6020aff7872e5d9f8046ca367194c8088"
+    },
+    {
+      "path": "frontend/A2uiApplicationReleaseStatus.tsx",
+      "size": 1433,
+      "sha256": "13d391b6935c4c4923747822189a51a656c10c0aa9cf62c9f2eaa730ec30d63b",
+      "sourceSha256": "ad4c56ddc9560209e589d9df06d60eaabe4f2cf90f1a64de64bbf679d2703702"
+    },
+    {
+      "path": "frontend/a2uiApplicationShowAst.ts",
+      "size": 7206,
+      "sha256": "cc05727e85116895b75b61a69a06476cbb0d33bf1fb87f70d975ba1fd22180e0",
+      "sourceSha256": "cc05727e85116895b75b61a69a06476cbb0d33bf1fb87f70d975ba1fd22180e0"
+    },
+    {
+      "path": "frontend/a2uiApplicationValidationIssues.ts",
+      "size": 5808,
+      "sha256": "87fa1f12583ad93a849154cc1719d305176355f5debd84514c802d8b2ee72af1",
+      "sourceSha256": "b2b950f7da1d20279c25fe5054c68f86eda28ed52b0bda101ac98c47f8691272"
+    },
+    {
+      "path": "frontend/a2uiCatalogContracts.test.ts",
+      "size": 15032,
+      "sha256": "6b06a816ff58174f18a8f6b905e4fdb9f898aa11caab6694606fd3906f63739c",
+      "sourceSha256": "bf0a91c8e73a125c301b8ac28692db098505cf4ece4d19ba670e76ad17cd0c7f"
+    },
+    {
+      "path": "frontend/a2uiCatalogContracts.ts",
+      "size": 18530,
+      "sha256": "57f77e91fe71267cebe63fe6522df21eef85074996f0f8e0f2099a22c8b9c5b9",
+      "sourceSha256": "7369ddbaaedbc20e8b1b96e3d7b1c43416417981146580889d2fdc910e8d1134"
+    },
+    {
+      "path": "frontend/A2uiCatalogPage.tsx",
+      "size": 27502,
+      "sha256": "cec248d474ca7a891c6175406ad6ad93141363006550c01542738f03d35bdb74",
+      "sourceSha256": "af8ee106aa21b840c167a6fdf5ccfbd51584094ce021bd01e8d6e97ff9eefde2"
+    },
+    {
+      "path": "frontend/a2uiContractCorrection.test.ts",
+      "size": 7843,
+      "sha256": "02bc35518df5fdd67f07280c85c07b87fdc6bab0f927bdc00ab1db4b993dbb05",
+      "sourceSha256": "a2c5214b4183a7a482e6d3a8343d0b510a50efc8a5771b49acd9da8919f4a1ab"
+    },
+    {
+      "path": "frontend/A2uiShowAuthoringEditor.tsx",
+      "size": 21223,
+      "sha256": "8f353c656f4dc1fc168e957c9abdfc7f2673df1f111f7d19043115219bb2adc0",
+      "sourceSha256": "df865ec05b57066028c360b9c5c5f10c0b29ee03c1dcb4e0d8a456200d3a6c1f"
+    },
+    {
+      "path": "frontend/a2uiWorkflowInteractionContract.test.ts",
+      "size": 8340,
+      "sha256": "8e26c17416bf26dc86778f9529f812044bd6c1291c77b6f71d95d1dbdf975533",
+      "sourceSha256": "050475ef4a78dfcc6841e09c48985bd6ff5421a2c287e1b71ccfe068764101dd"
+    },
+    {
+      "path": "frontend/api.ts",
+      "size": 87442,
+      "sha256": "a3c7108c9bf3faea2f81597dc17c1e8dc984a7e600a9f7bf6b8ce766149edeae",
+      "sourceSha256": "75c2c7c0157e5c5af663ac2af06099e5d217804d2e130ef414f348b76c731f87"
+    },
+    {
+      "path": "frontend/bindingValidationNavigation.test.ts",
+      "size": 522,
+      "sha256": "6e83279c6ea8ebe230fa9e47614d02e184ff8d23ff35c3476ae2aafa13f5e49b",
+      "sourceSha256": "76c7ba9ab388af173fc2a591c67e7a1ce9858a3c36af9d23e614b11f496d28d2"
+    },
+    {
+      "path": "frontend/bindingValidationNavigation.ts",
+      "size": 549,
+      "sha256": "35e96fc0e25131c64c8f04d680227e33c4a825e83d13ba5de436e4fed99e71d4",
+      "sourceSha256": "c5fa023ad8bbc2f714695ff589bc5a80ceaed35fffb2630d87038cb0c4ccdfbe"
+    },
+    {
+      "path": "frontend/CapabilityActionAuthoringPage.tsx",
+      "size": 107397,
+      "sha256": "8fceec729244e26e8ceb7ecfde248f38d5db8937a69d3ad7cad2d4f83c1dfb06",
+      "sourceSha256": "f1c97c2f3112e583d4dc7cf87a9300fa4b8bbe0f2be02f2f14ce43b298f569f6"
+    },
+    {
+      "path": "frontend/capabilityAuthoringDiff.ts",
+      "size": 11700,
+      "sha256": "bc2cd9beece3cdd6d638ab4ecd0a28206500a13267f94d67d5bbfc41da3a3d8a",
+      "sourceSha256": "c24484e7788307cfd3711b5996bf228771aadcb064435699930a478eb4b82bfc"
+    },
+    {
+      "path": "frontend/CapabilityCenterPage.tsx",
+      "size": 9678,
+      "sha256": "e28ec10cfd268cf0ba7adec00bde87c4533315d5fde7e0084ff5a78555e1f98e",
+      "sourceSha256": "629d699eefd5a13e60f642784aea938faf0aab51366829aa563cac04d57ee946"
+    },
+    {
+      "path": "frontend/capabilityClassification.ts",
+      "size": 1060,
+      "sha256": "c0b2a75a1da58248d8e4dbd27a50a83221b2d5b757d72910b3ff9297c35f0a1c",
+      "sourceSha256": "c0b2a75a1da58248d8e4dbd27a50a83221b2d5b757d72910b3ff9297c35f0a1c"
+    },
+    {
+      "path": "frontend/capabilityClientTechnicalDraft.test.ts",
+      "size": 8117,
+      "sha256": "6bc623a0fec23a7d5414627525e37c5b40a1086fba900e77103470dc8c6ed1b3",
+      "sourceSha256": "fdf24068b30f067a7925b0352c1ebc3e4023dff7b12bbd990b227cb9fb813e3b"
+    },
+    {
+      "path": "frontend/capabilityClientTechnicalDraft.ts",
+      "size": 6077,
+      "sha256": "a2c7c8a16ca7e973a9fb71ca6816b1a809a08d2b938f248d68ab0f362ecf16b3",
+      "sourceSha256": "a2c7c8a16ca7e973a9fb71ca6816b1a809a08d2b938f248d68ab0f362ecf16b3"
+    },
+    {
+      "path": "frontend/CapabilityClientTechnicalNavigation.tsx",
+      "size": 2799,
+      "sha256": "78a3ea3de985cd6aedf8cf75a40fc8a45e27f9d75309efa8ac48a80e954aca8b",
+      "sourceSha256": "6ceaefe08302c0ee40ab5d3e93c86d13ef500a86bf9186307ffb7b025a6b1a9d"
+    },
+    {
+      "path": "frontend/capabilityClientVariantLayout.test.ts",
+      "size": 3327,
+      "sha256": "c5d43a685c7ad18be7a80e3df80e5a5f303854d86987a7781db1090a47e12ffa",
+      "sourceSha256": "c5d43a685c7ad18be7a80e3df80e5a5f303854d86987a7781db1090a47e12ffa"
+    },
+    {
+      "path": "frontend/capabilityClientVariantLayout.ts",
+      "size": 2117,
+      "sha256": "f0b52d4968f8d7cf35846cd0270ed24e96e55124c8350ba97b5c7f4dddad0a76",
+      "sourceSha256": "f0b52d4968f8d7cf35846cd0270ed24e96e55124c8350ba97b5c7f4dddad0a76"
+    },
+    {
+      "path": "frontend/CapabilityClientVariantReview.tsx",
+      "size": 3650,
+      "sha256": "445106c6ca0fa3e3bb7c04c9cdeb8ea9f83483ef2799e836254e318768126e47",
+      "sourceSha256": "491e438f9576ea7758384d69cf3b6320c6168008d21894c4c895b54fa864ad07"
+    },
+    {
+      "path": "frontend/capabilityCreateChangeModel.test.ts",
+      "size": 2696,
+      "sha256": "ca765cf9494c2cfb8f7bafb899ec6ab85af7cc95f4db6dc20eb690cf9044a7d0",
+      "sourceSha256": "ca765cf9494c2cfb8f7bafb899ec6ab85af7cc95f4db6dc20eb690cf9044a7d0"
+    },
+    {
+      "path": "frontend/capabilityCreateChangeModel.ts",
+      "size": 1731,
+      "sha256": "590bfb90df9cd738830022fd9e62800f13dbb34a11f2ff26e1dbb2eb1edf803f",
+      "sourceSha256": "590bfb90df9cd738830022fd9e62800f13dbb34a11f2ff26e1dbb2eb1edf803f"
+    },
+    {
+      "path": "frontend/capabilityDraftLifecycle.test.ts",
+      "size": 18257,
+      "sha256": "4728e8d1ae90e514bc97e83b8796360567ca758376509d19610bd220ebd3e438",
+      "sourceSha256": "d28ef801e7b0536370f78b75ffbc9e5db7afb25b971ef1101ee38f48e7fc0e82"
+    },
+    {
+      "path": "frontend/capabilityDraftLifecycle.ts",
+      "size": 10090,
+      "sha256": "4556a87f22430bf3b8bdc3050afa295b3cb07762e7ada99719d832b490a5e176",
+      "sourceSha256": "aa78548627dfe8cd6bf602f2ca065f30913675670711b324099f8832610c070a"
+    },
+    {
+      "path": "frontend/CapabilityExecutionBindingEditor.tsx",
+      "size": 9459,
+      "sha256": "6c4c181caf0fd798b6e836dcd9f28101980ae8057d46869f0dd37c4f85f09b17",
+      "sourceSha256": "5c88159d703e8760a594851431f6285b2bac402397d02bda671d772a9a3721b8"
+    },
+    {
+      "path": "frontend/capabilityFormPatchAdapter.test.ts",
+      "size": 3588,
+      "sha256": "e9a40baa42444cecb9b7b90fc74b33afb880635964adc5845ae049689f80d192",
+      "sourceSha256": "cdfcda867f7dab72dde21bb98857f20a0548b01fe0319285b2aa116b0dedfe70"
+    },
+    {
+      "path": "frontend/capabilityFormPatchAdapter.ts",
+      "size": 3432,
+      "sha256": "22c8f53bb44d03bd3c1b5e36ee1019e07966809f13b7e8b4d3e5d2958ade2eb2",
+      "sourceSha256": "22c8f53bb44d03bd3c1b5e36ee1019e07966809f13b7e8b4d3e5d2958ade2eb2"
+    },
+    {
+      "path": "frontend/capabilityInputFieldContract.test.ts",
+      "size": 1386,
+      "sha256": "86f7e32d29d5237519fbf900eea9bfb8a151d96e7eb67e98b17308dcba2b7bfa",
+      "sourceSha256": "86f7e32d29d5237519fbf900eea9bfb8a151d96e7eb67e98b17308dcba2b7bfa"
+    },
+    {
+      "path": "frontend/capabilityInputFieldContract.ts",
+      "size": 3757,
+      "sha256": "3faef7a950b7dac92076265a1065b50cfa0a2b2a22c4464221699958ba2cb89c",
+      "sourceSha256": "e3b0a798a786f890ac1a4b3cccb9f4f9dd82dc8bee7e485e1a3ee0be35db94c6"
+    },
+    {
+      "path": "frontend/CapabilityInputSchemaEditor.tsx",
+      "size": 7223,
+      "sha256": "8e10c2b400fe894f2bca03c040f27de0bef49ef51c6c7739aac2cb047d62bc98",
+      "sourceSha256": "955eec4cab1ef9a5934a32997c14380d235336b58294b2fbdeca071361255786"
+    },
+    {
+      "path": "frontend/CapabilityPresentationComponents.tsx",
+      "size": 18592,
+      "sha256": "fade48e4ebc1c9b38f40fb4bc4783e8545059924cfc409ad55083484f06bb5e2",
+      "sourceSha256": "7bc9f0131eb668d74b0f2e755c0680cfd7c692fd0fddd1bc1198b7b3182524fb"
+    },
+    {
+      "path": "frontend/capabilityRpcContract.test.ts",
+      "size": 4096,
+      "sha256": "72714aa233b87620732b524189754f8ece01c9e91627f4e3329ef7277e0576ab"
+    },
+    {
+      "path": "frontend/cardContainerTemplate.ts",
+      "size": 229,
+      "sha256": "ed65f0b1bacbb249ecfc21ddb72d0216d8e841050acf9e40ec5d8397b936b528",
+      "sourceSha256": "ed65f0b1bacbb249ecfc21ddb72d0216d8e841050acf9e40ec5d8397b936b528"
+    },
+    {
+      "path": "frontend/ComponentAssetAuthoringPage.tsx",
+      "size": 57381,
+      "sha256": "485fcdb22d7dcaaba5999806b49ffbea6d598f62733bb395ccc7d2f82a51e2a5",
+      "sourceSha256": "fa72826d39d1f74522cd450c790ad6c5bc7e60ac93b5ef843fe1a3dd71953121"
+    },
+    {
+      "path": "frontend/ComponentAssetDetailPage.tsx",
+      "size": 34727,
+      "sha256": "7bb80c12cb143b6554d5dc7d69b741dc21c2a4c97c99c9a2481524794fddfd6e",
+      "sourceSha256": "247053a1f9313239d49521ff2caeb8cd02c875766ad7ccc8ddeaad30cc855ea3"
+    },
+    {
+      "path": "frontend/ComponentCenterPage.tsx",
+      "size": 24721,
+      "sha256": "a175c3e3561efb50626653f1cb5bea28523ffd43159ddd03219c3a793acfbf5a",
+      "sourceSha256": "16166ab3713912e1325c4bcd73ccdd29d5c583cca8ad4c7e3852f4b937dedb30"
+    },
+    {
+      "path": "frontend/componentFormPatchAdapter.ts",
+      "size": 5639,
+      "sha256": "a656ab984512fa8709cb5f661aacfce59cc1a0228fa76b8b8e270a70cf53818e",
+      "sourceSha256": "a656ab984512fa8709cb5f661aacfce59cc1a0228fa76b8b8e270a70cf53818e"
+    },
+    {
+      "path": "frontend/dependency-licenses.json",
+      "size": 40703,
+      "sha256": "1005e0d845252c350007d530ded52a950a7120eaea91fa47961210f2a9b95ee9"
+    },
+    {
+      "path": "frontend/employeesApi.ts",
+      "size": 1186,
+      "sha256": "55868a4e42ffe17a9343a3b6f5c857f27f1834c8a30cbd0fa8437d223390f520"
+    },
+    {
+      "path": "frontend/index.html",
+      "size": 271,
+      "sha256": "30d57f9e9bc8188c84ac60c8bbf38e287cb3cb29e08393e5e3183be854b650f7"
+    },
+    {
+      "path": "frontend/index.tsx",
+      "size": 198657,
+      "sha256": "7c6e70a7d7906cb501a4071d9c4320e9730f71a66b16ff680f0f98406203357b",
+      "sourceSha256": "2a393ec0d12d7c96970fd6c7787e5a396271794d5854cedf72ce808d2e373302"
+    },
+    {
+      "path": "frontend/main.tsx",
+      "size": 3295,
+      "sha256": "6e3b553756078ebce2128b58ec8b99bace364fee3f2681e48bccd017285eba10"
+    },
+    {
+      "path": "frontend/management.less",
+      "size": 114945,
+      "sha256": "9c55d415f9018e0c764498051fa1693ba04acb8ad9f11e20d25d27cbc8173b72"
+    },
+    {
+      "path": "frontend/package-lock.json",
+      "size": 138084,
+      "sha256": "e3e0ab834e43d89dd04532fea202deb692632256bd7d688afffd644941e5aeeb"
+    },
+    {
+      "path": "frontend/package.json",
+      "size": 889,
+      "sha256": "d2a2306abfcda2ce60d8dabc5f2fbe3c0600d47ecb1c3b4a71f5a23c54561cfb"
+    },
+    {
+      "path": "frontend/README.md",
+      "size": 3250,
+      "sha256": "7166ae7b7213ecd5d77994a39c9244a737e8141da16bc65875da2f4fbfbd5677"
+    },
+    {
+      "path": "frontend/scripts/run-tests.mjs",
+      "size": 640,
+      "sha256": "619f97d359f0660d049a84fb95366200ae60bab1c2ac25e795d030b29b767f03"
+    },
+    {
+      "path": "frontend/shared/AssetAccessContext.tsx",
+      "size": 2838,
+      "sha256": "1b98c80a8b8fd90a45bfcef5ae73a2ba9ed7bdc74974fd5d10ebe51207f82a21",
+      "sourceSha256": "1b98c80a8b8fd90a45bfcef5ae73a2ba9ed7bdc74974fd5d10ebe51207f82a21"
+    },
+    {
+      "path": "frontend/shared/AssetEnvironmentFacts.tsx",
+      "size": 4319,
+      "sha256": "bbd083742b88f49e8c183e29c8e20413f0b65b651862ce47e305f50e58198bdc",
+      "sourceSha256": "08ded1947cb593681269decb3ec5e517c50726195f729cd59047e5e125cf62eb"
+    },
+    {
+      "path": "frontend/shared/assetOwnerManagement.test.ts",
+      "size": 1974,
+      "sha256": "a5dc4bc1ce5ad00294fc7489a8148f5c0815b2bf08f3025c3ad59a669cb843ef",
+      "sourceSha256": "eef1d694bfb00e057ce1aa6baaa89cdeb14f423fbad69b2a937988b3fd9ec717"
+    },
+    {
+      "path": "frontend/shared/AssetOwnerManagement.tsx",
+      "size": 3106,
+      "sha256": "487e05885116139de34ad279692592a458203482fd644d86a48c1817f55fc307",
+      "sourceSha256": "5b59e7123446ce51d48d351d745c1ab0f4802edbbd5f5b76fc38ea6e5897a5c1"
+    },
+    {
+      "path": "frontend/shared/assetOwnerManagementModel.ts",
+      "size": 605,
+      "sha256": "335c156de8181760468995a8c6c7e66685c1a30bd1e8ed11f66f8e8abb8d279a",
+      "sourceSha256": "335c156de8181760468995a8c6c7e66685c1a30bd1e8ed11f66f8e8abb8d279a"
+    },
+    {
+      "path": "frontend/shared/AssetReleaseTab.grayDefaults.test.ts",
+      "size": 912,
+      "sha256": "b8c8a298f55e5917fb17beb6904735b7e350578dd517ff2533d58aaf6fa65850",
+      "sourceSha256": "0bcabdd64053e5ab1431e9221ca3941900a3da7de36e6703f5e4f638cf2e0a65"
+    },
+    {
+      "path": "frontend/shared/AssetReleaseTab.tsx",
+      "size": 39716,
+      "sha256": "560bcff729157cb419e27a8befc3738f79723e75f36a6902e03b1423886b7df1",
+      "sourceSha256": "9c30226e9d3ee131a8a26dc70d27cfd9c9811fdcb16da72a6d745ce280d2b775"
+    },
+    {
+      "path": "frontend/shared/authoringChangeReview/index.tsx",
+      "size": 3591,
+      "sha256": "df91df6d5cb155722b7bf02fb15002724a17d513095d64090cf9fe0fe2a5e449",
+      "sourceSha256": "f118cf18e60144f8f34f37b44e5623196c630317849ed93a6ba73bc8bff345f9"
+    },
+    {
+      "path": "frontend/shared/authoringChangeReview/patchProjection.test.ts",
+      "size": 2839,
+      "sha256": "b6be3f097c5ef9f9c621a70736de3ba2105bacfdbb1cb4170127a3d828d0e94b",
+      "sourceSha256": "09f05fbbf6357c3d431764b5735e74f0cfd2d7b909250e75f6881191419a043a"
+    },
+    {
+      "path": "frontend/shared/authoringChangeReview/patchProjection.ts",
+      "size": 3006,
+      "sha256": "aabca6071608e8fb925e96228a700f905bee631a0fa39ff306a7aba0a530000b",
+      "sourceSha256": "b252e5603c92404923cb4b39802c9212adcdefcea573e1f49ed59aab0d5a5246"
+    },
+    {
+      "path": "frontend/shared/authoringChat/adapters/a2uiApplicationAdapter.ts",
+      "size": 1889,
+      "sha256": "b52bda65ca0e58f9b99dd05dc867128685af8816d8f2301c3ce05b4497ac6e06",
+      "sourceSha256": "b52bda65ca0e58f9b99dd05dc867128685af8816d8f2301c3ce05b4497ac6e06"
+    },
+    {
+      "path": "frontend/shared/authoringChat/adapters/capabilityCenterAdapter.ts",
+      "size": 3696,
+      "sha256": "786346ac3ec0908e13593fadbefceb0403472c63adfa5f1aba6ad3f6d7df84c0",
+      "sourceSha256": "786346ac3ec0908e13593fadbefceb0403472c63adfa5f1aba6ad3f6d7df84c0"
+    },
+    {
+      "path": "frontend/shared/authoringChat/adapters/componentCenterAdapter.ts",
+      "size": 3106,
+      "sha256": "a8260ab47df54e2730d8f65d2b0ab64bf958f2d1b1fa84101240e0ae26c4ac3d",
+      "sourceSha256": "a8260ab47df54e2730d8f65d2b0ab64bf958f2d1b1fa84101240e0ae26c4ac3d"
+    },
+    {
+      "path": "frontend/shared/authoringChat/adapters/skillCodingAdapter.ts",
+      "size": 740,
+      "sha256": "dc6c6ab81eebec2f38b4441536663e220a528c3cb22c0d2816434e037b329a5c",
+      "sourceSha256": "dc6c6ab81eebec2f38b4441536663e220a528c3cb22c0d2816434e037b329a5c"
+    },
+    {
+      "path": "frontend/shared/authoringChat/index.tsx",
+      "size": 83563,
+      "sha256": "4c24a5e80caa59fbbd48583077b58ad3df18fd707b361df652df8ced1b861f59",
+      "sourceSha256": "d9ef2335480027f9220eae754348f1c18a29754afd78f12fe006574d01b196f7"
+    },
+    {
+      "path": "frontend/shared/authoringChat/operatorPresentation.test.ts",
+      "size": 2505,
+      "sha256": "f628c35a5b7ea504fb19ab8803f663e4fc90620aabdf3c22c89a460aa59862c7",
+      "sourceSha256": "f628c35a5b7ea504fb19ab8803f663e4fc90620aabdf3c22c89a460aa59862c7"
+    },
+    {
+      "path": "frontend/shared/authoringChat/operatorPresentation.ts",
+      "size": 2125,
+      "sha256": "30e02be94609d5d46426b3fbecbdb425a63b9986b2ff3954bd8cf1ba82dad385",
+      "sourceSha256": "30e02be94609d5d46426b3fbecbdb425a63b9986b2ff3954bd8cf1ba82dad385"
+    },
+    {
+      "path": "frontend/shared/authoringChat/runRecovery.test.ts",
+      "size": 2354,
+      "sha256": "3070ba6d5c28d8c6f16df7d30e5193d889c55323e34b8047dc719fc8aae2465f",
+      "sourceSha256": "3070ba6d5c28d8c6f16df7d30e5193d889c55323e34b8047dc719fc8aae2465f"
+    },
+    {
+      "path": "frontend/shared/authoringChat/runRecovery.ts",
+      "size": 1402,
+      "sha256": "cecb9b497ddb277133a7b2b4dabbef208be6ad4c1cf0db5496fd631dcc2aaae9",
+      "sourceSha256": "cecb9b497ddb277133a7b2b4dabbef208be6ad4c1cf0db5496fd631dcc2aaae9"
+    },
+    {
+      "path": "frontend/shared/authoringChat/toolResultProjection.test.ts",
+      "size": 2450,
+      "sha256": "e180339fd70580b96a4b219011a796753553593e1f7437996465fa9d1f3e43d9",
+      "sourceSha256": "e180339fd70580b96a4b219011a796753553593e1f7437996465fa9d1f3e43d9"
+    },
+    {
+      "path": "frontend/shared/authoringChat/toolResultProjection.ts",
+      "size": 2840,
+      "sha256": "c6781f7d55275b6e772d13c947758c3db866d9b0682cc4565c03bdc523905d65",
+      "sourceSha256": "c6e1638114fe7a2fc67c4f85170947bd2c74ad6335c1a7bf735d5319b4cbad4e"
+    },
+    {
+      "path": "frontend/shared/authoringChat/transport.ts",
+      "size": 567,
+      "sha256": "37aa215099107ee3d8aaeeff0e898a0744f03740a388e357bc5c52cd43389cc3",
+      "sourceSha256": "37aa215099107ee3d8aaeeff0e898a0744f03740a388e357bc5c52cd43389cc3"
+    },
+    {
+      "path": "frontend/shared/authoringChat/types.ts",
+      "size": 422,
+      "sha256": "1ab6a616d57ba1415ffa868a41a1c1b5fa2d228ddfdc71045f41346fd82ca3ff",
+      "sourceSha256": "1ab6a616d57ba1415ffa868a41a1c1b5fa2d228ddfdc71045f41346fd82ca3ff"
+    },
+    {
+      "path": "frontend/shared/authoringFormPatch/FormPatchReview.tsx",
+      "size": 5644,
+      "sha256": "60d9508b2cb6204e817984bf9de00c1c7f1f3e5162c7ceae581326277eac61fe",
+      "sourceSha256": "fb7ef76d246c4c250022779e939d07e4ee061b8e1e4a0f202e27bfc34a807332"
+    },
+    {
+      "path": "frontend/shared/authoringFormPatch/index.test.ts",
+      "size": 3871,
+      "sha256": "f102cbf4fa7290d6b77d932ee5fc804d4d0c04e516d0c026a94d6ca64e7216b6",
+      "sourceSha256": "f102cbf4fa7290d6b77d932ee5fc804d4d0c04e516d0c026a94d6ca64e7216b6"
+    },
+    {
+      "path": "frontend/shared/authoringFormPatch/index.ts",
+      "size": 11924,
+      "sha256": "67260ab93b454250b226cfbdd6b0250d51f09537076416a519aecaba81d7c23b",
+      "sourceSha256": "67260ab93b454250b226cfbdd6b0250d51f09537076416a519aecaba81d7c23b"
+    },
+    {
+      "path": "frontend/shared/AuthoringWorkbenchLayout.tsx",
+      "size": 762,
+      "sha256": "4a9638e28e4da619658ad7b9b52124f737ffa9769942c5f60854f0ae8a97206d",
+      "sourceSha256": "bb07a1feb783f6c637831954ae8fd0f70c698b4dc9181485c3669a43702aaa05"
+    },
+    {
+      "path": "frontend/shared/capabilityDisplayText.ts",
+      "size": 1066,
+      "sha256": "9e234f40f2c5dbde8150517f6aa38a32b41bc934ef30d3f0be315c744b561dcf",
+      "sourceSha256": "ad24fa60af6febe2fe1cee18d1bfcf43b8e52823231bd396da37a8dfb9070968"
+    },
+    {
+      "path": "frontend/shared/diff/PatchDiffPreview.tsx",
+      "size": 3315,
+      "sha256": "fc534b0357d3ded9c64f9ccf69c49e9e3ea7a3e1cfecd844ddeb983c67228cc8",
+      "sourceSha256": "fc534b0357d3ded9c64f9ccf69c49e9e3ea7a3e1cfecd844ddeb983c67228cc8"
+    },
+    {
+      "path": "frontend/shared/diff/UnifiedDiffCode.tsx",
+      "size": 1223,
+      "sha256": "7628a0f4327150173aebbd399faa2632444a229180cb7b7f48da4a8479d9522e",
+      "sourceSha256": "7628a0f4327150173aebbd399faa2632444a229180cb7b7f48da4a8479d9522e"
+    },
+    {
+      "path": "frontend/shared/DynamicCardContainerPreview.tsx",
+      "size": 4229,
+      "sha256": "ae5a1cb8e248ad71516a4564a82dbf8f8890be61e38c157d1191cc4f2af90de0",
+      "sourceSha256": "9fd7058ea2d0708e135b08543d833aabe84f2f034527700f5ff555ed61b300e2"
+    },
+    {
+      "path": "frontend/shared/DynamicComponent.test.ts",
+      "size": 1316,
+      "sha256": "6021fb49acd0f67383fc368161e41f676f18a43c73d0eabcc5b219ca3820fa20"
+    },
+    {
+      "path": "frontend/shared/DynamicComponent.tsx",
+      "size": 5220,
+      "sha256": "535c6b6b3cd9546513ce25d1d29d992ec7fc5e17d87088cee3cbb669ace8d7bb"
+    },
+    {
+      "path": "frontend/shared/JsonFormatTextArea.tsx",
+      "size": 4789,
+      "sha256": "c763c9677bf391bc99e018d7452f29054cb7ea20bf84e562b18f002e699b863a",
+      "sourceSha256": "1df3ea29d581a95db888667385655bb9035aa2d187d5c6ccd485242f263901f9"
+    },
+    {
+      "path": "frontend/shared/managementAuthoringPolicy.test.ts",
+      "size": 2720,
+      "sha256": "b3fbe49cf3bccf616dbd17bf3c87c0f47fdb56a29d303d9948ccdd8eb4d34435"
+    },
+    {
+      "path": "frontend/shared/managementAuthoringPolicy.ts",
+      "size": 454,
+      "sha256": "5e781c974db08b3fa28f894142ff99036e6e06f645ede7841125a767610c2712"
+    },
+    {
+      "path": "frontend/shared/PreviewImage.tsx",
+      "size": 334,
+      "sha256": "f99b934209b0215c548ee308cdfe5c2fe4ed7b81d11819683499d87d0c4684a1"
+    },
+    {
+      "path": "frontend/shared/releaseDiff/ReleaseDiffViewer.tsx",
+      "size": 12134,
+      "sha256": "0b3da462424e4d03ec1528dbb17142665afa50b1452b544ed5aef07cc63654b6",
+      "sourceSha256": "4dacf7cf97122fa91243e85550279814199809df1d00e75612c989b64272ed84"
+    },
+    {
+      "path": "frontend/shared/releaseOperationFeedback.test.ts",
+      "size": 2017,
+      "sha256": "e482a94b7c735fd283fec0a80c403a4d7787c61adacbf25446cae0959ca8ca43",
+      "sourceSha256": "fb90a760304a8d9019f3774b4941b5270044fd3589f1ccb8c01abba7550009d9"
+    },
+    {
+      "path": "frontend/shared/releaseOperationFeedback.ts",
+      "size": 1912,
+      "sha256": "284ac7d5c893cefaf653ca4c1b76e8844b44f5b28b9e3484b5af518463bd3232",
+      "sourceSha256": "b16825dd3f35f080f2a782e578e67510f2ebbee1e4b510ab1f43eca3c56d4eed"
+    },
+    {
+      "path": "frontend/shared/safeJson.ts",
+      "size": 211,
+      "sha256": "6b3de18ebe654e6d4b43faed2c43ca9e81d8274de8691de7cd6daee9eee068d0"
+    },
+    {
+      "path": "frontend/shared/specialistOptions.ts",
+      "size": 1399,
+      "sha256": "365145a16884bba9d1b6a3d85ce2ac4018b8ce63476aee11176e49f616e86a52",
+      "sourceSha256": "365145a16884bba9d1b6a3d85ce2ac4018b8ce63476aee11176e49f616e86a52"
+    },
+    {
+      "path": "frontend/shared/useAssetReleaseEditability.ts",
+      "size": 2066,
+      "sha256": "94f31a3197ef9c71423a5bea91dde72c01f30562fd0c0e4f92d2f83ed3130b87",
+      "sourceSha256": "94f31a3197ef9c71423a5bea91dde72c01f30562fd0c0e4f92d2f83ed3130b87"
+    },
+    {
+      "path": "frontend/shared/userIdWhitelist.test.ts",
+      "size": 560,
+      "sha256": "cc53af2d7a990164def03c21f08ad4db8b651ac99d3c8f126752a05cdf8c32d9"
+    },
+    {
+      "path": "frontend/shared/userIdWhitelist.ts",
+      "size": 553,
+      "sha256": "38e9ff3f7c2124606a290bd428127e21781d5037aa22831b2ec5c3b0c5ba1609"
+    },
+    {
+      "path": "frontend/SkillResultPreviewPage.tsx",
+      "size": 15291,
+      "sha256": "18ce1de3759be6d4180e1ee679735c798c99e16982800193754d1f9687e36489",
+      "sourceSha256": "645cee65d9629d3741f995246dab8e79fd01363cf0ce88f651569eb430c1d77f"
+    },
+    {
+      "path": "frontend/specialistPrtDebug.test.ts",
+      "size": 2669,
+      "sha256": "79d16fb02ab11da607fa85b360d3461f98552f6a8e9c80627c4400424089fa40",
+      "sourceSha256": "5df21b688d043d278c25f8de92911daef65a9fd427c9cb459a80ad725a6c5ac5"
+    },
+    {
+      "path": "frontend/specialistPrtDebug.ts",
+      "size": 3077,
+      "sha256": "bc58518173451a66ee4877136e71202947f89f075b7ae06981730b93592a76ab",
+      "sourceSha256": "13039bf497058211f19af2115b401a69f47fda0bce2881c4da42f532de6d6fc0"
+    },
+    {
+      "path": "frontend/tsconfig.json",
+      "size": 424,
+      "sha256": "bc23ead8e2de45462cbff2a409b78c7a861ed75abb9ae6e036c37d3c3e901761"
+    },
+    {
+      "path": "frontend/types.ts",
+      "size": 9557,
+      "sha256": "a2bb3d943bd1088e99cefd6d6fcd75f1ab55524462a017d29c431646cde62bae",
+      "sourceSha256": "9b91b9592aa8be7a56572690c779c4449af290ee1c9fc258f129d7eab0e98d78"
+    },
+    {
+      "path": "frontend/VALIDATION.md",
+      "size": 3085,
+      "sha256": "b1ea84eba89189f55389534631649bb1fc6fd20f0be440aceff7dd8774bdf5a0"
+    },
+    {
+      "path": "frontend/workflow/model.ts",
+      "size": 28826,
+      "sha256": "0b84ded4ccb3febb393ccad6b22758a69df2ed6c0fa8aea1bf6e2975890d2a4d",
+      "sourceSha256": "a4a37d77c906495b33c61e99d9302bb586906c10a8ac97a6262c83f144619684"
+    },
+    {
+      "path": "frontend/workflow/types.ts",
+      "size": 4654,
+      "sha256": "61d613e42b74856ce71ab13e6ccfa4df816ae780aee12136cc8e965521082fde",
+      "sourceSha256": "61d613e42b74856ce71ab13e6ccfa4df816ae780aee12136cc8e965521082fde"
+    },
+    {
+      "path": "frontend/workflow/workflowApi.ts",
+      "size": 2797,
+      "sha256": "30b83fdf43edc43783a848c7a8fc0827ae2a5aa0e89a9d2d2b8a254f356c8f60",
+      "sourceSha256": "17ee3c05aadf0347b300f556cc49728399a695f1539484449f91c471a1d8c80a"
+    },
+    {
+      "path": "frontend/workflow/workflowAuthoringExtensions.less",
+      "size": 1284,
+      "sha256": "b091c3aeff032aecf8edd9d97da7058c82db9f0c7b04c29f11e6baeeb7daca23",
+      "sourceSha256": "b091c3aeff032aecf8edd9d97da7058c82db9f0c7b04c29f11e6baeeb7daca23"
+    },
+    {
+      "path": "frontend/workflow/WorkflowCanvas.tsx",
+      "size": 6509,
+      "sha256": "0d14671e7c55c83eb85d73735da06cccfbabef79dc2892a2138055b0c53ff51e",
+      "sourceSha256": "e589afcbcc6e9efdad49ea49639679a4150beb481fe319a43bcc0b96e3298f56"
+    },
+    {
+      "path": "frontend/workflow/WorkflowCatalog.tsx",
+      "size": 5610,
+      "sha256": "1688c2f5fbbdf996589ea7067cd620045ce8921660c804137e2e937f300632b9",
+      "sourceSha256": "f75433155cbf539042bb25f5ab5f4b4c80448cc6c7cdcae6e68093beb96e3266"
+    },
+    {
+      "path": "frontend/workflow/WorkflowInspector.tsx",
+      "size": 16096,
+      "sha256": "39b5581ee3d223251713967f525dcebc7816a8193d770bf3556841f829355b01",
+      "sourceSha256": "55410ca6475f616752d3c5509282e9136b5d01b6f81def51a651e8cf64341bbe"
+    },
+    {
+      "path": "frontend/workflow/workflowList.less",
+      "size": 3327,
+      "sha256": "361add64065f8b978257494a50203d8b0e158e56e1214320d15bf321918c4384",
+      "sourceSha256": "361add64065f8b978257494a50203d8b0e158e56e1214320d15bf321918c4384"
+    },
+    {
+      "path": "frontend/workflow/WorkflowListPage.tsx",
+      "size": 13604,
+      "sha256": "e1731dace8b3a9b6ae21d421c967af71ffd6232bbc1312a7df2555c0cee242fa",
+      "sourceSha256": "1c575b86c1dc408f1fb9530c5469174550ee38a696fb9a82f3ff1abaefb5156f"
+    },
+    {
+      "path": "frontend/workflow/workflowOrchestration.less",
+      "size": 10230,
+      "sha256": "7da84881178f5f9d47809d9fc8a591ead7c3e6850720b5bdff19300e0214a8e1",
+      "sourceSha256": "7da84881178f5f9d47809d9fc8a591ead7c3e6850720b5bdff19300e0214a8e1"
+    },
+    {
+      "path": "frontend/workflow/WorkflowOrchestrationPage.tsx",
+      "size": 15370,
+      "sha256": "eb961c415ecc2f95645a6bd6a84b0f8f9e3fbaefca7d1f8aa2d9463ea1d3f197",
+      "sourceSha256": "694672ddff4cca1373b171f797fd6d0b659ab19cd9a760dc2a2a8550dffffa88"
+    },
+    {
+      "path": "frontend/workflow/WorkflowParallelInspector.tsx",
+      "size": 6068,
+      "sha256": "7867d344e11ca8fdea003c6a4283e4526758a16bc420022cecbabf0b860287b6",
+      "sourceSha256": "7f1b74ff95c779d1d3f794112535163e05171aabef9f2a9ecf66c7cbd4325c9c"
+    },
+    {
+      "path": "frontend/workflow/workflowQuickTrigger.test.ts",
+      "size": 3250,
+      "sha256": "4a6eea1670106901859f68a900731a7e6a92e3da3f147ccaf7806f4f38231699",
+      "sourceSha256": "f36bfe36dbb90646a49235241013fb0202d7fd8e164f0bd758cb823634a87049"
+    },
+    {
+      "path": "frontend/workflow/workflowReleaseOverviewRefreshUx.test.ts",
+      "size": 690,
+      "sha256": "afc2ab042a4bdf633b0e31d67bf8515410780c799f73ca3e67c82b3b992b6fe2",
+      "sourceSha256": "89ac81fb9a4618238ba25001d683c2795160013750d8f76a60a3c61752cb7309"
+    },
+    {
+      "path": "frontend/workflow/WorkflowRouterInspector.tsx",
+      "size": 7873,
+      "sha256": "dafab166d9df36b8c359a1fe7808cb3358537ed5f4ac55645122386b7f66830a",
+      "sourceSha256": "9cbab7708f729b572c42aff5ffac98dd535cea9669894b2c5aa5329b96bf6f14"
+    },
+    {
+      "path": "frontend/workflow/workflowSkillNodeActionsUx.test.ts",
+      "size": 1521,
+      "sha256": "2c17a41370936033c8c90684704370d2cfd6f1ddb19e08e935cde286f25c66bb",
+      "sourceSha256": "8c6986bdca1808975338d1389889b1933c9beb8a8c198e4ce0bffefd8427ec7e"
+    },
+    {
+      "path": "frontend/workflow/workflowSkillNodeMutations.test.ts",
+      "size": 10160,
+      "sha256": "16e7c55722dda413c1cdfaed27edf6a90e44339f8feb360af4da5fcbccdf169a",
+      "sourceSha256": "16e7c55722dda413c1cdfaed27edf6a90e44339f8feb360af4da5fcbccdf169a"
+    },
+    {
+      "path": "frontend/workflow/workflowSummaryAdvice.test.ts",
+      "size": 5799,
+      "sha256": "008ed0bb9feba831a66bf2075af4adfa5b72f4e6c0317bd8f6b1bd1a75355f28",
+      "sourceSha256": "4d47bdbf7acf80a5046a5891b114a11dcd4517ba66bf66ceecf22b82b77861a2"
+    },
+    {
+      "path": "frontend/workflow/workflowValidation.ts",
+      "size": 9109,
+      "sha256": "a370fcfafb2324a8bca5c4b84b10754b61e4144138c2ad77bef78bf54fc32d2d",
+      "sourceSha256": "a370fcfafb2324a8bca5c4b84b10754b61e4144138c2ad77bef78bf54fc32d2d"
+    },
+    {
+      "path": "frontend/workflow/workflowViewModel.ts",
+      "size": 909,
+      "sha256": "2be1e56c67b3e4baa24951d2aba79d2c3844dda596682ec1940ecd938ed73514",
+      "sourceSha256": "2be1e56c67b3e4baa24951d2aba79d2c3844dda596682ec1940ecd938ed73514"
+    },
+    {
+      "path": "frontend/workspaceResetSource.test.ts",
+      "size": 1808,
+      "sha256": "43b81e9490f89960e03e5e051a3a1af3f9db325e4a1876580c80fee1da2b2f30",
+      "sourceSha256": "43b81e9490f89960e03e5e051a3a1af3f9db325e4a1876580c80fee1da2b2f30"
+    },
+    {
+      "path": "frontend/workspaceResetSource.ts",
+      "size": 3413,
+      "sha256": "13b2f85bc1a359e11ba7a959f249df436933992f718669a248c0c0209bd9f962",
+      "sourceSha256": "13b2f85bc1a359e11ba7a959f249df436933992f718669a248c0c0209bd9f962"
+    },
+    {
+      "path": "frontend/workspaceZipDownload.test.ts",
+      "size": 782,
+      "sha256": "c68536e1b732ea7120fe1dc4fcb5a7b14f0bb64ac120db8bcf8588c15918cf2e",
+      "sourceSha256": "c68536e1b732ea7120fe1dc4fcb5a7b14f0bb64ac120db8bcf8588c15918cf2e"
+    },
+    {
+      "path": "frontend/workspaceZipDownload.ts",
+      "size": 1450,
+      "sha256": "a840296d955179215a0a9ef9a7f40eddb8b0d1cd339ecce1dc3e8c563f75a054",
+      "sourceSha256": "a840296d955179215a0a9ef9a7f40eddb8b0d1cd339ecce1dc3e8c563f75a054"
+    },
+    {
+      "path": "INTEGRATION-GAPS.md",
+      "size": 12139,
+      "sha256": "13b1b74e20e3ab15c8924b360f4ec05d2af19be24f3cce0ef33cc603deefdd86"
+    },
+    {
+      "path": "INTEGRATION-GAPS.zh-CN.md",
+      "size": 10985,
+      "sha256": "538f55d593199dff7b28c1d5565215f53feb2766954c896bcadef1e69400f984"
+    },
+    {
+      "path": "lombok.config",
+      "size": 66,
+      "sha256": "0ceeaecd4ed622ceb80c2eb7fa56eefc06bd0b30e8bf9090af008f7d3b9cd152"
+    },
+    {
+      "path": "MANUAL-MODE.zh-CN.md",
+      "size": 8452,
+      "sha256": "02f20da2295f4195d736add382310fbb734c2f19acfc197527dfb516234f15b8"
+    },
+    {
+      "path": "pom.xml",
+      "size": 6994,
+      "sha256": "6bd12f127b04131d192bf0a6f62ad450155e002e86315ee2f502218fe74661c8"
+    },
+    {
+      "path": "proto/a2flow/a2ui/v1/a2ui.proto",
+      "size": 2821,
+      "sha256": "e6238e1cded9c3164e1b7a4d528348965695aadda80607558c471e12e9fe03f4"
+    },
+    {
+      "path": "proto/a2flow/capability/v1/capability.proto",
+      "size": 1544,
+      "sha256": "ed6fb8e61545681d43aff983a9e13e2fb3c74d843736a0a59f4507c2ad1c2161"
+    },
+    {
+      "path": "publication-bridge/bridge.py",
+      "size": 16475,
+      "sha256": "264f1bf1e13c433f250cd577bbb7d296f518cd66ffef5ad6ba0ceb406429e392"
+    },
+    {
+      "path": "publication-bridge/migrations/V001__publication_receipts.sql",
+      "size": 404,
+      "sha256": "24278604ce419a771e867d74ad4684953de721f1abc43fa529ceb1906288471f"
+    },
+    {
+      "path": "publication-bridge/README.md",
+      "size": 4244,
+      "sha256": "0eda507faa62cda677989c1c6f946abc82f6987c5345d27d6b45036778d9995b"
+    },
+    {
+      "path": "publication-bridge/run-local-tests.sh",
+      "size": 1330,
+      "sha256": "20716f476c1771b3b7c15f49cf6693d1448b5492bb03b9103af838b532deb1f4"
+    },
+    {
+      "path": "publication-bridge/runtime_assets.py",
+      "size": 5561,
+      "sha256": "f66caf99194286d03539f4352e11f4f985cd7f85ddc7a8ec1b4df5553bdec14f"
+    },
+    {
+      "path": "publication-bridge/test_publication.py",
+      "size": 12284,
+      "sha256": "3378c740e2471f95b46d2fca3cf18121537f339048fc520c527cb50bf31a8873"
+    },
+    {
+      "path": "publication-bridge/VERIFICATION.md",
+      "size": 1941,
+      "sha256": "a9198fac7e5ef47fc40f6fd5811ea9486b70cb0bf2effc60cc8aba36d1060215"
+    },
+    {
+      "path": "README.md",
+      "size": 2054,
+      "sha256": "03bae9c1ba9a61c6980ac6306f7a9dbf3387b9eef78d6ba4b03bbbbb16b4986a"
+    },
+    {
+      "path": "RPC-CHAT.zh-CN.md",
+      "size": 6471,
+      "sha256": "d7246c68df922e29cc5113c8da4d15396b7a2fb039d70af14b43ac9521dbb705"
+    },
+    {
+      "path": "tests/host/http-smoke.mjs",
+      "size": 6711,
+      "sha256": "0c5b629c1c294a3ac1472e7a62092f95897e7e3a20e1c60a1440d5392af60379"
+    },
+    {
+      "path": "tests/host/management.json",
+      "size": 234,
+      "sha256": "365263f80ce9804ab1d93bc5e08af852f97052e67843e14e39d5e3e8048a9483"
+    },
+    {
+      "path": "tests/host/run-local.sh",
+      "size": 3188,
+      "sha256": "2441db6c8452ea444d3b2f1e8aca0002fa8eb50261ce519fcf889fe99634f7e4"
+    },
+    {
+      "path": "tests/runtime/A2uiAdapterSmoke.java",
+      "size": 6626,
+      "sha256": "f532732885360fd87e72823bdf28fb79c0bac7873993fed8dfa628e8c14d7991"
+    },
+    {
+      "path": "tests/runtime/A2uiFacadeSmoke.java",
+      "size": 11347,
+      "sha256": "1e78d8a542c5434788df7b8aa851887428efd1c8518fee8b6937ae2e3bcb36b3"
+    },
+    {
+      "path": "tests/runtime/A2uiMappingSmoke.java",
+      "size": 5989,
+      "sha256": "602a4718e46a0c0b4cb3f894f8847b4bba57b5738e67508fed19f49cde744a7b"
+    },
+    {
+      "path": "tests/runtime/m-authoring-rpc.mjs",
+      "size": 14989,
+      "sha256": "b5d83153cb56942841c3c09121784da6755b719c81b0ab56e0e19b923fffe859"
+    },
+    {
+      "path": "tests/runtime/management.json",
+      "size": 415,
+      "sha256": "76e1def7faa0277b8feaf037807f7ee9e1a15c89bc591aecee4311bd5dddb07a"
+    },
+    {
+      "path": "tests/runtime/prepare-integration.py",
+      "size": 3620,
+      "sha256": "2513fe961f8ddbef0b5afe8e5cacb4cec526632bf62da3dce55e0b383001d6ec"
+    },
+    {
+      "path": "tests/runtime/run-chat-rpc-integration.sh",
+      "size": 5796,
+      "sha256": "b87ebce7c1d1f3a5c02e8f10c925c9f8a6913a569d9e0830b8671015e7f62f31"
+    },
+    {
+      "path": "tests/runtime/SyntheticBusinessGrpc.java",
+      "size": 5545,
+      "sha256": "cbb2f1d204fcace634c4ee20459d0f4ce08b907d479b558e857ae7a2976e77d1"
+    },
+    {
+      "path": "tests/runtime/VERIFICATION.zh-CN.md",
+      "size": 1161,
+      "sha256": "26745cdd2a94737648d4ff0c5dd95cb9a530e7fda44d386c1f6ffddbb33c1bd8"
+    }
+  ],
+  "findings": [],
+  "excludedLocalOnly": [
+    "backend/.DS_Store",
+    "backend/agentcore/domain/AgentService.java",
+    "backend/aicoding/engine/SkillFactoryAiCodingModelClient.java",
+    "backend/aicoding/run/SkillFactoryRunControlService.java",
+    "backend/aicoding/tool/skill/SkillFactoryLabRuntimeQueryClient.java",
+    "backend/aicoding/tool/skill/SkillFactoryReleaseReadinessInspectionService.java",
+    "backend/approval/AgentApprovalService.java",
+    "backend/approval/AgentApprovalStatusEnum.java",
+    "backend/config/AiCodingApprovalConfig.java",
+    "backend/config/SkillFactoryPublishConfig.java",
+    "backend/config/SkillFactoryReleaseApprovalConfig.java",
+    "backend/config/kconf/SkillFactoryBooleanConfigKey.java",
+    "backend/config/kconf/SkillFactoryJsonConfigKey.java",
+    "backend/config/kconf/SkillFactoryJsonMapConfigKey.java",
+    "backend/config/kconf/SkillFactoryStringConfigKey.java",
+    "backend/entry/rpc/SkillFactoryServiceImpl.java",
+    "backend/lifecycle/publish/SkillFactoryAgentSkillClient.java",
+    "backend/lifecycle/publish/SkillFactoryBlobStoreClient.java",
+    "backend/lifecycle/publish/SkillFactoryExternalPublishService.java",
+    "backend/lifecycle/publish/SkillFactoryLangBridgeClient.java",
+    "backend/release/approval/AssetReleaseApprovalService.java",
+    "backend/release/approval/KwaiFlowApprovalCallbackContent.java",
+    "backend/release/approval/ReleaseApprovalExecution.java",
+    "backend/release/approval/ReleaseApprovalMode.java",
+    "backend/release/approval/ReleaseApprovalStatus.java",
+    "backend/release/approval/ReleaseApprovalSubmission.java",
+    "backend/release/approval/SkillFactoryReleaseApprovalConsumer.java",
+    "backend/storage/db/entity/AgentPendingApprovalDO.java",
+    "backend/storage/db/entity/SkillAssetReleaseApprovalDO.java",
+    "backend/storage/db/mapper/AgentPendingApprovalMapper.java",
+    "backend/storage/db/mapper/SkillAssetReleaseApprovalMapper.java",
+    "backend/storage/db/repository/AgentPendingApprovalRepository.java",
+    "backend/storage/db/repository/SkillAssetReleaseApprovalRepository.java"
+  ],
+  "removedAfterInitialCopy": [
+    "backend/agentcore/runtime/tool/CapabilityHttpTransport.java",
+    "backend/agentcore/runtime/tool/OkHttpCapabilityHttpTransport.java",
+    "backend/lifecycle/publish/SkillFactoryExternalPublishResult.java",
+    "backend/model/CapabilityHttpTransportRequest.java",
+    "backend/model/CapabilityHttpTransportResponse.java",
+    "backend/storage/db/entity/AgentHumanDecisionDO.java",
+    "backend/storage/db/mapper/AgentHumanDecisionMapper.java",
+    "backend/storage/db/repository/AgentHumanDecisionRepository.java",
+    "frontend/capabilityClusters.ts"
+  ],
+  "excludedDirectories": [
+    "node_modules",
+    "dist",
+    "target",
+    ".git",
+    "__pycache__",
+    ".pytest_cache"
+  ],
+  "acceptance": "Source transfer only. Not deployed or end-to-end accepted."
+}

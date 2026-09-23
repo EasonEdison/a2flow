@@ -243,6 +243,31 @@ class ChatCardContract:
 
 
 class OfflineChatCardTests(ChatCardContract, unittest.TestCase):
+    def test_rpc_display_action_persists_snapshot_and_private_session_atomically(self):
+        base = prepared(interactive=False)
+        display = base.display()
+        display["protocolProfile"] = "a2flow.java-rpc.v1"
+        display["snapshotMessages"] = [{"surface": "before"}]
+        display["actions"] = [{"surfaceId": "main", "componentId": "button", "actionName": "save"}]
+        value = PreparedApplication(base.application_key, base.application_version, False, json.dumps(display))
+        private = metadata(self.conversation)
+        private.update(applicationKey=base.application_key, applicationVersion=base.application_version,
+                       rpc={"session": {"token": "private-session"}})
+        saved = self.store.save(self.owner, self.conversation, value, private)
+        inputs = {"surfaceId": "main", "sourceComponentId": "button", "context": {"amount": "9223372036854775807"}}
+        claim = self.store.claim(self.owner, self.conversation, saved["cardId"], "rpc-request", "save", inputs, 0)
+        self.assertTrue(claim["dispatch"])
+        display["snapshotMessages"] = [{"surface": "after"}]
+        value = PreparedApplication(base.application_key, base.application_version, False, json.dumps(display))
+        done = self.store.finish(self.owner, self.conversation, saved["cardId"], "rpc-request", {"saved": True},
+                                 True, False, prepared=value, binding_metadata=private)
+        self.assertEqual(done["status"], "DISPLAY_ONLY")
+        self.assertEqual(done["display"]["snapshotMessages"], [{"surface": "after"}])
+        self.assertNotIn("private-session", json.dumps(done))
+        self.assertEqual(self.store.replay(self.owner, self.conversation, saved["cardId"],
+                                          "rpc-request", "save", inputs, 0), done)
+        self.assertEqual(self.store.get_binding(self.owner, self.conversation, saved["cardId"])["metadata"], private)
+
     def make_store(self):
         self.memory = MemoryStorage()
         return ChatCardStore("unused-test-dsn", environment="PRT",

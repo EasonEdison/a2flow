@@ -1,5 +1,6 @@
-import json
 """Single-snapshot environment-local resolution. Never invokes model or Tools."""
+import json
+from typing import Any
 from skill_registry import (
     CatalogPort, MaterialPort, SkillMaterial, TrustedResolutionEvidence,
 )
@@ -8,6 +9,8 @@ from skill_registry import TrustedContext as RegistryContext
 
 from .records import (
     KINDS,
+    Asset,
+    Bundle,
     AssetError,
     ResolvedAbility,
     ResolvedWorkflow,
@@ -28,7 +31,7 @@ def owner_context(value):
 
 class AssetReader(CatalogPort, MaterialPort):
     """Namespace and physical environment are injected by the trusted host."""
-    def __init__(self, repository, namespace):
+    def __init__(self, repository: Any, namespace: str) -> None:
         self.repository = repository
         self.namespace = globals()["namespace"](namespace)
 
@@ -41,7 +44,7 @@ class AssetReader(CatalogPort, MaterialPort):
             raise AssetError("DESTINATION_MISMATCH")
         return owner, bundle
 
-    def _resolve(self, bundle, owner, kind, key):
+    def _resolve(self, bundle: Bundle, owner: TrustedContext, kind: str, key: str) -> tuple[Asset, str]:
         states = [s for s in bundle.serving if (s["kind"], s["key"]) == (kind, key)]
         if len(states) != 1:
             raise AssetError("ASSET_NOT_FOUND")

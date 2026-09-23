@@ -11,6 +11,7 @@ from capability_registry import AbilityDefinitionValidator, SharedResultPolicySe
 from .records import (
     Asset, AssetError, Bundle, KINDS, MAX_ASSETS, canonical, closed, digest,
 )
+from .java_runtime import application_abilities, is_java_asset, validate_java_asset
 
 _NAMESPACE = re.compile(r"[a-z][a-z0-9-]{0,63}")
 
@@ -91,6 +92,9 @@ class BundleValidator:
         self.component_validator = component_validator
 
     def validate_definition(self, kind, key, definition):
+        if is_java_asset(definition):
+            validate_java_asset(kind, key, definition)
+            return
         if kind == "SKILL":
             entries(definition)
         elif kind == "ABILITY":
@@ -229,6 +233,14 @@ class BundleValidator:
             document = asset.document
             declared = {(d["kind"], d["key"]) for d in document["dependencies"]}
             application = asset.definition
+            if is_java_asset(application):
+                required = {("ABILITY", code) for code in application_abilities(application, asset.key)}
+                if not required <= declared:
+                    raise AssetError("MISSING_ABILITY_BINDING")
+                # Catalog validity is frozen by the Java compiler; this layer
+                # retains its complete artifact rather than recompiling v0.9.1
+                # through the old MVP four-component validator.
+                continue
             component = application["asset"]["componentCatalogRef"]
             if ("COMPONENT", component) not in declared:
                 raise AssetError("MISSING_COMPONENT_BINDING")
@@ -274,6 +286,8 @@ class BundleValidator:
                     (*identity, selected_version(state, user)))
                 if application is None:
                     raise AssetError("SERVING_DEPENDENCY_MISMATCH")
+                if is_java_asset(application.definition):
+                    continue
                 catalog_key = application.definition["asset"]["componentCatalogRef"]
                 catalog_state = state_by_key.get(("COMPONENT", catalog_key))
                 if catalog_state is None:

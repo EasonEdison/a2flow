@@ -125,12 +125,18 @@ services:
       A2FLOW_BSIDE_BROWSER_ORIGIN: ${A2FLOW_BSIDE_BROWSER_ORIGIN:?set the exact browser origin}
       A2FLOW_BSIDE_SESSION_SECONDS: ${A2FLOW_BSIDE_SESSION_SECONDS:-7200}
       A2FLOW_BSIDE_RUNTIME_URL: http://127.0.0.1:8765
+      A2FLOW_ENGINE_RPC_TARGET: ${A2FLOW_ENGINE_RPC_TARGET:?set the Java runtime gRPC endpoint}
+      A2FLOW_ENGINE_RPC_MODE: MTLS
+      A2FLOW_ENGINE_RPC_CA_FILE: /run/a2flow-rpc/ca.pem
+      A2FLOW_ENGINE_RPC_CERT_FILE: /run/a2flow-rpc/engine.pem
+      A2FLOW_ENGINE_RPC_KEY_FILE: /run/a2flow-rpc/engine-key.pem
       A2FLOW_BSIDE_INTERNAL_TOKEN: ${A2FLOW_ATTENDED_INTERNAL_TOKEN:?set an owner-only internal token}
       DEEPSEEK_API_KEY: ${A2FLOW_ATTENDED_DEEPSEEK_KEY}
     secrets:
       - postgres_password
     volumes:
       - postgres_socket:/run/postgresql
+      - ${A2FLOW_RPC_CONFIG_DIRECTORY:?set an owner-only RPC certificate directory}:/run/a2flow-rpc:ro
     command: ["serve-bside"]
     restart: unless-stopped
 

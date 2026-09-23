@@ -6,6 +6,7 @@ from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 
 from .records import AssetError, KINDS, MAX_ASSETS, MAX_BYTES, canonical, digest
 from .validation import environment, namespace
+from .java_runtime import is_java_asset
 
 DDL = (
     "CREATE TABLE IF NOT EXISTS a2flow_asset_environment "
@@ -443,6 +444,10 @@ class PostgresAssetRepository:
                     continue
                 application = assets[(
                     asset_kind, asset_key, selected(state, user))]
+                if is_java_asset(application["definition"]):
+                    # Java bindings name an ability, not a permanently pinned
+                    # version. Runtime checks the current admitted closure.
+                    continue
                 for action in application["definition"]["actionPolicies"]:
                     ability_key, expected_version = (
                         action["abilityReleaseRef"].split("@"))

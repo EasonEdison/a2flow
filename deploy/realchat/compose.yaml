@@ -90,6 +90,15 @@ services:
     environment:
       <<: *environment
       A2FLOW_LISTEN_PORT: "8781"
+      A2FLOW_ENGINE_RPC_TARGET: ${A2FLOW_ENGINE_RPC_TARGET:?set the Java runtime gRPC endpoint}
+      A2FLOW_ENGINE_RPC_MODE: MTLS
+      A2FLOW_ENGINE_RPC_CA_FILE: /run/a2flow-rpc/ca.pem
+      A2FLOW_ENGINE_RPC_CERT_FILE: /run/a2flow-rpc/engine.pem
+      A2FLOW_ENGINE_RPC_KEY_FILE: /run/a2flow-rpc/engine-key.pem
+    volumes:
+      - postgres_socket:/run/postgresql
+      - ${A2FLOW_REALCHAT_STATIC}:/opt/a2flow/static:ro
+      - ${A2FLOW_RPC_CONFIG_DIRECTORY:?set an owner-only RPC certificate directory}:/run/a2flow-rpc:ro
     command: [bside]
   runtime:
     <<: *host
