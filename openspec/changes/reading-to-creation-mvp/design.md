@@ -56,6 +56,8 @@ body_json 用于结构化内容，不塞原始 Provider 响应或全部 Tool 历
 
 实际 RPC 使用类型明确的请求/响应 DTO；以上逻辑能力可复用同一个服务，不要求每个 actionCode 一个新服务。业务拒绝、版本冲突、资源不存在、RPC 不可达分别表达，不能统统变成空内容成功。
 
+实施细化：RPC 的 `ArtifactBody` 使用 oneof 区分 `ReadingBrief`、`TopicPlan`、`Manuscript`，分别包含观点与依据、候选选题、稿件与引用。模型和 M 端配置面对普通嵌套对象，不需要生成 Base64 或 JSON 字符串。数据库 `body_json` 是经过这些固定 DTO 校验后的 JSONB，不是任意字典入口。确认结果也使用明确字段。项目增加 `current_source_id` 引用当前素材版本，与当前选题/稿件指向一起支持重新打开项目。
+
 导出只读取当前用户可访问的指定版本，浏览器下载文本；不新增公网文件桶或永久下载链接。模型负责分析和生成，内容服务负责验证、保存和读取，不在该服务里再建第二个 Agent。
 
 ## 4. 三个 Skill 和 Application

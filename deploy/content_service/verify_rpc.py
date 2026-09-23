@@ -227,7 +227,7 @@ def verify(target: str) -> None:
                     project_id=project.id,
                     title="旧revision",
                     body="不应该写入",
-                    expected_project_revision=0,
+                    expected_project_revision=project.revision,
                 ),
                 timeout=10,
             ),
