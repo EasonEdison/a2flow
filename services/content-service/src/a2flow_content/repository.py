@@ -275,7 +275,7 @@ class PostgresContentRepository:
 
     def _context(self, context: TrustedContext) -> None:
         if context.environment is not self.environment:
-            raise ContentError("ENVIRONMENT_MISMATCH", 409)
+            raise ContentError("ENVIRONMENT_MISMATCH", 403)
 
     @contextmanager
     def _connection(self) -> Iterator[Connection]:

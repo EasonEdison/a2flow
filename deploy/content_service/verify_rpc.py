@@ -158,13 +158,13 @@ def verify(target: str) -> None:
             timeout=10,
         )
         assert selection.topic_id == "t1" and selection.edited_title == "我的读书习惯"
-        restored = stub.GetConfirmation(
+        restored_confirmation = stub.GetConfirmation(
             pb.GetConfirmationRequest(
                 context=context("confirmation-read"), confirmation_id=selection.id
             ),
             timeout=10,
         )
-        assert restored == selection
+        assert restored_confirmation == selection
         rejected(
             lambda: stub.GetConfirmation(
                 pb.GetConfirmationRequest(
