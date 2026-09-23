@@ -1,0 +1,189 @@
+syntax = "proto3";
+package a2flow.content.v1;
+
+import "a2flow/capability/v1/capability.proto";
+
+// Identity is supplied by the authenticated execution service, never by model arguments.
+// This service owns business data, not Agent history or Workflow execution state.
+message Project {
+  string id = 1;
+  string title = 2;
+  string audience = 3;
+  string output_format = 4;
+  uint32 revision = 5;
+  string current_selection_id = 6;
+  string current_manuscript_id = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  string current_source_id = 10;
+}
+message Source {
+  string id = 1;
+  string project_id = 2;
+  uint32 revision = 3;
+  string title = 4;
+  string source_url = 5;
+  string body = 6;
+  string digest = 7;
+  string created_at = 8;
+}
+message InputReference {
+  string kind = 1;
+  string id = 2;
+  uint32 revision = 3;
+}
+message ReadingPoint {
+  string id = 1;
+  string claim = 2;
+  optional string evidence_quote = 3;
+  optional string evidence_locator = 4;
+  string explanation = 5;
+  bool model_suggestion = 6;
+}
+message ReadingBrief {
+  repeated ReadingPoint points = 1;
+  repeated string questions = 2;
+  repeated string usable_materials = 3;
+}
+message TopicOption {
+  string id = 1;
+  string title = 2;
+  string angle = 3;
+  string audience = 4;
+  string rationale = 5;
+  repeated string source_point_ids = 6;
+}
+message TopicPlan { repeated TopicOption topics = 1; }
+message Citation {
+  string reference_kind = 1;
+  string reference_id = 2;
+  uint32 revision = 3;
+  string label = 4;
+}
+message Manuscript {
+  string title = 1;
+  string body_markdown = 2;
+  repeated Citation citations = 3;
+}
+message ArtifactBody {
+  oneof value {
+    ReadingBrief reading_brief = 1;
+    TopicPlan topic_plan = 2;
+    Manuscript manuscript = 3;
+  }
+}
+message Artifact {
+  string id = 1;
+  string project_id = 2;
+  string kind = 3;
+  uint32 revision = 4;
+  ArtifactBody body = 5;
+  string body_markdown = 6;
+  repeated InputReference input_refs = 7;
+  string origin = 8;
+  string created_at = 9;
+}
+message Confirmation {
+  string id = 1;
+  string project_id = 2;
+  string artifact_id = 3;
+  string decision_type = 4;
+  repeated string selected_point_ids = 5;
+  string created_at = 6;
+  string user_notes = 7;
+  string topic_id = 8;
+  string edited_title = 9;
+  string edited_angle = 10;
+}
+message CreateProjectRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string title = 2;
+  string audience = 3;
+  string output_format = 4;
+}
+message ListProjectsRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  uint32 page = 2;
+  uint32 page_size = 3;
+}
+message ListProjectsResponse {
+  repeated Project list = 1;
+  uint64 total = 2;
+  uint32 page = 3;
+  uint32 page_size = 4;
+}
+message GetProjectRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string project_id = 2;
+}
+message SaveSourceRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string project_id = 2;
+  string title = 3;
+  string body = 4;
+  string source_url = 5;
+  optional uint32 expected_project_revision = 6;
+}
+message GetSourceRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string source_id = 2;
+}
+message SaveArtifactRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string project_id = 2;
+  string kind = 3;
+  ArtifactBody body = 4;
+  reserved 5;
+  repeated InputReference input_refs = 6;
+  string origin = 7;
+}
+message GetArtifactRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string artifact_id = 2;
+}
+message ConfirmReadingRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string project_id = 2;
+  string artifact_id = 3;
+  repeated string selected_point_ids = 4;
+  string user_notes = 5;
+  optional uint32 expected_project_revision = 6;
+}
+message ConfirmTopicRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string project_id = 2;
+  string artifact_id = 3;
+  string topic_id = 4;
+  string edited_title = 5;
+  string edited_angle = 6;
+  optional uint32 expected_project_revision = 7;
+}
+message ConfirmManuscriptRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string project_id = 2;
+  string artifact_id = 3;
+  optional uint32 expected_project_revision = 4;
+}
+message ExportManuscriptRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string artifact_id = 2;
+  string format = 3;
+}
+message ExportManuscriptResponse {
+  string filename = 1;
+  string media_type = 2;
+  string content = 3;
+}
+service ContentService {
+  rpc CreateProject(CreateProjectRequest) returns (Project);
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc GetProject(GetProjectRequest) returns (Project);
+  rpc SaveSource(SaveSourceRequest) returns (Source);
+  rpc GetSource(GetSourceRequest) returns (Source);
+  rpc SaveArtifact(SaveArtifactRequest) returns (Artifact);
+  rpc GetArtifact(GetArtifactRequest) returns (Artifact);
+  rpc ConfirmReading(ConfirmReadingRequest) returns (Confirmation);
+  rpc ConfirmTopic(ConfirmTopicRequest) returns (Confirmation);
+  rpc ConfirmManuscript(ConfirmManuscriptRequest) returns (Confirmation);
+  rpc ExportManuscript(ExportManuscriptRequest) returns (ExportManuscriptResponse);
+}

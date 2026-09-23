@@ -1,5 +1,15 @@
 # 内部 RPC 契约
 
+## Python 内容业务服务（阅读到创作）
+
+新增 `proto/a2flow/content/v1/content.proto`，11 个明确方法覆盖项目、素材、产物、确认和导出。每个请求引用既有 `ExecutionContext`，不转发 Cookie；可信身份由经过服务认证的执行端注入。正文使用 `ArtifactBody` oneof 区分阅读简报、选题单和稿件，确认结果也有明确字段；ProtoJSON 是普通嵌套对象，不要求模型或 M 端用户填写 Base64 或 JSON 字符串。签名中的 kind 与实际 body 必须由业务服务交叉校验。
+
+运行 `bash packages/rpc-contracts/scripts/generate-content.sh` 生成 Python 与 mypy 类型声明；用 `PYTHON_BIN` 指定隔离工具环境，PATH 须包含同环境的 protoc-gen-mypy 工具。可选 `DESCRIPTOR_OUTPUT=/absolute/path/content.pb` 输出带依赖的描述文件用于能力注册。共用身份 proto 目前仍在旧管理源码目录；引用该文件不表示内容服务依赖 Java 进程。
+
+运行 `PYTHONPATH=packages/rpc-contracts/src python -m unittest discover -s packages/rpc-contracts/tests` 验证传输结构、身份精度和版本 presence；这不替代真实 RPC、身份校验或 PostgreSQL 联调。生成器使用本文件既有固定工具版本，禁止手改生成代码。
+
+新目标是仅 M 端 Java、业务与运行态执行 Python。下文描述原有客户端兼容基线；旧 Java 发布选择/执行尚需独立迁移验收。首批内容服务不能被描述为整个 Chat 链路已经切换 Python。
+
 Python 模块由 Java 管理候选的 `proto/a2flow/{capability,a2ui}/v1/*.proto` 通过公开 `grpcio-tools==1.75.1` 生成，不手改生成代码。RPC 是服务间协议，不是浏览器 API。
 
 运行代码生成命令：`python -m grpc_tools.protoc -I "$PROTO_ROOT" --python_out=src --grpc_python_out=src a2flow/capability/v1/capability.proto a2flow/a2ui/v1/a2ui.proto`。
