@@ -1,0 +1,11 @@
+markdown-it-py<5,>=4
+psycopg[binary]<4,>=3.2
+
+[rpc]
+a2flow-rpc-contracts==0.1.0
+grpcio==1.75.1
+
+[test]
+mypy==1.19.1
+pytest<9,>=8
+ruff<0.17,>=0.13
