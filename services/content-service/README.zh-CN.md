@@ -6,7 +6,7 @@
 
 `ContentService(repository)` 提供 11 个同步方法：项目 create/list/get、素材 save/get、产物 save/get、阅读/选题/稿件确认和稿件导出。
 
-当前导出只完成无损 Markdown。TXT 转换尚未交付；服务会返回 `TXT_EXPORT_NOT_IMPLEMENTED`，不会用脆弱正则删除正文字符后假装成功。
+Markdown 原文可直接导出；TXT 使用 CommonMark 解析器按 token 提取文本，保留普通下划线、行内代码和代码块内容，不使用全局正则删除正文字符。
 
 每个方法接收 `TrustedContext(user_id, environment, request_id, trace_id)`。`user_id` 支持完整 signed 64-bit，只能由已认证的内部传输层构造，不能从业务字段或模型输出读取。
 

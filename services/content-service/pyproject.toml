@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel>=0.45"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "a2flow-content-service"
 version = "0.1.0"
 description = "A2Flow reading-to-creation content business service"
 requires-python = ">=3.11"
-dependencies = ["psycopg[binary]>=3.2,<4"]
+dependencies = ["markdown-it-py>=4,<5", "psycopg[binary]>=3.2,<4"]
 
 [project.optional-dependencies]
 rpc = ["a2flow-rpc-contracts==0.1.0", "grpcio==1.75.1"]

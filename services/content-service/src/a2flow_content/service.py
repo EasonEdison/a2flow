@@ -6,7 +6,8 @@ import re
 from typing import Protocol
 from uuid import UUID
 
-from .errors import ContentError
+from markdown_it import MarkdownIt
+
 from .models import (
     ArtifactRecord,
     ConfirmationRecord,
@@ -18,6 +19,7 @@ from .models import (
     ExportFormat,
     ExportManuscriptQuery,
     GetArtifactQuery,
+    GetConfirmationQuery,
     GetProjectQuery,
     GetSourceQuery,
     ListProjectsQuery,
@@ -49,6 +51,10 @@ class ContentRepository(Protocol):
     ) -> ArtifactRecord: ...
 
     def get_artifact(self, context: TrustedContext, artifact_id: UUID) -> ArtifactRecord: ...
+
+    def get_confirmation(
+        self, context: TrustedContext, confirmation_id: UUID
+    ) -> ConfirmationRecord: ...
 
     def confirm_reading(
         self, context: TrustedContext, command: ConfirmReadingCommand
@@ -96,6 +102,11 @@ class ContentService:
     def get_artifact(self, context: TrustedContext, query: GetArtifactQuery) -> ArtifactRecord:
         return self._repository.get_artifact(context, query.artifact_id)
 
+    def get_confirmation(
+        self, context: TrustedContext, query: GetConfirmationQuery
+    ) -> ConfirmationRecord:
+        return self._repository.get_confirmation(context, query.confirmation_id)
+
     def confirm_reading(
         self, context: TrustedContext, command: ConfirmReadingCommand
     ) -> ConfirmationRecord:
@@ -123,4 +134,32 @@ class ContentService:
             return ExportedManuscript(
                 f"{safe_title}.md", "text/markdown; charset=utf-8", artifact.body.body_markdown
             )
-        raise ContentError("TXT_EXPORT_NOT_IMPLEMENTED", 501)
+        return ExportedManuscript(
+            f"{safe_title}.txt",
+            "text/plain; charset=utf-8",
+            markdown_to_text(artifact.body.body_markdown),
+        )
+
+
+def markdown_to_text(markdown: str) -> str:
+    """Render CommonMark tokens to text while preserving literal code content."""
+    blocks: list[str] = []
+    for token in MarkdownIt("commonmark").parse(markdown):
+        if token.type in {"fence", "code_block"}:
+            blocks.append(token.content.rstrip("\n"))
+            continue
+        if token.type == "hr":
+            blocks.append("---")
+            continue
+        if token.type != "inline" or token.children is None:
+            continue
+        chunks: list[str] = []
+        for child in token.children:
+            if child.type in {"text", "code_inline"}:
+                chunks.append(child.content)
+            elif child.type in {"softbreak", "hardbreak"}:
+                chunks.append("\n")
+            elif child.type == "image":
+                chunks.append(child.content)
+        blocks.append("".join(chunks))
+    return "\n\n".join(block for block in blocks if block)

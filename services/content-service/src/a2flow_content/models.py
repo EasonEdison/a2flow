@@ -319,6 +319,14 @@ class GetArtifactQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class GetConfirmationQuery:
+    confirmation_id: UUID
+
+    def __post_init__(self) -> None:
+        uuid_value(self.confirmation_id, "CONFIRMATION_ID")
+
+
+@dataclass(frozen=True, slots=True)
 class ConfirmReadingCommand:
     project_id: UUID
     artifact_id: UUID

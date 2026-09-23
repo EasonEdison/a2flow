@@ -690,6 +690,13 @@ class PostgresContentRepository:
         with self._connection() as connection:
             return self._artifact_row(connection, context, artifact_id)
 
+    def get_confirmation(
+        self, context: TrustedContext, confirmation_id: UUID
+    ) -> ConfirmationRecord:
+        self._context(context)
+        with self._connection() as connection:
+            return self._confirmation_row(connection, context, confirmation_id)
+
     def _confirm(
         self,
         context: TrustedContext,
