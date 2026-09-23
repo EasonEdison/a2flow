@@ -23,6 +23,17 @@ public final class ManagementApplication {
         String documentRoot = staticDirectory == null ? Files.createTempDirectory("a2flow-management-web-").toString()
                 : java.nio.file.Path.of(staticDirectory).toRealPath().toString();
         var web = tomcat.addContext("", documentRoot);
+        // addContext does not install the default web.xml MIME mappings.
+        web.addMimeMapping("html", "text/html");
+        web.addMimeMapping("js", "text/javascript");
+        web.addMimeMapping("mjs", "text/javascript");
+        web.addMimeMapping("css", "text/css");
+        web.addMimeMapping("json", "application/json");
+        web.addMimeMapping("svg", "image/svg+xml");
+        web.addMimeMapping("png", "image/png");
+        web.addMimeMapping("ico", "image/vnd.microsoft.icon");
+        web.addMimeMapping("woff", "font/woff");
+        web.addMimeMapping("woff2", "font/woff2");
         web.setParentClassLoader(ManagementApplication.class.getClassLoader());
         var application = new AnnotationConfigWebApplicationContext();
         application.register(ManualManagementConfiguration.class);
