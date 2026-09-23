@@ -158,6 +158,13 @@ def verify(target: str) -> None:
             timeout=10,
         )
         assert selection.topic_id == "t1" and selection.edited_title == "我的读书习惯"
+        restored = stub.GetConfirmation(
+            pb.GetConfirmationRequest(
+                context=context("confirmation-read"), confirmation_id=selection.id
+            ),
+            timeout=10,
+        )
+        assert restored == selection
         text = "# 我的读书习惯\n\n先明确一个小目标，再给自己留出休息时间。"
         manuscript = stub.SaveArtifact(
             pb.SaveArtifactRequest(
@@ -250,7 +257,7 @@ def verify(target: str) -> None:
             (grpc.StatusCode.PERMISSION_DENIED, grpc.StatusCode.FAILED_PRECONDITION),
         )
     print(
-        "CONTENT_RPC_PASS: 11 methods, confirmations, replay, "
+        "CONTENT_RPC_PASS: 12 methods, confirmations, replay, "
         "owner isolation, CAS, environment, export"
     )
 

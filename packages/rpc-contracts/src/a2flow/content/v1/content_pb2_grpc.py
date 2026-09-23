@@ -69,6 +69,11 @@ class ContentServiceStub(object):
                 request_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.GetArtifactRequest.SerializeToString,
                 response_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.Artifact.FromString,
                 _registered_method=True)
+        self.GetConfirmation = channel.unary_unary(
+                '/a2flow.content.v1.ContentService/GetConfirmation',
+                request_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.GetConfirmationRequest.SerializeToString,
+                response_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.Confirmation.FromString,
+                _registered_method=True)
         self.ConfirmReading = channel.unary_unary(
                 '/a2flow.content.v1.ContentService/ConfirmReading',
                 request_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.ConfirmReadingRequest.SerializeToString,
@@ -136,6 +141,12 @@ class ContentServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetConfirmation(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ConfirmReading(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -197,6 +208,11 @@ def add_ContentServiceServicer_to_server(servicer, server):
                     servicer.GetArtifact,
                     request_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.GetArtifactRequest.FromString,
                     response_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.Artifact.SerializeToString,
+            ),
+            'GetConfirmation': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetConfirmation,
+                    request_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.GetConfirmationRequest.FromString,
+                    response_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.Confirmation.SerializeToString,
             ),
             'ConfirmReading': grpc.unary_unary_rpc_method_handler(
                     servicer.ConfirmReading,
@@ -408,6 +424,33 @@ class ContentService(object):
             '/a2flow.content.v1.ContentService/GetArtifact',
             a2flow_dot_content_dot_v1_dot_content__pb2.GetArtifactRequest.SerializeToString,
             a2flow_dot_content_dot_v1_dot_content__pb2.Artifact.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetConfirmation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/a2flow.content.v1.ContentService/GetConfirmation',
+            a2flow_dot_content_dot_v1_dot_content__pb2.GetConfirmationRequest.SerializeToString,
+            a2flow_dot_content_dot_v1_dot_content__pb2.Confirmation.FromString,
             options,
             channel_credentials,
             insecure,

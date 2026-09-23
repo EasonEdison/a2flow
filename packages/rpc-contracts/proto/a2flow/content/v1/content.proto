@@ -141,6 +141,10 @@ message GetArtifactRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
   string artifact_id = 2;
 }
+message GetConfirmationRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string confirmation_id = 2;
+}
 message ConfirmReadingRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
   string project_id = 2;
@@ -182,6 +186,7 @@ service ContentService {
   rpc GetSource(GetSourceRequest) returns (Source);
   rpc SaveArtifact(SaveArtifactRequest) returns (Artifact);
   rpc GetArtifact(GetArtifactRequest) returns (Artifact);
+  rpc GetConfirmation(GetConfirmationRequest) returns (Confirmation);
   rpc ConfirmReading(ConfirmReadingRequest) returns (Confirmation);
   rpc ConfirmTopic(ConfirmTopicRequest) returns (Confirmation);
   rpc ConfirmManuscript(ConfirmManuscriptRequest) returns (Confirmation);

@@ -10,7 +10,7 @@ from google.protobuf.json_format import MessageToDict
 class ContentContractTest(unittest.TestCase):
     def test_all_operations_use_exact_common_context(self) -> None:
         service = content.DESCRIPTOR.services_by_name["ContentService"]
-        self.assertEqual(len(service.methods), 11)
+        self.assertEqual(len(service.methods), 12)
         for method in service.methods:
             context = method.input_type.fields_by_name["context"]
             self.assertEqual(context.message_type, capability.ExecutionContext.DESCRIPTOR)
