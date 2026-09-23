@@ -165,6 +165,16 @@ def verify(target: str) -> None:
             timeout=10,
         )
         assert restored == selection
+        rejected(
+            lambda: stub.GetConfirmation(
+                pb.GetConfirmationRequest(
+                    context=context("other-confirmation", -(2**63)),
+                    confirmation_id=selection.id,
+                ),
+                timeout=10,
+            ),
+            (grpc.StatusCode.NOT_FOUND,),
+        )
         text = "# 我的读书习惯\n\n先明确一个小目标，再给自己留出休息时间。"
         manuscript = stub.SaveArtifact(
             pb.SaveArtifactRequest(
@@ -213,6 +223,9 @@ def verify(target: str) -> None:
             assert exported.content and exported.filename
             if output_format == "MARKDOWN":
                 assert exported.content == text
+            else:
+                assert exported.content.startswith("我的读书习惯")
+                assert "# " not in exported.content
         restored = stub.GetArtifact(
             pb.GetArtifactRequest(context=context("artifact-read"), artifact_id=manuscript.id),
             timeout=10,

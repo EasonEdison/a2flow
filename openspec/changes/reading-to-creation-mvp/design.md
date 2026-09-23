@@ -49,6 +49,7 @@ body_json 用于结构化内容，不塞原始 Provider 响应或全部 Tool 历
 | content.source.get | sourceId | 正文、标题、出处、版本 | 只读 |
 | content.artifact.save | projectId、kind、内容、inputRefs | artifactId、revision | 保存生成或编辑版本 |
 | content.artifact.get | artifactId | 结构化内容、正文、输入引用 | 只读 |
+| content.confirmation.get | confirmationId | 已保存的观点选择、个人笔记或选题修改 | 只读自己的确认 |
 | content.reading.confirm | projectId、artifactId、selectedPointIds、userNotes、expectedProjectRevision | confirmationId、已选素材 | 保存阅读选择 |
 | content.topic.confirm | projectId、artifactId、topicId、editedTitle、editedAngle、expectedProjectRevision | confirmationId、选题单 | 保存选题 |
 | content.manuscript.confirm | projectId、artifactId、expectedProjectRevision | confirmationId、定稿版本 | 保存定稿事实 |
