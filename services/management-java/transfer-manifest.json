@@ -1901,8 +1901,8 @@
     },
     {
       "path": "backend/lifecycle/SkillFactoryMethodDispatcher.java",
-      "size": 50244,
-      "sha256": "eb6e2b050c23718c97436886b166f89e9a606027ade246e8826fabd475cc9ea8",
+      "size": 50273,
+      "sha256": "a0337541abeec55e96c222bf19ecb8fce1bd4d562f2ee417ba3091838c155344",
       "sourceSha256": "3e50df5bab660133697d8cea9dd3e44a80d007431617dc7e9de85e6fe0703a5f"
     },
     {
@@ -1958,6 +1958,11 @@
       "size": 9283,
       "sha256": "108268d8b0f41f8d2fda811f41ca8ee1b024af0900b714957f59ccf434e3a6f4",
       "sourceSha256": "899c623c2ce9c820460ebcaa7c925b33158d981ad1afe948ca047cc888587b9a"
+    },
+    {
+      "path": "backend/lifecycle/SkillListPage.java",
+      "size": 2629,
+      "sha256": "4ab0b74fb3ce1e81f6bb0e2f89e43114affa3563e0ac4d437ba55f0a9d3070f3"
     },
     {
       "path": "backend/lifecycle/SkillPreprodBuildRestoreService.java",
@@ -2997,8 +3002,8 @@
     },
     {
       "path": "frontend/api.ts",
-      "size": 87554,
-      "sha256": "51a4f412e447e947b19fac3c61fc3985adb1d9a6d034e91a3841bcc8527f2c33",
+      "size": 88003,
+      "sha256": "92e5bf42ce91cc28004b0b8adfdb5d1c9c526376665f987447bf715dd4e1c77e",
       "sourceSha256": "75c2c7c0157e5c5af663ac2af06099e5d217804d2e130ef414f348b76c731f87"
     },
     {

@@ -247,7 +247,7 @@ public class SkillFactoryMethodDispatcher {
             return workflowResult;
         }
         if (method == SkillFactoryMethodEnum.SKILL_LIST) {
-            return success(workspaceService.listSkills(params), true);
+            return success(SkillListPage.from(workspaceService.listSkills(params), params), false);
         }
         if (method == SkillFactoryMethodEnum.SKILL_DETAIL) {
             return success(skillBindingCandidateService.enrichSkillDetail(

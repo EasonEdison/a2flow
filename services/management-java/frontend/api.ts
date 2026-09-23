@@ -1713,7 +1713,15 @@ export interface SkillListPage {
 }
 export const skillFactoryApi = {
     config: () => callSkillFactory<SkillFactoryPageConfig>(SkillFactoryMethod.SKILL_FACTORY_CONFIG, {}),
-    list: (query: SkillListQuery) => callSkillFactory<SkillListPage>(SkillFactoryMethod.SKILL_LIST, query),
+    list: async (query: SkillListQuery): Promise<SkillListPage> => {
+        const result = await callSkillFactory<SkillListPage>(SkillFactoryMethod.SKILL_LIST, query);
+        if (!result || !Array.isArray(result.list)
+            || ![result.total, result.page, result.pageSize, result.editingCount, result.onlineCount]
+                .every(value => typeof value === 'number' && Number.isSafeInteger(value))) {
+            throw new Error('Skill 列表响应格式错误，请联系管理员检查接口契约');
+        }
+        return result;
+    },
     detail: (skillCode: string) => callSkillFactory<SkillDraft>(SkillFactoryMethod.SKILL_DETAIL, { skillCode }),
     saveSkillInfo: (payload: SkillInfoPayload) => callSkillFactory<SkillDraft>(SkillFactoryMethod.WORKSPACE_CREATE, payload),
     updateSkillInfo: (payload: SkillInfoUpdatePayload) => callSkillFactory<SkillDraft>(SkillFactoryMethod.SKILL_UPDATE, payload),
