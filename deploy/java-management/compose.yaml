@@ -12,6 +12,10 @@ x-private: &private
 services:
   management:
     <<: *private
+    # Native JDBC/gRPC libraries need an executable extraction directory.
+    tmpfs: ["/tmp:size=64m,mode=1777", "/native:size=32m,mode=0700,uid=1000,gid=1000,exec"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Dorg.newsclub.net.unix.library.tmpdir=/native -Dio.netty.native.workdir=/native"
     image: ${A2FLOW_JAVA_IMAGE:?set reviewed JRE image digest}
     env_file: ["${A2FLOW_DEPLOY_PRIVATE:?set private config directory}/java.env"]
     volumes:
@@ -29,7 +33,7 @@ services:
     env_file: ["${A2FLOW_DEPLOY_PRIVATE}/publication.env"]
     volumes:
       - postgres_socket:/run/postgresql
-    entrypoint: [python, /opt/a2flow/services/management-java/publication-bridge/bridge.py]
+    entrypoint: [sh, -c, 'export PYTHONPATH="/opt/a2flow:$$PYTHONPATH"; exec python /opt/a2flow/services/management-java/publication-bridge/bridge.py']
   bside:
     <<: *private
     image: ${A2FLOW_PYTHON_IMAGE}
