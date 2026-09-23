@@ -1511,8 +1511,8 @@
     },
     {
       "path": "backend/host/ManagementApplication.java",
-      "size": 3597,
-      "sha256": "2c3c01afb004735eb9d8661a711c905799dd1739ade83beafa82c9308659ffff"
+      "size": 4193,
+      "sha256": "66f19571bde7dcb3b2a35614fa23a74f4a5dca3daddc4ab3ab62dd3e2054c0bc"
     },
     {
       "path": "backend/host/ManagementHttpPolicy.java",
