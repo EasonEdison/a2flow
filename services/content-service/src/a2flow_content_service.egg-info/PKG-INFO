@@ -1,7 +1,0 @@
-Metadata-Version: 2.1
-Name: a2flow-content-service
-Version: 0.1.0
-Summary: A2Flow reading-to-creation content business service
-Requires-Python: >=3.11
-Provides-Extra: rpc
-Provides-Extra: test
