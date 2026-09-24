@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://a2flow.dev/catalogs/digital-employee/functions.json",
+  "title": "A2Flow Digital Employee Function Contract",
+  "description": "Project function allowlist: the locked official Basic functions plus the equals implementation exported by the Google A2UI SDK.",
+  "catalogId": "a2flow.digital-employee.pc.v1",
+  "baseCatalog": {
+    "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
+    "sourceRepository": "https://github.com/a2ui-project/a2ui",
+    "sourceCommit": "420c6183c400e4b84fe3f9e084906725062a6d56"
+  },
+  "sdkExtensions": {
+    "equals": {
+      "package": "@a2ui/web_core",
+      "version": "0.11.0",
+      "export": "EqualsImplementation",
+      "semantics": "strict equality"
+    }
+  },
+  "functions": {
+    "required": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/required"
+    },
+    "regex": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/regex"
+    },
+    "length": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/length"
+    },
+    "numeric": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/numeric"
+    },
+    "email": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/email"
+    },
+    "formatString": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/formatString"
+    },
+    "formatNumber": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/formatNumber"
+    },
+    "formatCurrency": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/formatCurrency"
+    },
+    "formatDate": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/formatDate"
+    },
+    "pluralize": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/pluralize"
+    },
+    "openUrl": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/openUrl"
+    },
+    "and": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/and"
+    },
+    "or": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/or"
+    },
+    "not": {
+      "$ref": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json#/functions/not"
+    },
+    "equals": {
+      "type": "object",
+      "description": "Returns true when a and b are strictly equal. Implemented by @a2ui/web_core EqualsImplementation.",
+      "properties": {
+        "call": {
+          "const": "equals"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicValue"
+            },
+            "b": {
+              "$ref": "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicValue"
+            }
+          },
+          "required": [
+            "a",
+            "b"
+          ],
+          "unevaluatedProperties": false
+        },
+        "returnType": {
+          "const": "boolean"
+        }
+      },
+      "required": [
+        "call",
+        "args"
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "$defs": {
+    "anyFunction": {
+      "oneOf": [
+        {
+          "$ref": "#/functions/required"
+        },
+        {
+          "$ref": "#/functions/regex"
+        },
+        {
+          "$ref": "#/functions/length"
+        },
+        {
+          "$ref": "#/functions/numeric"
+        },
+        {
+          "$ref": "#/functions/email"
+        },
+        {
+          "$ref": "#/functions/formatString"
+        },
+        {
+          "$ref": "#/functions/formatNumber"
+        },
+        {
+          "$ref": "#/functions/formatCurrency"
+        },
+        {
+          "$ref": "#/functions/formatDate"
+        },
+        {
+          "$ref": "#/functions/pluralize"
+        },
+        {
+          "$ref": "#/functions/openUrl"
+        },
+        {
+          "$ref": "#/functions/and"
+        },
+        {
+          "$ref": "#/functions/or"
+        },
+        {
+          "$ref": "#/functions/not"
+        },
+        {
+          "$ref": "#/functions/equals"
+        }
+      ]
+    }
+  }
+}
