@@ -61,6 +61,12 @@ public final class A2uiAtomAuthoringProjection {
                 FIELD_NAME_CN, asset == null ? null : asset.getComponentNameCn()));
         result.put(FIELD_CATEGORY, source.get(FIELD_CATEGORY));
         result.put(FIELD_COMPONENT_ORIGIN_TYPE, source.get(FIELD_COMPONENT_ORIGIN_TYPE));
+        if (A2uiComponentOriginType.A2UI_OFFICIAL.name().equals(
+                source.get(FIELD_COMPONENT_ORIGIN_TYPE))) {
+            result.put("officialCatalogId", source.get("officialCatalogId"));
+            result.put("officialSourceCommit", source.get("officialSourceCommit"));
+            result.put("officialSchema", source.get("officialSchema"));
+        }
         result.put(FIELD_COMPOSITION_KIND, source.get(FIELD_COMPOSITION_KIND));
         result.put(FIELD_PROPS_SCHEMA, source.get(FIELD_PROPS_SCHEMA));
         result.put(FIELD_EVENT_SCHEMA, source.get(FIELD_EVENT_SCHEMA));
