@@ -1,0 +1,7 @@
+/.mypy_cache/
+/.pytest_cache/
+/.ruff_cache/
+/build/
+/src/*.egg-info/
+__pycache__/
+*.py[cod]
