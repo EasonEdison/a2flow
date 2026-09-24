@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>阅读到创作 · PRT 资产导入</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #17211d; background: #f5f7f6; }
+    body { margin: 0; padding: 32px 16px; }
+    main { max-width: 920px; margin: auto; background: white; border: 1px solid #d8dfdb; border-radius: 14px; padding: 28px; box-shadow: 0 12px 40px #15332612; }
+    h1 { margin-top: 0; } .notice { background: #f0f6f3; border-left: 4px solid #256f52; padding: 12px 16px; }
+    form { display: grid; gap: 16px; margin: 24px 0; } label { display: grid; gap: 6px; font-weight: 650; }
+    input, button { font: inherit; padding: 10px 12px; border: 1px solid #aebbb4; border-radius: 8px; }
+    button { border-color: #145c43; background: #145c43; color: white; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: not-allowed; } fieldset { border: 1px solid #d8dfdb; border-radius: 10px; padding: 14px; }
+    fieldset label { display: flex; align-items: center; font-weight: 500; } fieldset input { width: auto; }
+    progress { width: 100%; } #log { max-height: 320px; overflow: auto; background: #101713; color: #cce9db; padding: 14px; border-radius: 8px; white-space: pre-wrap; }
+    table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e1e7e3; } code { overflow-wrap: anywhere; }
+    .error { color: #9f1d20; font-weight: 700; } small { font-weight: 400; color: #506159; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>阅读到创作 · PRT 资产导入</h1>
+  <p class="notice">此页面只使用当前同源管理员会话调用 M 的正式 authoring/release HTTP 接口；不读取、不展示、不存储 Cookie 或 token。不会写发布数据库，也不会执行 ONLINE/force 发布。</p>
+  <form id="authoring-form">
+    <fieldset><legend>Content RPC descriptor set（二选一，粘贴文本优先）</legend>
+      <p><button id="load-project-descriptor" type="button">加载本项目 Content RPC 契约</button> <span id="descriptor-status" role="status"></span></p>
+      <label>粘贴 base64 descriptor<textarea id="descriptor-text" rows="8" spellcheck="false" placeholder="粘贴公开协议的 base64 FileDescriptorSet"></textarea></label>
+      <label>或上传 base64 文本文件<input id="descriptor-file" type="file" accept="text/plain,.txt"></label>
+    </fieldset>
+    <label>RPC targetKey<input id="target-key" value="content" pattern="[A-Za-z][A-Za-z0-9_-]{0,63}" required></label>
+    <label>专员 ID（与 M 当前配置一致）<input id="specialist-ids" placeholder="例如：101" required></label>
+    <label><span><input id="sync-official-basic" type="checkbox" checked> 同步 M 内置锁定的 Google A2UI Official Basic Catalog（空库首次导入必需）</span></label>
+    <fieldset><legend>可选 Workflow</legend>
+      <label><input id="include-workflow" type="checkbox"> 在三个独立 Chat Skill 都发布成功后创建/更新现有 v2 Workflow</label>
+      <label>Workflow 专员稳定 ID<input id="specialist-code" disabled></label>
+      <label>已有 workflowCode（重试时填写，留空则新建）<input id="workflow-code" disabled></label>
+    </fieldset>
+    <label><span><input id="reviewed" type="checkbox" required> 我已审核 12 个能力、3 个 Application、3 个 Skill，仅发布到 PRT</span></label>
+    <button id="run" type="submit">创建并发布阅读创作示例到 PRT</button>
+  </form>
+  <section aria-live="polite"><h2>进度</h2><progress id="progress" max="100" value="0"></progress><pre id="log">等待用户点击按钮。</pre></section>
+  <section id="result" hidden><h2>PRT 资产</h2><p>管理台当前没有资产直达 URL；以下链接打开管理台，资产 Key 可直接复制到对应类型搜索框。</p><table><thead><tr><th>类型</th><th>Key</th><th>入口</th></tr></thead><tbody id="assets"></tbody></table><p><button id="download-manifest" type="button">下载无凭据 manifest</button></p></section>
+  <p id="error" class="error" role="alert"></p>
+</main>
+<script type="module" src="./import.js"></script>
+</body>
+</html>

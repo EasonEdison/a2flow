@@ -51,7 +51,9 @@ public final class GrpcCapabilityContract {
             Map<String, Descriptors.FileDescriptor> resolved = new LinkedHashMap<>();
             // Context's exact descriptor is owned by the platform, not by the capability author.
             var authority = Capability.getDescriptor();
-            if (!authority.toProto().equals(pending.get(authority.getName()))) throw new IllegalArgumentException("Exact platform ExecutionContext descriptor required (include imports)");
+            if (!matchesPlatformDescriptor(authority, pending.get(authority.getName()))) {
+                throw new IllegalArgumentException("Exact platform ExecutionContext descriptor required (include imports)");
+            }
             while (!pending.isEmpty()) {
                 boolean progress = false;
                 var iterator = pending.entrySet().iterator();
@@ -79,5 +81,51 @@ public final class GrpcCapabilityContract {
         } catch (com.google.protobuf.InvalidProtocolBufferException | Descriptors.DescriptorValidationException e) {
             throw new IllegalArgumentException("Invalid descriptor set", e);
         }
+    }
+
+    static boolean matchesPlatformDescriptor(Descriptors.FileDescriptor authority,
+            DescriptorProtos.FileDescriptorProto candidate) {
+        if (candidate == null) return false;
+        var authorityProto = authority.toProto();
+        var normalized = candidate.toBuilder();
+        if (authority.getMessageTypes().size() != normalized.getMessageTypeCount()) return false;
+        for (int index = 0; index < authority.getMessageTypes().size(); index++) {
+            if (!normalizeRedundantJsonNames(authority.getMessageTypes().get(index),
+                    authorityProto.getMessageType(index), normalized.getMessageTypeBuilder(index))) {
+                return false;
+            }
+        }
+        return authorityProto.equals(normalized.build());
+    }
+
+    private static boolean normalizeRedundantJsonNames(Descriptors.Descriptor authority,
+            DescriptorProtos.DescriptorProto authorityProto,
+            DescriptorProtos.DescriptorProto.Builder candidate) {
+        if (!authority.getName().equals(candidate.getName())
+                || !authorityProto.getName().equals(candidate.getName())
+                || authority.getFields().size() != candidate.getFieldCount()
+                || authority.getNestedTypes().size() != candidate.getNestedTypeCount()) {
+            return false;
+        }
+        for (int index = 0; index < authority.getFields().size(); index++) {
+            var authorityField = authority.getFields().get(index);
+            var authorityFieldProto = authorityProto.getField(index);
+            var candidateField = candidate.getFieldBuilder(index);
+            if (!authorityField.getName().equals(candidateField.getName())
+                    || !authorityFieldProto.getName().equals(candidateField.getName())) {
+                return false;
+            }
+            if (candidateField.hasJsonName() && !authorityFieldProto.hasJsonName()) {
+                if (!authorityField.getJsonName().equals(candidateField.getJsonName())) return false;
+                candidateField.clearJsonName();
+            }
+        }
+        for (int index = 0; index < authority.getNestedTypes().size(); index++) {
+            if (!normalizeRedundantJsonNames(authority.getNestedTypes().get(index),
+                    authorityProto.getNestedType(index), candidate.getNestedTypeBuilder(index))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

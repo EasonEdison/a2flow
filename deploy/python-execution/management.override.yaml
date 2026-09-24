@@ -1,0 +1,13 @@
+# Compose with deploy/java-management/compose.yaml under its existing project.
+# M validation still calls the same real content RPC as the Python executor.
+services:
+  management:
+    environment:
+      A2FLOW_CAPABILITY_GRPC_TARGETS_JSON: >-
+        {"content":{"PRT":{"host":"127.0.0.1","port":8795,"trustCertFile":"/run/a2flow/rpc/ca.pem","clientCertFile":"/run/a2flow/rpc/content-client.pem","clientKeyFile":"/run/a2flow/rpc/content-client-key.pem"}}}
+    volumes:
+      - ${A2FLOW_EXECUTION_PRIVATE:?set private Python execution directory}/rpc/client.pem:/run/a2flow/rpc/content-client.pem:ro
+      - ${A2FLOW_EXECUTION_PRIVATE}/rpc/client-key.pem:/run/a2flow/rpc/content-client-key.pem:ro
+  bside:
+    environment:
+      A2FLOW_ENGINE_RPC_TARGET: "127.0.0.1:8794"
