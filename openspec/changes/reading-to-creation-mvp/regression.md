@@ -1,5 +1,11 @@
 # 内容业务服务：隔离验收记录
 
+## 2026-09-24：Python 通用能力执行内核增量
+
+`services/capability-execution` 的类型合同、参数校验/绑定、执行器与注册 Protobuf 传输已联合验证：20 项测试通过，strict mypy（5 个模块）及 Ruff 通过。组合测试实际经过执行器映射与 loopback gRPC，验证 userId 精确传输及请求/响应拒绝边界；额外修复已有 null 值被嵌套路径静默覆盖的问题。
+
+这里的 gRPC 下游为测试 ContentService，不是数据库内容服务或真实模型。没有入站 host、发布库 resolver、引擎切流、线上写库和浏览器验收；不要将本批解释为“全链已迁到 Python”。迁移边界详见 python-execution.md。本次测试端口在测试结束时自动关闭，无持久容器或外部业务请求。
+
 日期：2026-09-23。全部数据为人工测试素材，不含真实用户内容。
 
 ## 范围

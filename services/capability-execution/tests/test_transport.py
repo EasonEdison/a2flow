@@ -11,7 +11,16 @@ from a2flow.content.v1 import content_pb2 as content
 from a2flow.content.v1 import content_pb2_grpc as content_rpc
 from google.protobuf import descriptor_pb2
 
-from a2flow_capability.models import Environment, JsonObject, TrustedContext
+from a2flow_capability.models import (
+    ArgumentDefinition,
+    Environment,
+    JsonKind,
+    JsonObject,
+    PublishedPlan,
+    RequestMapping,
+    TrustedContext,
+    ValueSchema,
+)
 from a2flow_capability.transport import Endpoint, GrpcTransport, TransportError, registered_method
 
 
@@ -137,5 +146,31 @@ def test_real_rpc_transport_and_rejection_before_dispatch() -> None:
                     ctx,
                 )
             assert service.calls == 2
+            # Exercise mapping kernel + actual downstream RPC, not just an injected fake port.
+            from a2flow_capability.executor import CapabilityExecutor
+
+            published = PublishedPlan(
+                source_id="source-test",
+                source_digest="a" * 64,
+                resolved_environment=Environment.PRT,
+                action_code="content.project.create",
+                capability_version=1,
+                client_type="PC",
+                target_key="content",
+                service_name=Plan().service_name,
+                method_name="CreateProject",
+                descriptor_set_base64=descriptor(),
+                context_field="context",
+                timeout_ms=3000,
+                max_response_bytes=1024 * 1024,
+                technical_output_schema=Plan().technical_output_schema,
+                arguments=(ArgumentDefinition("projectTitle", ValueSchema(JsonKind.STRING), True),),
+                request_mappings=(RequestMapping("projectTitle", "title"),),
+            )
+            result = CapabilityExecutor(transport).execute(
+                published, {"projectTitle": "mapped"}, ctx
+            )
+            assert result.success and isinstance(result.data, dict)
+            assert result.data["title"] == "mapped" and service.calls == 3
         finally:
             server.stop(0).wait()
