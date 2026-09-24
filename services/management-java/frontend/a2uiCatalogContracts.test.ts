@@ -1,6 +1,8 @@
 import {
   A2UI_MANAGED_CATALOG_SOURCE_URL,
   A2UI_APPLICATION_ROUTE_PATHS,
+  A2UI_CATALOG_SOURCE_LABELS,
+  A2UI_COMPONENT_ORIGIN_LABELS,
   A2UI_COMPONENT_CENTER_ENTRIES,
   COMPONENT_CENTER_ASSET_VIEWS,
   COMPONENT_CENTER_HEADER_ACTIONS,
@@ -20,6 +22,7 @@ import {
   parseA2uiCatalogAuthoringJson,
   parseA2uiCatalogComponentForm,
   projectA2uiCatalogMembership,
+  toA2uiCatalogDetailSource,
   validateA2uiCatalogComponent,
   type A2uiCatalogComponentContract,
   type A2uiCatalogComponentRecord,
@@ -58,7 +61,6 @@ const baseComponent: A2uiCatalogComponentContract = {
 
 function componentRecord(
   id: string,
-  catalogSourceType: 'A2UI_OFFICIAL' | 'PLATFORM_MANAGED',
   componentOriginType: 'A2UI_OFFICIAL' | 'PLATFORM_CUSTOM',
   enabled = true,
 ): A2uiCatalogComponentRecord {
@@ -66,7 +68,6 @@ function componentRecord(
     ...baseComponent,
     id,
     componentCode: `${id}.text`,
-    catalogSourceType,
     componentOriginType,
     release: {
       catalogId: `${id}.catalog`,
@@ -105,6 +106,10 @@ function catalogRecord(
     componentOrigins: {
       Text: catalogSourceType === 'A2UI_OFFICIAL' ? 'A2UI_OFFICIAL' : 'PLATFORM_CUSTOM',
     },
+    officialCatalogManifest:
+      catalogSourceType === 'A2UI_OFFICIAL'
+        ? { catalogId: `${id}.catalog`, components: { Text: { type: 'object' } } }
+        : undefined,
   };
 }
 
@@ -284,30 +289,39 @@ async function main() {
     );
   });
 
-  await test('active Catalog projections expose only managed/custom rows', () => {
-    const official = componentRecord('a2ui-official-basic', 'A2UI_OFFICIAL', 'A2UI_OFFICIAL');
-    const managed = componentRecord(
-      'a2flow-managed-basic',
-      'PLATFORM_MANAGED',
-      'PLATFORM_CUSTOM',
-    );
-    const mismatched = componentRecord(
-      'a2flow-managed-official-origin',
-      'PLATFORM_MANAGED',
-      'A2UI_OFFICIAL',
+  await test('shows trusted official and managed Atom projections using the actual server shape', () => {
+    const official = {
+      ...componentRecord('a2ui-official-basic', 'A2UI_OFFICIAL'),
+      officialCatalogId: 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+      officialSourceCommit: '420c6183c400e4b84fe3f9e084906725062a6d56',
+      officialSchema: { type: 'object', properties: { component: { const: 'Text' } } },
+    };
+    const managed = componentRecord('a2flow-managed-basic', 'PLATFORM_CUSTOM');
+    const inconsistent = {
+      ...managed,
+      id: 'inconsistent',
+      catalogSourceType: 'A2UI_OFFICIAL' as const,
+    };
+
+    assertEqual(
+      filterA2uiCatalogComponents([official, managed], 'ALL')?.length,
+      2,
+      'visible Atom count',
     );
     assertEqual(
-      filterA2uiCatalogComponents([official, managed, mismatched], 'ALL')?.[0]?.id,
+      filterA2uiCatalogComponents([official, managed], 'A2UI_OFFICIAL')?.[0]?.id,
+      official.id,
+      'official Atom projection',
+    );
+    assertEqual(
+      filterA2uiCatalogComponents([official, managed], 'PLATFORM_MANAGED')?.[0]?.id,
       managed.id,
-      'managed/custom Catalog projection',
+      'managed Atom projection',
     );
-    assertEqual(
-      filterA2uiCatalogComponents([official, managed, mismatched], 'ALL')?.length,
-      1,
-      'active atom count',
-    );
+    assertEqual(official.catalogSourceType, undefined, 'actual Atom omits Catalog source');
     assertEqual(isA2uiCatalogComponentEditable(official), false, 'official editability');
     assertEqual(isA2uiCatalogComponentEditable(managed), true, 'managed editability');
+    assertEqual(isA2uiCatalogComponentEditable(inconsistent), false, 'inconsistent origin fails closed');
   });
 
   await test('collects only exact enabled managed/custom Catalog release options', () => {
@@ -348,18 +362,19 @@ async function main() {
     );
   });
 
-  await test('filters Catalog assets by typed source and trusts server editability only for managed rows', () => {
+  await test('shows both Catalog sources and trusts server editability only for managed rows', () => {
     const official = catalogRecord('official', 'A2UI_OFFICIAL');
     const managed = catalogRecord('managed', 'PLATFORM_MANAGED');
+    assertEqual(filterA2uiCatalogs([official, managed], 'ALL')?.length, 2, 'visible Catalog count');
     assertEqual(
-      filterA2uiCatalogs([official, managed], 'ALL')?.[0]?.id,
-      managed.id,
-      'managed assets',
+      filterA2uiCatalogs([official, managed], 'A2UI_OFFICIAL')?.[0]?.id,
+      official.id,
+      'official Catalog filter',
     );
     assertEqual(
-      filterA2uiCatalogs([official, managed], 'ALL')?.length,
-      1,
-      'active managed asset count',
+      filterA2uiCatalogs([official, managed], 'PLATFORM_MANAGED')?.[0]?.id,
+      managed.id,
+      'managed Catalog filter',
     );
     assertEqual(isA2uiCatalogEditable(official), false, 'official Catalog read-only');
     assertEqual(isA2uiCatalogEditable(managed), true, 'managed Catalog editable');
@@ -367,6 +382,27 @@ async function main() {
       isA2uiCatalogEditable({ ...managed, editable: false }),
       false,
       'server editability fail closed',
+    );
+    assertEqual(A2UI_CATALOG_SOURCE_LABELS.A2UI_OFFICIAL, 'Google 官方', 'official label');
+    assertEqual(
+      A2UI_COMPONENT_ORIGIN_LABELS.A2UI_OFFICIAL,
+      'Google 官方组件',
+      'official Atom label',
+    );
+  });
+
+  await test('projects the complete official manifest only for read-only detail', () => {
+    const official = catalogRecord('official', 'A2UI_OFFICIAL');
+    const managed = catalogRecord('managed', 'PLATFORM_MANAGED');
+    assertEqual(
+      JSON.stringify(toA2uiCatalogDetailSource(official)),
+      JSON.stringify(official.officialCatalogManifest),
+      'official manifest detail',
+    );
+    assertEqual(
+      Object.prototype.hasOwnProperty.call(toA2uiCatalogDetailSource(managed), 'editable'),
+      false,
+      'managed authoring detail excludes authority',
     );
   });
 
@@ -410,6 +446,10 @@ async function main() {
       '{"catalogId":"managed","release":{"digest":"spoofed"}}',
     );
     assertEqual(spoofed.ok, false, 'authority-bearing Catalog JSON');
+    const officialSpoof = parseA2uiCatalogAuthoringJson(
+      '{"catalogId":"managed","officialCatalogManifest":{"components":{}}}',
+    );
+    assertEqual(officialSpoof.ok, false, 'official manifest authority');
   });
 }
 
