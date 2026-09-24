@@ -1,0 +1,37 @@
+name: a2flow-python-execution
+
+x-private: &private
+  image: ${A2FLOW_EXECUTION_IMAGE:?set reviewed immutable image}
+  network_mode: host
+  user: "1000:1000"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:size=32m,mode=1777"]
+  restart: unless-stopped
+  mem_limit: 192m
+
+services:
+  execution:
+    <<: *private
+    env_file: ["${A2FLOW_EXECUTION_PRIVATE:?set private directory}/execution.env"]
+    volumes:
+      - postgres_socket:/run/postgresql
+      - ${A2FLOW_EXECUTION_PRIVATE}/management.dsn:/run/a2flow/management.dsn:ro
+      - ${A2FLOW_EXECUTION_PRIVATE}/assets.dsn:/run/a2flow/assets.dsn:ro
+      - ${A2FLOW_EXECUTION_PRIVATE}/targets.json:/run/a2flow/targets.json:ro
+      - ${A2FLOW_EXECUTION_PRIVATE}/rpc:/run/a2flow/rpc:ro
+    command: ["-m", "a2flow_a2ui"]
+  content:
+    <<: *private
+    env_file: ["${A2FLOW_EXECUTION_PRIVATE}/content.env"]
+    volumes:
+      - postgres_socket:/run/postgresql
+      - ${A2FLOW_EXECUTION_PRIVATE}/content.dsn:/run/a2flow/content.dsn:ro
+      - ${A2FLOW_EXECUTION_PRIVATE}/rpc:/run/a2flow/rpc:ro
+    command: ["-m", "a2flow_content"]
+
+volumes:
+  postgres_socket:
+    external: true
+    name: ${A2FLOW_EXISTING_POSTGRES_SOCKET:?set existing socket volume}
