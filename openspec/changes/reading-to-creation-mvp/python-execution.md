@@ -1,4 +1,12 @@
-# Python 业务能力执行迁移：第一批
+# Python 业务能力执行迁移
+
+## 2026-09-24 第二批：发布准入及 Host
+
+已完成权威 `skill_asset_release_state` 读取（含 RELEASE_RECORD 摘要及 snapshotBuildId 恢复）、短只读 repeatable-read 事务、PRT/ONLINE 隔离选择、ONLINE userId 百分比/白名单灰度、完整 M draft 编译和来源比对。不是旧 Python 投影准入。现有 M 管理库聚合保存两环境指针，本批未迁移物理存储布局。
+
+Python CapabilityExecution Host 已组装。Resolve 即验证完整 descriptor/unary/context；Execute 每次重读发布态并验证调用方 sourceId/digest，旧版本拒绝且不调用业务服务。生产只接受 mTLS，loopback 测试模式需要显式配置。userId 不作为认证凭据；可信上游仍负责登录、绑定和操作权限。
+
+47 项能力测试、strict mypy 10 模块、Ruff 通过；实际隔离 PG 中写入合成 M 发布记录，两个 Python Host 完成项目创建落库、重放、跨用户拒绝、灰度、旧版本拒绝、无跨环境回退和篡改摘要拒绝。未进行真实 M 页面发布/模型调用/公网部署。下方第一批记录保留历史，未交付列表以本段和文末更新为准。
 
 2026-09-24。本批实现执行内核与下游 Protobuf 传输，不切换现有线上 Java 服务。
 
@@ -23,8 +31,8 @@ root 的真实 loopback gRPC 验证已覆盖：最大 signed int64 注入、保�
 
 ## 未交付
 
-1. 从 M 已发布数据库重建执行计划、按 userId 灰度选择并比对 sourceId/digest；不能用直接传入 PublishedPlan 代替该授权入口。
-2. Python CapabilityExecution 入站 host 与实际配置组装；现有引擎尚未改连新服务。
+1. 从真实 M 页面创建并发布场景资产（后端读取、灰度、sourceId/digest 校验已完成）。
+2. 现有引擎改连 Python Host、生产服务证书和部署配置验收（Host 实现已完成）。
 3. Python A2UI Load/Action/ResultAdapter 迁移。
 4. M 场景资产录入发布、真实模型 Chat、三节点 Workflow、公网部署与浏览器验收。
 

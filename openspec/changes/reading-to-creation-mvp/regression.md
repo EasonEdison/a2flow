@@ -8,6 +8,18 @@
 
 日期：2026-09-23。全部数据为人工测试素材，不含真实用户内容。
 
+## 2026-09-24 Python 能力链路新增证据
+
+- 47 项 capability tests PASS；strict mypy 10 source modules、探针 1 文件及 Ruff PASS。
+- 实际隔离 PostgreSQL，按照 M writer 结构合成 root/RELEASE_RECORD 和 compact version；不是浏览器作者发布证据。
+- 两个真实 Python gRPC Host：发布读取 → 编译 → Execute → ContentService.CreateProject → 内容数据库落库 PASS。
+- 最大 signed64 userId 原样传递、requestId 重放、跨用户隔离 PASS。
+- 发布改到 build-2 后旧 sourceId/digest 被 FAILED_PRECONDITION 拒绝，项目数未增加 PASS。
+- PRT 缺指针不读取 ONLINE；ONLINE compact版本恢复、百分比与最大/最小 signed64/白名单选择 PASS。
+- 拆分 recordJson 篡改后摘要校验拒绝 PASS。
+- Review 补充：Resolve 提前校验完整 descriptor；坏契约不能先 Resolve 成功再到 Execute 才发现。非字符串 inputDigest/grayStatus 拒绝，空白摘要保持 Java 正常兼容语义。
+- 临时测试 Host、容器仅用于隔离验证；生产监听、资产、用户数据和页面均未更改。mTLS 生产证书握手不在本次通过范围。
+
 ## 范围
 
 独立 Python 内容业务服务，12 个强类型 gRPC 方法、PostgreSQL 五张业务表、共用可信身份上下文。M 端配置、模型调用、Chat 卡片、Workflow 和公网部署不在本次通过范围。

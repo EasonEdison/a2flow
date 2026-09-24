@@ -32,10 +32,9 @@ result = executor.execute(plan, arguments, trusted_context)   # PC/APP 运行态
 
 ## 当前边界
 
-本批已实现执行内核，不代表运行链路已经切换到 Python。以下内容仍由后续批次完成：
+执行内核、权威发布读取/编译、入站 RPC 和 Host 已实现，配置和联调说明见 [中文运行手册](README.zh-CN.md)。不代表线上运行链路已经切换到 Python。以下内容仍未完成或不支持：
 
-- 从 PostgreSQL 读取并校验不可变 published plan 的 resolver；
-- 入站 RPC adapter、host、管理端发布接线和流量切换；
+- 真实 M 页面场景资产发布、现有引擎流量切换与生产证书组装；
 - 非 unary Protobuf、HTTP 回退、动态目标、数组下标映射、非 `ORIGINAL` 响应改写和非 `NONE` 幂等策略。
 
 这些未支持项一律 fail closed，不自动回退到 HTTP 或其他环境/目标。
@@ -52,4 +51,4 @@ MYPYPATH=src /home/admin/OpenSource/.venvs/content-mvp/bin/mypy tests --explicit
 /home/admin/OpenSource/.venvs/content-mvp/bin/pytest -q
 ```
 
-本目录没有数据库测试，也不会访问线上服务。
+真实隔离 PostgreSQL 联调由 `deploy/capability_service/verify_published_content.py` 执行；需显式开启测试写入，不能使用线上数据库。
