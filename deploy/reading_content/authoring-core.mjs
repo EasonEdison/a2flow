@@ -82,9 +82,9 @@ function capabilityDraft(spec, descriptorSetBase64, targetKey, sample) {
   };
 }
 
-function placeholderSample(spec) {
+export function placeholderSample(spec) {
   const values = {
-    title: '阅读到创作发布验收', audience: '希望把阅读转化为公开内容的创作者', outputFormat: 'Markdown',
+    title: '阅读到创作发布验收', audience: '希望把阅读转化为公开内容的创作者', outputFormat: 'ARTICLE',
     page: 1, pageSize: 20, projectId: UUID_ZERO, sourceId: UUID_ZERO, artifactId: UUID_ZERO,
     confirmationId: UUID_ZERO, sourceUrl: 'https://example.invalid/reading-content-fixture',
     body: '注意力不是无限资源。主动安排休息能保护注意力。', expectedProjectRevision: 1,
@@ -93,7 +93,11 @@ function placeholderSample(spec) {
     inputRefs: [{ kind: 'SOURCE', id: UUID_ZERO, revision: 1 }], origin: 'MODEL_GENERATED', selectedPointIds: ['p1'], userNotes: '',
     topicId: 't1', editedTitle: '注意力不是意志力', editedAngle: '从资源管理切入', format: 'MARKDOWN',
   };
-  return Object.fromEntries(spec.fields.filter(item => item.required).map(item => [item.toolField, values[item.toolField]]));
+  const sample = Object.fromEntries(spec.fields.filter(item => item.required).map(item => [item.toolField, values[item.toolField]]));
+  // SaveArtifact's protobuf body is a oneof whose branch fields are conditionally required.
+  // Keep the fallback input example structurally valid for the representative READING_BRIEF kind.
+  if (spec.actionCode === 'content.artifact.save') sample.readingPoints = values.readingPoints;
+  return sample;
 }
 
 async function ensureCapability(client, spec, options, sample) {
@@ -215,11 +219,11 @@ async function ensureSkill(client, skill, capabilityIds, applicationId, speciali
   return { workspaceId, release: await publishPrt(client, 'SKILL', skill.skillCode, { workspaceId }) };
 }
 
-function sampleFactory(state) {
+export function sampleFactory(state) {
   const sourceRef = () => [{ kind: 'SOURCE', id: state.source.id, revision: state.source.revision }];
   const artifactRef = item => ({ kind: 'ARTIFACT', id: item.id, revision: item.revision });
   return {
-    create: { title: '阅读到创作 PRT 发布验收', audience: '希望把阅读转化为公开内容的创作者', outputFormat: 'Markdown' },
+    create: { title: '阅读到创作 PRT 发布验收', audience: '希望把阅读转化为公开内容的创作者', outputFormat: 'ARTICLE' },
     list: { page: 1, pageSize: 20 },
     project: () => ({ projectId: state.project.id }),
     sourceSave: () => ({ projectId: state.project.id, title: '注意力阅读摘录', body: '注意力不是无限资源。主动安排休息能保护注意力。', sourceUrl: 'https://example.invalid/reading-content-fixture', expectedProjectRevision: 1 }),

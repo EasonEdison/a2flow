@@ -7,12 +7,12 @@ const stringItem = { type: 'string' };
 const integerItem = { type: 'integer' };
 const referenceItem = {
   type: 'object',
-  properties: { kind: stringItem, id: stringItem, revision: integerItem },
+  properties: { kind: { type: 'string', description: '引用类型，只能是 SOURCE 或 ARTIFACT' }, id: stringItem, revision: integerItem },
   required: ['kind', 'id', 'revision'],
 };
 const citationItem = {
   type: 'object',
-  properties: { referenceKind: stringItem, referenceId: stringItem, revision: integerItem, label: stringItem },
+  properties: { referenceKind: { type: 'string', description: '引用类型，只能是 SOURCE 或 ARTIFACT' }, referenceId: stringItem, revision: integerItem, label: stringItem },
   required: ['referenceKind', 'referenceId', 'revision', 'label'],
 };
 const readingPointItem = {
@@ -45,7 +45,8 @@ export const capabilitySpecs = [
   {
     actionCode: 'content.project.create', methodName: 'CreateProject', nameCn: '创建内容项目', sideEffect: 'WRITE',
     description: '为当前可信用户创建一个阅读到创作项目。',
-    fields: [field('title', 'string', '项目标题'), field('audience', 'string', '目标读者'), field('outputFormat', 'string', '目标输出形式')],
+    fields: [field('title', 'string', '项目标题'), field('audience', 'string', '目标读者'),
+      field('outputFormat', 'string', '内容输出形态，只能是 ARTICLE（文章）或 SPOKEN_SCRIPT（口播稿），不是导出文件格式', true, { allowedValues: values('ARTICLE', 'SPOKEN_SCRIPT') })],
     mappings: { title: 'title', audience: 'audience', outputFormat: 'outputFormat' },
     outputs: [['id', '项目 ID', 'string'], ['revision', '项目修订号', 'integer']],
   },
@@ -82,14 +83,14 @@ export const capabilitySpecs = [
     fields: [
       field('projectId', 'string', '项目 ID'),
       field('kind', 'string', '产物类型', true, { allowedValues: values('READING_BRIEF', 'TOPIC_PLAN', 'MANUSCRIPT') }),
-      field('readingPoints', 'array', '阅读要点', false, { items: readingPointItem }),
-      field('questions', 'array', '待追问问题', false, { items: stringItem }),
-      field('usableMaterials', 'array', '可用素材', false, { items: stringItem }),
-      field('topics', 'array', '选题候选', false, { items: topicItem }),
-      field('manuscriptTitle', 'string', '稿件标题', false),
-      field('manuscriptMarkdown', 'string', '稿件 Markdown 正文', false),
-      field('citations', 'array', '稿件引用', false, { items: citationItem }),
-      field('inputRefs', 'array', '冻结输入引用', true, { items: referenceItem }),
+      field('readingPoints', 'array', '仅 READING_BRIEF 使用，对应 body.readingBrief.points，至少一项', false, { items: readingPointItem }),
+      field('questions', 'array', '仅 READING_BRIEF 使用，对应 body.readingBrief.questions', false, { items: stringItem }),
+      field('usableMaterials', 'array', '仅 READING_BRIEF 使用，对应 body.readingBrief.usableMaterials', false, { items: stringItem }),
+      field('topics', 'array', '仅 TOPIC_PLAN 使用，对应 body.topicPlan.topics，至少一项', false, { items: topicItem }),
+      field('manuscriptTitle', 'string', '仅 MANUSCRIPT 使用，对应 body.manuscript.title', false),
+      field('manuscriptMarkdown', 'string', '仅 MANUSCRIPT 使用，对应 body.manuscript.bodyMarkdown', false),
+      field('citations', 'array', '仅 MANUSCRIPT 使用，对应 body.manuscript.citations', false, { items: citationItem }),
+      field('inputRefs', 'array', '冻结输入引用；kind 只能是 SOURCE 或 ARTIFACT，且至少一项', true, { items: referenceItem }),
       field('origin', 'string', '产物来源', true, { allowedValues: values('MODEL_GENERATED', 'USER_EDITED') }),
     ],
     mappings: {
@@ -353,17 +354,17 @@ export const skillSpecs = [
   {
     skillCode: 'reading-material-analysis', nameCn: '阅读材料分析', applicationCode: 'reading-point-selector',
     capabilities: ['content.project.create', 'content.project.list', 'content.project.get', 'content.source.save', 'content.source.get', 'content.artifact.save', 'content.artifact.get', 'content.confirmation.get', 'content.reading.confirm'],
-    markdown: `---\nname: reading-material-analysis\ndescription: 保存阅读材料、生成有原文依据的阅读要点，并交给用户多选确认\n---\n\n# 阅读材料分析\n\n先创建或读取项目并保存原文，再生成 READING_BRIEF。非模型建议的要点必须引用原文中真实存在的原句。调用 reading-point-selector 时，把 points 规范化为展示列表，把每个 id/claim 规范化为 options 的 value/label；不得代替用户选择。只有 confirmReading 成功才视为本阶段完成。\n`,
+    markdown: `---\nname: reading-material-analysis\ndescription: 保存阅读材料、生成有原文依据的阅读要点，并交给用户多选确认\n---\n\n# 阅读材料分析\n\n创建项目时 outputFormat 只能取 ARTICLE 或 SPOKEN_SCRIPT；本场景默认 ARTICLE，不能填写 Markdown。先创建或读取项目并保存原文，再调用 content.artifact.save：kind 必须为 READING_BRIEF，只填写 readingPoints/questions/usableMaterials 分支，inputRefs 使用 kind=SOURCE。非模型建议的要点必须引用原文中真实存在的原句。能力响应中的展示数据路径是 body.readingBrief.points；调用 reading-point-selector 时，把该 points 规范化为展示列表，把每个 id/claim 规范化为 options 的 value/label；不得代替用户选择。只有 confirmReading 成功且响应 decisionType=READING 才视为本阶段完成。\n`,
   },
   {
     skillCode: 'content-topic-planning', nameCn: '内容选题规划', applicationCode: 'content-topic-selector',
     capabilities: ['content.project.get', 'content.artifact.get', 'content.artifact.save', 'content.confirmation.get', 'content.topic.confirm'],
-    markdown: `---\nname: content-topic-planning\ndescription: 基于已确认阅读要点生成选题，并等待用户编辑和确认\n---\n\n# 内容选题规划\n\n只基于已确认阅读要点生成 TOPIC_PLAN，每个候选都要保留 sourcePointIds。使用 content-topic-selector 展示候选；每张候选卡中的标题和角度可编辑，必须由用户点击该卡的 confirmTopic，不能替用户确认。\n`,
+    markdown: `---\nname: content-topic-planning\ndescription: 基于已确认阅读要点生成选题，并等待用户编辑和确认\n---\n\n# 内容选题规划\n\n只基于 decisionType=READING 的确认记录生成选题。调用 content.artifact.save 时 kind 必须为 TOPIC_PLAN，只填写 topics 分支，inputRefs 使用 kind=ARTIFACT 指向已确认的 READING_BRIEF；每个候选都要保留 sourcePointIds。能力响应中的展示数据路径是 body.topicPlan.topics；使用 content-topic-selector 展示候选。每张候选卡中的标题和角度可编辑，必须由用户点击该卡的 confirmTopic；只有响应 decisionType=TOPIC 才算确认，不能替用户确认。\n`,
   },
   {
     skillCode: 'content-draft-writing', nameCn: '内容稿件创作', applicationCode: 'content-manuscript-editor',
     capabilities: ['content.project.get', 'content.artifact.get', 'content.artifact.save', 'content.confirmation.get', 'content.manuscript.confirm', 'content.manuscript.export'],
-    markdown: `---\nname: content-draft-writing\ndescription: 基于已确认选题创作、编辑、保存、确认和导出稿件\n---\n\n# 内容稿件创作\n\n生成 MANUSCRIPT 时引用必须存在于 inputRefs。使用 content-manuscript-editor 编辑和预览；saveManuscriptDraft 返回的新 artifact id/revision 是后续唯一有效保存身份。存在未保存标题或正文时 confirmManuscript、exportManuscript 和下载都会被组件 checks 阻断。不得对旧 artifact 执行确认或导出。\n`,
+    markdown: `---\nname: content-draft-writing\ndescription: 基于已确认选题创作、编辑、保存、确认和导出稿件\n---\n\n# 内容稿件创作\n\n只基于 decisionType=TOPIC 的确认记录创作稿件。调用 content.artifact.save 时 kind 必须为 MANUSCRIPT，只填写 manuscriptTitle/manuscriptMarkdown/citations 分支；citation 的 referenceKind 只能是 SOURCE 或 ARTIFACT，且引用必须存在于 inputRefs。能力响应中的已保存正文路径是 body.manuscript.title 和 body.manuscript.bodyMarkdown。使用 content-manuscript-editor 编辑和预览；saveManuscriptDraft 返回的新 artifact id/revision 是后续唯一有效保存身份。存在未保存标题或正文时 confirmManuscript、exportManuscript 和下载都会被组件 checks 阻断。导出 format 只能是 MARKDOWN 或 TXT；最终确认必须返回 decisionType=MANUSCRIPT。不得对旧 artifact 执行确认或导出。\n`,
   },
 ];
 
