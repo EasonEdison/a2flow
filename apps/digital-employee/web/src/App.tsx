@@ -171,7 +171,7 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
       if (!abort.signal.aborted) { await load(); setBusy(false); }
     }
   };
-  return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述目标，确认后启动工作流</p></div>
+  return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述目标，数字员工会调用已发布能力并展示交互卡片</p></div>
     <button className="secondary" disabled={busy} onClick={() => { setError(''); void load(); }}>重新读取历史</button>
     {error ? <p className="chat-error" role="alert">{error}</p> : null}</header>
     <div className="message-flow" ref={flowRef}>{messages.map(message => <article className={`message ${message.role}`} key={message.id}><span>{message.role === 'user' ? '你' : 'AI'}</span><div>
