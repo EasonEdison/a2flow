@@ -167,7 +167,7 @@ public class A2uiCurrentCapabilityResolver {
         Map<String, Object> source = draft.getDraft();
         List<String> supportedClients = supportedClients(source.get(FIELD_SUPPORTED_CLIENTS));
         Map<String, Object> clientVariants = map(source.get(FIELD_CLIENT_VARIANTS));
-        if (!new ArrayList<>(clientVariants.keySet()).equals(supportedClients)) {
+        if (!clientVariants.keySet().equals(new LinkedHashSet<>(supportedClients))) {
             throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
         }
         Map<String, A2uiCurrentCapabilityVariantContract> variants = new LinkedHashMap<>();

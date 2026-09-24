@@ -724,9 +724,17 @@ public class A2uiApplicationBuildCompiler {
         if (capability == null || capability.getClientVariants() == null) {
             throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
         }
-        List<String> clients = new ArrayList<>(capability.getClientVariants().keySet());
-        if (!CLIENT_MODE_PC.equals(clients) && !CLIENT_MODE_APP.equals(clients)
-                && !CLIENT_MODE_DIFFERENT.equals(clients) && !CLIENT_MODE_COMMON.equals(clients)) {
+        Set<String> clientKeys = capability.getClientVariants().keySet();
+        List<String> clients;
+        if (clientKeys.equals(Set.of(CLIENT_PC))) {
+            clients = CLIENT_MODE_PC;
+        } else if (clientKeys.equals(Set.of(CLIENT_APP))) {
+            clients = CLIENT_MODE_APP;
+        } else if (clientKeys.equals(Set.of(CLIENT_PC, CLIENT_APP))) {
+            clients = CLIENT_MODE_DIFFERENT;
+        } else if (clientKeys.equals(Set.of(CLIENT_COMMON))) {
+            clients = CLIENT_MODE_COMMON;
+        } else {
             throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
         }
         List<A2uiCurrentCapabilityVariantContract> variants = new ArrayList<>();

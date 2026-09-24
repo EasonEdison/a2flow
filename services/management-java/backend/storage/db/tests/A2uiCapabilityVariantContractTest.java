@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityContract;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityVariantContract;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiMappingSource;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiRequestMapping;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSideEffectLevel;
@@ -33,8 +34,8 @@ public final class A2uiCapabilityVariantContractTest {
         compiler.validateCapabilitySchemas(legacyCommon, mappings("title"), Map.of(), null);
 
         LinkedHashMap<String, Object> different = new LinkedHashMap<>();
-        different.put("PC", variant(modelContract("title")));
         different.put("APP", variant(modelContract("body")));
+        different.put("PC", variant(modelContract("title")));
         A2uiCurrentCapabilityContract pcAndApp = resolver.contract(
                 draft(List.of("PC", "APP"), different), ACTION_CODE);
         check(pcAndApp.getClientVariants().keySet().equals(
@@ -43,10 +44,27 @@ public final class A2uiCapabilityVariantContractTest {
         mustSchemaFailure(() -> compiler.validateCapabilitySchemas(
                 pcAndApp, mappings("title"), Map.of(), null));
 
+        LinkedHashMap<String, A2uiCurrentCapabilityVariantContract> reversedTyped = new LinkedHashMap<>();
+        reversedTyped.put("APP", typedVariant("APP", "title"));
+        reversedTyped.put("PC", typedVariant("PC", "title"));
+        compiler.validateCapabilitySchemas(new A2uiCurrentCapabilityContract(
+                ACTION_CODE, reversedTyped, A2uiSideEffectLevel.READ_ONLY),
+                mappings("title"), Map.of(), null);
+
+        LinkedHashMap<String, Object> missing = new LinkedHashMap<>();
+        missing.put("PC", variant(modelContract("title")));
         mustSchemaFailure(() -> resolver.contract(
-                draft(List.of("PC"), variants("COMMON", modelContract("title"))), ACTION_CODE));
+                draft(List.of("PC", "APP"), missing), ACTION_CODE));
+        LinkedHashMap<String, Object> extra = variants("PC", modelContract("title"));
+        extra.put("APP", variant(modelContract("title")));
+        mustSchemaFailure(() -> resolver.contract(draft(List.of("PC"), extra), ACTION_CODE));
         System.out.println("A2UI_CAPABILITY_VARIANTS_PASS: PC preserved, COMMON compatible, "
-                + "all declared variants validated, mismatched declarations rejected");
+                + "map order ignored, all variants validated, missing and extra keys rejected");
+    }
+
+    private static A2uiCurrentCapabilityVariantContract typedVariant(String client, String field) {
+        return new A2uiCurrentCapabilityVariantContract(
+                client, modelContract(field), RESULT_CONTRACT);
     }
 
     private static CapabilityActionDraft draft(List<String> supportedClients,
