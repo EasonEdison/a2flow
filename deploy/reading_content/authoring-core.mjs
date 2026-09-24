@@ -13,6 +13,7 @@ const requiredText = (value, name) => {
 };
 const list = value => Array.isArray(value) ? value : Array.isArray(value?.list) ? value.list : [];
 const actionCodeOf = item => item?.draft?.basicInfo?.actionCode || item?.basicInfo?.actionCode || item?.actionCode;
+const capabilityNameOf = item => item?.draft?.basicInfo?.nameCn || item?.basicInfo?.nameCn || item?.nameCn;
 const appCodeOf = item => item?.appCode || item?.componentCode || item?.componentName || item?.runtimeConfig?.appCode;
 const componentCodeOf = item => item?.componentCode || item?.type || item?.componentName;
 const catalogIdOf = item => item?.catalogId || item?.componentCode || item?.componentName;
@@ -101,8 +102,15 @@ async function ensureCapability(client, spec, options, sample) {
   if (matches.length > 1) throw new Error(`${spec.actionCode}: duplicate capability drafts`);
   let draftId;
   if (matches.length === 0) {
-    const created = (await client.call('CAPABILITY_DRAFT_CREATE', { draftJson: JSON.stringify({ payloadType: 'CAPABILITY_DRAFT_SNAPSHOT', mode: 'CREATE', basicInfo: { nameCn: spec.nameCn } }) })).data;
-    draftId = requiredText(created?.draftId, `${spec.actionCode}.draftId`);
+    const byName = list((await client.call('CAPABILITY_LIST', { keyword: spec.nameCn })).data);
+    const initialDrafts = byName.filter(item => capabilityNameOf(item) === spec.nameCn && !actionCodeOf(item));
+    if (initialDrafts.length > 1) throw new Error(`${spec.actionCode}: multiple initial drafts named ${spec.nameCn}`);
+    if (initialDrafts.length === 1) {
+      draftId = requiredText(initialDrafts[0]?.draftId, `${spec.actionCode}.draftId`);
+    } else {
+      const created = (await client.call('CAPABILITY_DRAFT_CREATE', { draftJson: JSON.stringify({ payloadType: 'CAPABILITY_DRAFT_SNAPSHOT', mode: 'CREATE', basicInfo: { nameCn: spec.nameCn } }) })).data;
+      draftId = requiredText(created?.draftId, `${spec.actionCode}.draftId`);
+    }
   } else {
     draftId = requiredText(matches[0]?.draftId, `${spec.actionCode}.draftId`);
   }
@@ -110,7 +118,7 @@ async function ensureCapability(client, spec, options, sample) {
   await client.call('CAPABILITY_DRAFT_SAVE', {
     draftId, baseRevision: detail.revision,
     draftJson: JSON.stringify(capabilityDraft(spec, options.descriptorSetBase64, options.targetKey, sample)),
-    businessDomain: 'content', capabilityDomain: 'reading-creation', specialistIds: options.specialistIds,
+    businessDomain: 'general', capabilityDomain: 'general', specialistIds: options.specialistIds,
   });
   const validation = (await client.call('CAPABILITY_VALIDATE', { draftId })).data;
   if (validation?.valid !== true) throw new Error(`${spec.actionCode}: ${JSON.stringify(validation?.errors || validation)}`);
@@ -153,9 +161,11 @@ export async function bootstrapBasicAtoms(client, atoms) {
   for (const atom of atoms) await ensureAtom(client, atom);
 }
 
-async function ensureCatalog(client) {
+async function ensureCatalog(client, officialComponentCodes = []) {
+  const importedOfficial = new Set(officialComponentCodes);
   const missing = [];
   for (const code of BASIC_COMPONENTS) {
+    if (importedOfficial.has(code)) continue;
     const rows = list((await client.call('A2UI_CATALOG_COMPONENT_LIST', { keyword: code })).data);
     if (!rows.some(item => componentCodeOf(item) === code)) missing.push(code);
   }
@@ -187,7 +197,7 @@ async function ensureSkill(client, skill, capabilityIds, applicationId, speciali
   let detailResult = await client.call('SKILL_DETAIL', { skillCode: skill.skillCode }, true);
   let workspaceId = skill.skillCode;
   if (!detailResult.ok) {
-    const created = (await client.call('WORKSPACE_CREATE', { skillCode: skill.skillCode, skillNameCn: skill.nameCn, skillDescription: skill.markdown.split('\n')[2] || skill.nameCn, specialistIds, businessDomain: 'content', capabilityDomain: 'reading-creation' })).data;
+    const created = (await client.call('WORKSPACE_CREATE', { skillCode: skill.skillCode, skillNameCn: skill.nameCn, skillDescription: skill.markdown.split('\n')[2] || skill.nameCn, specialistIds, businessDomain: 'general', capabilityDomain: 'general' })).data;
     workspaceId = created?.workspaceId || skill.skillCode;
   } else {
     workspaceId = detailResult.data?.workspaceId || skill.skillCode;
@@ -270,7 +280,7 @@ export async function runPrtAuthoring(client, options) {
     if (!capabilities.has(spec.actionCode)) capabilities.set(spec.actionCode, await ensureCapability(client, spec, normalized, placeholderSample(spec)));
     await publishPrt(client, 'CAPABILITY_ACTION', capabilities.get(spec.actionCode).draftId);
   }
-  const catalogRelease = await ensureCatalog(client);
+  const catalogRelease = await ensureCatalog(client, options.officialComponentCodes);
   const applicationRows = new Map();
   for (const application of buildApplications()) applicationRows.set(application.appCode, await ensureApplication(client, application));
   const skillRows = new Map();

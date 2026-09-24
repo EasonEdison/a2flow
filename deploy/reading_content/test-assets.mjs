@@ -52,12 +52,15 @@ assert.match(html, /<button id="load-project-descriptor" type="button">加载本
 assert.match(html, /<textarea id="descriptor-text"/);
 assert.match(html, /<input id="descriptor-file" type="file" accept="text\/plain,\.txt">/);
 assert.match(html, /<input id="target-key" value="content"/);
+assert.match(html, /<input id="sync-official-basic" type="checkbox" checked>/);
 assert.doesNotMatch(html, /<input[^>]+(?:name|id)="[^"]*(?:token|cookie|password)/i);
 const browser = await readFile(new URL('./import.js', import.meta.url), 'utf8');
 assert.match(browser, /form\.addEventListener\('submit'/);
 assert.match(browser, /loadDescriptorButton\.addEventListener\('click'/);
 assert.match(browser, /fetch\(new URL\('\.\/content-descriptor\.txt', import\.meta\.url\)/);
 assert.match(browser, /validateDescriptorBase64\(await response\.text\(\)\)/);
+assert.match(browser, /client\.call\('A2UI_CATALOG_OFFICIAL_IMPORT'\)/);
+assert.match(browser, /catalogSourceType !== 'A2UI_OFFICIAL'/);
 assert.match(browser, /descriptorText \|\| \(descriptorFile \?/);
 assert.match(browser, /if \(!descriptorText && !descriptorFile\)/);
 assert.doesNotMatch(browser, /RELEASE_ONLINE|forcePublish|authorization/i);
@@ -78,4 +81,7 @@ const authoringCore = await readFile(new URL('./authoring-core.mjs', import.meta
 assert.match(authoringCore, /clientType: 'PC'/);
 assert.match(authoringCore, /getRandomValues/);
 assert.doesNotMatch(authoringCore, /randomUUID|Math\.random/);
+assert.match(authoringCore, /businessDomain: 'general', capabilityDomain: 'general'/);
+assert.match(authoringCore, /initialDrafts\.length > 1/);
+assert.match(authoringCore, /!actionCodeOf\(item\)/);
 console.log('PASS reading-content assets, stale-draft guards, inline export identity, and explicit browser trigger');

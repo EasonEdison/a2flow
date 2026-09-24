@@ -8,6 +8,7 @@ const descriptorTextInput = /** @type {HTMLTextAreaElement} */ (document.querySe
 const fileInput = /** @type {HTMLInputElement} */ (document.querySelector('#descriptor-file'));
 const targetInput = /** @type {HTMLInputElement} */ (document.querySelector('#target-key'));
 const specialistInput = /** @type {HTMLInputElement} */ (document.querySelector('#specialist-ids'));
+const syncOfficialBasic = /** @type {HTMLInputElement} */ (document.querySelector('#sync-official-basic'));
 const includeWorkflow = /** @type {HTMLInputElement} */ (document.querySelector('#include-workflow'));
 const specialistCode = /** @type {HTMLInputElement} */ (document.querySelector('#specialist-code'));
 const workflowCode = /** @type {HTMLInputElement} */ (document.querySelector('#workflow-code'));
@@ -92,11 +93,22 @@ form.addEventListener('submit', async event => {
   try {
     const descriptorSetBase64 = validateDescriptorBase64(descriptorText || (descriptorFile ? await descriptorFile.text() : ''));
     const client = new ManagementClient({ origin: location.origin, signal: AbortSignal.timeout(30 * 60_000), onProgress: append });
+    let officialComponentCodes = [];
+    if (syncOfficialBasic.checked) {
+      const official = (await client.call('A2UI_CATALOG_OFFICIAL_IMPORT')).data;
+      if (official?.catalogSourceType !== 'A2UI_OFFICIAL' || official?.sourceCommit !== '420c6183c400e4b84fe3f9e084906725062a6d56'
+          || official?.importedAtomCount !== 18 || !Array.isArray(official?.componentCodes)) {
+        throw new Error('M 返回的 Google A2UI Official Basic Catalog 锁定身份不一致。');
+      }
+      officialComponentCodes = official.componentCodes;
+      append('已同步 M 内置锁定的 Google A2UI Official Basic Catalog（18 个组件）。');
+    }
     let resumeCheckpoint = null;
     try { resumeCheckpoint = JSON.parse(localStorage.getItem(checkpointKey) || 'null'); } catch { localStorage.removeItem(checkpointKey); }
     manifest = await runPrtAuthoring(client, {
       descriptorSetBase64, targetKey: targetInput.value, specialistIds: specialistInput.value,
       includeWorkflow: includeWorkflow.checked, specialistCode: specialistCode.value, workflowCode: workflowCode.value.trim() || undefined,
+      officialComponentCodes,
       resumeCheckpoint,
       onCheckpoint: checkpoint => localStorage.setItem(checkpointKey, JSON.stringify(checkpoint)),
     });

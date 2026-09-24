@@ -221,11 +221,9 @@ public class A2uiApplicationManifestCompilerService {
             canonicalContract.put(FIELD_COMPONENT_CODE, component.get(FIELD_COMPONENT_CODE));
             canonicalContract.put(FIELD_TYPE, component.get(FIELD_TYPE));
             canonicalContract.put(FIELD_NAME_CN, component.get(FIELD_NAME_CN));
-            A2uiCatalogComponentContract contract = JsonSupport.fromJSON(
-                    JsonSupport.toJSON(canonicalContract), A2uiCatalogComponentContract.class);
+            A2uiCatalogComponentContract contract = componentContract(canonicalContract);
             if (contract == null || StringUtils.isBlank(contract.getType())
-                    || contract.getComponentOriginType()
-                    != A2uiComponentOriginType.PLATFORM_CUSTOM) {
+                    || !isSupportedComponentOrigin(contract.getComponentOriginType())) {
                 throw failure(CATALOG_SUPPORT_MISSING);
             }
             contract.setCatalogId(catalogId)
@@ -234,6 +232,30 @@ public class A2uiApplicationManifestCompilerService {
             result.add(contract);
         }
         return result;
+    }
+
+    private A2uiCatalogComponentContract componentContract(Map<String, Object> source) {
+        A2uiComponentOriginType originType;
+        try {
+            originType = A2uiComponentOriginType.parse(
+                    text(source.get(FIELD_COMPONENT_ORIGIN_TYPE)));
+        } catch (RuntimeException exception) {
+            throw failure(CATALOG_SUPPORT_MISSING);
+        }
+        if (originType == A2uiComponentOriginType.A2UI_OFFICIAL) {
+            return new A2uiCatalogComponentContract()
+                    .setComponentCode(text(source.get(FIELD_COMPONENT_CODE)))
+                    .setType(text(source.get(FIELD_TYPE)))
+                    .setNameCn(text(source.get(FIELD_NAME_CN)))
+                    .setComponentOriginType(originType);
+        }
+        return JsonSupport.fromJSON(
+                JsonSupport.toJSON(source), A2uiCatalogComponentContract.class);
+    }
+
+    private boolean isSupportedComponentOrigin(A2uiComponentOriginType originType) {
+        return originType == A2uiComponentOriginType.PLATFORM_CUSTOM
+                || originType == A2uiComponentOriginType.A2UI_OFFICIAL;
     }
 
     private A2uiCatalogSourceType catalogSourceType(Map<String, Object> catalogPayload) {

@@ -31,6 +31,7 @@
     </fieldset>
     <label>RPC targetKey<input id="target-key" value="content" pattern="[A-Za-z][A-Za-z0-9_-]{0,63}" required></label>
     <label>专员 ID（与 M 当前配置一致）<input id="specialist-ids" placeholder="例如：101" required></label>
+    <label><span><input id="sync-official-basic" type="checkbox" checked> 同步 M 内置锁定的 Google A2UI Official Basic Catalog（空库首次导入必需）</span></label>
     <fieldset><legend>可选 Workflow</legend>
       <label><input id="include-workflow" type="checkbox"> 在三个独立 Chat Skill 都发布成功后创建/更新现有 v2 Workflow</label>
       <label>Workflow 专员稳定 ID<input id="specialist-code" disabled></label>

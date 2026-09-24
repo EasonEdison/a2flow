@@ -85,8 +85,9 @@ public class A2uiCatalogReleaseAssetAdapter extends AbstractReleaseAssetAdapter 
                 throw new IllegalStateException(ERROR_MEMBERSHIP_INVALID);
             }
             String origin = String.valueOf(atom.getA2uiContract().get("componentOriginType"));
-            if (A2uiComponentOriginType.parse(origin)
-                    != A2uiComponentOriginType.PLATFORM_CUSTOM) {
+            A2uiComponentOriginType originType = A2uiComponentOriginType.parse(origin);
+            if (originType != A2uiComponentOriginType.PLATFORM_CUSTOM
+                    && originType != A2uiComponentOriginType.A2UI_OFFICIAL) {
                 throw new IllegalStateException(ERROR_MEMBERSHIP_INVALID);
             }
             Map<String, Object> component = new LinkedHashMap<>();

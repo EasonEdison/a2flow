@@ -17,6 +17,8 @@ import dev.a2flow.management.support.JsonSupport;
 import dev.a2flow.management.a2ui.application.A2uiImmutableJsonSupport;
 import dev.a2flow.management.a2ui.catalog
         .A2uiKuaishouCatalogImporter.KuaishouCatalogSnapshot;
+import dev.a2flow.management.a2ui.catalog
+        .A2uiOfficialBasicCatalogImporter.OfficialBasicCatalogSnapshot;
 import dev.a2flow.management.a2ui.registry.A2uiRegistryValidationException;
 import dev.a2flow.management.access.AssetAuthorizationService;
 import dev.a2flow.management.lifecycle.domain.ComponentAsset;
@@ -33,8 +35,8 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>上游普通作者态只能创建 PLATFORM_MANAGED source，下游把唯一当前态写入
  * `skill_component_registry.runtime_config_json`。完整快手 Catalog 快照只能由受控导入用例通过 URL
- * 或原始 JSON 构造，不能通过普通请求伪造。本服务不发布 Catalog、不写 support evidence，也不按
- * identity 猜来源。
+ * 或原始 JSON 构造；Google Official Catalog 只能来自随服务发布的锁定资源，二者都不能通过普通请求
+ * 伪造。本服务不发布 Catalog、不写 support evidence，也不按 identity 猜来源。
  */
 @Service
 @Slf4j
@@ -53,6 +55,8 @@ public class A2uiCatalogRegistryService {
     private static final String ERROR_DUPLICATE = "A2UI_CATALOG_DUPLICATE";
     private static final String ERROR_READ_ONLY = "A2UI_OFFICIAL_CATALOG_RETIRED";
     private static final String ERROR_IMPORT_FORBIDDEN = "A2UI_CATALOG_MANAGED_IMPORT_FORBIDDEN";
+    private static final String ERROR_OFFICIAL_IMPORT_FORBIDDEN =
+            "A2UI_CATALOG_OFFICIAL_IMPORT_FORBIDDEN";
     private static final String PARAM_KEYWORD = "keyword";
     private static final String PARAM_CATALOG_SOURCE_TYPE = "catalogSourceType";
     private static final List<String> IMPORT_METADATA_FIELDS = Arrays.asList(
@@ -73,7 +77,33 @@ public class A2uiCatalogRegistryService {
     private A2uiKuaishouCatalogImporter kuaishouCatalogImporter;
 
     @Resource
+    private A2uiOfficialBasicCatalogImporter officialBasicCatalogImporter;
+
+    @Resource
     private A2uiCatalogImportTransactionService catalogImportTransactionService;
+
+    /**
+     * 由平台管理员导入随当前 M 二进制锁定的 Google A2UI Official Basic Catalog。
+     *
+     * <p>该入口不接收 URL、schema 或 Catalog identity；导入器会复核内置资源的 commit 与摘要，
+     * 普通作者态请求无法借此伪造 Official 来源。
+     */
+    public Map<String, Object> importOfficial(String operator) {
+        if (assetAuthorizationService == null || !assetAuthorizationService.isAdmin(operator)) {
+            throw new A2uiRegistryValidationException(ERROR_OFFICIAL_IMPORT_FORBIDDEN);
+        }
+        OfficialBasicCatalogSnapshot snapshot =
+                officialBasicCatalogImporter.loadLockedSnapshot(operator);
+        ComponentAsset savedCatalog =
+                catalogImportTransactionService.importOfficialSnapshot(snapshot, operator);
+        Map<String, Object> result = project(savedCatalog);
+        result.put("importedAtomCount", snapshot.getAtomAssets().size());
+        log.info("Google A2UI Official Basic Catalog 锁定快照导入完成, catalogId:{}, "
+                        + "sourceCommit:{}, atomCount:{}, operator:{}",
+                savedCatalog.getComponentName(), A2uiOfficialBasicCatalogImporter.SOURCE_COMMIT,
+                snapshot.getAtomAssets().size(), operator);
+        return result;
+    }
 
     /**
      * 将普通平台管理请求转换成 PLATFORM_MANAGED Catalog 当前行。

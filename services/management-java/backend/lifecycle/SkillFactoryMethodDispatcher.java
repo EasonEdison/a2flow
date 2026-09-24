@@ -709,6 +709,9 @@ public class SkillFactoryMethodDispatcher {
                     userName, required(params, PARAM_ID),
                     jsonObject(params, PARAM_CATALOG_JSON))), false);
         }
+        if (method == SkillFactoryMethodEnum.A2UI_CATALOG_OFFICIAL_IMPORT) {
+            return success(projectCatalog(a2uiCatalogRegistryService.importOfficial(userName)), false);
+        }
         if (method == SkillFactoryMethodEnum.A2UI_CATALOG_MANAGED_IMPORT) {
             return success(projectCatalog(a2uiCatalogRegistryService.importManaged(
                     userName, params.get(PARAM_SOURCE_URL), params.get(PARAM_CATALOG_JSON))), false);
