@@ -31,11 +31,13 @@ def json_bytes(value: JsonValue) -> bytes:
 
 
 def tokens(pointer: str, *, allow_root: bool = True) -> tuple[str, ...]:
-    if type(pointer) is not str or len(pointer) > MAX_POINTER or not pointer.startswith("/"):
+    if type(pointer) is not str or len(pointer) > MAX_POINTER:
         raise A2uiError("JSON_POINTER_INVALID")
-    if pointer == "/":
+    if pointer in {"", "/"}:
         if allow_root:
             return ()
+        raise A2uiError("JSON_POINTER_INVALID")
+    if not pointer.startswith("/"):
         raise A2uiError("JSON_POINTER_INVALID")
     raw = pointer[1:].split("/")
     if not raw or len(raw) > MAX_DEPTH:
@@ -165,12 +167,12 @@ def reject_authority_keys(value: JsonValue) -> None:
             raise A2uiError("A2UI_ACTION_CONTEXT_INVALID")
         if isinstance(node, dict):
             for key, child in node.items():
-                normalized = "".join(character.lower() for character in key if character.isalnum())
+                normalized = key.replace("_", "").replace("-", "").lower()
                 if normalized in blocked:
-                    raise A2uiError("A2UI_ACTION_CONTEXT_INVALID")
+                    raise A2uiError("A2UI_ACTION_CONTEXT_AUTHORITY_FORBIDDEN")
                 walk(child, depth + 1)
         elif isinstance(node, list):
             for child in node:
                 walk(child, depth + 1)
 
-    walk(value, 0)
+    walk(value, 1)

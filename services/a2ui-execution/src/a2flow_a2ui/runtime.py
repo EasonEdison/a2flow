@@ -73,21 +73,19 @@ def _trusted(context: TrustedContext, now: datetime | None = None) -> JsonObject
 
 def _execution_map(result: ExecutionResult) -> JsonObject:
     value: JsonObject = {
-        "success": result.success,
         "actionCode": result.action_code,
-        "sourceId": result.source_id,
-        "sourceDigest": result.source_digest,
         "capabilityVersion": result.capability_version,
         "clientType": result.client_type,
         "requestedEnvironment": result.requested_environment.value,
         "resolvedEnvironment": result.resolved_environment.value,
-        "requestId": result.request_id,
+        "success": result.success,
+        "httpStatus": None,
+        "contentType": None,
+        "traceId": None,
         "data": copy.deepcopy(result.data),
+        "errorCode": result.error_code.value if result.error_code is not None else None,
+        "message": result.message,
     }
-    if result.error_code is not None:
-        value["errorCode"] = result.error_code.value
-    if result.message is not None:
-        value["message"] = result.message
     return value
 
 
@@ -167,15 +165,11 @@ def map_request(
                     action if mapping.source is MappingSource.ACTION_CONTEXT else params
                 )
                 mask = read(root, transform.mask_source_path)
-                if (
-                    not mask.found
-                    or not isinstance(mask.value, list)
-                    or len(mask.value) != len(value)
-                ):
+                if not mask.found or not isinstance(mask.value, list):
                     raise A2uiError("A2UI_REQUEST_MAPPING_INVALID")
                 if any(type(flag) is not bool for flag in mask.value):
                     raise A2uiError("A2UI_REQUEST_MAPPING_INVALID")
-                value = [item for item, flag in zip(value, mask.value, strict=True) if flag]
+                value = [item for item, flag in zip(value, mask.value, strict=False) if flag]
         result = write(result, mapping.target_path, value)
     return require_object(result, "A2UI_REQUEST_MAPPING_INVALID")
 
@@ -375,10 +369,9 @@ def _predicate(predicate: BusinessPredicate | None, result: ExecutionResult) -> 
                 return False
             matched = Decimal(str(lookup.value)) > Decimal(str(clause.expected_value))
         elif clause.operator == "IS_ARRAY":
-            matched = (
-                type(clause.expected_value) is bool
-                and isinstance(lookup.value, list) is clause.expected_value
-            )
+            if clause.expected_value is not True:
+                raise A2uiError("A2UI_BUSINESS_PREDICATE_INVALID")
+            matched = isinstance(lookup.value, list)
         else:
             raise A2uiError("A2UI_BUSINESS_PREDICATE_INVALID")
         if not matched:
@@ -539,12 +532,8 @@ class A2uiRuntimeService:
         if (
             card.user_id != context.user_id
             or card.release.environment is not context.environment
-            or expected_surface_revision < 0
             or card.revision != expected_surface_revision
             or context.request_id != idempotency_key
-            or card.session.token != runtime_session_token
-            or card.session.app_build_id != app_build_id
-            or not correlation_id.strip()
         ):
             raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
         published = self._releases.current(card.release.app_code, context)
@@ -552,13 +541,20 @@ class A2uiRuntimeService:
             raise A2uiError("RESET_REQUIRED")
         build = published.build
         if (
-            build.app_build_id != card.session.app_build_id
+            expected_surface_revision < 0
+            or not correlation_id.strip()
+            or not runtime_session_token.strip()
+            or not app_build_id.strip()
+            or not idempotency_key.strip()
+            or card.session.token != runtime_session_token
+            or card.session.app_build_id != app_build_id
+            or build.app_build_id != card.session.app_build_id
             or build.protocol_version != card.session.protocol_version
             or build.catalog.catalog_id != card.session.catalog_id
             or build.catalog.revision != card.session.catalog_revision
             or build.catalog.digest != card.session.catalog_digest
         ):
-            raise A2uiError("RESET_REQUIRED")
+            raise A2uiError("A2UI_RUNTIME_SESSION_MISMATCH")
         validate_schema(build.params_schema, card.params, "A2UI_PARAMS_INVALID")
         ledger = SurfaceLedger.replay(card.snapshot)
         binding, action_context = self._resolve_action(build, ledger, action_message)
@@ -631,13 +627,15 @@ class A2uiRuntimeService:
             for item in build.action_bindings
             if item.surface_id == surface_id and item.action_code == name
         ]
+        if not matches:
+            raise A2uiError("A2UI_ACTION_NOT_BOUND")
         if len(matches) != 1:
-            raise A2uiError("A2UI_ACTION_BINDING_NOT_FOUND")
+            raise A2uiError("A2UI_BUILD_ACTION_CLOSURE_INVALID")
         binding = matches[0]
-        if (
-            not ledger.has_surface(surface_id)
-            or component_id != binding.source_component_id
-            or component_id not in binding.allowed_source_component_ids
+        if not ledger.has_surface(surface_id):
+            raise A2uiError("A2UI_SURFACE_NOT_FOUND")
+        if component_id != binding.source_component_id or component_id not in (
+            binding.allowed_source_component_ids
         ):
             raise A2uiError("A2UI_ACTION_SOURCE_INVALID")
         declarations = [
@@ -651,7 +649,7 @@ class A2uiRuntimeService:
             len(declarations) != 1
             or declarations[0].context_template_digest != binding.declaration_digest
         ):
-            raise A2uiError("A2UI_ACTION_DECLARATION_INVALID")
+            raise A2uiError("A2UI_BUILD_ACTION_CLOSURE_INVALID")
         context_value = require_object(action["context"], "A2UI_ACTION_CONTEXT_INVALID")
         require_size(context_value, 64 * 1024, "A2UI_ACTION_CONTEXT_INVALID")
         reject_authority_keys(context_value)

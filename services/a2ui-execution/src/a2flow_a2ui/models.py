@@ -262,7 +262,10 @@ class ApplicationBuild(_PublishedModel):
         binding_ids.extend(item.binding_id for item in self.action_bindings)
         if len(binding_ids) != len(set(binding_ids)):
             raise ValueError("binding ids must be unique")
-        action_keys = [(item.surface_id, item.action_code) for item in self.action_bindings]
+        action_keys = [
+            (item.surface_id, item.source_component_id, item.action_code)
+            for item in self.action_bindings
+        ]
         if len(action_keys) != len(set(action_keys)):
             raise ValueError("action bindings must be unique per surface and action")
         return self

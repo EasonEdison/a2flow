@@ -18,7 +18,7 @@ from a2flow_a2ui.models import (
     TrustedCard,
 )
 from a2flow_a2ui.rpc import A2uiRpcService
-from a2flow_a2ui.runtime import A2uiRuntimeService, map_request
+from a2flow_a2ui.runtime import A2uiRuntimeService, _execution_map, _predicate, map_request
 
 
 def build_json() -> JsonObject:
@@ -262,7 +262,7 @@ def test_act_rejects_authority_input_before_capability() -> None:
             "context": {"name": "x", "target_endpoint": "evil"},
         },
     }
-    with pytest.raises(A2uiError, match="A2UI_ACTION_CONTEXT_INVALID"):
+    with pytest.raises(A2uiError, match="A2UI_ACTION_CONTEXT_AUTHORITY_FORBIDDEN"):
         runtime.act(
             card,
             "correlation",
@@ -390,3 +390,141 @@ def test_existing_grpc_contract_describe_activate_and_act() -> None:
     finally:
         channel.close()
         server.stop(0).wait(timeout=3)
+
+
+def test_java_compiler_build_shape_load_branch_predicate_and_metadata() -> None:
+    raw = build_json()
+    raw["loadBindings"] = [
+        {
+            "bindingId": "first-binding",
+            "capability": {"actionCode": "first"},
+            "requestMappings": [
+                {
+                    "source": "TRUSTED_CONTEXT",
+                    "sourcePath": "/userId",
+                    "targetPath": "/identity",
+                    "constantValue": None,
+                }
+            ],
+            "successOutcome": "NO_UI_MESSAGES",
+            "failureOutcome": "NO_UI_MESSAGES",
+            "resultAdapters": [],
+            "failureResultAdapters": [],
+        },
+        {
+            "bindingId": "second-binding",
+            "capability": {"actionCode": "second"},
+            "requestMappings": [
+                {
+                    "source": "CAPABILITY_PREVIOUS_RESULT",
+                    "sourcePath": "/data/value",
+                    "targetPath": "/previous",
+                    "constantValue": None,
+                }
+            ],
+            "successOutcome": "ADAPTER_PIPELINE",
+            "failureOutcome": "NO_UI_MESSAGES",
+            "resultAdapters": [
+                {
+                    "adapterId": "pass",
+                    "order": 1,
+                    "type": "A2UI_PASSTHROUGH",
+                    "templateCode": None,
+                    "templateRevision": None,
+                    "templateDigest": None,
+                    "messageTemplate": None,
+                    "bindings": [],
+                    "source": "CAPABILITY_DATA",
+                    "sourcePath": "/messages",
+                    "cardinality": "MANY",
+                    "required": True,
+                    "emittedActionDeclarations": [
+                        {
+                            "surfaceId": "main",
+                            "sourceComponentId": "submit",
+                            "actionCode": "demo.submit",
+                            "contextSchema": {"type": "object"},
+                        }
+                    ],
+                }
+            ],
+            "failureResultAdapters": [],
+        },
+    ]
+    raw_action = raw["actionBindings"][0]  # type: ignore[index]
+    assert isinstance(raw_action, dict)
+    raw_action.pop("successBranches")
+    build = ApplicationBuild.model_validate(raw)
+    assert build.action_bindings[0].success_branches == ()
+    assert build.load_bindings[1].result_adapters[0].bindings == ()
+
+    result = ExecutionResult(
+        True,
+        "first",
+        "source",
+        "sha256:digest",
+        2,
+        "PC",
+        Environment.PRT,
+        Environment.PRT,
+        "child",
+        {"value": 7},
+    )
+    assert _execution_map(result) == {
+        "actionCode": "first",
+        "capabilityVersion": 2,
+        "clientType": "PC",
+        "requestedEnvironment": "PRT",
+        "resolvedEnvironment": "PRT",
+        "success": True,
+        "httpStatus": None,
+        "contentType": None,
+        "traceId": None,
+        "data": {"value": 7},
+        "errorCode": None,
+        "message": None,
+    }
+    predicate = build.action_bindings[0].business_success_predicate
+    assert predicate is not None
+    root_predicate = predicate.model_copy(
+        update={
+            "all_of": (
+                predicate.all_of[0].model_copy(update={"source_path": "", "expected_value": 7}),
+            )
+        }
+    )
+    root_result = ExecutionResult(
+        True,
+        "first",
+        "source",
+        "sha256:digest",
+        2,
+        "PC",
+        Environment.PRT,
+        Environment.PRT,
+        "child",
+        7,
+    )
+    assert _predicate(root_predicate, root_result) is True
+
+
+def test_boolean_mask_uses_java_overlap_prefix_semantics() -> None:
+    build = ApplicationBuild.model_validate(build_json())
+    original = build.action_bindings[0].request_mappings[0]
+    raw_mapping = original.model_dump(by_alias=True)
+    raw_mapping.update(
+        {
+            "source": "APP_PARAMS",
+            "sourcePath": "/items",
+            "targetPath": "/selected",
+            "transform": {"type": "ARRAY_FILTER_BY_BOOLEAN_MASK", "maskSourcePath": "/mask"},
+        }
+    )
+    typed_mapping = type(original).model_validate(raw_mapping)
+    assert map_request(
+        (typed_mapping,),
+        action={},
+        params={"items": ["a", "b", "c"], "mask": [False, True]},
+        trusted={},
+        previous=None,
+    ) == {"selected": ["b"]}
