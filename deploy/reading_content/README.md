@@ -20,7 +20,7 @@
 
 `content-descriptor.txt` 是部署静态资源，不含凭据，不得手写。当前文件由本仓库 `packages/rpc-contracts/proto/a2flow/content/v1/content.proto` 在集成提交 `4dde853` 上生成，并通过 `grpc_tools.protoc --include_imports` 纳入 `services/management-java/proto/a2flow/capability/v1/capability.proto`；原始 FileDescriptorSet 的 SHA-256 为 `eb261f17724397d5bf935f15283bbfdbe08cf69f54458b475280d3ceea8917b7`。协议变更时必须从同一待部署提交重新生成 base64 文本，并让离线测试核对 12 个方法后再随本目录部署。
 
-空库首次导入应保留“同步 M 内置锁定的 Google A2UI Official Basic Catalog”勾选。该操作调用无客户端 schema 参数的管理员固定方法，由 M 从随二进制发布的资源读取 [Google A2UI v0.9 Basic Catalog](https://github.com/a2ui-project/a2ui/blob/420c6183c400e4b84fe3f9e084906725062a6d56/specification/v0_9/catalogs/basic/catalog.json)：协议版本 `v0.9.1`、source commit `420c6183c400e4b84fe3f9e084906725062a6d56`、catalog SHA-256 `8cc94d0a482e67048f9fc989964ca5da56fe42f531d919315a508989fb22e13e`。服务端会再次核对原文件、rules 和协议文档摘要；页面不上传、不拼装、不简化官方 schema。`Markdown` 与 `TextDownload` 仍由本项目作为独立扩展注册，绝不标记为 Official。
+空库首次导入应保留“同步 M 内置锁定的 Google A2UI Official Basic Catalog”勾选。该操作调用无客户端 schema 参数的管理员固定方法，由 M 从随二进制发布的资源读取 [Google A2UI v0.9.1 Basic Catalog](https://github.com/a2ui-project/a2ui/blob/420c6183c400e4b84fe3f9e084906725062a6d56/specification/v0_9_1/catalogs/basic/catalog.json)：协议版本 `v0.9.1`、source commit `420c6183c400e4b84fe3f9e084906725062a6d56`、catalog SHA-256 `8cc94d0a482e67048f9fc989964ca5da56fe42f531d919315a508989fb22e13e`。服务端会再次核对原文件、rules 和协议文档摘要；页面不上传、不拼装、不简化官方 schema。`Markdown` 与 `TextDownload` 仍由本项目作为独立扩展注册，绝不标记为 Official。
 
 当前正式 M 的受控分类只有 `general/general` 和专员 `101`，因此本工具的 Capability 与 Skill 都使用该现有分类，不修改全局配置。若首次 `CAPABILITY_DRAFT_CREATE` 已成功而随后的 SAVE 失败，重试会按唯一 `nameCn` 复用 actionCode 仍为空的初始 draft；同名候选超过一个时停止，避免重复身份。
 

@@ -191,9 +191,9 @@ public class A2uiOfficialBasicCatalogImporter {
     private static Map<String, OfficialDocument> protocolDocuments() {
         Map<String, OfficialDocument> documents = new LinkedHashMap<>();
         documents.put("serverToClient", document("server_to_client.json",
-                "da75d25378b0d02069cc3de54db76f6f71cffdf2a3fd95a8fabbb1f516c07cbe"));
+                "2ba29dbcb57611225c96d3e064d05cf97e9d8224b293c8b20d37b93922a2d30d"));
         documents.put("clientToServer", document("client_to_server.json",
-                "76c9a6f54e40bbcc1ed7b36b0d56563b82122ea7f9d8379787c4afcf29cc95e0"));
+                "f049f8a554296a603cd3c1cef37dd6811006dc90e3ff52ce845d1674cd00a6b7"));
         documents.put("commonTypes", document("common_types.json",
                 "ac79788e95e5bdf0a39808953593a53c1bc9fcdcdb55480f4610613c6591e94c"));
         documents.put("clientCapabilities", document("client_capabilities.json",
@@ -201,7 +201,7 @@ public class A2uiOfficialBasicCatalogImporter {
         documents.put("serverCapabilities", document("server_capabilities.json",
                 "bdaf275dd2abf279e62637ead1b840744e031d94735ec4f63d0c7c2fe5347dd4"));
         documents.put("clientDataModel", document("client_data_model.json",
-                "a2d9301eda70f71be089a6fae09428ed9fab9fcc23775e2cd227e220419ef6cd"));
+                "6aefe455be9287caaf2f964ae480e8cf87706718106130908b41df19d5e982be"));
         return Collections.unmodifiableMap(documents);
     }
 
