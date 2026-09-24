@@ -160,7 +160,7 @@ public final class A2uiCatalogFunctionContractValidator {
         if (functions.isEmpty() || functions.size() > MAX_FUNCTIONS) {
             throw invalidContract();
         }
-        validateReferences(contract, contractId, true);
+        validateReferences(contract, contractId, true, 0, new int[] {0});
         for (Map.Entry<String, Object> entry : functions.entrySet()) {
             if (StringUtils.isBlank(entry.getKey()) || !(entry.getValue() instanceof Map<?, ?>)) {
                 throw invalidContract();
@@ -193,7 +193,7 @@ public final class A2uiCatalogFunctionContractValidator {
         }
         if (value instanceof Map<?, ?> rawMap) {
             Map<String, Object> map = stringKeyMap(rawMap, ERROR_CALL_INVALID);
-            if (map.containsKey(FIELD_CALL) && map.containsKey(FIELD_ARGS)) {
+            if (map.containsKey(FIELD_CALL)) {
                 validateFunctionCall(map, contract);
             }
             for (Object child : map.values()) {
@@ -232,7 +232,11 @@ public final class A2uiCatalogFunctionContractValidator {
         }
     }
 
-    private void validateReferences(Object value, String contractId, boolean root) {
+    private void validateReferences(Object value, String contractId, boolean root,
+            int depth, int[] visited) {
+        if (depth > MAX_EXPRESSION_DEPTH || ++visited[0] > MAX_EXPRESSION_NODES) {
+            throw invalidContract();
+        }
         if (value instanceof Map<?, ?> rawMap) {
             Map<String, Object> map = stringKeyMap(rawMap, ERROR_CONTRACT_INVALID);
             if (!root && map.containsKey(FIELD_ID)) {
@@ -246,11 +250,11 @@ public final class A2uiCatalogFunctionContractValidator {
                 throw invalidContract();
             }
             for (Object child : map.values()) {
-                validateReferences(child, contractId, false);
+                validateReferences(child, contractId, false, depth + 1, visited);
             }
         } else if (value instanceof List<?> list) {
             for (Object child : list) {
-                validateReferences(child, contractId, false);
+                validateReferences(child, contractId, false, depth + 1, visited);
             }
         }
     }

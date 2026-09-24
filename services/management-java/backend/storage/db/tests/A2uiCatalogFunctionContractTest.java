@@ -67,6 +67,8 @@ public final class A2uiCatalogFunctionContractTest {
         expectInvalid(() -> validator.validateMessageTemplateCalls(
                 messages(call("unknown", Map.of(), "boolean")), project));
         expectInvalid(() -> validator.validateMessageTemplateCalls(
+                messages(Map.of("call", "equals", "returnType", "boolean")), project));
+        expectInvalid(() -> validator.validateMessageTemplateCalls(
                 messages(call("equals", Map.of("a", Map.of("path", "/draftTitle")),
                         "boolean")), project));
         expectInvalid(() -> validator.validateMessageTemplateCalls(
@@ -83,6 +85,13 @@ public final class A2uiCatalogFunctionContractTest {
         functions(externalReference).put("external", Map.of(
                 "$ref", "https://untrusted.example/functions.json#/external"));
         expectInvalid(() -> validator.validateProjectContract(CATALOG_ID, externalReference));
+        Map<String, Object> deepContract = projectContract();
+        Map<String, Object> deepSchema = Map.of("type", "string");
+        for (int depth = 0; depth < 70; depth++) {
+            deepSchema = Map.of("allOf", List.of(deepSchema));
+        }
+        functions(deepContract).put("tooDeep", deepSchema);
+        expectInvalid(() -> validator.validateProjectContract(CATALOG_ID, deepContract));
 
         ComponentAsset official = new A2uiOfficialBasicCatalogImporter()
                 .loadLockedSnapshot("admin").getCatalogAsset();
