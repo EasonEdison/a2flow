@@ -23,6 +23,7 @@ let manifest = null;
 let completed = 0;
 const checkpointKey = 'a2flow.readingContent.prtCheckpoint.v1';
 const manifestKey = 'a2flow.readingContent.prtManifest.v1';
+const functionContractUrl = new URL('./digital-employee-functions.json', import.meta.url);
 
 function validateDescriptorBase64(value) {
   const descriptor = value.trim();
@@ -92,6 +93,13 @@ form.addEventListener('submit', async event => {
   log.textContent = '开始：只执行用户点击触发的 PRT authoring。'; progress.value = 1; completed = 1;
   try {
     const descriptorSetBase64 = validateDescriptorBase64(descriptorText || (descriptorFile ? await descriptorFile.text() : ''));
+    const functionResponse = await fetch(functionContractUrl, { credentials: 'same-origin', cache: 'no-store' });
+    if (!functionResponse.ok) throw new Error(`无法读取项目函数合同：HTTP ${functionResponse.status}`);
+    const functionContract = await functionResponse.json();
+    if (functionContract?.catalogId !== 'a2flow.digital-employee.pc.v1' || !functionContract?.functions?.equals) {
+      throw new Error('项目函数合同 identity 或 equals 声明不一致。');
+    }
+    append('已读取项目函数合同（locked official 14 + SDK equals）。');
     const client = new ManagementClient({ origin: location.origin, signal: AbortSignal.timeout(30 * 60_000), onProgress: append });
     let officialComponentCodes = [];
     if (syncOfficialBasic.checked) {
@@ -107,6 +115,7 @@ form.addEventListener('submit', async event => {
     try { resumeCheckpoint = JSON.parse(localStorage.getItem(checkpointKey) || 'null'); } catch { localStorage.removeItem(checkpointKey); }
     manifest = await runPrtAuthoring(client, {
       descriptorSetBase64, targetKey: targetInput.value, specialistIds: specialistInput.value,
+      functionContract,
       includeWorkflow: includeWorkflow.checked, specialistCode: specialistCode.value, workflowCode: workflowCode.value.trim() || undefined,
       officialComponentCodes,
       resumeCheckpoint,

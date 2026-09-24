@@ -9,6 +9,7 @@ import java.util.Map;
 import dev.a2flow.management.a2ui.application.A2uiApplicationManifestCompilerService;
 import dev.a2flow.management.a2ui.catalog
         .A2uiOfficialBasicCatalogImporter.OfficialBasicCatalogSnapshot;
+import dev.a2flow.management.a2ui.registry.A2uiAtomRegistryService;
 import dev.a2flow.management.a2ui.registry.A2uiComponentOriginType;
 import dev.a2flow.management.a2ui.registry.A2uiRegistryValidationException;
 import dev.a2flow.management.access.AssetAuthorizationService;
@@ -66,8 +67,56 @@ public final class A2uiOfficialCatalogImportTest {
             service.importOfficial("user");
             throw new AssertionError("non-admin imported official catalog");
         } catch (A2uiRegistryValidationException expected) { }
+        verifyOfficialManagementVisibility(snapshot);
         verifyOfficialAtomCanBeFrozen(snapshot);
         System.out.println("PASS: admin-only locked Google A2UI Official Basic Catalog import");
+    }
+
+    private static void verifyOfficialManagementVisibility(
+            OfficialBasicCatalogSnapshot snapshot) throws Exception {
+        ComponentAsset catalog = snapshot.getCatalogAsset().setId(100L);
+        ComponentAsset officialText = snapshot.getAtomAssets().stream()
+                .filter(atom -> "Text".equals(atom.getComponentName())).findFirst()
+                .orElseThrow().setId(101L);
+        A2uiCatalogRegistryService catalogs = new A2uiCatalogRegistryService();
+        set(catalogs, "assetRepository", new SkillFactoryComponentAssetRepository() {
+            @Override
+            public List<ComponentAsset> list(ComponentAssetQuery query, boolean enabledOnly) {
+                return List.of(catalog);
+            }
+
+            @Override
+            public ComponentAsset get(Long id) {
+                return Long.valueOf(100L).equals(id) ? catalog : null;
+            }
+        });
+        List<Map<String, Object>> listedCatalogs = catalogs.list(Map.of());
+        if (listedCatalogs.size() != 1
+                || !Boolean.FALSE.equals(listedCatalogs.get(0).get("editable"))
+                || !A2uiCatalogSourceType.A2UI_OFFICIAL.name().equals(
+                catalogs.detail("100").get("catalogSourceType"))) {
+            throw new AssertionError("official catalog is not visible read-only");
+        }
+
+        A2uiAtomRegistryService atoms = new A2uiAtomRegistryService();
+        set(atoms, "assetRepository", new SkillFactoryComponentAssetRepository() {
+            @Override
+            public List<ComponentAsset> list(ComponentAssetQuery query, boolean enabledOnly) {
+                return List.of(officialText);
+            }
+
+            @Override
+            public ComponentAsset get(Long id) {
+                return Long.valueOf(101L).equals(id) ? officialText : null;
+            }
+        });
+        if (atoms.list(Map.of()).size() != 1 || atoms.detail("101") != officialText) {
+            throw new AssertionError("official atom is not visible read-only");
+        }
+        try {
+            atoms.update("admin", "101", Map.of());
+            throw new AssertionError("official atom became editable");
+        } catch (A2uiRegistryValidationException expected) { }
     }
 
     private static void verifyOfficialAtomCanBeFrozen(

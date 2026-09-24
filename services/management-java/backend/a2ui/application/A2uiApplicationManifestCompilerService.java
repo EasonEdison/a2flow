@@ -28,6 +28,7 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiApplicat
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityContract;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiLoadBinding;
 import dev.a2flow.management.a2ui.catalog.A2uiCatalogModels.A2uiCatalogComponentContract;
+import dev.a2flow.management.a2ui.catalog.A2uiCatalogFunctionContractValidator;
 import dev.a2flow.management.a2ui.catalog.A2uiCatalogSourceType;
 import dev.a2flow.management.a2ui.registry.A2uiComponentOriginType;
 import dev.a2flow.management.release.PublishedAssetQueryService;
@@ -74,6 +75,8 @@ public class A2uiApplicationManifestCompilerService {
     private A2uiCurrentCapabilityResolver currentCapabilityResolver;
 
     private final A2uiApplicationBuildCompiler compiler;
+    private final A2uiCatalogFunctionContractValidator functionContractValidator =
+            new A2uiCatalogFunctionContractValidator();
     private final A2uiShowTemplateAnalyzer showTemplateAnalyzer = new A2uiShowTemplateAnalyzer();
 
     public A2uiApplicationManifestCompilerService() {
@@ -132,6 +135,19 @@ public class A2uiApplicationManifestCompilerService {
         }
         List<A2uiCatalogComponentContract> catalogComponents = catalogComponents(
                 catalogId, catalogPayload, catalogRevision, catalogSnapshot.getDigest());
+        A2uiCatalogFunctionContractValidator.ValidatedFunctionContract functionContract;
+        try {
+            functionContract = functionContractValidator.publishedContract(
+                    catalogId, catalogPayload);
+        } catch (RuntimeException exception) {
+            throw failure(CATALOG_SUPPORT_MISSING);
+        }
+        try {
+            functionContractValidator.validateMessageTemplateCalls(
+                    draft.getShowTemplate().getMessageTemplates(), functionContract);
+        } catch (RuntimeException exception) {
+            throw failure(DRAFT_INVALID);
+        }
         Map<String, A2uiComponentOriginType> componentOrigins = componentOrigins(catalogComponents);
         injectAuthority(draft, catalogId, catalogSourceType, componentOrigins,
                 catalogRevision, catalogSnapshot.getDigest());

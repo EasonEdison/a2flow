@@ -59,6 +59,7 @@ public class A2uiCatalogRegistryService {
             "A2UI_CATALOG_OFFICIAL_IMPORT_FORBIDDEN";
     private static final String PARAM_KEYWORD = "keyword";
     private static final String PARAM_CATALOG_SOURCE_TYPE = "catalogSourceType";
+    private static final String FIELD_FUNCTION_CONTRACT = "functionContract";
     private static final List<String> IMPORT_METADATA_FIELDS = Arrays.asList(
             "sourceUrl", "rawDigest", "functionCodes", "functions", "catalogManifest");
     private static final List<String> AUTHORITY_FIELDS = Arrays.asList(
@@ -82,6 +83,9 @@ public class A2uiCatalogRegistryService {
     @Resource
     private A2uiCatalogImportTransactionService catalogImportTransactionService;
 
+    private final A2uiCatalogFunctionContractValidator functionContractValidator =
+            new A2uiCatalogFunctionContractValidator();
+
     /**
      * 由平台管理员导入随当前 M 二进制锁定的 Google A2UI Official Basic Catalog。
      *
@@ -94,6 +98,8 @@ public class A2uiCatalogRegistryService {
         }
         OfficialBasicCatalogSnapshot snapshot =
                 officialBasicCatalogImporter.loadLockedSnapshot(operator);
+        functionContractValidator.publishedContract(
+                A2uiOfficialBasicCatalogImporter.CATALOG_ID, source(snapshot.getCatalogAsset()));
         ComponentAsset savedCatalog =
                 catalogImportTransactionService.importOfficialSnapshot(snapshot, operator);
         Map<String, Object> result = project(savedCatalog);
@@ -127,6 +133,14 @@ public class A2uiCatalogRegistryService {
         source.put("protocolVersion", PROTOCOL_VERSION);
         source.put("catalogSourceType", A2uiCatalogSourceType.PLATFORM_MANAGED.name());
         source.put("componentCodes", componentCodes);
+        if (input.containsKey(FIELD_FUNCTION_CONTRACT)) {
+            A2uiCatalogFunctionContractValidator.ValidatedFunctionContract functionContract =
+                    functionContractValidator.validateProjectContract(
+                            catalogId, input.get(FIELD_FUNCTION_CONTRACT));
+            source.put(FIELD_FUNCTION_CONTRACT, functionContract.contract());
+            source.put("functionCodes", functionContract.functionCodes());
+            source.put("functions", functionContract.functions());
+        }
         String canonicalSource = JsonSupport.toJSON(A2uiImmutableJsonSupport.canonicalize(source));
         log.info("A2UI managed Catalog canonical source 已生成, catalogId:{}, componentCount:{}, operator:{}",
                 catalogId, componentCodes.size(), operator);
@@ -152,9 +166,9 @@ public class A2uiCatalogRegistryService {
         if (assets != null) {
             for (ComponentAsset asset : assets) {
                 Map<String, Object> projection = project(asset);
-                if (A2uiCatalogSourceType.PLATFORM_MANAGED.name().equals(
-                        projection.get("catalogSourceType"))
-                        && (expected == null || expected == A2uiCatalogSourceType.PLATFORM_MANAGED)) {
+                A2uiCatalogSourceType actual = parseSourceCode(
+                        String.valueOf(projection.get("catalogSourceType")));
+                if (expected == null || expected == actual) {
                     result.add(projection);
                 }
             }
@@ -168,12 +182,7 @@ public class A2uiCatalogRegistryService {
         if (asset == null || !ASSET_TYPE_A2UI_CATALOG.equals(asset.getAssetType())) {
             throw new A2uiRegistryValidationException(ERROR_NOT_FOUND);
         }
-        Map<String, Object> projection = project(asset);
-        if (!A2uiCatalogSourceType.PLATFORM_MANAGED.name().equals(
-                projection.get("catalogSourceType"))) {
-            throw new A2uiRegistryValidationException(ERROR_NOT_FOUND);
-        }
-        return projection;
+        return project(asset);
     }
 
     /** 创建普通 PLATFORM_MANAGED Catalog；来源不可由请求指定。 */
@@ -307,9 +316,12 @@ public class A2uiCatalogRegistryService {
     private ComponentAsset preserveImportMetadata(ComponentAsset current, ComponentAsset next) {
         Map<String, Object> currentSource = source(current);
         Map<String, Object> nextSource = source(next);
-        for (String field : IMPORT_METADATA_FIELDS) {
-            if (currentSource.containsKey(field)) {
-                nextSource.put(field, currentSource.get(field));
+        if (currentSource.containsKey("sourceUrl") || currentSource.containsKey("rawDigest")
+                || currentSource.containsKey("catalogManifest")) {
+            for (String field : IMPORT_METADATA_FIELDS) {
+                if (currentSource.containsKey(field)) {
+                    nextSource.put(field, currentSource.get(field));
+                }
             }
         }
         next.setRuntimeConfigJson(JsonSupport.toJSON(

@@ -22,6 +22,8 @@
 
 空库首次导入应保留“同步 M 内置锁定的 Google A2UI Official Basic Catalog”勾选。该操作调用无客户端 schema 参数的管理员固定方法，由 M 从随二进制发布的资源读取 [Google A2UI v0.9.1 Basic Catalog](https://github.com/a2ui-project/a2ui/blob/420c6183c400e4b84fe3f9e084906725062a6d56/specification/v0_9_1/catalogs/basic/catalog.json)：协议版本 `v0.9.1`、source commit `420c6183c400e4b84fe3f9e084906725062a6d56`、catalog SHA-256 `8cc94d0a482e67048f9fc989964ca5da56fe42f531d919315a508989fb22e13e`。服务端会再次核对原文件、rules 和协议文档摘要；页面不上传、不拼装、不简化官方 schema。`Markdown` 与 `TextDownload` 仍由本项目作为独立扩展注册，绝不标记为 Official。
 
+`digital-employee-functions.json` 是从本仓库 B 端 `apps/digital-employee/web/src/catalogs/digital-employee-functions.json` 精确复制的公开项目合同：14 个函数 `$ref` 到上述 locked official Catalog，仅 `equals` 来自已锁定的 `@a2ui/web_core` `0.11.0` `EqualsImplementation`。浏览器只在用户点击发布按钮后同源读取该文件；M 将合同随项目 Catalog 发布并据此校验 FunctionCall，不接收或执行任意脚本。
+
 当前正式 M 的受控分类只有 `general/general` 和专员 `101`，因此本工具的 Capability 与 Skill 都使用该现有分类，不修改全局配置。若首次 `CAPABILITY_DRAFT_CREATE` 已成功而随后的 SAVE 失败，重试会按唯一 `nameCn` 复用 actionCode 仍为空的初始 draft；同名候选超过一个时停止，避免重复身份。
 
 当前 M SPA 没有可恢复的资产直达 URL，结果区会提供管理台入口和可复制的真实资产 Key，不伪造深链；同时可以下载不含凭据的 PRT manifest。浏览器在 12 项 dry-run 全部成功后把无凭据 checkpoint 存入同源 `localStorage`；若后续 Catalog/Application/Skill 发布中断，再次点击会先核对 12 个 draft identity/revision 后从发布阶段继续，避免为重试重复创建能力资产或改写已验证 digest。完成后 checkpoint 会被移除，只保留便于复用 workflowCode 的 manifest。

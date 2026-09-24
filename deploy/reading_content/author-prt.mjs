@@ -21,6 +21,8 @@ assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(origin.hostname), 'Node C
 const cookie = env('M_SESSION_COOKIE');
 assert.match(cookie, /^a2flow_management_session=[A-Za-z0-9_-]+$/);
 const descriptorSetBase64 = (await readFile(env('RPC_DESCRIPTOR_FILE'), 'utf8')).trim();
+const functionContract = JSON.parse(await readFile(
+  new URL('./digital-employee-functions.json', import.meta.url), 'utf8'));
 const client = new ManagementClient({ origin: origin.origin, cookie, signal: AbortSignal.timeout(30 * 60_000), onProgress: message => console.log(`PASS ${message}`) });
 
 if (process.env.M_BOOTSTRAP_BASIC_CATALOG === '1') {
@@ -54,6 +56,7 @@ if (process.env.M_BOOTSTRAP_BASIC_CATALOG === '1') {
 
 const result = await runPrtAuthoring(client, {
   descriptorSetBase64, targetKey: env('RPC_TARGET_KEY'), specialistIds: env('M_SPECIALIST_IDS'),
+  functionContract,
   includeWorkflow: process.env.M_INCLUDE_WORKFLOW === '1', specialistCode: process.env.M_SPECIALIST_CODE,
   workflowCode: process.env.M_EXISTING_WORKFLOW_CODE,
 });

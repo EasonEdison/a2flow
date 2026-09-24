@@ -161,7 +161,10 @@ export async function bootstrapBasicAtoms(client, atoms) {
   for (const atom of atoms) await ensureAtom(client, atom);
 }
 
-async function ensureCatalog(client, officialComponentCodes = []) {
+async function ensureCatalog(client, officialComponentCodes = [], functionContract) {
+  if (!functionContract || functionContract.catalogId !== CATALOG_ID || !functionContract.functions) {
+    throw new Error('project function contract does not match catalog identity');
+  }
   const importedOfficial = new Set(officialComponentCodes);
   const missing = [];
   for (const code of BASIC_COMPONENTS) {
@@ -171,7 +174,7 @@ async function ensureCatalog(client, officialComponentCodes = []) {
   }
   if (missing.length) throw new Error(`M 缺少已登记 basic atoms: ${missing.join(', ')}；先用隔离 CLI 的 --bootstrap-basic-catalog 导入官方 schema`);
   for (const atom of customAtoms) await ensureAtom(client, atom);
-  const catalog = { catalogId: CATALOG_ID, nameCn: '数字员工阅读创作组件集', protocolVersion: PROTOCOL_VERSION, componentCodes: [...BASIC_COMPONENTS, ...customAtoms.map(item => item.componentCode)] };
+  const catalog = { catalogId: CATALOG_ID, nameCn: '数字员工阅读创作组件集', protocolVersion: PROTOCOL_VERSION, componentCodes: [...BASIC_COMPONENTS, ...customAtoms.map(item => item.componentCode)], functionContract };
   const catalogs = list((await client.call('A2UI_CATALOG_LIST', { keyword: CATALOG_ID })).data);
   const matches = catalogs.filter(item => catalogIdOf(item) === CATALOG_ID);
   if (matches.length > 1) throw new Error(`${CATALOG_ID}: duplicate catalogs`);
@@ -280,7 +283,7 @@ export async function runPrtAuthoring(client, options) {
     if (!capabilities.has(spec.actionCode)) capabilities.set(spec.actionCode, await ensureCapability(client, spec, normalized, placeholderSample(spec)));
     await publishPrt(client, 'CAPABILITY_ACTION', capabilities.get(spec.actionCode).draftId);
   }
-  const catalogRelease = await ensureCatalog(client, options.officialComponentCodes);
+  const catalogRelease = await ensureCatalog(client, options.officialComponentCodes, options.functionContract);
   const applicationRows = new Map();
   for (const application of buildApplications()) applicationRows.set(application.appCode, await ensureApplication(client, application));
   const skillRows = new Map();

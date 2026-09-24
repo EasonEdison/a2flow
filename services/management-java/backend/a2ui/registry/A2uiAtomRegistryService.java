@@ -99,7 +99,7 @@ public class A2uiAtomRegistryService {
         List<ComponentAsset> result = new ArrayList<>();
         if (assets != null) {
             for (ComponentAsset asset : assets) {
-                if (isKuaishouCustom(asset)) {
+                if (isVisibleAtom(asset)) {
                     result.add(asset);
                 }
             }
@@ -110,7 +110,7 @@ public class A2uiAtomRegistryService {
     /** 按 Registry 主键读取 A2UI_ATOM。 */
     public ComponentAsset detail(String id) {
         ComponentAsset asset = assetRepository.get(parseId(id));
-        if (!isKuaishouCustom(asset)) {
+        if (!isVisibleAtom(asset)) {
             throw new A2uiRegistryValidationException(ERROR_NOT_FOUND);
         }
         return asset;
@@ -202,6 +202,20 @@ public class A2uiAtomRegistryService {
                 && contract != null
                 && A2uiComponentOriginType.PLATFORM_CUSTOM.name().equals(
                 contract.get("componentOriginType"));
+    }
+
+    private boolean isVisibleAtom(ComponentAsset asset) {
+        Map<String, Object> contract = asset == null ? null : asset.getA2uiContract();
+        if (asset == null || !ASSET_TYPE_A2UI_ATOM.equals(asset.getAssetType())
+                || contract == null) {
+            return false;
+        }
+        try {
+            A2uiComponentOriginType.parse(String.valueOf(contract.get("componentOriginType")));
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     private Long parseId(String id) {

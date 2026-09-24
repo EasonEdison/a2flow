@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import dev.a2flow.management.support.JsonSupport;
 import dev.a2flow.management.a2ui.application.A2uiImmutableJsonSupport;
 import dev.a2flow.management.a2ui.catalog.A2uiCatalogSourceType;
+import dev.a2flow.management.a2ui.catalog.A2uiCatalogFunctionContractValidator;
 import dev.a2flow.management.a2ui.registry.A2uiComponentOriginType;
 import dev.a2flow.management.lifecycle.domain.ComponentAsset;
 import dev.a2flow.management.release.ReleaseModels.AssetSnapshot;
@@ -50,6 +51,9 @@ public class A2uiCatalogReleaseAssetAdapter extends AbstractReleaseAssetAdapter 
     @Resource
     private SkillFactoryComponentAssetRepository assetRepository;
 
+    private final A2uiCatalogFunctionContractValidator functionContractValidator =
+            new A2uiCatalogFunctionContractValidator();
+
     @Override
     public ReleaseAssetType assetType() {
         return ReleaseAssetType.A2UI_CATALOG;
@@ -62,6 +66,7 @@ public class A2uiCatalogReleaseAssetAdapter extends AbstractReleaseAssetAdapter 
         }
         ComponentAsset catalogAsset = assetRepository.findByAssetTypeAndName(ASSET_TYPE, assetKey);
         Map<String, Object> catalogSource = catalogSource(catalogAsset, assetKey);
+        functionContractValidator.publishedContract(assetKey, catalogSource);
         List<String> componentCodes = componentCodes(catalogSource);
         List<ComponentAsset> atoms = assetRepository.list(
                 new ComponentAssetQuery().setAssetType(ATOM_ASSET_TYPE), true);

@@ -61,6 +61,8 @@ assert.match(browser, /fetch\(new URL\('\.\/content-descriptor\.txt', import\.me
 assert.match(browser, /validateDescriptorBase64\(await response\.text\(\)\)/);
 assert.match(browser, /client\.call\('A2UI_CATALOG_OFFICIAL_IMPORT'\)/);
 assert.match(browser, /catalogSourceType !== 'A2UI_OFFICIAL'/);
+assert.match(browser, /digital-employee-functions\.json/);
+assert.match(browser, /functionContract\?\.functions\?\.equals/);
 assert.match(browser, /descriptorText \|\| \(descriptorFile \?/);
 assert.match(browser, /if \(!descriptorText && !descriptorFile\)/);
 assert.doesNotMatch(browser, /RELEASE_ONLINE|forcePublish|authorization/i);
@@ -73,6 +75,14 @@ assert.ok(descriptorBinary.length > 0);
 for (const method of ['CreateProject', 'ListProjects', 'GetProject', 'SaveSource', 'GetSource', 'SaveArtifact', 'GetArtifact', 'GetConfirmation', 'ConfirmReading', 'ConfirmTopic', 'ConfirmManuscript', 'ExportManuscript']) {
   assert.ok(descriptorBinary.includes(Buffer.from(method)), `content descriptor misses ${method}`);
 }
+
+const deployedFunctions = JSON.parse(await readFile(
+  new URL('./digital-employee-functions.json', import.meta.url), 'utf8'));
+const rendererFunctions = JSON.parse(await readFile(
+  new URL('../../apps/digital-employee/web/src/catalogs/digital-employee-functions.json', import.meta.url), 'utf8'));
+assert.deepEqual(deployedFunctions, rendererFunctions, 'authoring function contract must exactly match B renderer');
+assert.equal(Object.keys(deployedFunctions.functions).length, 15);
+assert.equal(deployedFunctions.functions.equals.properties.call.const, 'equals');
 
 const requestIds = new Set(Array.from({ length: 32 }, createRequestId));
 assert.equal(requestIds.size, 32);
