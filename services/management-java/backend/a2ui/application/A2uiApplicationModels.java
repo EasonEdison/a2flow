@@ -252,11 +252,39 @@ public final class A2uiApplicationModels {
      * 运行时路由引用，也不携带 Capability 版本、releaseId 或 digest。
      */
     @Value
-    public static class A2uiCurrentCapabilityContract {
-        private String actionCode;
+    public static class A2uiCurrentCapabilityVariantContract {
+        private String clientType;
         private Map<String, Object> modelContract;
         private Map<String, Object> resultContract;
+    }
+
+    /**
+     * 发布能力声明的全部真实端契约；compiler 必须逐项校验，Runtime 仍按可信 client 选择。
+     */
+    @Value
+    public static class A2uiCurrentCapabilityContract {
+        private String actionCode;
+        private Map<String, A2uiCurrentCapabilityVariantContract> clientVariants;
         private A2uiSideEffectLevel sideEffect;
+
+        public A2uiCurrentCapabilityContract(String actionCode,
+                Map<String, A2uiCurrentCapabilityVariantContract> clientVariants,
+                A2uiSideEffectLevel sideEffect) {
+            this.actionCode = actionCode;
+            this.clientVariants = clientVariants == null ? null
+                    : Collections.unmodifiableMap(new LinkedHashMap<>(clientVariants));
+            this.sideEffect = sideEffect;
+        }
+
+        /** 兼容已有 COMMON fixture；仍进入统一 variants 校验，不保留旧单契约旁路。 */
+        public A2uiCurrentCapabilityContract(String actionCode,
+                Map<String, Object> modelContract,
+                Map<String, Object> resultContract,
+                A2uiSideEffectLevel sideEffect) {
+            this(actionCode, Collections.singletonMap("COMMON",
+                    new A2uiCurrentCapabilityVariantContract(
+                            "COMMON", modelContract, resultContract)), sideEffect);
+        }
     }
 
     /** 当前 Capability schema 的发布时审计结果；Runtime 不使用它选择执行版本。 */

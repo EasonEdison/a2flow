@@ -3,6 +3,7 @@ package dev.a2flow.management.a2ui.application;
 import static dev.a2flow.management.a2ui.application.A2uiApplicationErrorCode.CAPABILITY_REFERENCE_INVALID;
 import static dev.a2flow.management.a2ui.application.A2uiApplicationErrorCode.CAPABILITY_SCHEMA_INCOMPATIBLE;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -16,6 +17,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityContract;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityVariantContract;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSideEffectLevel;
 import dev.a2flow.management.model.CapabilityActionDraft;
 import dev.a2flow.management.release.CapabilityReleasePayloadAdapter;
@@ -52,7 +54,12 @@ public class A2uiCurrentCapabilityResolver {
     private static final String FIELD_RESULT_CONTRACT = "resultContract";
     private static final String FIELD_GOVERNANCE = "governance";
     private static final String FIELD_SIDE_EFFECT_LEVEL = "sideEffectLevel";
+    private static final String CLIENT_PC = "PC";
+    private static final String CLIENT_APP = "APP";
     private static final String CLIENT_COMMON = "COMMON";
+    private static final List<String> CLIENT_MODE_PC = List.of(CLIENT_PC);
+    private static final List<String> CLIENT_MODE_APP = List.of(CLIENT_APP);
+    private static final List<String> CLIENT_MODE_DIFFERENT = List.of(CLIENT_PC, CLIENT_APP);
     private static final List<String> CLIENT_MODE_COMMON = List.of(CLIENT_COMMON);
     private static final String SIDE_EFFECT_READ = "READ";
     private static final String SIDE_EFFECT_WRITE = "WRITE";
@@ -156,25 +163,47 @@ public class A2uiCurrentCapabilityResolver {
         }
     }
 
-    private A2uiCurrentCapabilityContract contract(CapabilityActionDraft draft, String actionCode) {
+    A2uiCurrentCapabilityContract contract(CapabilityActionDraft draft, String actionCode) {
         Map<String, Object> source = draft.getDraft();
+        List<String> supportedClients = supportedClients(source.get(FIELD_SUPPORTED_CLIENTS));
         Map<String, Object> clientVariants = map(source.get(FIELD_CLIENT_VARIANTS));
-        if (!CLIENT_MODE_COMMON.equals(source.get(FIELD_SUPPORTED_CLIENTS))
-                || clientVariants.size() != 1 || !clientVariants.containsKey(CLIENT_COMMON)) {
+        if (!new ArrayList<>(clientVariants.keySet()).equals(supportedClients)) {
             throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
         }
-        Map<String, Object> commonVariant = map(clientVariants.get(CLIENT_COMMON));
-        Map<String, Object> modelContract = map(commonVariant.get(FIELD_MODEL_CONTRACT));
-        Map<String, Object> resultContract = map(commonVariant.get(FIELD_RESULT_CONTRACT));
+        Map<String, A2uiCurrentCapabilityVariantContract> variants = new LinkedHashMap<>();
+        for (String client : supportedClients) {
+            Map<String, Object> variant = map(clientVariants.get(client));
+            Map<String, Object> modelContract = map(variant.get(FIELD_MODEL_CONTRACT));
+            Map<String, Object> resultContract = map(variant.get(FIELD_RESULT_CONTRACT));
+            if (modelContract.isEmpty() || resultContract.isEmpty()) {
+                throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
+            }
+            variants.put(client, new A2uiCurrentCapabilityVariantContract(
+                    client,
+                    A2uiImmutableJsonSupport.immutableMap(modelContract),
+                    A2uiImmutableJsonSupport.immutableMap(resultContract)));
+        }
         Map<String, Object> governance = map(source.get(FIELD_GOVERNANCE));
-        if (modelContract.isEmpty() || resultContract.isEmpty()) {
+        return new A2uiCurrentCapabilityContract(
+                actionCode, variants, sideEffect(governance.get(FIELD_SIDE_EFFECT_LEVEL)));
+    }
+
+    private List<String> supportedClients(Object value) {
+        if (!(value instanceof List)) {
             throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
         }
-        return new A2uiCurrentCapabilityContract(
-                actionCode,
-                A2uiImmutableJsonSupport.immutableMap(modelContract),
-                A2uiImmutableJsonSupport.immutableMap(resultContract),
-                sideEffect(governance.get(FIELD_SIDE_EFFECT_LEVEL)));
+        List<String> clients = new ArrayList<>();
+        for (Object client : (List<?>) value) {
+            if (!(client instanceof String)) {
+                throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
+            }
+            clients.add((String) client);
+        }
+        if (!CLIENT_MODE_PC.equals(clients) && !CLIENT_MODE_APP.equals(clients)
+                && !CLIENT_MODE_DIFFERENT.equals(clients) && !CLIENT_MODE_COMMON.equals(clients)) {
+            throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
+        }
+        return clients;
     }
 
     private A2uiSideEffectLevel sideEffect(Object rawSideEffect) {
