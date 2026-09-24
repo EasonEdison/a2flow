@@ -44,6 +44,7 @@ class ContextField(StrEnum):
 
 class ExecutionErrorCode(StrEnum):
     TRUSTED_CONTEXT_REQUIRED = "TRUSTED_CONTEXT_REQUIRED"
+    CAPABILITY_CLIENT_NOT_SUPPORTED = "CAPABILITY_CLIENT_NOT_SUPPORTED"
     RELEASE_ENVIRONMENT_INVALID = "RELEASE_ENVIRONMENT_INVALID"
     EXECUTION_PLAN_INVALID = "EXECUTION_PLAN_INVALID"
     ARGUMENT_INVALID = "ARGUMENT_INVALID"
@@ -256,6 +257,8 @@ class PublishedPlan:
             raise ValueError("only NONE idempotency is supported")
         if self.response_policy != "ORIGINAL":
             raise ValueError("only ORIGINAL response policy is supported")
+        if type(self.technical_output_schema) is not dict:
+            raise ValueError("technical_output_schema must be a JSON object")
         names = tuple(argument.name for argument in self.arguments)
         if len(names) != len(set(names)):
             raise ValueError("argument names must be unique")
@@ -316,4 +319,3 @@ def _require_path(value: str) -> None:
 def _require_unique_paths(paths: tuple[str, ...]) -> None:
     if len(paths) != len(set(paths)):
         raise ValueError("request mappings write the same target more than once")
-

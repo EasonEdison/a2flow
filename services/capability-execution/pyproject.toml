@@ -10,7 +10,17 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-test = ["mypy==1.19.1", "pytest>=8,<9", "ruff>=0.13,<0.17"]
+rpc = [
+    "a2flow-rpc-contracts==0.1.0",
+    "grpcio==1.75.1",
+    "jsonschema>=4.26,<5",
+]
+test = [
+    "mypy==1.19.1",
+    "pytest>=8,<9",
+    "ruff>=0.13,<0.17",
+    "types-jsonschema>=4.26,<5",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
