@@ -2,6 +2,8 @@
 import { ManagementClient, runPrtAuthoring } from './authoring-core.mjs';
 
 const form = /** @type {HTMLFormElement} */ (document.querySelector('#authoring-form'));
+const loadDescriptorButton = /** @type {HTMLButtonElement} */ (document.querySelector('#load-project-descriptor'));
+const descriptorStatus = /** @type {HTMLElement} */ (document.querySelector('#descriptor-status'));
 const descriptorTextInput = /** @type {HTMLTextAreaElement} */ (document.querySelector('#descriptor-text'));
 const fileInput = /** @type {HTMLInputElement} */ (document.querySelector('#descriptor-file'));
 const targetInput = /** @type {HTMLInputElement} */ (document.querySelector('#target-key'));
@@ -20,6 +22,34 @@ let manifest = null;
 let completed = 0;
 const checkpointKey = 'a2flow.readingContent.prtCheckpoint.v1';
 const manifestKey = 'a2flow.readingContent.prtManifest.v1';
+
+function validateDescriptorBase64(value) {
+  const descriptor = value.trim();
+  if (!descriptor || descriptor.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(descriptor)) {
+    throw new Error('Content RPC descriptor 不是合法的 base64 文本。');
+  }
+  let decoded;
+  try { decoded = atob(descriptor); } catch { throw new Error('Content RPC descriptor 无法解码。'); }
+  if (!decoded.length) throw new Error('Content RPC descriptor 解码结果为空。');
+  return descriptor;
+}
+
+loadDescriptorButton.addEventListener('click', async () => {
+  if (loadDescriptorButton.disabled) return;
+  loadDescriptorButton.disabled = true; error.textContent = ''; descriptorStatus.textContent = '正在加载…';
+  try {
+    const response = await fetch(new URL('./content-descriptor.txt', import.meta.url), { cache: 'no-store' });
+    if (!response.ok) throw new Error(`加载本项目 Content RPC 契约失败（HTTP ${response.status}）。`);
+    const descriptor = validateDescriptorBase64(await response.text());
+    descriptorTextInput.value = descriptor;
+    descriptorStatus.textContent = `已加载并校验（${descriptor.length} 个 base64 字符），请继续审阅。`;
+  } catch (reason) {
+    descriptorStatus.textContent = '';
+    error.textContent = reason instanceof Error ? reason.message : '加载本项目 Content RPC 契约失败。';
+  } finally {
+    loadDescriptorButton.disabled = false;
+  }
+});
 
 includeWorkflow.addEventListener('change', () => {
   specialistCode.disabled = !includeWorkflow.checked;
@@ -60,7 +90,7 @@ form.addEventListener('submit', async event => {
   runButton.disabled = true; error.textContent = ''; resultSection.hidden = true; assets.replaceChildren();
   log.textContent = '开始：只执行用户点击触发的 PRT authoring。'; progress.value = 1; completed = 1;
   try {
-    const descriptorSetBase64 = descriptorText || (descriptorFile ? (await descriptorFile.text()).trim() : '');
+    const descriptorSetBase64 = validateDescriptorBase64(descriptorText || (descriptorFile ? await descriptorFile.text() : ''));
     const client = new ManagementClient({ origin: location.origin, signal: AbortSignal.timeout(30 * 60_000), onProgress: append });
     let resumeCheckpoint = null;
     try { resumeCheckpoint = JSON.parse(localStorage.getItem(checkpointKey) || 'null'); } catch { localStorage.removeItem(checkpointKey); }

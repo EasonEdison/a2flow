@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createRequestId } from './authoring-core.mjs';
 import { buildApplications, capabilitySpecs, customAtoms, skillSpecs, validateAssets } from './assets.mjs';
 
 assert.equal(validateAssets().capabilities, 12);
@@ -47,12 +48,34 @@ assert.deepEqual(confirmButton.checks[2].condition, {
 const html = await readFile(new URL('./import.html', import.meta.url), 'utf8');
 assert.match(html, /创建并发布阅读创作示例到 PRT/);
 assert.match(html, /type="submit"/);
+assert.match(html, /<button id="load-project-descriptor" type="button">加载本项目 Content RPC 契约<\/button>/);
 assert.match(html, /<textarea id="descriptor-text"/);
 assert.match(html, /<input id="descriptor-file" type="file" accept="text\/plain,\.txt">/);
+assert.match(html, /<input id="target-key" value="content"/);
 assert.doesNotMatch(html, /<input[^>]+(?:name|id)="[^"]*(?:token|cookie|password)/i);
 const browser = await readFile(new URL('./import.js', import.meta.url), 'utf8');
 assert.match(browser, /form\.addEventListener\('submit'/);
+assert.match(browser, /loadDescriptorButton\.addEventListener\('click'/);
+assert.match(browser, /fetch\(new URL\('\.\/content-descriptor\.txt', import\.meta\.url\)/);
+assert.match(browser, /validateDescriptorBase64\(await response\.text\(\)\)/);
 assert.match(browser, /descriptorText \|\| \(descriptorFile \?/);
 assert.match(browser, /if \(!descriptorText && !descriptorFile\)/);
 assert.doesNotMatch(browser, /RELEASE_ONLINE|forcePublish|authorization/i);
+
+const descriptorText = (await readFile(new URL('./content-descriptor.txt', import.meta.url), 'utf8')).trim();
+assert.match(descriptorText, /^[A-Za-z0-9+/]+={0,2}$/);
+assert.equal(descriptorText.length % 4, 0);
+const descriptorBinary = Buffer.from(descriptorText, 'base64');
+assert.ok(descriptorBinary.length > 0);
+for (const method of ['CreateProject', 'ListProjects', 'GetProject', 'SaveSource', 'GetSource', 'SaveArtifact', 'GetArtifact', 'GetConfirmation', 'ConfirmReading', 'ConfirmTopic', 'ConfirmManuscript', 'ExportManuscript']) {
+  assert.ok(descriptorBinary.includes(Buffer.from(method)), `content descriptor misses ${method}`);
+}
+
+const requestIds = new Set(Array.from({ length: 32 }, createRequestId));
+assert.equal(requestIds.size, 32);
+for (const requestId of requestIds) assert.match(requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+const authoringCore = await readFile(new URL('./authoring-core.mjs', import.meta.url), 'utf8');
+assert.match(authoringCore, /clientType: 'PC'/);
+assert.match(authoringCore, /getRandomValues/);
+assert.doesNotMatch(authoringCore, /randomUUID|Math\.random/);
 console.log('PASS reading-content assets, stale-draft guards, inline export identity, and explicit browser trigger');

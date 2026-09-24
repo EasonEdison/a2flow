@@ -17,6 +17,16 @@ const appCodeOf = item => item?.appCode || item?.componentCode || item?.componen
 const componentCodeOf = item => item?.componentCode || item?.type || item?.componentName;
 const catalogIdOf = item => item?.catalogId || item?.componentCode || item?.componentName;
 
+export function createRequestId() {
+  if (!globalThis.crypto?.getRandomValues) throw new Error('secure random generator is unavailable');
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export class ManagementClient {
   constructor({ origin, cookie, signal, onProgress = () => {} }) {
     this.origin = new URL(requiredText(origin, 'origin'));
@@ -108,7 +118,7 @@ async function ensureCapability(client, spec, options, sample) {
 }
 
 async function dryRun(client, capability, environment = 'PRT') {
-  const result = (await client.call('CAPABILITY_DRY_RUN', { draftId: capability.draftId, revision: capability.detail.revision, environment, clientType: 'COMMON' })).data;
+  const result = (await client.call('CAPABILITY_DRY_RUN', { draftId: capability.draftId, revision: capability.detail.revision, environment, clientType: 'PC' })).data;
   if (result?.toolResult?.success !== true) throw new Error(`${capability.detail?.draft?.basicInfo?.actionCode || capability.draftId}: dry-run failed (${result?.toolResult?.errorCode || 'UNKNOWN'})`);
   return result.toolResult.data;
 }
@@ -121,9 +131,9 @@ async function publishPrt(client, assetType, assetKey, extra = {}) {
   if (overview?.activeChange?.status === 'ACTIVE') {
     if (overview.activeChange.sourceDigest !== digest) throw new Error(`${assetType}/${assetKey}: another active change owns a different digest`);
   } else {
-    await client.call('RELEASE_CHANGE_CREATE', { ...identity, changeName: '阅读到创作 PRT 发布', requestId: crypto.randomUUID() });
+    await client.call('RELEASE_CHANGE_CREATE', { ...identity, changeName: '阅读到创作 PRT 发布', requestId: createRequestId() });
   }
-  const deployed = (await client.call('RELEASE_PREPROD_DEPLOY', { ...identity, expectedDigest: digest, requestId: crypto.randomUUID() })).data;
+  const deployed = (await client.call('RELEASE_PREPROD_DEPLOY', { ...identity, expectedDigest: digest, requestId: createRequestId() })).data;
   if (deployed?.status !== 'SUCCEEDED') throw new Error(`${assetType}/${assetKey}: PRT deploy ${deployed?.status || 'UNKNOWN'}`);
   overview = (await client.call('RELEASE_OVERVIEW', identity)).data;
   if (!overview?.environments?.PRT?.sourceId) throw new Error(`${assetType}/${assetKey}: missing PRT pointer`);
