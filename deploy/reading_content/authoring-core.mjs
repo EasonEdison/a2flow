@@ -73,7 +73,7 @@ function capabilityDraft(spec, descriptorSetBase64, targetKey, sample) {
   return {
     payloadType: 'CAPABILITY_DRAFT_SNAPSHOT', mode: 'CREATE',
     basicInfo: { actionCode: spec.actionCode, nameCn: spec.nameCn, description: spec.description, technicalOwner: 'reading-content' },
-    governance: { sideEffectLevel: spec.sideEffect }, supportedClients: ['COMMON'], clientVariants: { COMMON: {
+    governance: { sideEffectLevel: spec.sideEffect }, supportedClients: ['PC'], clientVariants: { PC: {
       apiSource: { sourceType: 'GRPC' },
       modelContract: { description: spec.description, inputFields: spec.fields, inputExampleJson: JSON.stringify(sample) },
       executionBinding: { bindingType: 'GRPC', target: { targetKey, serviceName: CONTENT_SERVICE, methodName: spec.methodName, descriptorSetBase64, contextField: 'context' }, requestMappingsJson: JSON.stringify(spec.mappings), contextMappingsJson: '{}', timeoutMs: 30_000, maxResponseBytes: 5_242_880, idempotency: 'NONE', responsePolicy: 'ORIGINAL' },
