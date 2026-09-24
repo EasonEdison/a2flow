@@ -209,3 +209,16 @@ def test_plan_rejects_duplicate_and_prefix_conflicting_writes() -> None:
         ExecutionErrorCode.REQUEST_MAPPING_INVALID,
         lambda: bind_request(plan, {"name": "scalar"}, context()),
     )
+
+
+def test_null_mapping_cannot_be_replaced_by_a_nested_mapping() -> None:
+    plan = make_plan(
+        arguments=(ArgumentDefinition("optional", ValueSchema(JsonKind.STRING)),),
+        request_mappings=(RequestMapping("optional", "payload"),),
+        constant_mappings=(ConstantMapping("payload.value", "fixed"),),
+    )
+
+    assert_error(
+        ExecutionErrorCode.REQUEST_MAPPING_INVALID,
+        lambda: bind_request(plan, {"optional": None}, context()),
+    )
