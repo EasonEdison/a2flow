@@ -34,7 +34,7 @@ import {
   parseA2uiCatalogAuthoringJson,
   parseA2uiCatalogComponentForm,
   projectA2uiCatalogMembership,
-  toA2uiCatalogAuthoringSource,
+  toA2uiCatalogDetailSource,
   type A2uiCatalogComponentContract,
   type A2uiCatalogComponentFormValues,
   type A2uiCatalogComponentRecord,
@@ -58,13 +58,15 @@ function jsonText(value: unknown): string {
   return jsonStringify(value, null, 2) || '{}';
 }
 
-function toFormValues(component: A2uiCatalogComponentContract): A2uiCatalogComponentFormValues {
+function toFormValues(
+  component: A2uiCatalogComponentContract | A2uiCatalogComponentRecord,
+): A2uiCatalogComponentFormValues {
   return {
     componentCode: component.componentCode,
     type: component.type,
     nameCn: component.nameCn,
-    category: component.category,
-    compositionKind: component.compositionKind,
+    category: component.category || '',
+    compositionKind: component.compositionKind || 'ATOMIC',
     propsSchemaJson: jsonText(component.propsSchema),
     eventSchemaJson: jsonText(component.eventSchema),
     childrenConstraintJson: jsonText(component.childrenConstraint),
@@ -96,13 +98,7 @@ const A2uiCatalogPage: React.FC = () => {
   const [importingManaged, setImportingManaged] = useState(false);
   const [error, setError] = useState('');
   const availableCount = useMemo(
-    () =>
-      components?.filter(
-        (component) =>
-          component.catalogSourceType === 'PLATFORM_MANAGED' &&
-          component.componentOriginType === 'PLATFORM_CUSTOM' &&
-          isAvailable(component),
-      )?.length,
+    () => components?.filter((component) => isAvailable(component))?.length,
     [components],
   );
   const filteredComponents = useMemo(
@@ -112,6 +108,7 @@ const A2uiCatalogPage: React.FC = () => {
   const filteredCatalogs = useMemo(() => filterA2uiCatalogs(catalogs, 'ALL'), [catalogs]);
   const publishedCatalogs = useMemo(() => collectPublishedA2uiCatalogOptions(catalogs), [catalogs]);
   const selectedReadonly = Boolean(selected && !isA2uiCatalogComponentEditable(selected));
+  const selectedOfficial = selected?.componentOriginType === 'A2UI_OFFICIAL';
   const selectedCatalogReadonly = Boolean(
     selectedCatalog && !isA2uiCatalogEditable(selectedCatalog),
   );
@@ -134,7 +131,6 @@ const A2uiCatalogPage: React.FC = () => {
       const [loadedCatalogs, loadedComponents] = await Promise.all([
         a2uiCatalogApi.list({
           keyword: keyword.trim() || undefined,
-          catalogSourceType: 'PLATFORM_MANAGED',
         }),
         a2uiCatalogComponentApi.list({ keyword: keyword.trim() || undefined }),
       ]);
@@ -170,7 +166,7 @@ const A2uiCatalogPage: React.FC = () => {
     try {
       const detail = await a2uiCatalogApi.detail(record.id);
       setSelectedCatalog(detail);
-      setCatalogJsonText(jsonText(toA2uiCatalogAuthoringSource(detail)));
+      setCatalogJsonText(jsonText(toA2uiCatalogDetailSource(detail)));
       setCatalogDrawerOpen(true);
     } catch (reason) {
       message.error(reason instanceof Error ? reason.message : 'A2UI Catalog 详情加载失败');
@@ -266,7 +262,7 @@ const A2uiCatalogPage: React.FC = () => {
         <div>
           <h1 className="page-title">A2UI Catalog</h1>
           <p className="page-subtitle">
-            平台自研 Catalog 与组件合同；导入和 PRT/ONLINE 发布状态均由服务端投影
+            Google 官方只读 Catalog 与平台自研 Catalog；来源和发布状态均由服务端投影
           </p>
         </div>
         <Space>
@@ -284,8 +280,8 @@ const A2uiCatalogPage: React.FC = () => {
 
       <Alert
         type="info"
-        message="当前页面只展示平台自研资产"
-        description="Catalog 必须由服务端投影为 PLATFORM_MANAGED，组件必须为 PLATFORM_CUSTOM；不根据 catalogId 猜来源，也不接受客户端自报 revision、digest、membership 或 release authority。"
+        message="展示可信 Google 官方与平台自研资产"
+        description="Google 官方 Catalog 与组件来自服务端锁定资源且仅可查看；平台自研资产保留普通编辑入口。前端不根据 catalogId 猜来源，也不接受客户端自报 origin、revision、digest、membership 或 release authority。"
         style={{ marginBottom: 16 }}
       />
 
@@ -384,7 +380,9 @@ const A2uiCatalogPage: React.FC = () => {
                 title: '来源',
                 width: 130,
                 render: (_: unknown, record: A2uiCatalogRecord) => (
-                  <Tag color="purple">{A2UI_CATALOG_SOURCE_LABELS[record.catalogSourceType]}</Tag>
+                  <Tag color={record.catalogSourceType === 'A2UI_OFFICIAL' ? 'blue' : 'purple'}>
+                    {A2UI_CATALOG_SOURCE_LABELS[record.catalogSourceType]}
+                  </Tag>
                 ),
               },
               {
@@ -466,17 +464,13 @@ const A2uiCatalogPage: React.FC = () => {
                 ),
               },
               {
-                title: 'Catalog 来源',
-                width: 130,
+                title: '来源',
+                width: 150,
                 render: (_: unknown, record: A2uiCatalogComponentRecord) => (
-                  <Tag color="purple">{A2UI_CATALOG_SOURCE_LABELS[record.catalogSourceType]}</Tag>
+                  <Tag color={record.componentOriginType === 'A2UI_OFFICIAL' ? 'blue' : 'purple'}>
+                    {A2UI_COMPONENT_ORIGIN_LABELS[record.componentOriginType]}
+                  </Tag>
                 ),
-              },
-              {
-                title: '组件来源',
-                width: 120,
-                render: (_: unknown, record: A2uiCatalogComponentRecord) =>
-                  A2UI_COMPONENT_ORIGIN_LABELS[record.componentOriginType],
               },
               { title: 'type', dataIndex: 'type', width: 130 },
               { title: '分类', dataIndex: 'category', width: 110 },
@@ -594,7 +588,13 @@ const A2uiCatalogPage: React.FC = () => {
           </Card>
         ) : null}
         <Form layout="vertical">
-          <Form.Item label="Catalog authoring JSON">
+          <Form.Item
+            label={
+              selectedCatalog?.catalogSourceType === 'A2UI_OFFICIAL'
+                ? 'Google A2UI 官方 Catalog manifest'
+                : 'Catalog authoring JSON'
+            }
+          >
             <JsonFormatTextArea
               value={catalogJsonText}
               disabled={selectedCatalogReadonly}
@@ -611,7 +611,7 @@ const A2uiCatalogPage: React.FC = () => {
             )}
           </Space>
         </Form>
-        {selectedCatalogReleaseBinding ? (
+        {!selectedCatalogReadonly && selectedCatalogReleaseBinding ? (
           <div style={{ marginTop: 24 }}>
             <AssetReleaseTab
               assetType={selectedCatalogReleaseBinding.assetType}
@@ -619,7 +619,7 @@ const A2uiCatalogPage: React.FC = () => {
               title="A2UI Catalog 发布管理"
             />
           </div>
-        ) : selectedCatalog ? (
+        ) : !selectedCatalogReadonly && selectedCatalog ? (
           <Alert
             type="error"
             message="Catalog 详情缺少 catalogId，已阻止打开发布管理"
@@ -668,19 +668,39 @@ const A2uiCatalogPage: React.FC = () => {
               <Input disabled />
             </Form.Item>
           </div>
-          <Form.Item label="Props schema" name="propsSchemaJson" rules={[{ required: true }]}>
-            <JsonFormatTextArea
-              disabled={selectedReadonly}
-              autoSize={{ minRows: 5, maxRows: 16 }}
-            />
-          </Form.Item>
-          <Form.Item label="Event schema" name="eventSchemaJson" rules={[{ required: true }]}>
+          {selectedOfficial ? (
+            <Form.Item label="Google A2UI 官方 component schema">
+              <JsonFormatTextArea
+                value={jsonText(selected?.officialSchema)}
+                disabled
+                autoSize={{ minRows: 18, maxRows: 30 }}
+              />
+            </Form.Item>
+          ) : null}
+          <Form.Item
+            hidden={selectedOfficial}
+            label="Props schema"
+            name="propsSchemaJson"
+            rules={[{ required: true }]}
+          >
             <JsonFormatTextArea
               disabled={selectedReadonly}
               autoSize={{ minRows: 5, maxRows: 16 }}
             />
           </Form.Item>
           <Form.Item
+            hidden={selectedOfficial}
+            label="Event schema"
+            name="eventSchemaJson"
+            rules={[{ required: true }]}
+          >
+            <JsonFormatTextArea
+              disabled={selectedReadonly}
+              autoSize={{ minRows: 5, maxRows: 16 }}
+            />
+          </Form.Item>
+          <Form.Item
+            hidden={selectedOfficial}
             label="Children / slot 约束"
             name="childrenConstraintJson"
             rules={[{ required: true }]}
@@ -691,6 +711,7 @@ const A2uiCatalogPage: React.FC = () => {
             />
           </Form.Item>
           <Form.Item
+            hidden={selectedOfficial}
             label="合法消息示例"
             name="validMessageExampleJson"
             rules={[{ required: true }]}
@@ -701,6 +722,7 @@ const A2uiCatalogPage: React.FC = () => {
             />
           </Form.Item>
           <Form.Item
+            hidden={selectedOfficial}
             label="非法消息示例"
             name="invalidMessageExampleJson"
             rules={[{ required: true }]}

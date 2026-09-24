@@ -205,19 +205,32 @@ export const A2UI_MANAGED_CATALOG_SOURCE_URL =
   'https://example.invalid/REQUIRES_CONFIGURATION';
 
 export const A2UI_CATALOG_SOURCE_LABELS: Record<A2uiCatalogSourceType, string> = {
-  A2UI_OFFICIAL: 'A2UI 官方',
+  A2UI_OFFICIAL: 'Google 官方',
   PLATFORM_MANAGED: '平台自研',
 };
 
 export const A2UI_COMPONENT_ORIGIN_LABELS: Record<A2uiComponentOriginType, string> = {
-  A2UI_OFFICIAL: '官方组件',
-  PLATFORM_CUSTOM: '平台组件',
+  A2UI_OFFICIAL: 'Google 官方组件',
+  PLATFORM_CUSTOM: '平台自研组件',
 };
 
-export interface A2uiCatalogComponentRecord extends A2uiCatalogComponentContract {
+export interface A2uiCatalogComponentRecord {
   id: string;
-  catalogSourceType: A2uiCatalogSourceType;
+  componentCode: string;
+  type: string;
+  nameCn: string;
+  category?: string;
+  compositionKind?: A2uiComponentCompositionKind;
+  propsSchema?: Record<string, unknown>;
+  eventSchema?: Record<string, unknown>;
+  childrenConstraint?: A2uiChildrenConstraint;
+  validMessageExample?: Record<string, unknown>;
+  invalidMessageExample?: Record<string, unknown>;
+  catalogSourceType?: A2uiCatalogSourceType;
   componentOriginType: A2uiComponentOriginType;
+  officialCatalogId?: string;
+  officialSourceCommit?: string;
+  officialSchema?: Record<string, unknown>;
   release?: A2uiCatalogReleaseProjection;
   createTime?: number;
   updateTime?: number;
@@ -240,6 +253,8 @@ export interface A2uiCatalogRecord {
   releases?: A2uiEnvironmentReleaseMap;
   componentTypes?: string[];
   componentOrigins?: Record<string, A2uiComponentOriginType>;
+  sourceCommit?: string;
+  officialCatalogManifest?: Record<string, unknown>;
   createTime?: number;
   updateTime?: number;
 }
@@ -292,20 +307,32 @@ export interface A2uiPublishedCatalogOption {
 
 export function filterA2uiCatalogComponents(
   records: A2uiCatalogComponentRecord[],
-  _filter: A2uiCatalogSourceFilter,
+  filter: A2uiCatalogSourceFilter,
 ): A2uiCatalogComponentRecord[] {
-  return records.filter(
-    (record) =>
-      record.catalogSourceType === 'PLATFORM_MANAGED' &&
-      record.componentOriginType === 'PLATFORM_CUSTOM',
-  );
+  return records.filter((record) => {
+    if (
+      record.componentOriginType !== 'A2UI_OFFICIAL' &&
+      record.componentOriginType !== 'PLATFORM_CUSTOM'
+    ) {
+      return false;
+    }
+    if (filter === 'ALL') return true;
+    return filter === 'A2UI_OFFICIAL'
+      ? record.componentOriginType === 'A2UI_OFFICIAL'
+      : record.componentOriginType === 'PLATFORM_CUSTOM';
+  });
 }
 
 export function filterA2uiCatalogs(
   records: A2uiCatalogRecord[],
-  _filter: A2uiCatalogSourceFilter,
+  filter: A2uiCatalogSourceFilter,
 ): A2uiCatalogRecord[] {
-  return records.filter((record) => record.catalogSourceType === 'PLATFORM_MANAGED');
+  return records.filter(
+    (record) =>
+      (record.catalogSourceType === 'A2UI_OFFICIAL' ||
+        record.catalogSourceType === 'PLATFORM_MANAGED') &&
+      (filter === 'ALL' || record.catalogSourceType === filter),
+  );
 }
 
 export function isA2uiCatalogEditable(record: A2uiCatalogRecord): boolean {
@@ -314,8 +341,9 @@ export function isA2uiCatalogEditable(record: A2uiCatalogRecord): boolean {
 
 export function isA2uiCatalogComponentEditable(record: A2uiCatalogComponentRecord): boolean {
   return (
-    record.catalogSourceType === 'PLATFORM_MANAGED' &&
-    record.componentOriginType === 'PLATFORM_CUSTOM'
+    record.componentOriginType === 'PLATFORM_CUSTOM' &&
+    (record.catalogSourceType === undefined ||
+      record.catalogSourceType === 'PLATFORM_MANAGED')
   );
 }
 
@@ -437,6 +465,13 @@ export function toA2uiCatalogAuthoringSource(record: A2uiCatalogRecord): A2uiCat
   };
 }
 
+export function toA2uiCatalogDetailSource(record: A2uiCatalogRecord): A2uiCatalogAuthoringJson {
+  if (record.catalogSourceType === 'A2UI_OFFICIAL') {
+    return record.officialCatalogManifest || {};
+  }
+  return toA2uiCatalogAuthoringSource(record);
+}
+
 const A2UI_CATALOG_AUTHORITY_FIELDS = new Set([
   'catalogSourceType',
   'editable',
@@ -445,10 +480,22 @@ const A2UI_CATALOG_AUTHORITY_FIELDS = new Set([
   'digest',
   'catalogDigest',
   'release',
+  'releases',
   'frontendSupport',
   'catalogSupport',
   'hostProfile',
   'rendererArtifactDigest',
+  'sourceCommit',
+  'rulesDigest',
+  'protocolDigests',
+  'sourceUrl',
+  'rawDigest',
+  'functionCodes',
+  'functions',
+  'functionContract',
+  'catalogManifest',
+  'officialCatalogManifest',
+  'officialRulesText',
 ]);
 
 function catalogAuthorityPath(value: unknown, path = '$'): string | undefined {
