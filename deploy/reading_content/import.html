@@ -24,7 +24,10 @@
   <h1>阅读到创作 · PRT 资产导入</h1>
   <p class="notice">此页面只使用当前同源管理员会话调用 M 的正式 authoring/release HTTP 接口；不读取、不展示、不存储 Cookie 或 token。不会写发布数据库，也不会执行 ONLINE/force 发布。</p>
   <form id="authoring-form">
-    <label>Content RPC descriptor set（base64 文本文件）<input id="descriptor-file" type="file" accept="text/plain,.txt" required></label>
+    <fieldset><legend>Content RPC descriptor set（二选一，粘贴文本优先）</legend>
+      <label>粘贴 base64 descriptor<textarea id="descriptor-text" rows="8" spellcheck="false" placeholder="粘贴公开协议的 base64 FileDescriptorSet"></textarea></label>
+      <label>或上传 base64 文本文件<input id="descriptor-file" type="file" accept="text/plain,.txt"></label>
+    </fieldset>
     <label>RPC targetKey<input id="target-key" value="content-service" pattern="[A-Za-z][A-Za-z0-9_-]{0,63}" required></label>
     <label>专员 ID（与 M 当前配置一致）<input id="specialist-ids" placeholder="例如：101" required></label>
     <fieldset><legend>可选 Workflow</legend>

@@ -47,8 +47,12 @@ assert.deepEqual(confirmButton.checks[2].condition, {
 const html = await readFile(new URL('./import.html', import.meta.url), 'utf8');
 assert.match(html, /创建并发布阅读创作示例到 PRT/);
 assert.match(html, /type="submit"/);
+assert.match(html, /<textarea id="descriptor-text"/);
+assert.match(html, /<input id="descriptor-file" type="file" accept="text\/plain,\.txt">/);
 assert.doesNotMatch(html, /<input[^>]+(?:name|id)="[^"]*(?:token|cookie|password)/i);
 const browser = await readFile(new URL('./import.js', import.meta.url), 'utf8');
 assert.match(browser, /form\.addEventListener\('submit'/);
+assert.match(browser, /descriptorText \|\| \(descriptorFile \?/);
+assert.match(browser, /if \(!descriptorText && !descriptorFile\)/);
 assert.doesNotMatch(browser, /RELEASE_ONLINE|forcePublish|authorization/i);
 console.log('PASS reading-content assets, stale-draft guards, inline export identity, and explicit browser trigger');

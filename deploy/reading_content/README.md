@@ -15,7 +15,7 @@
 
 将本目录作为 M 同源静态内容提供，管理员登录后打开 `import.html`。页面不会自动执行，只有用户勾选审核确认并点击“创建并发布阅读创作示例到 PRT”后才调用 `/api/management/v2/handler`。
 
-需要选择 base64 FileDescriptorSet 文本文件，并填写固定 `targetKey`、M 当前专员 ID。页面用当前 HttpOnly 同源会话，代码无法读取或输出该 Cookie。失败不会自动重放发布请求；再次点击时按稳定 actionCode/appCode/skillCode 查找并复用已有资产，若发现重复身份或不同 digest 的活动变更会停止。
+需要粘贴 base64 FileDescriptorSet 文本，或选择含同一内容的文本文件（两者同时提供时粘贴文本优先），并填写固定 `targetKey`、M 当前专员 ID。页面用当前 HttpOnly 同源会话，代码无法读取或输出该 Cookie。失败不会自动重放发布请求；再次点击时按稳定 actionCode/appCode/skillCode 查找并复用已有资产，若发现重复身份或不同 digest 的活动变更会停止。
 
 当前 M SPA 没有可恢复的资产直达 URL，结果区会提供管理台入口和可复制的真实资产 Key，不伪造深链；同时可以下载不含凭据的 PRT manifest。浏览器在 12 项 dry-run 全部成功后把无凭据 checkpoint 存入同源 `localStorage`；若后续 Catalog/Application/Skill 发布中断，再次点击会先核对 12 个 draft identity/revision 后从发布阶段继续，避免为重试重复创建能力资产或改写已验证 digest。完成后 checkpoint 会被移除，只保留便于复用 workflowCode 的 manifest。
 

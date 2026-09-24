@@ -2,6 +2,7 @@
 import { ManagementClient, runPrtAuthoring } from './authoring-core.mjs';
 
 const form = /** @type {HTMLFormElement} */ (document.querySelector('#authoring-form'));
+const descriptorTextInput = /** @type {HTMLTextAreaElement} */ (document.querySelector('#descriptor-text'));
 const fileInput = /** @type {HTMLInputElement} */ (document.querySelector('#descriptor-file'));
 const targetInput = /** @type {HTMLInputElement} */ (document.querySelector('#target-key'));
 const specialistInput = /** @type {HTMLInputElement} */ (document.querySelector('#specialist-ids'));
@@ -49,12 +50,17 @@ function addAsset(type, key) {
 form.addEventListener('submit', async event => {
   event.preventDefault();
   if (runButton.disabled || !form.reportValidity()) return;
+  const descriptorText = descriptorTextInput.value.trim();
   const descriptorFile = fileInput.files?.[0];
-  if (!descriptorFile) return;
+  if (!descriptorText && !descriptorFile) {
+    error.textContent = '请粘贴 base64 descriptor，或选择对应的文本文件。';
+    descriptorTextInput.focus();
+    return;
+  }
   runButton.disabled = true; error.textContent = ''; resultSection.hidden = true; assets.replaceChildren();
   log.textContent = '开始：只执行用户点击触发的 PRT authoring。'; progress.value = 1; completed = 1;
   try {
-    const descriptorSetBase64 = (await descriptorFile.text()).trim();
+    const descriptorSetBase64 = descriptorText || (descriptorFile ? (await descriptorFile.text()).trim() : '');
     const client = new ManagementClient({ origin: location.origin, signal: AbortSignal.timeout(30 * 60_000), onProgress: append });
     let resumeCheckpoint = null;
     try { resumeCheckpoint = JSON.parse(localStorage.getItem(checkpointKey) || 'null'); } catch { localStorage.removeItem(checkpointKey); }
