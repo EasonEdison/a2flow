@@ -312,6 +312,79 @@ def test_split_records_and_compact_version_snapshot_are_verified() -> None:
     assert database.transactions == 1
 
 
+def test_compact_version_matches_java_blank_and_invalid_input_digest_rules() -> None:
+    asset_key = "probe-draft"
+    database = DatabaseDouble()
+    build = _build(asset_key, 2)
+    build["inputDigest"] = " \t"
+    version = _version(asset_key, 2, compact=True)
+    state = _state(
+        asset_key,
+        environments={"ONLINE": _pointer("ONLINE", "VERSION", 2)},
+        builds=[_record(database, asset_key, "builds", "buildId", build)],
+        versions=[_record(database, asset_key, "versions", "versionId", version)],
+    )
+    state["recordStorageVersion"] = 1
+    _install_root(database, asset_key, state)
+
+    assert (
+        _reader(database, Environment.ONLINE)
+        .resolve(asset_key, _context(Environment.ONLINE))
+        .source_id
+        == "version-2"
+    )
+
+    database = DatabaseDouble()
+    build = _build(asset_key, 2)
+    build["inputDigest"] = 7
+    version = _version(asset_key, 2, compact=True)
+    state = _state(
+        asset_key,
+        environments={"ONLINE": _pointer("ONLINE", "VERSION", 2)},
+        builds=[_record(database, asset_key, "builds", "buildId", build)],
+        versions=[_record(database, asset_key, "versions", "versionId", version)],
+    )
+    state["recordStorageVersion"] = 1
+    _install_root(database, asset_key, state)
+
+    with pytest.raises(ReleaseError, match=r"^RELEASE_STATE_INVALID$"):
+        _reader(database, Environment.ONLINE).resolve(
+            asset_key, _context(Environment.ONLINE)
+        )
+
+
+def test_stable_online_rejects_non_string_gray_status_but_accepts_blank() -> None:
+    asset_key = "probe-draft"
+    database = DatabaseDouble()
+    online = _pointer("ONLINE", "VERSION", 1)
+    online["grayStatus"] = " \t"
+    _install_root(
+        database,
+        asset_key,
+        _state(
+            asset_key,
+            environments={"ONLINE": online},
+            versions=[_version(asset_key, 1)],
+        ),
+    )
+    reader = _reader(database, Environment.ONLINE)
+
+    assert reader.resolve(asset_key, _context(Environment.ONLINE)).version == 1
+
+    online["grayStatus"] = 7
+    _install_root(
+        database,
+        asset_key,
+        _state(
+            asset_key,
+            environments={"ONLINE": online},
+            versions=[_version(asset_key, 1)],
+        ),
+    )
+    with pytest.raises(ReleaseError, match=r"^ONLINE_POINTER_INVALID$"):
+        reader.resolve(asset_key, _context(Environment.ONLINE))
+
+
 def test_tampered_record_and_pointer_identity_fail_closed() -> None:
     asset_key = "probe-draft"
     database = DatabaseDouble()

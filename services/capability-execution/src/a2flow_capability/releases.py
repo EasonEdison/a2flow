@@ -279,8 +279,12 @@ class PostgresReleaseReader:
             if version.get("sourceDigest") != build.get("sourceDigest"):
                 raise ReleaseError("RELEASE_STATE_INVALID")
             build_input = build.get("inputDigest")
-            if type(build_input) is not str or not build_input:
-                build_input = build.get("sourceDigest")
+            if build_input is not None and type(build_input) is not str:
+                raise ReleaseError("RELEASE_STATE_INVALID")
+            if build_input is None or not build_input.strip():
+                build_input = _required_text(
+                    build.get("sourceDigest"), "RELEASE_STATE_INVALID"
+                )
             if version.get("inputDigest") != build_input:
                 raise ReleaseError("RELEASE_STATE_INVALID")
             version["snapshot"] = build["snapshot"]
@@ -352,6 +356,8 @@ class PostgresReleaseReader:
         rule_value = state.get("grayRule")
         gray_status = state.get("grayStatus")
         if candidate_value is None:
+            if gray_status is not None and type(gray_status) is not str:
+                raise ReleaseError("ONLINE_POINTER_INVALID")
             if rule_value is not None or (
                 type(gray_status) is str
                 and gray_status.strip()
