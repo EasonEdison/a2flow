@@ -1,6 +1,13 @@
 import { basicCatalog, createComponentImplementation } from '@a2ui/react/v0_9';
 import { Catalog, CommonSchemas } from '@a2ui/web_core/v0_9';
+import { EqualsImplementation } from '@a2ui/web_core/v0_9/basic_catalog';
 import { z } from 'zod';
+import functionContract from '../catalogs/digital-employee-functions.json';
+import {
+  contractFunctionCodes,
+  officialFunctionCodes,
+  selectFunctionImplementations,
+} from '../catalogFunctions.mjs';
 import { MarkdownContent } from './MarkdownContent';
 import { TextDownload } from './TextDownload';
 
@@ -20,12 +27,22 @@ const TextDownloadComponent = createComponentImplementation({
   }).strict(),
 }, ({ props }) => <TextDownload {...props} />);
 
-// Explicit renderer registrations, not a generic claim that every published Catalog is supported.
+const officialFunctions = selectFunctionImplementations(
+  officialFunctionCodes(functionContract),
+  basicCatalog.functions,
+);
+const projectFunctions = selectFunctionImplementations(
+  contractFunctionCodes(functionContract),
+  basicCatalog.functions,
+  { equals: EqualsImplementation },
+);
+
+// The locked official renderer exposes 14 functions. The project Catalog adds only
+// the Google SDK's existing equals implementation for declarative checks.
 export const registeredCatalogs = [
-  basicCatalog,
-  new Catalog('https://a2ui.org/specification/v0_9_1/catalogs/basic/catalog.json',
-    [...basicCatalog.components.values()], [...basicCatalog.functions.values()], basicCatalog.themeSchema),
-  new Catalog('a2flow.digital-employee.pc.v1',
+  new Catalog(functionContract.baseCatalog.catalogId,
+    [...basicCatalog.components.values()], officialFunctions, basicCatalog.themeSchema),
+  new Catalog(functionContract.catalogId,
     [...basicCatalog.components.values(), Markdown, TextDownloadComponent],
-    [...basicCatalog.functions.values()], basicCatalog.themeSchema),
+    projectFunctions, basicCatalog.themeSchema),
 ];
