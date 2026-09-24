@@ -200,12 +200,12 @@ def _put_path(target: JsonObject, path: str, value: JsonValue) -> None:
     segments = path.split(".")
     current = target
     for segment in segments[:-1]:
-        child = current.get(segment)
-        if child is None:
+        if segment not in current:
             next_object: JsonObject = {}
             current[segment] = next_object
             current = next_object
             continue
+        child = current[segment]
         if not isinstance(child, dict):
             raise CapabilityExecutionError(
                 ExecutionErrorCode.REQUEST_MAPPING_INVALID,
