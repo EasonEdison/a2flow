@@ -3,6 +3,11 @@ import { A2uiMessageListSchema, MessageProcessor, extractRefFields } from '@a2ui
 export const RPC_PROFILE = 'a2flow.java-rpc.v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
+/** Changes only when a new persisted revision or display snapshot has arrived. */
+export function persistedSnapshotKey(card) {
+  return JSON.stringify([card.cardId, card.revision, card.display]);
+}
+
 /** A complete persisted snapshot is replayed into a fresh official processor, never patched onto another card. */
 export function createSnapshotProcessor(display, catalogs) {
   if (display.protocolProfile !== RPC_PROFILE) throw new Error('不支持的 A2UI 协议配置');

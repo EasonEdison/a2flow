@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiErrorMessage, productApi, type ApiError, type MemorySettings } from '../productApi';
+import { createUuidV4 } from '../secureUuid.mjs';
 import './MemorySettingsPage.css';
 
 const lengthOf = (text: string) => Array.from(text).length;
@@ -98,7 +99,7 @@ export function MemorySettingsPage() {
             <small id={`memory-count-${entry.id}`}>{lengthOf(entry.text)} / 1000 字{!entry.text.trim() ? ' · 请填写内容或删除空条目' : ''}</small>
           </div>) : <p className="empty-card">还没有记忆。添加一条你希望数字员工长期参考的偏好。</p>}
         </div>
-        <div className="memory-add"><button type="button" className="secondary" disabled={draft.entries.length >= 20} onClick={() => { setDraft({ ...draft, entries: [...draft.entries, { id: crypto.randomUUID(), text: '' }] }); setNotice(''); }}>添加偏好</button><span>{draft.entries.length} / 20 条 · {total} / 8000 字</span></div>
+        <div className="memory-add"><button type="button" className="secondary" disabled={draft.entries.length >= 20} onClick={() => { setDraft({ ...draft, entries: [...draft.entries, { id: createUuidV4(), text: '' }] }); setNotice(''); }}>添加偏好</button><span>{draft.entries.length} / 20 条 · {total} / 8000 字</span></div>
       </fieldset>
       {invalid ? <p className="inline-error">每条需填写 1–1000 字，全部条目合计不超过 8000 字。</p> : null}
       <div className="memory-actions">
