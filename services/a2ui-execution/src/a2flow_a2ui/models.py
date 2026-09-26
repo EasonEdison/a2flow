@@ -163,15 +163,29 @@ class ResultAdapter(_PublishedModel):
     )
 
 
+class BusinessPredicateVersion(StrEnum):
+    JSON_POINTER_V1 = "JSON_POINTER_V1"
+
+
+class BusinessPredicateSource(StrEnum):
+    CAPABILITY_DATA = "CAPABILITY_DATA"
+
+
+class BusinessPredicateOperator(StrEnum):
+    EQUALS = "EQUALS"
+    GREATER_THAN = "GREATER_THAN"
+    IS_ARRAY = "IS_ARRAY"
+
+
 class PredicateClause(_PublishedModel):
-    source: str
+    source: BusinessPredicateSource
     source_path: str = Field(alias="sourcePath", min_length=1)
-    operator: str
+    operator: BusinessPredicateOperator
     expected_value: JsonValue = Field(alias="expectedValue")
 
 
 class BusinessPredicate(_PublishedModel):
-    version: str
+    version: BusinessPredicateVersion
     all_of: tuple[PredicateClause, ...] = Field(alias="allOf", min_length=1)
 
 
