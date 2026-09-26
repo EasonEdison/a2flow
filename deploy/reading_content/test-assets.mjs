@@ -89,6 +89,13 @@ assert.match(skillSpecs[1].markdown, /body\.topicPlan\.topics/);
 assert.match(skillSpecs[2].markdown, /body\.manuscript\.title.*body\.manuscript\.bodyMarkdown/s);
 
 const [reading, topic, manuscript] = buildApplications();
+const choice = reading.showTemplate.messageTemplates[1].updateComponents.components[8];
+assert.equal(choice.id, 'selection');
+assert.deepEqual(choice.options, [], 'official ChoicePicker.options must be an array, not a DataBinding');
+assert.deepEqual(reading.showTemplate.inputBindings.find(item => item.targetMessageIndex === 1), {
+  targetMessageIndex: 1, targetPath: '/updateComponents/components/8/options',
+  source: 'APP_PARAMS', sourcePath: '/options', required: true,
+}, 'Show must bind the concrete option array before emitting the official message');
 assert.equal(reading.actionBindings[0].actionCode, 'confirmReading');
 assert.equal(reading.actionBindings[0].completeWorkflowInteractionOnSuccess, true);
 assert.equal(topic.actionBindings[0].actionCode, 'confirmTopic');

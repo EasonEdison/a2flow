@@ -247,14 +247,17 @@ export function buildApplications() {
         { id: 'pointClaim', component: 'Text', text: ref('claim'), variant: 'h4' },
         { id: 'pointQuote', component: 'Text', text: ref('evidenceQuote'), variant: 'caption' },
         { id: 'pointExplanation', component: 'Text', text: ref('explanation') },
-        { id: 'selection', component: 'ChoicePicker', label: '选择要保留的阅读要点', variant: 'multipleSelection', displayStyle: 'checkbox', options: ref('/options'), value: ref('/selectedPointIds'), checks: [{ condition: fn('length', { value: ref('/selectedPointIds'), min: 1 }), message: '至少选择一个阅读要点' }] },
+        { id: 'selection', component: 'ChoicePicker', label: '选择要保留的阅读要点', variant: 'multipleSelection', displayStyle: 'checkbox', options: [], value: ref('/selectedPointIds'), checks: [{ condition: fn('length', { value: ref('/selectedPointIds'), min: 1 }), message: '至少选择一个阅读要点' }] },
         { id: 'notes', component: 'TextField', label: '补充你的理解（可选）', value: ref('/userNotes'), variant: 'longText' },
         { id: 'status', component: 'Text', text: ref('/status'), variant: 'caption' },
         { id: 'confirm', component: 'Button', child: 'confirmText', variant: 'primary', checks: [{ condition: fn('length', { value: ref('/selectedPointIds'), min: 1 }), message: '至少选择一个阅读要点' }], action: { event: { name: 'confirmReading', context: { ...binding('projectId'), ...binding('artifactId'), ...binding('selectedPointIds'), ...binding('userNotes'), expectedProjectRevision: ref('/projectRevision') } } } },
         { id: 'confirmText', component: 'Text', text: '确认阅读要点' },
       ] } },
       { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value: Object.fromEntries(readingKeys.map(key => [key, readingProperties[key].type === 'array' ? [] : readingProperties[key].type === 'integer' ? 0 : ''])) } },
-    ], inputBindings: appInputBindings(readingKeys) }, loadBindings: [],
+    ], inputBindings: [...appInputBindings(readingKeys), {
+      targetMessageIndex: 1, targetPath: '/updateComponents/components/8/options',
+      source: 'APP_PARAMS', sourcePath: '/options', required: true,
+    }] }, loadBindings: [],
     actionBindings: [actionBinding({ bindingId: 'confirm_reading', componentId: 'confirm', actionName: 'confirmReading', capability: 'content.reading.confirm', schema: readingContext, keys: ['projectId', 'artifactId', 'selectedPointIds', 'userNotes', 'expectedProjectRevision'], complete: true, decisionType: 'READING', adapters: [adapter('reading_confirmed', { confirmationId: '', status: '阅读要点已确认' }, [{ targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true }])] })],
   };
 
