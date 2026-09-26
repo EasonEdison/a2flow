@@ -1,9 +1,24 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createRequestId, placeholderSample, sampleFactory } from './authoring-core.mjs';
+import { createRequestId, placeholderSample, publishPrt, sampleFactory } from './authoring-core.mjs';
 import { buildApplications, capabilitySpecs, customAtoms, skillSpecs, validateAssets } from './assets.mjs';
 
 assert.equal(validateAssets().capabilities, 12);
+const releaseCalls = [];
+let published = false;
+await publishPrt({ call: async (method, params) => {
+  releaseCalls.push([method, params]);
+  if (method === 'RELEASE_OVERVIEW') return { data: {
+    currentSnapshot: { digest: 'edited-draft' }, activeChange: { status: 'ACTIVE', sourceDigest: 'initial-draft' },
+    allowedActions: ['DEPLOY_PREPROD'], environments: { PRT: { digest: published ? 'edited-draft' : 'initial-draft', sourceId: 'build-test' } },
+  } };
+  assert.equal(method, 'RELEASE_PREPROD_DEPLOY');
+  assert.equal(params.expectedDigest, 'edited-draft');
+  published = true;
+  return { data: { status: 'SUCCEEDED' } };
+} }, 'A2UI_APPLICATION', 'test-app');
+assert.deepEqual(releaseCalls.map(([method]) => method), ['RELEASE_OVERVIEW', 'RELEASE_PREPROD_DEPLOY', 'RELEASE_OVERVIEW']);
+await assert.rejects(publishPrt({ call: async () => ({data:{currentSnapshot:{digest:'current'},activeChange:{status:'ACTIVE'},allowedActions:[]}}) }, 'A2UI_APPLICATION', 'blocked'), /cannot publish/);
 const known = new Set(capabilitySpecs.map(item => item.actionCode));
 for (const skill of skillSpecs) for (const actionCode of skill.capabilities) assert.ok(known.has(actionCode), `${skill.skillCode}: ${actionCode}`);
 

@@ -135,13 +135,15 @@ async function dryRun(client, capability, environment = 'PRT') {
   return result.toolResult.data;
 }
 
-async function publishPrt(client, assetType, assetKey, extra = {}) {
+export async function publishPrt(client, assetType, assetKey, extra = {}) {
   const identity = { assetType, assetKey, ...extra };
   let overview = (await client.call('RELEASE_OVERVIEW', identity)).data;
   const digest = requiredText(overview?.currentSnapshot?.digest, `${assetType}/${assetKey}.digest`);
   if (overview?.environments?.PRT?.digest === digest) return overview;
   if (overview?.activeChange?.status === 'ACTIVE') {
-    if (overview.activeChange.sourceDigest !== digest) throw new Error(`${assetType}/${assetKey}: another active change owns a different digest`);
+    // An ACTIVE change remains editable after PRT publication. Its starting
+    // digest is not the current draft digest; the server decides deployability.
+    if (!overview.allowedActions?.includes('DEPLOY_PREPROD')) throw new Error(`${assetType}/${assetKey}: current change cannot publish to PRT`);
   } else {
     await client.call('RELEASE_CHANGE_CREATE', { ...identity, changeName: '阅读到创作 PRT 发布', requestId: createRequestId() });
   }
