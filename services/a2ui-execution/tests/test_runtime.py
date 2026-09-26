@@ -164,6 +164,32 @@ def build_json() -> JsonObject:
     }
 
 
+def test_catalog_function_contract_is_optional_and_preserved() -> None:
+    legacy = ApplicationBuild.model_validate(build_json())
+    assert legacy.catalog.function_contract is None
+
+    current = build_json()
+    function_contract: JsonObject = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://a2flow.dev/catalogs/demo/functions.json",
+        "catalogId": "catalog",
+        "functions": {
+            "equals": {
+                "type": "object",
+                "properties": {
+                    "call": {"const": "equals"},
+                    "args": {"type": "object"},
+                },
+            }
+        },
+    }
+    current["catalog"]["functionContract"] = function_contract  # type: ignore[index]
+    parsed = ApplicationBuild.model_validate(current)
+
+    assert parsed.catalog.function_contract == function_contract
+    assert parsed.model_dump(by_alias=True)["catalog"]["functionContract"] == function_contract
+
+
 class Releases:
     def __init__(self, published: PublishedApplication) -> None:
         self.published = published

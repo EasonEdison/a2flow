@@ -85,6 +85,9 @@ class CatalogRef(_PublishedModel):
     digest: str = Field(min_length=1)
     catalog_source_type: str = Field(alias="catalogSourceType", min_length=1)
     component_origins: dict[str, str] = Field(alias="componentOrigins")
+    function_contract: JsonObject | None = Field(
+        default=None, alias="functionContract"
+    )
 
 
 class SurfaceDeclaration(_PublishedModel):

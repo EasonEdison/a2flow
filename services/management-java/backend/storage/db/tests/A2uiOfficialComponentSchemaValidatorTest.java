@@ -18,6 +18,8 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiInteract
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowInputSource;
 import dev.a2flow.management.a2ui.application.A2uiApplicationBuildCompiler;
 import dev.a2flow.management.a2ui.application.A2uiApplicationValidationException;
+import dev.a2flow.management.a2ui.catalog.A2uiCatalogFunctionContractValidator;
+import dev.a2flow.management.a2ui.catalog.A2uiCatalogFunctionContractValidator.ValidatedFunctionContract;
 import dev.a2flow.management.a2ui.catalog.A2uiCatalogModels.A2uiCatalogComponentContract;
 import dev.a2flow.management.a2ui.catalog.A2uiCatalogSourceType;
 import dev.a2flow.management.a2ui.registry.A2uiComponentOriginType;
@@ -31,6 +33,7 @@ public final class A2uiOfficialComponentSchemaValidatorTest {
 
     private static final String OFFICIAL_CATALOG =
             "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json";
+    private static final String MANAGED_CATALOG = "a2flow.digital-employee.pc.v1";
 
     private A2uiOfficialComponentSchemaValidatorTest() { }
 
@@ -45,11 +48,81 @@ public final class A2uiOfficialComponentSchemaValidatorTest {
                 Map.of("label", "One", "value", "one")), Map.of("path", "/selection")), origins);
         expectInvalid(() -> validator.validateMessages(
                 messages(Map.of("path", "/options"), Map.of("path", "/selection")), origins));
+        verifyManagedFunctionAuthority(validator);
 
         verifyCompilerGate();
         verifyRenderedBinding(List.of(Map.of("label", "One", "value", "one")), true);
         verifyRenderedBinding(List.of(Map.of("label", "missing-value")), false);
-        System.out.println("PASS: locked official component schema and rendered Show binding validation");
+        System.out.println("PASS: locked official props, managed functions, and Show binding validation");
+    }
+
+    private static void verifyManagedFunctionAuthority(
+            A2uiOfficialComponentSchemaValidator validator) {
+        Map<String, Object> contract = managedFunctionContract();
+        ValidatedFunctionContract validated = new A2uiCatalogFunctionContractValidator()
+                .validateProjectContract(MANAGED_CATALOG, contract);
+        Map<String, A2uiComponentOriginType> origins =
+                Map.of("Button", A2uiComponentOriginType.A2UI_OFFICIAL);
+        Map<String, Object> equals = functionCall("equals", Map.of(
+                "a", Map.of("path", "/draftTitle"),
+                "b", Map.of("path", "/savedTitle")));
+
+        // Manifest compilation consumes the already validated immutable authority.
+        validator.validateMessages(buttonMessages(equals), origins, validated);
+        // Show rendering revalidates the same authority frozen into the Build.
+        validator.validateMessages(buttonMessages(equals), origins, MANAGED_CATALOG,
+                A2uiCatalogSourceType.PLATFORM_MANAGED, contract);
+
+        expectInvalid(() -> validator.validateMessages(buttonMessages(
+                functionCall("unknown", Map.of("a", "x", "b", "x"))), origins, validated));
+        expectInvalid(() -> validator.validateMessages(buttonMessages(
+                functionCall("equals", Map.of("a", "x"))), origins, validated));
+    }
+
+    private static Map<String, Object> managedFunctionContract() {
+        Map<String, Object> dynamicValue = Map.of("$ref", "#/$defs/operand");
+        Map<String, Object> equals = Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "call", Map.of("const", "equals"),
+                        "args", Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "a", dynamicValue,
+                                        "b", dynamicValue),
+                                "required", List.of("a", "b"),
+                                "additionalProperties", false),
+                        "returnType", Map.of("const", "boolean")),
+                "required", List.of("call", "args"),
+                "unevaluatedProperties", false);
+        return Map.of(
+                "$schema", "https://json-schema.org/draft/2020-12/schema",
+                "$id", "https://a2flow.dev/catalogs/digital-employee/functions.json",
+                "catalogId", MANAGED_CATALOG,
+                "$defs", Map.of("operand", Map.of("$ref",
+                        "https://a2ui.org/specification/v0_9/common_types.json#/$defs/DynamicValue")),
+                "functions", Map.of("equals", equals));
+    }
+
+    private static Map<String, Object> functionCall(String call, Map<String, Object> args) {
+        return Map.of("call", call, "args", args, "returnType", "boolean");
+    }
+
+    private static List<Map<String, Object>> buttonMessages(Object condition) {
+        return List.of(Map.of(
+                "version", "v0.9.1",
+                "updateComponents", Map.of(
+                        "surfaceId", "main",
+                        "components", List.of(Map.of(
+                                "id", "confirm-button",
+                                "component", "Button",
+                                "child", "confirm-label",
+                                "variant", "primary",
+                                "action", Map.of("event", Map.of(
+                                        "name", "confirmManuscript")),
+                                "checks", List.of(Map.of(
+                                        "condition", condition,
+                                        "message", "请先保存修改")))))));
     }
 
     private static void verifyCompilerGate() {
@@ -145,7 +218,8 @@ public final class A2uiOfficialComponentSchemaValidatorTest {
         A2uiCompiledCatalogRef catalog = new A2uiCompiledCatalogRef(
                 "a2flow.digital-employee.pc.v1", "1", "digest",
                 A2uiCatalogSourceType.PLATFORM_MANAGED,
-                Map.of("ChoicePicker", A2uiComponentOriginType.A2UI_OFFICIAL));
+                Map.of("ChoicePicker", A2uiComponentOriginType.A2UI_OFFICIAL),
+                Map.of());
         A2uiCompiledShowInputBinding binding = new A2uiCompiledShowInputBinding(
                 1, "/updateComponents/components/8/options",
                 A2uiShowInputSource.APP_PARAMS, "/options", true, null);

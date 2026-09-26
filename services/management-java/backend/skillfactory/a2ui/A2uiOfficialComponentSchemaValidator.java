@@ -12,6 +12,9 @@ import com.networknt.schema.Schema;
 import com.networknt.schema.SchemaRegistry;
 import com.networknt.schema.SpecificationVersion;
 
+import dev.a2flow.management.a2ui.catalog.A2uiCatalogFunctionContractValidator;
+import dev.a2flow.management.a2ui.catalog.A2uiCatalogFunctionContractValidator.ValidatedFunctionContract;
+import dev.a2flow.management.a2ui.catalog.A2uiCatalogSourceType;
 import dev.a2flow.management.a2ui.registry.A2uiComponentOriginType;
 import dev.a2flow.management.support.JsonSupport;
 
@@ -36,12 +39,59 @@ public final class A2uiOfficialComponentSchemaValidator {
     private static final String FIELD_UPDATE_COMPONENTS = "updateComponents";
     private static final String FIELD_COMPONENTS = "components";
     private static final String FIELD_COMPONENT = "component";
-    private static final Map<String, Schema> COMPONENT_SCHEMAS = componentSchemas();
+    private static final String FIELD_DEFS = "$defs";
+    private static final String FIELD_ANY_FUNCTION = "anyFunction";
+    private static final String FIELD_ONE_OF = "oneOf";
+    private static final Map<String, Schema> OFFICIAL_COMPONENT_SCHEMAS = componentSchemas(null);
+    private final A2uiCatalogFunctionContractValidator functionContractValidator =
+            new A2uiCatalogFunctionContractValidator();
 
-    /** Validates every official component in a protocol message batch. */
+    /** Validates official components against the locked Basic functions for legacy Builds. */
     public void validateMessages(List<Map<String, Object>> messages,
             Map<String, A2uiComponentOriginType> componentOrigins) {
-        if (messages == null || componentOrigins == null) {
+        validateMessages(messages, componentOrigins, OFFICIAL_COMPONENT_SCHEMAS);
+    }
+
+    /** Uses the already validated published Catalog functions without weakening component props. */
+    public void validateMessages(List<Map<String, Object>> messages,
+            Map<String, A2uiComponentOriginType> componentOrigins,
+            ValidatedFunctionContract functionContract) {
+        if (functionContract == null || functionContract.contract().isEmpty()) {
+            validateMessages(messages, componentOrigins);
+            return;
+        }
+        validateMessages(messages, componentOrigins, componentSchemas(functionContract));
+    }
+
+    /** Revalidates the immutable Build authority before rendered Show messages are accepted. */
+    public void validateMessages(List<Map<String, Object>> messages,
+            Map<String, A2uiComponentOriginType> componentOrigins,
+            String catalogId, A2uiCatalogSourceType sourceType,
+            Map<String, Object> rawFunctionContract) {
+        if (rawFunctionContract == null || rawFunctionContract.isEmpty()) {
+            validateMessages(messages, componentOrigins);
+            return;
+        }
+        try {
+            ValidatedFunctionContract validated;
+            if (sourceType == A2uiCatalogSourceType.A2UI_OFFICIAL) {
+                validated = functionContractValidator.validateOfficialManifest(rawFunctionContract);
+            } else if (sourceType == A2uiCatalogSourceType.PLATFORM_MANAGED) {
+                validated = functionContractValidator.validateProjectContract(
+                        catalogId, rawFunctionContract);
+            } else {
+                throw invalid();
+            }
+            validateMessages(messages, componentOrigins, validated);
+        } catch (RuntimeException exception) {
+            throw invalid();
+        }
+    }
+
+    private void validateMessages(List<Map<String, Object>> messages,
+            Map<String, A2uiComponentOriginType> componentOrigins,
+            Map<String, Schema> componentSchemas) {
+        if (messages == null || componentOrigins == null || componentSchemas == null) {
             throw invalid();
         }
         for (Map<String, Object> message : messages) {
@@ -60,14 +110,15 @@ public final class A2uiOfficialComponentSchemaValidator {
                     throw invalid();
                 }
                 if (componentOrigins.get(type) == A2uiComponentOriginType.A2UI_OFFICIAL) {
-                    validateOfficial(type, component);
+                    validateOfficial(type, component, componentSchemas);
                 }
             }
         }
     }
 
-    private void validateOfficial(String type, Map<String, Object> component) {
-        Schema schema = COMPONENT_SCHEMAS.get(type);
+    private void validateOfficial(String type, Map<String, Object> component,
+            Map<String, Schema> componentSchemas) {
+        Schema schema = componentSchemas.get(type);
         if (schema == null) {
             throw invalid();
         }
@@ -81,23 +132,44 @@ public final class A2uiOfficialComponentSchemaValidator {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Schema> componentSchemas() {
+    private static Map<String, Schema> componentSchemas(
+            ValidatedFunctionContract functionContract) {
         String catalogJson = readResource(RESOURCE_ROOT + "basic/catalog.json");
         String commonTypesJson = readResource(RESOURCE_ROOT + "json/common_types.json");
         Map<String, String> documents = new LinkedHashMap<>();
         documents.put(OFFICIAL_CATALOG_ID, catalogJson);
-        // common_types.json resolves its relative catalog.json function reference here.
-        documents.put(OFFICIAL_CATALOG_REFERENCE_ID, catalogJson);
         documents.put(OFFICIAL_COMMON_TYPES_ID, commonTypesJson);
+        if (functionContract == null) {
+            // common_types.json resolves its relative catalog.json function reference here.
+            documents.put(OFFICIAL_CATALOG_REFERENCE_ID, catalogJson);
+        } else {
+            Map<String, Object> alias = stringMap(
+                    JsonSupport.fromJSON(catalogJson, Object.class));
+            alias.put("$id", OFFICIAL_CATALOG_REFERENCE_ID);
+            Map<String, Object> definitions = stringMap(alias.get(FIELD_DEFS));
+            Map<String, Object> anyFunction = stringMap(
+                    definitions.get(FIELD_ANY_FUNCTION));
+            List<Map<String, Object>> choices = functionContract.functionCodes().stream()
+                    .map(code -> Map.<String, Object>of("$ref",
+                            functionContract.contractId() + "#/functions/"
+                                    + code.replace("~", "~0").replace("/", "~1")))
+                    .toList();
+            anyFunction.put(FIELD_ONE_OF, choices);
+            definitions.put(FIELD_ANY_FUNCTION, anyFunction);
+            alias.put(FIELD_DEFS, definitions);
+            documents.put(OFFICIAL_CATALOG_REFERENCE_ID, JsonSupport.toJSON(alias));
+            documents.put(functionContract.contractId(),
+                    JsonSupport.toJSON(functionContract.contract()));
+        }
         SchemaRegistry registry = SchemaRegistry.withDefaultDialect(
                 SpecificationVersion.DRAFT_2020_12, builder -> {
                     builder.schemaLoader(loader -> loader.fetchRemoteResources(false));
                     builder.schemas(documents);
                 });
         Map<String, Object> catalog = JsonSupport.fromJSON(catalogJson, Map.class);
-        Map<String, Object> definitions = stringMap(catalog.get(FIELD_COMPONENTS));
+        Map<String, Object> components = stringMap(catalog.get(FIELD_COMPONENTS));
         Map<String, Schema> schemas = new LinkedHashMap<>();
-        for (String type : definitions.keySet()) {
+        for (String type : components.keySet()) {
             String escapedType = type.replace("~", "~0").replace("/", "~1");
             Map<String, Object> reference = Map.of(
                     "$schema", DRAFT_2020_12,

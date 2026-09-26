@@ -205,11 +205,29 @@ const appSchema = properties => ({ type: 'object', properties, required: Object.
 const appInputBindings = keys => keys.map(key => ({ targetMessageIndex: 2, targetPath: `/updateDataModel/value/${key}`, source: 'APP_PARAMS', sourcePath: `/${key}`, required: true }));
 const contextSchema = properties => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 const actionMappings = keys => keys.map(key => ({ source: 'ACTION_CONTEXT', sourcePath: `/${key}`, targetPath: `/${key}` }));
-const adapter = (adapterId, value, bindings) => ({
-  adapterId, order: 1, type: 'MESSAGE_TEMPLATE',
-  messageTemplate: { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value } },
-  bindings,
-});
+const adapter = (adapterId, value, bindings = []) => {
+  const matchedBindings = new Set();
+  const adapters = Object.entries(value).map(([fieldName, fieldValue], index) => {
+    const fieldTarget = `/updateDataModel/value/${fieldName}`;
+    const fieldBindings = bindings
+      .map((item, bindingIndex) => ({ item, bindingIndex }))
+      .filter(({ item }) => item.targetPath === fieldTarget || item.targetPath.startsWith(`${fieldTarget}/`))
+      .map(({ item, bindingIndex }) => {
+        matchedBindings.add(bindingIndex);
+        return {
+          ...item,
+          targetPath: `/updateDataModel/value${item.targetPath.slice(fieldTarget.length)}`,
+        };
+      });
+    return {
+      adapterId: `${adapterId}_${fieldName}`, order: index + 1, type: 'MESSAGE_TEMPLATE',
+      messageTemplate: { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: `/${fieldName}`, value: fieldValue } },
+      bindings: fieldBindings,
+    };
+  });
+  if (matchedBindings.size !== bindings.length) throw new Error(`${adapterId}: binding target must belong to one top-level field`);
+  return adapters;
+};
 const failureAdapter = statusPath => ({
   adapterId: 'show_failure', order: 1, type: 'MESSAGE_TEMPLATE',
   messageTemplate: { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: statusPath, value: '' } },
@@ -258,7 +276,13 @@ export function buildApplications() {
       targetMessageIndex: 1, targetPath: '/updateComponents/components/8/options',
       source: 'APP_PARAMS', sourcePath: '/options', required: true,
     }] }, loadBindings: [],
-    actionBindings: [actionBinding({ bindingId: 'confirm_reading', componentId: 'confirm', actionName: 'confirmReading', capability: 'content.reading.confirm', schema: readingContext, keys: ['projectId', 'artifactId', 'selectedPointIds', 'userNotes', 'expectedProjectRevision'], complete: true, decisionType: 'READING', adapters: [adapter('reading_confirmed', { confirmationId: '', status: '阅读要点已确认' }, [{ targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true }])] })],
+    actionBindings: [actionBinding({ bindingId: 'confirm_reading', componentId: 'confirm', actionName: 'confirmReading', capability: 'content.reading.confirm', schema: readingContext, keys: ['projectId', 'artifactId', 'selectedPointIds', 'userNotes', 'expectedProjectRevision'], complete: true, decisionType: 'READING', adapters: adapter('reading_confirmed', {
+      confirmationId: '', selectedPointIds: [], userNotes: '', status: '阅读要点已确认',
+    }, [
+      { targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true },
+      { targetPath: '/updateDataModel/value/selectedPointIds', source: 'CAPABILITY_DATA', sourcePath: '/selectedPointIds', required: true },
+      { targetPath: '/updateDataModel/value/userNotes', source: 'CAPABILITY_DATA', sourcePath: '/userNotes', required: true },
+    ]) })],
   };
 
   const topicProperties = {
@@ -287,7 +311,16 @@ export function buildApplications() {
       ] } },
       { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value: Object.fromEntries(topicKeys.map(key => [key, topicProperties[key].type === 'array' ? [] : topicProperties[key].type === 'integer' ? 0 : ''])) } },
     ], inputBindings: appInputBindings(topicKeys) }, loadBindings: [],
-    actionBindings: [actionBinding({ bindingId: 'confirm_topic', componentId: 'confirmTopic', actionName: 'confirmTopic', capability: 'content.topic.confirm', schema: topicContext, keys: ['projectId', 'artifactId', 'topicId', 'editedTitle', 'editedAngle', 'expectedProjectRevision'], complete: true, decisionType: 'TOPIC', adapters: [adapter('topic_confirmed', { confirmationId: '', status: '创作选题已确认' }, [{ targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true }])] })],
+    actionBindings: [actionBinding({ bindingId: 'confirm_topic', componentId: 'confirmTopic', actionName: 'confirmTopic', capability: 'content.topic.confirm', schema: topicContext, keys: ['projectId', 'artifactId', 'topicId', 'editedTitle', 'editedAngle', 'expectedProjectRevision'], complete: true, decisionType: 'TOPIC', adapters: adapter('topic_confirmed', {
+      confirmationId: '',
+      topics: [{ id: '', title: '', angle: '', audience: '', rationale: '', sourcePointIds: [] }],
+      status: '创作选题已确认',
+    }, [
+      { targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true },
+      { targetPath: '/updateDataModel/value/topics/0/id', source: 'CAPABILITY_DATA', sourcePath: '/topicId', required: true },
+      { targetPath: '/updateDataModel/value/topics/0/title', source: 'CAPABILITY_DATA', sourcePath: '/editedTitle', required: true },
+      { targetPath: '/updateDataModel/value/topics/0/angle', source: 'CAPABILITY_DATA', sourcePath: '/editedAngle', required: true },
+    ]) })],
   };
 
   const manuscriptProperties = {
@@ -332,22 +365,25 @@ export function buildApplications() {
       } } },
     ], inputBindings: appInputBindings(manuscriptKeys) }, loadBindings: [],
     actionBindings: [
-      actionBinding({ bindingId: 'save_manuscript', componentId: 'save', actionName: 'saveManuscriptDraft', capability: 'content.artifact.save', schema: saveContext, keys: ['projectId', 'kind', 'manuscriptTitle', 'manuscriptMarkdown', 'citations', 'inputRefs', 'origin'], adapters: [adapter('manuscript_saved', {
-        savedTitle: '', savedMarkdown: '', savedArtifactId: '', savedArtifactRevision: 0, status: '稿件已保存', export: { artifactId: '', artifactRevision: 0, filename: '', mediaType: '', content: '' },
+      actionBinding({ bindingId: 'save_manuscript', componentId: 'save', actionName: 'saveManuscriptDraft', capability: 'content.artifact.save', schema: saveContext, keys: ['projectId', 'kind', 'manuscriptTitle', 'manuscriptMarkdown', 'citations', 'inputRefs', 'origin'], adapters: adapter('manuscript_saved', {
+        draftTitle: '', draftMarkdown: '', savedTitle: '', savedMarkdown: '', savedArtifactId: '', savedArtifactRevision: 0,
+        status: '稿件已保存', export: { artifactId: '', artifactRevision: 0, filename: '', mediaType: '', content: '' },
       }, [
+        { targetPath: '/updateDataModel/value/draftTitle', source: 'CAPABILITY_DATA', sourcePath: '/body/manuscript/title', required: true },
+        { targetPath: '/updateDataModel/value/draftMarkdown', source: 'CAPABILITY_DATA', sourcePath: '/body/manuscript/bodyMarkdown', required: true },
         { targetPath: '/updateDataModel/value/savedTitle', source: 'CAPABILITY_DATA', sourcePath: '/body/manuscript/title', required: true },
         { targetPath: '/updateDataModel/value/savedMarkdown', source: 'CAPABILITY_DATA', sourcePath: '/body/manuscript/bodyMarkdown', required: true },
         { targetPath: '/updateDataModel/value/savedArtifactId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true },
         { targetPath: '/updateDataModel/value/savedArtifactRevision', source: 'CAPABILITY_DATA', sourcePath: '/revision', required: true },
-      ])] }),
-      actionBinding({ bindingId: 'export_manuscript', componentId: 'exportButton', actionName: 'exportManuscript', capability: 'content.manuscript.export', schema: exportContext, keys: ['artifactId', 'format'], adapters: [adapter('manuscript_exported', { export: { artifactId: '', artifactRevision: 0, filename: '', mediaType: '', content: '' }, status: '下载内容已生成' }, [
+      ]) }),
+      actionBinding({ bindingId: 'export_manuscript', componentId: 'exportButton', actionName: 'exportManuscript', capability: 'content.manuscript.export', schema: exportContext, keys: ['artifactId', 'format'], adapters: adapter('manuscript_exported', { export: { artifactId: '', artifactRevision: 0, filename: '', mediaType: '', content: '' }, status: '下载内容已生成' }, [
         { targetPath: '/updateDataModel/value/export/artifactId', source: 'ACTION_CONTEXT', sourcePath: '/artifactId', required: true },
         { targetPath: '/updateDataModel/value/export/artifactRevision', source: 'ACTION_CONTEXT', sourcePath: '/artifactRevision', required: true },
         { targetPath: '/updateDataModel/value/export/filename', source: 'CAPABILITY_DATA', sourcePath: '/filename', required: true },
         { targetPath: '/updateDataModel/value/export/mediaType', source: 'CAPABILITY_DATA', sourcePath: '/mediaType', required: true },
         { targetPath: '/updateDataModel/value/export/content', source: 'CAPABILITY_DATA', sourcePath: '/content', required: true },
-      ])] }),
-      actionBinding({ bindingId: 'confirm_manuscript', componentId: 'confirm', actionName: 'confirmManuscript', capability: 'content.manuscript.confirm', schema: confirmContext, keys: ['projectId', 'artifactId', 'expectedProjectRevision'], complete: true, decisionType: 'MANUSCRIPT', adapters: [adapter('manuscript_confirmed', { confirmationId: '', status: '最终稿已确认' }, [{ targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true }])] }),
+      ]) }),
+      actionBinding({ bindingId: 'confirm_manuscript', componentId: 'confirm', actionName: 'confirmManuscript', capability: 'content.manuscript.confirm', schema: confirmContext, keys: ['projectId', 'artifactId', 'expectedProjectRevision'], complete: true, decisionType: 'MANUSCRIPT', adapters: adapter('manuscript_confirmed', { confirmationId: '', status: '最终稿已确认' }, [{ targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true }]) }),
     ],
   };
   return [reading, topic, manuscript];

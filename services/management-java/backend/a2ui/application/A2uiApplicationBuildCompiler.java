@@ -79,6 +79,7 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSideEffe
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSuccessBranch;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSurfaceDeclaration;
 import dev.a2flow.management.a2ui.application.A2uiShowTemplateAnalyzer.ShowFacts;
+import dev.a2flow.management.a2ui.catalog.A2uiCatalogFunctionContractValidator.ValidatedFunctionContract;
 import dev.a2flow.management.a2ui.catalog.A2uiCatalogModels.A2uiCatalogComponentContract;
 import dev.a2flow.management.a2ui.registry.A2uiComponentOriginType;
 import dev.a2flow.management.release.ReleaseEnvironment;
@@ -168,6 +169,16 @@ public class A2uiApplicationBuildCompiler {
             List<A2uiCatalogComponentContract> catalogComponents,
             Map<String, A2uiCurrentCapabilityContract> currentCapabilities,
             ReleaseEnvironment publicationEnvironment) {
+        return compile(draft, catalogComponents, currentCapabilities,
+                publicationEnvironment, null);
+    }
+
+    /** 生产编译冻结 ManifestCompiler 已验证的目标环境 Catalog 函数 authority。 */
+    public A2uiApplicationBuild compile(A2uiApplicationDraft draft,
+            List<A2uiCatalogComponentContract> catalogComponents,
+            Map<String, A2uiCurrentCapabilityContract> currentCapabilities,
+            ReleaseEnvironment publicationEnvironment,
+            ValidatedFunctionContract functionContract) {
         validateDraft(draft);
         A2uiInteractionMode interactionMode = interactionMode(draft);
         validateWorkflowInteraction(draft, interactionMode);
@@ -200,9 +211,12 @@ public class A2uiApplicationBuildCompiler {
         validateCatalogClosure(draft, catalogComponents, componentTypes);
         Map<String, A2uiComponentOriginType> componentOrigins = compileComponentOrigins(
                 catalogComponents, componentTypes);
+        Map<String, Object> catalogFunctionContract = functionContract == null
+                ? Collections.emptyMap()
+                : A2uiImmutableJsonSupport.immutableMap(functionContract.contract());
         try {
             officialComponentValidator.validateMessages(
-                    resolvedComponentMessages, componentOrigins);
+                    resolvedComponentMessages, componentOrigins, functionContract);
         } catch (ValidationException exception) {
             throw failure(DRAFT_INVALID);
         }
@@ -218,6 +232,7 @@ public class A2uiApplicationBuildCompiler {
         digestSource.put("actionDeclarations", actionDeclarations);
         digestSource.put("appCode", draft.getAppCode());
         digestSource.put("catalog", A2uiImmutableJsonSupport.canonicalize(draft.getCatalog()));
+        digestSource.put("catalogFunctionContract", catalogFunctionContract);
         digestSource.put("componentTypes", componentTypes);
         digestSource.put("description", draft.getDescription());
         digestSource.put("inputBindings", inputBindings);
@@ -254,7 +269,8 @@ public class A2uiApplicationBuildCompiler {
                 publicationEnvironment.name(),
                 new A2uiCompiledCatalogRef(draft.getCatalog().getCatalogId(),
                         draft.getCatalog().getRevision(), draft.getCatalog().getDigest(),
-                        draft.getCatalog().getCatalogSourceType(), componentOrigins),
+                        draft.getCatalog().getCatalogSourceType(), componentOrigins,
+                        catalogFunctionContract),
                 draft.getShowTemplate().getTemplateCode(),
                 showDigest,
                 A2uiImmutableJsonSupport.immutableMap(draft.getShowTemplate().getParamsSchema()),

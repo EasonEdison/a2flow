@@ -106,7 +106,8 @@ public class A2uiFacadeSmoke {
                 List.of(new A2uiCompiledRequestMapping(A2uiMappingSource.CAPABILITY_PREVIOUS_RESULT, "/data/value", "/previous", null)),
                 A2uiResultOutcome.NO_UI_MESSAGES, A2uiResultOutcome.NO_UI_MESSAGES, List.of(), List.of());
         return new A2uiApplicationBuild("build", "app", "source-digest", "v0.9.1", "ACTIVE", "commit", Map.of(), "PRT",
-                new A2uiCompiledCatalogRef("catalog", "1", "catalog-digest", A2uiCatalogSourceType.PLATFORM_MANAGED, Map.of()),
+                new A2uiCompiledCatalogRef("catalog", "1", "catalog-digest",
+                        A2uiCatalogSourceType.PLATFORM_MANAGED, Map.of(), Map.of()),
                 "show", "show-digest", Map.of("type", "object", "properties", Map.of("label", Map.of("type", "string")),
                         "required", List.of("label"), "additionalProperties", false),
                 List.of(new A2uiCompiledSurfaceDeclaration("surface", "button", List.of())),
