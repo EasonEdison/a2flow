@@ -67,7 +67,7 @@ export function analyzeSurface(surface) {
     if (children.length > MAX_CHILD_REFS) issues.push(issue('CHILD_REF_LIMIT', `${path}/children`, `单个组件的 children 不得超过 ${MAX_CHILD_REFS} 项。`, id));
     if (type === 'Text' && !validBinding(component.text)) issues.push(issue('INVALID_TEXT_BINDING', `${path}/text`, 'Text text 必须是包含有效 path 的对象。', id));
     if (type === 'ChoicePicker') {
-      if (!validBinding(component.options)) issues.push(issue('INVALID_OPTIONS_BINDING', `${path}/options`, 'ChoicePicker options 必须是包含有效 path 的对象。', id));
+      if (!Array.isArray(component.options)) issues.push(issue('INVALID_OPTIONS', `${path}/options`, 'ChoicePicker options 必须是数组。', id));
       if (!validBinding(component.value)) issues.push(issue('INVALID_VALUE_BINDING', `${path}/value`, 'ChoicePicker value 必须是包含有效 path 的对象。', id));
     }
     if (type === 'Button') {
@@ -172,7 +172,7 @@ export function addComponent(surface, component) {
   const templates = {
     Column: { id, component, children: [] },
     Text: { id, component, text: { path: '/' } },
-    ChoicePicker: { id, component, options: { path: '/' }, value: { path: '/' }, variant: 'mutuallyExclusive' },
+    ChoicePicker: { id, component, options: [], value: { path: '/' }, variant: 'mutuallyExclusive' },
     Button: { id, component, label: 'Button', action: { event: { name: '', context: {} } } },
   };
   return replaceComponents(surface, [...components, templates[component]]);
@@ -196,7 +196,7 @@ function matchesType(value, type) {
 function bindings(component) {
   if (!record(component)) return [];
   if (component.component === 'Text') return [['text', component.text]];
-  if (component.component === 'ChoicePicker') return [['options', component.options], ['value', component.value]];
+  if (component.component === 'ChoicePicker') return [['value', component.value]];
   if (component.component === 'Button' && record(component.action) && record(component.action.event) && record(component.action.event.context)) return Object.entries(component.action.event.context);
   return [];
 }
@@ -239,7 +239,7 @@ function renderComponent(component, byId, sample, depth, budget) {
   budget.remaining -= 1;
   if (component.component === 'Column') return { id: component.id, component: 'Column', children: component.children.map((id) => renderComponent(byId.get(id), byId, sample, depth + 1, budget)).filter(Boolean) };
   if (component.component === 'Text') return { id: component.id, component: 'Text', value: pointer(sample, component.text.path).value };
-  if (component.component === 'ChoicePicker') return { id: component.id, component: 'ChoicePicker', options: pointer(sample, component.options.path).value, value: pointer(sample, component.value.path).value };
+  if (component.component === 'ChoicePicker') return { id: component.id, component: 'ChoicePicker', options: component.options, value: pointer(sample, component.value.path).value };
   return { id: component.id, component: 'Button', label: component.label };
 }
 
