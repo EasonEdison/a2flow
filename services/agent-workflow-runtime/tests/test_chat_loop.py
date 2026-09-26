@@ -389,6 +389,33 @@ class ErrorBoundaryTests(unittest.TestCase):
         self.assertNotIn("PRIVATE_secret-input", str(emitter.events))
         self.assertNotIn("PRIVATE_secret-input", str(raised.exception))
 
+    def test_allowlisted_transport_rejection_stops_without_redispatch(self) -> None:
+        emitter = ListEmitter()
+        assets = RejectingChatAssets("TRANSPORT_ERROR")
+        loop = ChatLoop(
+            model_factory=FakeFactory([FakeModel([
+                self._ability_call("transport-error"),
+            ])]),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id="conv1",
+            reader=FakeMaterialPort(skill_material()),
+            control_request_id="chatctrl1",
+            emitter=emitter,
+            chat_assets=assets,
+        )
+
+        with self.assertRaises(ChatLoopError) as raised:
+            loop.turn("call the ability")
+
+        self.assertEqual("TRANSPORT_ERROR", str(raised.exception))
+        self.assertEqual(1, assets.dispatches)
+        self.assertEqual(
+            {"code": "TRANSPORT_ERROR", "reason": "ActionRejected"},
+            emitter.events[-1][1],
+        )
+        self.assertNotIn("never-emit-this-argument", str(emitter.events))
+
     def test_allowlisted_provider_protocol_rejection_is_specific_and_terminal(self) -> None:
         emitter = ListEmitter()
         loop = ChatLoop(

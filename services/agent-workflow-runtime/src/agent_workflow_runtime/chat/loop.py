@@ -31,7 +31,10 @@ from .tools import (
 
 
 _GENERIC_TURN_ERROR: Final[str] = "MODEL_STREAM_FAILED"
-_SAFE_ACTION_REJECTION_CODES: Final[frozenset[str]] = frozenset({"ARGUMENT_INVALID"})
+_SAFE_ACTION_REJECTION_CODES: Final[frozenset[str]] = frozenset({
+    "ARGUMENT_INVALID",
+    "TRANSPORT_ERROR",
+})
 _SAFE_PROVIDER_PROTOCOL_CODES: Final[frozenset[str]] = frozenset({
     "DUPLICATE_TOOL_ARGUMENT",
 })
