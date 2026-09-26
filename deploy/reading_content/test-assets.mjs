@@ -119,13 +119,38 @@ assert.equal(topicButton.action.event.context.topicId.path, 'id', 'repeated topi
 
 const actions = Object.fromEntries(manuscript.actionBindings.map(item => [item.actionCode, item]));
 assert.deepEqual(Object.keys(actions), ['saveManuscriptDraft', 'exportManuscript', 'confirmManuscript']);
-const saveValue = actions.saveManuscriptDraft.resultAdapters[0].messageTemplate.updateDataModel.value;
-assert.deepEqual(saveValue.export, { artifactId: '', artifactRevision: 0, filename: '', mediaType: '', content: '' });
-for (const field of ['savedTitle', 'savedMarkdown', 'savedArtifactId', 'savedArtifactRevision']) {
-  assert.ok(actions.saveManuscriptDraft.resultAdapters[0].bindings.some(item => item.targetPath.endsWith(`/${field}`)), `save adapter misses ${field}`);
+const assertLeafAdapters = (action, paths) => {
+  const adapters = action.resultAdapters;
+  assert.deepEqual(adapters.map(item => item.messageTemplate.updateDataModel.path), paths);
+  assert.deepEqual(adapters.map(item => item.order), adapters.map((_, index) => index + 1));
+  assert.equal(new Set(adapters.map(item => item.adapterId)).size, adapters.length);
+  assert.ok(adapters.every(item => item.messageTemplate.updateDataModel.path !== '/'));
+};
+const adapterAt = (action, path) => action.resultAdapters.find(item => item.messageTemplate.updateDataModel.path === path);
+assertLeafAdapters(reading.actionBindings[0], ['/confirmationId', '/selectedPointIds', '/userNotes', '/status']);
+assertLeafAdapters(topic.actionBindings[0], ['/confirmationId', '/topics', '/status']);
+assertLeafAdapters(actions.saveManuscriptDraft, [
+  '/draftTitle', '/draftMarkdown', '/savedTitle', '/savedMarkdown', '/savedArtifactId',
+  '/savedArtifactRevision', '/status', '/export',
+]);
+assertLeafAdapters(actions.exportManuscript, ['/export', '/status']);
+assertLeafAdapters(actions.confirmManuscript, ['/confirmationId', '/status']);
+assert.deepEqual(adapterAt(actions.saveManuscriptDraft, '/export').messageTemplate.updateDataModel.value,
+  { artifactId: '', artifactRevision: 0, filename: '', mediaType: '', content: '' });
+for (const field of ['draftTitle', 'draftMarkdown', 'savedTitle', 'savedMarkdown', 'savedArtifactId', 'savedArtifactRevision']) {
+  assert.deepEqual(adapterAt(actions.saveManuscriptDraft, `/${field}`).bindings.map(item => item.targetPath),
+    ['/updateDataModel/value'], `save adapter misses scalar binding for ${field}`);
 }
-assert.ok(actions.exportManuscript.resultAdapters[0].bindings.some(item => item.source === 'ACTION_CONTEXT' && item.sourcePath === '/artifactId'));
-assert.ok(actions.exportManuscript.resultAdapters[0].bindings.some(item => item.source === 'ACTION_CONTEXT' && item.sourcePath === '/artifactRevision'));
+const exportBindings = adapterAt(actions.exportManuscript, '/export').bindings;
+assert.ok(exportBindings.some(item => item.targetPath === '/updateDataModel/value/artifactId' && item.source === 'ACTION_CONTEXT' && item.sourcePath === '/artifactId'));
+assert.ok(exportBindings.some(item => item.targetPath === '/updateDataModel/value/artifactRevision' && item.source === 'ACTION_CONTEXT' && item.sourcePath === '/artifactRevision'));
+assert.equal(adapterAt(reading.actionBindings[0], '/selectedPointIds').bindings[0].sourcePath, '/selectedPointIds');
+assert.equal(adapterAt(reading.actionBindings[0], '/userNotes').bindings[0].sourcePath, '/userNotes');
+assert.deepEqual(adapterAt(topic.actionBindings[0], '/topics').bindings.map(item => [item.targetPath, item.sourcePath]), [
+  ['/updateDataModel/value/0/id', '/topicId'],
+  ['/updateDataModel/value/0/title', '/editedTitle'],
+  ['/updateDataModel/value/0/angle', '/editedAngle'],
+]);
 const confirmButton = manuscript.showTemplate.messageTemplates[1].updateComponents.components.find(item => item.id === 'confirm');
 assert.equal(confirmButton.action.event.context.artifactId.path, '/savedArtifactId');
 assert.equal(confirmButton.checks.length, 3);
