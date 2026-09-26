@@ -91,6 +91,31 @@ def test_endpoints_fail_closed() -> None:
         Endpoint("https://example.com", 5000)
 
 
+def test_standard_protoc_json_names_preserve_strict_authority() -> None:
+    bundle = descriptor_pb2.FileDescriptorSet.FromString(base64.b64decode(descriptor()))
+    for message in bundle.file[0].message_type:
+        runtime = cap.DESCRIPTOR.message_types_by_name[message.name]
+        for item in message.field:
+            item.json_name = runtime.fields_by_name[item.name].json_name
+    standard = bundle.SerializeToString()
+    assert registered_method(
+        replace(Plan(), descriptor_set_base64=base64.b64encode(standard).decode())
+    ).name == "CreateProject"
+    # Normalization must not alter the submitted descriptor.
+    assert bundle.SerializeToString() == standard
+    for attribute, value in (
+        ("json_name", "untrustedIdentity"),
+        ("number", 999),
+        ("type", descriptor_pb2.FieldDescriptorProto.TYPE_STRING),
+    ):
+        changed = descriptor_pb2.FileDescriptorSet.FromString(standard)
+        setattr(changed.file[0].message_type[0].field[0], attribute, value)
+        with pytest.raises(TransportError, match="EXACT_PLATFORM_CONTEXT_REQUIRED"):
+            registered_method(replace(
+                Plan(), descriptor_set_base64=base64.b64encode(changed.SerializeToString()).decode()
+            ))
+
+
 def test_modified_platform_context_and_streaming_are_rejected() -> None:
     bundle = descriptor_pb2.FileDescriptorSet.FromString(base64.b64decode(descriptor()))
     bundle.file[0].message_type[0].field[0].type = descriptor_pb2.FieldDescriptorProto.TYPE_STRING

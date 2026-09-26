@@ -14,7 +14,7 @@ from typing import Protocol, cast
 import grpc
 from a2flow.capability.v1 import capability_pb2 as cap
 from google.protobuf import descriptor_pb2, descriptor_pool, json_format, message_factory
-from google.protobuf.descriptor import MethodDescriptor
+from google.protobuf.descriptor import Descriptor, MethodDescriptor
 from google.protobuf.message import DecodeError, Message
 from jsonschema import Draft7Validator
 
@@ -93,6 +93,53 @@ class Endpoint:
         return grpc.secure_channel(target, credentials, options=options)
 
 
+def _normalize_canonical_json_names(
+    candidate: descriptor_pb2.DescriptorProto,
+    authority: descriptor_pb2.DescriptorProto,
+    runtime: Descriptor,
+) -> None:
+    """Ignore only protoc's redundant explicit default JSON names.
+
+    The final full descriptor comparison still rejects custom JSON names and
+    any changes to field types, numbers, options, dependencies or services.
+    """
+    fields = {field.name: field for field in authority.field}
+    for field in candidate.field:
+        expected = fields.get(field.name)
+        runtime_field = runtime.fields_by_name.get(field.name)
+        if (
+            expected is not None
+            and runtime_field is not None
+            and not expected.HasField("json_name")
+            and field.HasField("json_name")
+            and field.json_name == runtime_field.json_name
+        ):
+            field.ClearField("json_name")
+    nested = {message.name: message for message in authority.nested_type}
+    for message in candidate.nested_type:
+        expected_message = nested.get(message.name)
+        runtime_message = runtime.nested_types_by_name.get(message.name)
+        if expected_message is not None and runtime_message is not None:
+            _normalize_canonical_json_names(message, expected_message, runtime_message)
+
+
+def _matches_platform_descriptor(
+    candidate: descriptor_pb2.FileDescriptorProto | None,
+    authority: descriptor_pb2.FileDescriptorProto,
+) -> bool:
+    if candidate is None:
+        return False
+    normalized = descriptor_pb2.FileDescriptorProto()
+    normalized.CopyFrom(candidate)
+    messages = {message.name: message for message in authority.message_type}
+    for message in normalized.message_type:
+        expected = messages.get(message.name)
+        runtime = cap.DESCRIPTOR.message_types_by_name.get(message.name)
+        if expected is not None and runtime is not None:
+            _normalize_canonical_json_names(message, expected, runtime)
+    return normalized == authority
+
+
 def registered_method(plan: RpcPlan) -> MethodDescriptor:
     if len(plan.descriptor_set_base64) > 2_800_000:
         raise TransportError("DESCRIPTOR_TOO_LARGE")
@@ -103,7 +150,7 @@ def registered_method(plan: RpcPlan) -> MethodDescriptor:
         if len(pending) != len(bundle.file):
             raise TransportError("DUPLICATE_DESCRIPTOR_FILE")
         authority = descriptor_pb2.FileDescriptorProto.FromString(cap.DESCRIPTOR.serialized_pb)
-        if pending.get(authority.name) != authority:
+        if not _matches_platform_descriptor(pending.get(authority.name), authority):
             raise TransportError("EXACT_PLATFORM_CONTEXT_REQUIRED")
         pool = descriptor_pool.DescriptorPool()
         resolved: set[str] = set()
