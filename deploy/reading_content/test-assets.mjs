@@ -102,6 +102,13 @@ assert.match(skillSpecs[0].markdown, /ARTICLE.*SPOKEN_SCRIPT.*不能填写 Markd
 assert.match(skillSpecs[0].markdown, /body\.readingBrief\.points/);
 assert.match(skillSpecs[1].markdown, /body\.topicPlan\.topics/);
 assert.match(skillSpecs[2].markdown, /body\.manuscript\.title.*body\.manuscript\.bodyMarkdown/s);
+const draftSkill = skillSpecs.find(skill => skill.skillCode === 'content-draft-writing');
+assert.match(draftSkill.markdown, /content\.confirmation\.get 响应只给出已确认的 artifactId/);
+assert.match(draftSkill.markdown, /使用该 artifactId 调用 content\.artifact\.get.*artifact revision.*body\.topicPlan\.topics/s);
+assert.match(draftSkill.markdown, /顶层必须填写 projectId、kind=MANUSCRIPT、inputRefs 和 origin/);
+assert.match(draftSkill.markdown, /body 分支只填写 manuscriptTitle\/manuscriptMarkdown\/citations/);
+assert.match(draftSkill.markdown, /inputRefs 至少包含已确认的 TOPIC_PLAN.*kind=ARTIFACT.*revision=content\.artifact\.get 返回的 revision/s);
+assert.match(draftSkill.markdown, /每个 citation 的 referenceKind\/referenceId\/revision.*inputRefs.*kind\/id\/revision/s);
 
 const [reading, topic, manuscript] = buildApplications();
 const choice = reading.showTemplate.messageTemplates[1].updateComponents.components[8];
