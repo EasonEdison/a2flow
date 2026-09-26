@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError, client } from '../api/client';
+import { createUuidV4 } from '../secureUuid.mjs';
 import {
   object,
   string,
@@ -263,7 +264,7 @@ export function useRuntime(enabled: boolean) {
       }
 
       locks.current.add(kind);
-      const id = crypto.randomUUID();
+      const id = createUuidV4();
       const targetRunId = current.current ?? undefined;
       addControl({ id, kind, runId: targetRunId });
       setError('');

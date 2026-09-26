@@ -1,8 +1,9 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { A2uiSurface, MarkdownContext } from '@a2ui/react/v0_9';
 import { renderMarkdown } from '@a2ui/markdown-it';
-import { actionRequest, cardIsOperable, createSnapshotProcessor } from '../a2uiSnapshot.mjs';
+import { actionRequest, cardIsOperable, createSnapshotProcessor, persistedSnapshotKey } from '../a2uiSnapshot.mjs';
 import { productApi, type ChatCard } from '../productApi';
+import { createUuidV4 } from '../secureUuid.mjs';
 import { registeredCatalogs } from './a2uiCatalogs';
 import '../../node_modules/@a2ui/react/v0_9/index.css';
 import '@fontsource/material-symbols-outlined/400.css';
@@ -27,25 +28,37 @@ export function A2uiSnapshotCard({ card, onUpdate }: { card: ChatCard; onUpdate:
   const current = useRef({ card, onUpdate });
   current.current = { card, onUpdate };
   // Polling unchanged snapshots must not erase unsent user edits.
-  const snapshotKey = JSON.stringify(card.display);
+  const displayKey = JSON.stringify(card.display);
+  const snapshotKey = persistedSnapshotKey(card);
   useEffect(() => {
     let disposed = false;
     let next: ReturnType<typeof createSnapshotProcessor> | undefined;
     const subscriptions: Array<{ unsubscribe: () => void }> = [];
+    // A submitted action remains locked until a new persisted revision or display is observed.
+    inFlight.current = false;
+    setBusy(false);
     try {
-      next = createSnapshotProcessor(JSON.parse(snapshotKey), registeredCatalogs);
+      next = createSnapshotProcessor(JSON.parse(displayKey), registeredCatalogs);
       for (const surface of next.model.surfacesMap.values()) {
         subscriptions.push(surface.onError.subscribe(() => {
           if (!disposed) { inFlight.current = true; setError('组件绑定或表达式失败，已禁止操作。请核对 Catalog 配置。'); setBusy(true); }
         }));
         subscriptions.push(surface.onAction.subscribe(async event => {
           if (disposed || inFlight.current || !cardIsOperable(current.current.card)) return;
+          const latest = current.current.card;
+          let request: ReturnType<typeof actionRequest>;
+          let requestId: string;
+          try {
+            request = actionRequest(latest, event);
+            requestId = createUuidV4();
+          } catch {
+            if (!disposed) setError('提交前校验失败，操作尚未发送。');
+            return;
+          }
           inFlight.current = true;
           setBusy(true); setError('');
           try {
-            const latest = current.current.card;
-            const request = actionRequest(latest, event);
-            const updated = await productApi.chatAction(latest.conversationId, latest, crypto.randomUUID(), request.actionName, request.inputs);
+            const updated = await productApi.chatAction(latest.conversationId, latest, requestId, request.actionName, request.inputs);
             if (!disposed) current.current.onUpdate(updated);
           } catch {
             if (!disposed) setError('操作结果未确认，请重新读取卡片状态；不会自动重试。');
@@ -60,7 +73,7 @@ export function A2uiSnapshotCard({ card, onUpdate }: { card: ChatCard; onUpdate:
       setError(reason instanceof Error ? reason.message : 'A2UI 快照无效');
     }
     return () => { disposed = true; subscriptions.forEach(item => item.unsubscribe()); next?.model.dispose(); };
-  }, [snapshotKey]);
+  }, [displayKey, snapshotKey]);
   const operable = cardIsOperable(card) && !busy && !error;
   return <details className="display-card" open={['WAITING_ACTION', 'DISPLAY_ONLY', 'UNKNOWN'].includes(card.status)}>
     <summary>{card.display.applicationKey} · {labels[card.status] ?? '只读卡片'}</summary>
