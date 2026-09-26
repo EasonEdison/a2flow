@@ -49,11 +49,6 @@ public final class GrpcCapabilityContract {
             Map<String, DescriptorProtos.FileDescriptorProto> pending = new LinkedHashMap<>();
             for (var file : set.getFileList()) if (pending.put(file.getName(), file) != null) throw new IllegalArgumentException("Duplicate descriptor file");
             Map<String, Descriptors.FileDescriptor> resolved = new LinkedHashMap<>();
-            // Context's exact descriptor is owned by the platform, not by the capability author.
-            var authority = Capability.getDescriptor();
-            if (!matchesPlatformDescriptor(authority, pending.get(authority.getName()))) {
-                throw new IllegalArgumentException("Exact platform ExecutionContext descriptor required (include imports)");
-            }
             while (!pending.isEmpty()) {
                 boolean progress = false;
                 var iterator = pending.entrySet().iterator();
@@ -75,6 +70,7 @@ public final class GrpcCapabilityContract {
                         || !field.getMessageType().getFullName().equals("a2flow.capability.v1.ExecutionContext")) {
                     throw new IllegalArgumentException("Request contextField must reference platform ExecutionContext");
                 }
+                validatePlatformContext(field.getMessageType());
                 return selected;
             }
             throw new IllegalArgumentException("Service not found in descriptor set");
@@ -83,49 +79,39 @@ public final class GrpcCapabilityContract {
         }
     }
 
-    static boolean matchesPlatformDescriptor(Descriptors.FileDescriptor authority,
-            DescriptorProtos.FileDescriptorProto candidate) {
-        if (candidate == null) return false;
-        var authorityProto = authority.toProto();
-        var normalized = candidate.toBuilder();
-        if (authority.getMessageTypes().size() != normalized.getMessageTypeCount()) return false;
-        for (int index = 0; index < authority.getMessageTypes().size(); index++) {
-            if (!normalizeRedundantJsonNames(authority.getMessageTypes().get(index),
-                    authorityProto.getMessageType(index), normalized.getMessageTypeBuilder(index))) {
-                return false;
+    static void validatePlatformContext(Descriptors.Descriptor candidate) {
+        var authority = Capability.getDescriptor().findMessageTypeByName("ExecutionContext");
+        Map<Descriptors.OneofDescriptor, Descriptors.FieldDescriptor> oneofOwners = new LinkedHashMap<>();
+        for (String name : Set.of("user_id", "environment", "request_id", "client")) {
+            var expected = authority.findFieldByName(name);
+            var actual = candidate.findFieldByNumber(expected.getNumber());
+            if (actual == null || actual.isRepeated() || actual.getType() != expected.getType()) {
+                throw incompatibleContext(name + " must keep field number, scalar type and singular cardinality");
             }
+            var oneof = actual.getContainingOneof();
+            if (oneof != null) {
+                var previous = oneofOwners.putIfAbsent(oneof, actual);
+                if (previous != null) {
+                    throw incompatibleContext("required identity fields cannot share oneof " + oneof.getName());
+                }
+            }
+            if (name.equals("environment")) validateEnvironmentEnum(expected, actual);
         }
-        return authorityProto.equals(normalized.build());
     }
 
-    private static boolean normalizeRedundantJsonNames(Descriptors.Descriptor authority,
-            DescriptorProtos.DescriptorProto authorityProto,
-            DescriptorProtos.DescriptorProto.Builder candidate) {
-        if (!authority.getName().equals(candidate.getName())
-                || !authorityProto.getName().equals(candidate.getName())
-                || authority.getFields().size() != candidate.getFieldCount()
-                || authority.getNestedTypes().size() != candidate.getNestedTypeCount()) {
-            return false;
-        }
-        for (int index = 0; index < authority.getFields().size(); index++) {
-            var authorityField = authority.getFields().get(index);
-            var authorityFieldProto = authorityProto.getField(index);
-            var candidateField = candidate.getFieldBuilder(index);
-            if (!authorityField.getName().equals(candidateField.getName())
-                    || !authorityFieldProto.getName().equals(candidateField.getName())) {
-                return false;
-            }
-            if (candidateField.hasJsonName() && !authorityFieldProto.hasJsonName()) {
-                if (!authorityField.getJsonName().equals(candidateField.getJsonName())) return false;
-                candidateField.clearJsonName();
+    private static void validateEnvironmentEnum(Descriptors.FieldDescriptor expected,
+            Descriptors.FieldDescriptor actual) {
+        for (String name : Set.of("PRT", "ONLINE")) {
+            var expectedValue = expected.getEnumType().findValueByName(name);
+            var actualValue = actual.getEnumType().findValueByName(name);
+            if (actualValue == null || actualValue.getNumber() != expectedValue.getNumber()) {
+                throw incompatibleContext("environment enum must keep " + name + " wire number "
+                        + expectedValue.getNumber());
             }
         }
-        for (int index = 0; index < authority.getNestedTypes().size(); index++) {
-            if (!normalizeRedundantJsonNames(authority.getNestedTypes().get(index),
-                    authorityProto.getNestedType(index), candidate.getNestedTypeBuilder(index))) {
-                return false;
-            }
-        }
-        return true;
+    }
+
+    private static IllegalArgumentException incompatibleContext(String detail) {
+        return new IllegalArgumentException("Platform ExecutionContext is wire-incompatible: " + detail);
     }
 }

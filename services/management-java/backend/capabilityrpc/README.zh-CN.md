@@ -9,7 +9,7 @@
 - `apiSource.sourceType = GRPC`。
 - `executionBinding.bindingType = GRPC`。
 - `executionBinding.target` 只接受 `targetKey`、`serviceName`（完整包名）、`methodName`、`descriptorSetBase64`、`contextField`。
-- `descriptorSetBase64` 是 `protoc --include_imports --descriptor_set_out=...` 生成的 FileDescriptorSet 编码。业务请求必须包含名为 contextField 的 `a2flow.capability.v1.ExecutionContext` 单消息字段，导入项目 `proto/a2flow/capability/v1/capability.proto`。平台上下文描述必须一致，不允许自定义同名身份结构。
+- `descriptorSetBase64` 是 `protoc --include_imports --descriptor_set_out=...` 生成的 FileDescriptorSet 编码。业务请求必须包含名为 contextField 的 `a2flow.capability.v1.ExecutionContext` 单消息字段，并导入项目 `proto/a2flow/capability/v1/capability.proto`。平台不再比较整份描述符或字段总数；只核对实际调用的 unary 方法，以及 `user_id/environment/request_id/client` 的字段编号、精确类型、非 repeated、`PRT=1/ONLINE=2` 和四个身份字段不共享 oneof。无关新增字段、消息、方法及 `json_name` 不进入 wire 兼容性比较。
 - 保留原 `modelContract.inputFields` 三种来源、`requestMappingsJson` 与确定性系统变量映射。业务映射不能写 contextField；身份仅由宿主注入。Cookie、headers、URL、HTTP method/authMode 等旧字段拒绝，不迁移、不降级。
 - `timeoutMs` 为 1..120000；`maxResponseBytes` 最多 5MiB；`idempotency=NONE`，不自动重试；`responsePolicy=ORIGINAL`。
 - 返回值遵循 ProtoJSON：int64 是十进制字符串，作者 responseDemoJson 必须据此填写。继续由原 Demo/字段规则生成 `technicalOutputSchema`，真正返回值用 NetworkNT JSON Schema 校验。外部 schema 引用禁止。
