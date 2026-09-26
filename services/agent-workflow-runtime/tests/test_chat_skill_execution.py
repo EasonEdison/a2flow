@@ -1,13 +1,16 @@
 """Focused clean-room checks for bounded Skill execution in ordinary Chat."""
 
+import asyncio
 import hashlib
 import json
 from types import SimpleNamespace
 import unittest
 
+from langchain.agents.middleware import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGenerationChunk
+from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import Field
 
 from skill_registry.ports import MaterialPort, SkillMaterial
@@ -23,7 +26,12 @@ from agent_workflow_runtime.business import (
 )
 from agent_workflow_runtime.chat.assets import ChatAssets
 from agent_workflow_runtime.chat.events import DONE, ERROR, ListEmitter
-from agent_workflow_runtime.chat.loop import ChatLoop
+from agent_workflow_runtime.chat.loop import (
+    ChatLoop,
+    ChatLoopError,
+    _ChatSkillToolAdmission,
+)
+from agent_workflow_runtime.chat.tools import build_chat_tools
 from agent_workflow_runtime.models import ActionRejected
 
 
@@ -272,7 +280,7 @@ def _operations(*, reader=None, calls=None):
     }
 
 
-def _assets(reader=None, operations=None, sink=None):
+def _assets(reader=None, operations=None, sink=None, control_request_id="chatctrl1"):
     reader = reader or Reader()
     sink = sink or Sink()
     return ChatAssets(
@@ -280,7 +288,7 @@ def _assets(reader=None, operations=None, sink=None):
         operations or _operations(),
         OWNER,
         "conv1",
-        "chatctrl1",
+        control_request_id,
         sink,
         _application_validator,
         _data_validator,
@@ -291,6 +299,7 @@ class ScriptedModel(BaseChatModel):
     rounds: list
     tools: list = Field(default_factory=list)
     observed: list = Field(default_factory=list)
+    bound_tool_sets: list[tuple[str, ...]] = Field(default_factory=list)
 
     @property
     def configuration(self):
@@ -302,6 +311,7 @@ class ScriptedModel(BaseChatModel):
 
     def bind_tools(self, tools, **kwargs):
         self.tools = list(tools)
+        self.bound_tool_sets.append(tuple(tool.name for tool in tools))
         return self
 
     def _generate(self, messages, **kwargs):
@@ -319,6 +329,54 @@ class Factory:
 
     def create(self, reference, owner):
         return self.model
+
+
+class GateAssets:
+    """Explicit ChatAssets test API for model-request admission changes."""
+
+    def __init__(self) -> None:
+        self.names: frozenset[str] = frozenset()
+        self.attempts: list[str] = []
+
+    def begin_turn(self) -> None:
+        self.names = frozenset()
+
+    def admitted_tool_names(self) -> frozenset[str]:
+        return self.names
+
+    def waiting_action(self) -> None:
+        return None
+
+    def validate_context(self, context: object) -> None:
+        del context
+
+    def admit_skill(self, skill_key: str) -> dict[str, object]:
+        self.attempts.append(skill_key)
+        if skill_key == "reject":
+            raise ActionRejected("SKILL_NOT_FOUND")
+        self.names = (
+            frozenset({"execute_ability"})
+            if skill_key == "execute-only"
+            else frozenset({"execute_ability", "render_application"})
+        )
+        return {
+            "content": {"instructions": "fixture", "resources": []},
+            "artifact": {"resolvedVersion": {"versionId": "v1"}},
+        }
+
+    def execute_ability(
+        self, ability_key: str, arguments: dict[str, object],
+    ) -> dict[str, object]:
+        return {"abilityKey": ability_key, "output": dict(arguments)}
+
+    def render_application(
+        self,
+        application_key: str,
+        data: dict[str, object],
+        tool_call_id: str,
+    ) -> dict[str, object]:
+        del data
+        return {"cardId": "card:" + tool_call_id, "applicationKey": application_key}
 
 
 def _call(index, call_id, name, arguments):
@@ -350,6 +408,27 @@ def _loop(rounds, assets, reader, emitter):
 
 
 class ChatAssetsTests(unittest.TestCase):
+    def test_admitted_tool_names_are_empty_until_successful_admission(self) -> None:
+        assets, _, _ = _assets()
+        self.assertEqual(frozenset(), assets.admitted_tool_names())
+        assets.admit_skill(SKILL_KEY)
+        self.assertEqual(
+            frozenset({"execute_ability", "render_application"}),
+            assets.admitted_tool_names(),
+        )
+        assets.begin_turn()
+        self.assertEqual(frozenset(), assets.admitted_tool_names())
+
+        class RejectingReader(Reader):
+            def resolve_asset(self, kind, key, context):
+                del kind, key, context
+                raise ActionRejected("SKILL_NOT_FOUND")
+
+        rejected, _, _ = _assets(RejectingReader())
+        with self.assertRaisesRegex(ActionRejected, "SKILL_NOT_FOUND"):
+            rejected.admit_skill(SKILL_KEY)
+        self.assertEqual(frozenset(), rejected.admitted_tool_names())
+
     def test_bound_ability_rechecks_version_immediately_before_dispatch(self):
         reader = Reader()
         calls = []
@@ -486,6 +565,163 @@ class SeededChatAssetsIntegrationTests(unittest.TestCase):
 
 
 class ChatLoopSkillTests(unittest.TestCase):
+    def test_reused_assets_require_readmission_on_each_turn(self) -> None:
+        calls: list[tuple[dict[str, object], object]] = []
+        assets, reader, _ = _assets(operations=_operations(calls=calls))
+        emitter = ListEmitter()
+        loop, model = _loop([
+            [_call(0, "skill-1", "use_skill", {"skillKey": SKILL_KEY})],
+            [AIMessageChunk(content="Skill context ready")],
+            [_call(0, "skill-2", "use_skill", {"skillKey": SKILL_KEY})],
+            [_call(0, "ability-2", "execute_ability", {
+                "abilityKey": CALCULATE_KEY,
+                "arguments": {"value": 3},
+            })],
+            [AIMessageChunk(content="Calculated")],
+        ], assets, reader, emitter)
+
+        self.assertEqual("Skill context ready", loop.turn("Prepare"))
+        self.assertEqual("Calculated", loop.turn("Continue"))
+        self.assertEqual(
+            [
+                {"use_skill", "propose_workflow_run"},
+                {
+                    "use_skill", "propose_workflow_run",
+                    "execute_ability", "render_application",
+                },
+                {"use_skill", "propose_workflow_run"},
+                {
+                    "use_skill", "propose_workflow_run",
+                    "execute_ability", "render_application",
+                },
+                {
+                    "use_skill", "propose_workflow_run",
+                    "execute_ability", "render_application",
+                },
+            ],
+            [set(names) for names in model.bound_tool_sets],
+        )
+        self.assertEqual(2, len(reader.calls))
+        self.assertEqual([({"value": 3}, OWNER)], calls)
+
+    def test_fresh_assets_on_checkpointed_second_turn_require_readmission(self) -> None:
+        reader = Reader()
+        calls = []
+        saver = InMemorySaver()
+        first_assets, _, _ = _assets(
+            reader, _operations(calls=calls), control_request_id="turn-1",
+        )
+        first_model = ScriptedModel(rounds=[
+            [_call(0, "skill-1", "use_skill", {"skillKey": SKILL_KEY})],
+            [AIMessageChunk(content="Skill context ready")],
+        ])
+        first = ChatLoop(
+            model_factory=Factory(first_model),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id="conv1",
+            reader=reader,
+            control_request_id="turn-1",
+            chat_assets=first_assets,
+            checkpointer=saver,
+            thread_id="shared-thread",
+        )
+        self.assertEqual("Skill context ready", first.turn("Prepare"))
+
+        second_assets, _, _ = _assets(
+            reader, _operations(calls=calls), control_request_id="turn-2",
+        )
+        second_model = ScriptedModel(rounds=[
+            [_call(0, "skill-2", "use_skill", {"skillKey": SKILL_KEY})],
+            [_call(0, "ability-2", "execute_ability", {
+                "abilityKey": CALCULATE_KEY,
+                "arguments": {"value": 3},
+            })],
+            [AIMessageChunk(content="Calculated")],
+        ])
+        second = ChatLoop(
+            model_factory=Factory(second_model),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id="conv1",
+            reader=reader,
+            control_request_id="turn-2",
+            chat_assets=second_assets,
+            checkpointer=saver,
+            thread_id="shared-thread",
+        )
+        self.assertEqual("Calculated", second.turn("Continue"))
+        self.assertTrue(any(
+            isinstance(message, ToolMessage) and message.name == "use_skill"
+            for message in second_model.observed[0]
+        ), "the prior turn's use_skill result must remain history only")
+        self.assertEqual(
+            [
+                {"use_skill", "propose_workflow_run"},
+                {
+                    "use_skill", "propose_workflow_run",
+                    "execute_ability", "render_application",
+                },
+                {
+                    "use_skill", "propose_workflow_run",
+                    "execute_ability", "render_application",
+                },
+            ],
+            [set(names) for names in second_model.bound_tool_sets],
+        )
+        self.assertEqual(2, len(reader.calls))
+        self.assertEqual([({"value": 3}, OWNER)], calls)
+
+    def test_unadmitted_plain_chat_can_finish_without_use_skill(self) -> None:
+        assets, reader, _ = _assets()
+        emitter = ListEmitter()
+        loop, model = _loop(
+            [[AIMessageChunk(content="Hello")]], assets, reader, emitter,
+        )
+        self.assertEqual("Hello", loop.turn("Hello"))
+        self.assertEqual(
+            [{"use_skill", "propose_workflow_run"}],
+            [set(names) for names in model.bound_tool_sets],
+        )
+        self.assertEqual(frozenset(), assets.admitted_tool_names())
+
+    def test_failed_admission_does_not_open_execution_tools(self) -> None:
+        assets = GateAssets()
+        reader = Reader()
+        emitter = ListEmitter()
+        loop, model = _loop([
+            [_call(0, "reject-1", "use_skill", {"skillKey": "reject"})],
+        ], assets, reader, emitter)
+        with self.assertRaisesRegex(ChatLoopError, "MODEL_STREAM_FAILED"):
+            loop.turn("Load missing Skill")
+        self.assertEqual(
+            [{"use_skill", "propose_workflow_run"}],
+            [set(names) for names in model.bound_tool_sets],
+        )
+        self.assertEqual(frozenset(), assets.admitted_tool_names())
+
+    def test_successful_skill_switch_replaces_visible_execution_tools(self) -> None:
+        assets = GateAssets()
+        reader = Reader()
+        emitter = ListEmitter()
+        loop, model = _loop([
+            [_call(0, "full-1", "use_skill", {"skillKey": "full"})],
+            [_call(0, "narrow-1", "use_skill", {"skillKey": "execute-only"})],
+            [AIMessageChunk(content="Switched")],
+        ], assets, reader, emitter)
+        self.assertEqual("Switched", loop.turn("Switch Skills"))
+        self.assertEqual(
+            [
+                {"use_skill", "propose_workflow_run"},
+                {
+                    "use_skill", "propose_workflow_run",
+                    "execute_ability", "render_application",
+                },
+                {"use_skill", "propose_workflow_run", "execute_ability"},
+            ],
+            [set(names) for names in model.bound_tool_sets],
+        )
+
     def test_display_only_card_continues_to_model_completion(self):
         assets, reader, _ = _assets()
         emitter = ListEmitter()
@@ -639,6 +875,48 @@ class ChatLoopSkillTests(unittest.TestCase):
         self.assertEqual([], reader.calls)
         self.assertEqual("error", loop.history[2].status)
         self.assertEqual(2, len(model.observed))
+
+
+class ChatSkillToolAdmissionMiddlewareTests(unittest.TestCase):
+    def test_sync_and_async_hooks_preserve_prompt_without_accumulation(self) -> None:
+        assets = GateAssets()
+        tools = list(build_chat_tools(
+            reader=Reader(),
+            trusted_context=OWNER,
+            conversation_id="conv1",
+            control_request_id="chatctrl1",
+            chat_assets=assets,
+        ))
+        middleware = _ChatSkillToolAdmission(assets)
+        request = ModelRequest(
+            model=ScriptedModel(rounds=[]),
+            messages=[],
+            system_message=SystemMessage(content="base prompt"),
+            tools=tools,
+            runtime=None,
+        )
+        sync_requests = []
+
+        def sync_handler(prepared):
+            sync_requests.append(prepared)
+            return ModelResponse(result=[AIMessage(content="sync")])
+
+        middleware.wrap_model_call(request, sync_handler)
+        self.assertEqual(
+            {"use_skill", "propose_workflow_run"},
+            {tool.name for tool in sync_requests[0].tools},
+        )
+
+        async_requests = []
+
+        async def async_handler(prepared):
+            async_requests.append(prepared)
+            return ModelResponse(result=[AIMessage(content="async")])
+
+        asyncio.run(middleware.awrap_model_call(sync_requests[0], async_handler))
+        text = async_requests[0].system_message.text
+        self.assertIn("base prompt", text)
+        self.assertEqual(1, text.count("Skill admission is local to the current turn"))
 
 
 if __name__ == "__main__":

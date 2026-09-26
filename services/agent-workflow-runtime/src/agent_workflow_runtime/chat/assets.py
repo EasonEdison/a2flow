@@ -119,9 +119,16 @@ class ChatAssets:
     def control_request_id(self) -> str:
         return self._control_request_id
 
-    def begin_turn(self):
-        """Clear only transient turn state; Skill admission remains explicit."""
+    def admitted_tool_names(self) -> frozenset[str]:
+        """Return the current turn's model-callable Skill tools."""
 
+        admitted = self._admission
+        return frozenset() if admitted is None else admitted.required_tools
+
+    def begin_turn(self):
+        """Clear turn-local Skill admission and interaction state."""
+
+        self._admission = None
         with self._render_lock:
             self._waiting_action = None
 
