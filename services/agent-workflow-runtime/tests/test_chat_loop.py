@@ -154,6 +154,9 @@ class RejectingChatAssets:
     def begin_turn(self) -> None:
         return None
 
+    def admitted_tool_names(self) -> frozenset[str]:
+        return frozenset({"execute_ability"})
+
     def waiting_action(self) -> None:
         return None
 

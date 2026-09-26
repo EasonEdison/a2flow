@@ -5,12 +5,19 @@ Durable conversation migration is a separate assembly concern.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final, Protocol
 from uuid import uuid4
 
-from langchain.agents.middleware import AgentMiddleware, hook_config
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    ModelRequest,
+    ModelResponse,
+    hook_config,
+)
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import BaseTool
 from skillweave_contracts.models import (
     ConversationInvocationScope, TrustedInvocationContext,
 )
@@ -38,6 +45,15 @@ _SAFE_ACTION_REJECTION_CODES: Final[frozenset[str]] = frozenset({
 _SAFE_PROVIDER_PROTOCOL_CODES: Final[frozenset[str]] = frozenset({
     "DUPLICATE_TOOL_ARGUMENT",
 })
+_CHAT_BOOTSTRAP_TOOLS: Final[frozenset[str]] = frozenset({
+    "propose_workflow_run",
+    "use_skill",
+})
+_TURN_LOCAL_SKILL_PROMPT: Final[str] = (
+    "Skill admission is local to the current turn. Historical use_skill results "
+    "do not admit a Skill for this turn; call use_skill again before using Skill "
+    "Ability or Application tools."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +90,96 @@ def _classify_turn_failure(error: Exception) -> _TurnFailure:
 
 class ChatLoopError(Exception):
     """The SDK did not complete the turn."""
+
+
+class _ChatToolAdmissionPort(Protocol):
+    def admitted_tool_names(self) -> frozenset[str]:
+        """Return model-callable Skill tools admitted for this turn."""
+
+        ...
+
+
+class _ChatSkillToolAdmission(AgentMiddleware):
+    """Project turn-local Skill admission into each public model request."""
+
+    def __init__(self, chat_assets: _ChatToolAdmissionPort) -> None:
+        self._chat_assets = chat_assets
+
+    @staticmethod
+    def _tool_name(tool: BaseTool | dict[str, Any]) -> str | None:
+        if isinstance(tool, BaseTool):
+            return tool.name
+        name = tool.get("name")
+        if type(name) is str:
+            return name
+        function = tool.get("function")
+        if isinstance(function, dict):
+            function_name = function.get("name")
+            if type(function_name) is str:
+                return function_name
+        return None
+
+    @staticmethod
+    def _with_turn_prompt(
+        request: ModelRequest[TrustedInvocationContext],
+    ) -> ModelRequest[TrustedInvocationContext]:
+        current = request.system_message
+        if current is not None:
+            content = current.content
+            if isinstance(content, str) and _TURN_LOCAL_SKILL_PROMPT in content:
+                return request
+            if isinstance(content, list) and any(
+                isinstance(block, dict)
+                and block.get("type") == "text"
+                and block.get("text") == _TURN_LOCAL_SKILL_PROMPT
+                for block in content
+            ):
+                return request
+        blocks: list[str | dict[str, Any]] = []
+        if current is not None:
+            if isinstance(current.content, str):
+                if current.content:
+                    blocks.append({"type": "text", "text": current.content})
+            else:
+                blocks.extend(current.content)
+        blocks.append({"type": "text", "text": _TURN_LOCAL_SKILL_PROMPT})
+        system_message = (
+            SystemMessage(content=blocks)
+            if current is None
+            else current.model_copy(update={"content": blocks})
+        )
+        return request.override(system_message=system_message)
+
+    def _prepare(
+        self,
+        request: ModelRequest[TrustedInvocationContext],
+    ) -> ModelRequest[TrustedInvocationContext]:
+        admitted = self._chat_assets.admitted_tool_names()
+        allowed = _CHAT_BOOTSTRAP_TOOLS | admitted
+        filtered = [
+            tool for tool in request.tools
+            if self._tool_name(tool) in allowed
+        ]
+        prepared = request.override(tools=filtered)
+        return prepared if admitted else self._with_turn_prompt(prepared)
+
+    def wrap_model_call(
+        self,
+        request: ModelRequest[TrustedInvocationContext],
+        handler: Callable[
+            [ModelRequest[TrustedInvocationContext]], ModelResponse[Any]
+        ],
+    ) -> ModelResponse[Any]:
+        return handler(self._prepare(request))
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest[TrustedInvocationContext],
+        handler: Callable[
+            [ModelRequest[TrustedInvocationContext]], Awaitable[ModelResponse[Any]]
+        ],
+    ) -> ModelResponse[Any]:
+        return await handler(self._prepare(request))
 
 
 class _InteractiveCardStop(AgentMiddleware):
@@ -199,6 +305,7 @@ class ChatLoop:
             middleware = ([PersonalMemoryMiddleware(self._personal_memory, self._owner)]
                           if self._personal_memory is not None else [])
             if self._chat_assets is not None:
+                middleware.append(_ChatSkillToolAdmission(self._chat_assets))
                 middleware.append(_InteractiveCardStop(self._chat_assets))
             validators = {
                 "use_skill": UseSkillModelArgs.model_validate,
