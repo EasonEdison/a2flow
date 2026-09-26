@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, cast
 
 import grpc
 import pytest
@@ -145,13 +146,13 @@ def build_json() -> JsonObject:
                 ],
                 "failureResultAdapters": [],
                 "businessSuccessPredicate": {
-                    "version": "v1",
+                    "version": "JSON_POINTER_V1",
                     "allOf": [
                         {
                             "source": "CAPABILITY_DATA",
-                            "sourcePath": "/ok",
+                            "sourcePath": "/decisionType",
                             "operator": "EQUALS",
-                            "expectedValue": True,
+                            "expectedValue": "READING",
                         }
                     ],
                 },
@@ -191,7 +192,10 @@ class Capabilities:
             context.environment,
             context.environment,
             context.request_id,
-            {"ok": True, "greeting": f"hello {arguments['name']}"},
+            {
+                "decisionType": "READING",
+                "greeting": f"hello {arguments['name']}",
+            },
         )
 
 
@@ -242,6 +246,27 @@ def test_activate_and_action_preserve_release_session_and_trusted_child_request(
     assert result.snapshot[-1]["updateDataModel"]["value"] == {"greeting": "hello A2Flow"}  # type: ignore[index]
     assert capabilities.calls[0][1] == {"name": "A2Flow"}
     assert capabilities.calls[0][2].request_id.startswith("a2ui:")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("version", "v1"),
+        ("source", "TRUSTED_CONTEXT"),
+        ("operator", "CONTAINS"),
+    ),
+)
+def test_invalid_business_predicate_dialect_is_rejected_while_loading_publication(
+    field: str, value: str
+) -> None:
+    raw = cast(dict[str, Any], build_json())
+    predicate = raw["actionBindings"][0]["businessSuccessPredicate"]
+    if field == "version":
+        predicate[field] = value
+    else:
+        predicate["allOf"][0][field] = value
+    with pytest.raises(ValueError):
+        ApplicationBuild.model_validate(raw)
 
 
 def test_act_rejects_authority_input_before_capability() -> None:

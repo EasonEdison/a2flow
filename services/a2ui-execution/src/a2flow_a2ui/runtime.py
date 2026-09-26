@@ -30,6 +30,9 @@ from .models import (
     ActionBinding,
     ApplicationBuild,
     BusinessPredicate,
+    BusinessPredicateOperator,
+    BusinessPredicateSource,
+    BusinessPredicateVersion,
     CapabilityInvoker,
     EmittedActionDeclaration,
     ExecutionSummary,
@@ -347,28 +350,28 @@ def _predicate(predicate: BusinessPredicate | None, result: ExecutionResult) -> 
         return False
     if predicate is None:
         return True
-    if predicate.version != "v1":
+    if predicate.version is not BusinessPredicateVersion.JSON_POINTER_V1:
         raise A2uiError("A2UI_BUSINESS_PREDICATE_INVALID")
     for clause in predicate.all_of:
-        if clause.source != "CAPABILITY_DATA":
+        if clause.source is not BusinessPredicateSource.CAPABILITY_DATA:
             raise A2uiError("A2UI_BUSINESS_PREDICATE_INVALID")
         lookup = read(result.data, clause.source_path)
         if not lookup.found or lookup.value is None:
             return False
-        if clause.operator == "EQUALS":
+        if clause.operator is BusinessPredicateOperator.EQUALS:
             actual, expected = lookup.value, clause.expected_value
             if type(actual) in {int, float} and type(expected) in {int, float}:
                 matched = Decimal(str(actual)) == Decimal(str(expected))
             else:
                 matched = actual == expected
-        elif clause.operator == "GREATER_THAN":
+        elif clause.operator is BusinessPredicateOperator.GREATER_THAN:
             if type(lookup.value) not in {int, float} or type(clause.expected_value) not in {
                 int,
                 float,
             }:
                 return False
             matched = Decimal(str(lookup.value)) > Decimal(str(clause.expected_value))
-        elif clause.operator == "IS_ARRAY":
+        elif clause.operator is BusinessPredicateOperator.IS_ARRAY:
             if clause.expected_value is not True:
                 raise A2uiError("A2UI_BUSINESS_PREDICATE_INVALID")
             matched = isinstance(lookup.value, list)
