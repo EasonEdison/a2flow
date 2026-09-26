@@ -98,6 +98,7 @@ def test_context_wire_compatibility_ignores_unrelated_protocol_changes() -> None
         for item in message.field:
             item.json_name = runtime.fields_by_name[item.name].json_name
     context = bundle.file[0].message_type[0]
+    context.field[0].name = "renamed_identity"
     context.field[0].json_name = "platformUser"
     context.field.add(name="extra_context", number=99, type=9)
     bundle.file[0].message_type.add(name="UnrelatedMessage")
@@ -182,7 +183,13 @@ def test_real_rpc_transport_and_rejection_before_dispatch() -> None:
                 request_id="transport-test",
                 client="PC",
             )
-            result = transport.execute(Plan(), {"title": "reading"}, ctx)
+            bundle = descriptor_pb2.FileDescriptorSet.FromString(base64.b64decode(descriptor()))
+            bundle.file[0].message_type[0].field[0].name = "renamed_identity"
+            bundle.file[0].message_type[0].field[0].json_name = "platformUser"
+            compatible_plan = replace(
+                Plan(), descriptor_set_base64=base64.b64encode(bundle.SerializeToString()).decode()
+            )
+            result = transport.execute(compatible_plan, {"title": "reading"}, ctx)
             assert isinstance(result, dict)
             assert result["id"] == str(2**63 - 1) and result["title"] == "reading"
             assert service.user_id == 2**63 - 1 and service.calls == 1
