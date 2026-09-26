@@ -82,6 +82,8 @@ import dev.a2flow.management.a2ui.application.A2uiShowTemplateAnalyzer.ShowFacts
 import dev.a2flow.management.a2ui.catalog.A2uiCatalogModels.A2uiCatalogComponentContract;
 import dev.a2flow.management.a2ui.registry.A2uiComponentOriginType;
 import dev.a2flow.management.release.ReleaseEnvironment;
+import dev.a2flow.management.skillfactory.a2ui.A2uiOfficialComponentSchemaValidator;
+import dev.a2flow.management.skillfactory.a2ui.A2uiOfficialComponentSchemaValidator.ValidationException;
 
 /**
  * A2UI Application canonical draft 到不可变 Build 的纯领域 compiler。
@@ -138,6 +140,8 @@ public class A2uiApplicationBuildCompiler {
 
     private final A2uiBuildIdGenerator buildIdGenerator;
     private final A2uiShowTemplateAnalyzer showTemplateAnalyzer = new A2uiShowTemplateAnalyzer();
+    private final A2uiOfficialComponentSchemaValidator officialComponentValidator =
+            new A2uiOfficialComponentSchemaValidator();
     private final A2uiApplicationParamsSchemaValidator paramsSchemaValidator =
             new A2uiApplicationParamsSchemaValidator();
     private final A2uiApplicationActionScanService actionScanService =
@@ -188,13 +192,20 @@ public class A2uiApplicationBuildCompiler {
         List<A2uiCompiledLoadBinding> loadBindings = compileLoadBindings(
                 draft.getLoadBindings(), currentCapabilities,
                 draft.getShowTemplate().getParamsSchema());
+        List<Map<String, Object>> resolvedComponentMessages = componentMessages(
+                draft, actionBindings, loadBindings);
         validateResultTransformComponentClosure(
                 draft.getShowTemplate().getMessageTemplates(), actionBindings, loadBindings);
-        List<String> componentTypes = componentCollector.collect(
-                componentMessages(draft, actionBindings, loadBindings));
+        List<String> componentTypes = componentCollector.collect(resolvedComponentMessages);
         validateCatalogClosure(draft, catalogComponents, componentTypes);
         Map<String, A2uiComponentOriginType> componentOrigins = compileComponentOrigins(
                 catalogComponents, componentTypes);
+        try {
+            officialComponentValidator.validateMessages(
+                    resolvedComponentMessages, componentOrigins);
+        } catch (ValidationException exception) {
+            throw failure(DRAFT_INVALID);
+        }
         List<A2uiCapabilitySchemaAudit> capabilitySchemaAudits = compileCapabilityAudits(
                 draft, currentCapabilities);
         List<A2uiCompiledShowInputBinding> inputBindings = compileInputBindings(

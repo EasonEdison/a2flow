@@ -14,6 +14,8 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiApplicat
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledShowInputBinding;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowInputSource;
 import dev.a2flow.management.a2ui.runtime.show.A2uiJsonPointerValueMapper.LookupValue;
+import dev.a2flow.management.skillfactory.a2ui.A2uiOfficialComponentSchemaValidator;
+import dev.a2flow.management.skillfactory.a2ui.A2uiOfficialComponentSchemaValidator.ValidationException;
 
 /**
  * A2Flow A2UI Application 首屏 ShowTemplate 渲染器。
@@ -43,11 +45,13 @@ public class A2uiApplicationShowRenderer {
     private final A2uiJsonSchemaSubsetValidator schemaValidator;
     private final A2uiJsonPointerValueMapper valueMapper;
     private final A2uiMessageSnapshotReducer messageReducer;
+    private final A2uiOfficialComponentSchemaValidator officialComponentValidator;
 
     public A2uiApplicationShowRenderer() {
         this.schemaValidator = new A2uiJsonSchemaSubsetValidator();
         this.valueMapper = new A2uiJsonPointerValueMapper();
         this.messageReducer = new A2uiMessageSnapshotReducer();
+        this.officialComponentValidator = new A2uiOfficialComponentSchemaValidator();
     }
 
     /**
@@ -71,6 +75,12 @@ public class A2uiApplicationShowRenderer {
         // 严格按发布顺序把APP_PARAMS、TRUSTED_CONTEXT或CONSTANT写到指定消息JSON Pointer。
         for (A2uiCompiledShowInputBinding binding : artifact.getInputBindings()) {
             applyBinding(messages, params, trustedValues, binding);
+        }
+        try {
+            officialComponentValidator.validateMessages(
+                    messages, artifact.getCatalog().getComponentOrigins());
+        } catch (ValidationException exception) {
+            throw new RenderException(Code.MESSAGE_INVALID, ERROR_MESSAGE_INVALID, exception);
         }
         try {
             // 在空Ledger上整批回放，确保createSurface、组件树和data model能够自包含恢复。

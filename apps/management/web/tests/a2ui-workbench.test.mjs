@@ -21,18 +21,18 @@ const surface = {
     properties: {
       prompt: { type: 'string' },
       options: { type: 'array' },
-      selection: { type: 'string' },
+      selection: { type: 'array' },
     },
   },
   components: [
     { id: 'root', component: 'Column', children: ['prompt', 'choice', 'confirm'], extension: { keep: true } },
     { id: 'prompt', component: 'Text', text: { path: '/prompt' }, unknown: 1 },
-    { id: 'choice', component: 'ChoicePicker', options: { path: '/options' }, value: { path: '/selection' }, variant: 'mutuallyExclusive' },
+    { id: 'choice', component: 'ChoicePicker', options: [{ label: 'One', value: 'one' }], value: { path: '/selection' }, variant: 'mutuallyExclusive' },
     { id: 'confirm', component: 'Button', label: 'Confirm', action: { event: { name: 'confirm', context: { selection: { path: '/selection' }, safe: { literal: true } } } } },
   ],
 };
 
-const sample = { prompt: 'Choose', options: [{ label: 'One', value: 'one' }], selection: 'one' };
+const sample = { prompt: 'Choose', options: [{ label: 'One', value: 'one' }], selection: ['one'] };
 
 test('analyzes hierarchy and reports duplicate and dangling ids without rewriting data', () => {
   const malformed = structuredClone(surface);
@@ -72,6 +72,7 @@ test('component edits preserve malformed ancestors for full JSON repair', () => 
 
 test('add remove and reorder follow the flat component contract without reference repair', () => {
   const added = addComponent(surface, 'Text');
+  assert.deepEqual(addComponent(surface, 'ChoicePicker').components.at(-1).options, []);
   assert.equal(added.components.at(-1).component, 'Text');
   assert.equal(new Set(added.components.map((item) => item.id)).size, added.components.length);
   const moved = moveComponent(added, added.components.length - 1, -1);
@@ -94,7 +95,7 @@ test('safe preview renders supported components and bounds action simulation', (
   assert.equal(preview.root.children[0].value, 'Choose');
   assert.equal(preview.root.children[1].options[0].label, 'One');
   const event = simulateAction(surface, 'confirm', sample);
-  assert.deepEqual(event, { simulated: true, componentId: 'confirm', name: 'confirm', arguments: { selection: 'one', safe: true } });
+  assert.deepEqual(event, { simulated: true, componentId: 'confirm', name: 'confirm', arguments: { selection: ['one'], safe: true } });
 });
 
 test('safe preview refuses unsupported, invalid, oversized and dangerous content', () => {
@@ -112,7 +113,8 @@ test('preview reports malformed component bindings and actions without throwing'
     ['Text', 'text', '/prompt', 'INVALID_TEXT_BINDING'],
     ['Text', 'text', [], 'INVALID_TEXT_BINDING'],
     ['Text', 'text', {}, 'INVALID_TEXT_BINDING'],
-    ['ChoicePicker', 'options', null, 'INVALID_OPTIONS_BINDING'],
+    ['ChoicePicker', 'options', null, 'INVALID_OPTIONS'],
+    ['ChoicePicker', 'options', { path: '/options' }, 'INVALID_OPTIONS'],
     ['ChoicePicker', 'value', '/selection', 'INVALID_VALUE_BINDING'],
   ];
   for (const [componentType, field, malformed, code] of cases) {
