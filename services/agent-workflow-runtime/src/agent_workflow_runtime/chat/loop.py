@@ -5,6 +5,8 @@ Durable conversation migration is a separate assembly concern.
 """
 
 import asyncio
+from dataclasses import dataclass
+from typing import Final
 from uuid import uuid4
 
 from langchain.agents.middleware import AgentMiddleware, hook_config
@@ -14,6 +16,8 @@ from skillweave_contracts.models import (
 )
 
 from ..assembly import build_agent
+from ..deepseek_model import DeepSeekProtocolError
+from ..models import ActionRejected
 from ..service import require_owner
 from .events import DONE, ERROR, ListEmitter, TEXT_DELTA, TOOL_CALL
 from .tools import (
@@ -24,6 +28,45 @@ from .tools import (
     UseSkillModelArgs,
     build_chat_tools,
 )
+
+
+_GENERIC_TURN_ERROR: Final[str] = "MODEL_STREAM_FAILED"
+_SAFE_ACTION_REJECTION_CODES: Final[frozenset[str]] = frozenset({"ARGUMENT_INVALID"})
+_SAFE_PROVIDER_PROTOCOL_CODES: Final[frozenset[str]] = frozenset({
+    "DUPLICATE_TOOL_ARGUMENT",
+})
+
+
+@dataclass(frozen=True, slots=True)
+class _TurnFailure:
+    """Transport-safe failure projection; never carries exception text."""
+
+    code: str
+    reason: str
+
+
+def _provider_protocol_code(error: DeepSeekProtocolError) -> str | None:
+    """Read the provider's fixed code without stringifying arbitrary details."""
+
+    if len(error.args) != 1 or type(error.args[0]) is not str:
+        return None
+    code = error.args[0]
+    return code if code in _SAFE_PROVIDER_PROTOCOL_CODES else None
+
+
+def _classify_turn_failure(error: Exception) -> _TurnFailure:
+    """Expose only explicitly reviewed stable codes; all else stays generic."""
+
+    if (
+        isinstance(error, ActionRejected)
+        and error.code in _SAFE_ACTION_REJECTION_CODES
+    ):
+        return _TurnFailure(error.code, "ActionRejected")
+    if isinstance(error, DeepSeekProtocolError):
+        code = _provider_protocol_code(error)
+        if code is not None:
+            return _TurnFailure(code, "DeepSeekProtocolError")
+    return _TurnFailure(_GENERIC_TURN_ERROR, type(error).__name__)
 
 
 class ChatLoopError(Exception):
@@ -249,9 +292,11 @@ class ChatLoop:
             self._emitter.emit(DONE, {"content": final})
             return final
         except Exception as exc:
-            self._emitter.emit(ERROR, {"code": "MODEL_STREAM_FAILED",
-                                       "reason": type(exc).__name__})
-            raise ChatLoopError("MODEL_STREAM_FAILED") from exc
+            failure = _classify_turn_failure(exc)
+            self._emitter.emit(
+                ERROR, {"code": failure.code, "reason": failure.reason},
+            )
+            raise ChatLoopError(failure.code) from exc
         finally:
             _EMITTER.reset(token)
             if model is not None:

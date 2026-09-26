@@ -31,6 +31,8 @@ from agent_workflow_runtime.chat import (
     TOOL_CALL,
     WORKFLOW_CONFIRM,
 )
+from agent_workflow_runtime.deepseek_model import DeepSeekProtocolError
+from agent_workflow_runtime.models import ActionRejected
 
 OWNER = TrustedContext(user_id=1009, environment="PRT")
 
@@ -88,11 +90,22 @@ def skill_material():
 class FakeModel(BaseChatModel):
     rounds: list
     raise_on_stream: bool = False
+    protocol_error_code: str | None = None
     tools: list = Field(default_factory=list)
     observed: list = Field(default_factory=list)
 
-    def __init__(self, chunks, *, raise_on_stream=False):
-        super().__init__(rounds=[list(chunks)], raise_on_stream=raise_on_stream)
+    def __init__(
+        self,
+        chunks: list[AIMessageChunk],
+        *,
+        raise_on_stream: bool = False,
+        protocol_error_code: str | None = None,
+    ) -> None:
+        super().__init__(
+            rounds=[list(chunks)],
+            raise_on_stream=raise_on_stream,
+            protocol_error_code=protocol_error_code,
+        )
 
     @property
     def configuration(self):
@@ -112,7 +125,9 @@ class FakeModel(BaseChatModel):
     def _stream(self, messages, stop=None, run_manager=None, **kwargs):
         self.observed.append(list(messages))
         if self.raise_on_stream:
-            raise RuntimeError("provider down")
+            raise RuntimeError("provider down with secret-input")
+        if self.protocol_error_code is not None:
+            raise DeepSeekProtocolError(self.protocol_error_code)
         for chunk in self.rounds.pop(0):
             yield ChatGenerationChunk(message=chunk)
 
@@ -129,6 +144,30 @@ class FakeFactory:
             model.rounds.extend(remaining.rounds)
         self.models.clear()
         return model
+
+
+class RejectingChatAssets:
+    def __init__(self, code: str) -> None:
+        self.code = code
+        self.dispatches = 0
+
+    def begin_turn(self) -> None:
+        return None
+
+    def waiting_action(self) -> None:
+        return None
+
+    def validate_context(self, context: object) -> None:
+        del context
+
+    def execute_ability(
+        self,
+        ability_key: str,
+        arguments: dict[str, object],
+    ) -> dict[str, object]:
+        del ability_key, arguments
+        self.dispatches += 1
+        raise ActionRejected(self.code)
 
 
 def tool_call_chunk(index, call_id, name, args_text):
@@ -280,6 +319,121 @@ class UseSkillConversationScopeTests(unittest.TestCase):
 
 
 class ErrorBoundaryTests(unittest.TestCase):
+    @staticmethod
+    def _ability_call(call_id: str) -> AIMessageChunk:
+        return AIMessageChunk(
+            content="",
+            tool_call_chunks=[tool_call_chunk(
+                0,
+                call_id,
+                "execute_ability",
+                json.dumps({
+                    "abilityKey": "demo.invalid",
+                    "arguments": {"secret": "never-emit-this-argument"},
+                }),
+            )],
+        )
+
+    def test_allowlisted_tool_argument_rejection_stops_without_redispatch(self) -> None:
+        emitter = ListEmitter()
+        assets = RejectingChatAssets("ARGUMENT_INVALID")
+        factory = FakeFactory([
+            FakeModel([self._ability_call("invalid-1")]),
+            FakeModel([self._ability_call("must-not-dispatch")]),
+        ])
+        loop = ChatLoop(
+            model_factory=factory,
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id="conv1",
+            reader=FakeMaterialPort(skill_material()),
+            control_request_id="chatctrl1",
+            emitter=emitter,
+            chat_assets=assets,
+        )
+
+        with self.assertRaises(ChatLoopError) as raised:
+            loop.turn("call the ability")
+
+        self.assertEqual("ARGUMENT_INVALID", str(raised.exception))
+        self.assertEqual(1, assets.dispatches)
+        self.assertEqual(
+            {"code": "ARGUMENT_INVALID", "reason": "ActionRejected"},
+            emitter.events[-1][1],
+        )
+        self.assertNotIn("never-emit-this-argument", str(emitter.events))
+        self.assertNotIn("never-emit-this-argument", str(raised.exception))
+
+    def test_unallowlisted_action_rejection_remains_generic(self) -> None:
+        emitter = ListEmitter()
+        assets = RejectingChatAssets("PRIVATE_secret-input")
+        loop = ChatLoop(
+            model_factory=FakeFactory([FakeModel([
+                self._ability_call("private-rejection"),
+            ])]),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id="conv1",
+            reader=FakeMaterialPort(skill_material()),
+            control_request_id="chatctrl1",
+            emitter=emitter,
+            chat_assets=assets,
+        )
+
+        with self.assertRaises(ChatLoopError) as raised:
+            loop.turn("call the ability")
+
+        self.assertEqual(1, assets.dispatches)
+        self.assertEqual("MODEL_STREAM_FAILED", str(raised.exception))
+        self.assertEqual("MODEL_STREAM_FAILED", emitter.events[-1][1]["code"])
+        self.assertNotIn("PRIVATE_secret-input", str(emitter.events))
+        self.assertNotIn("PRIVATE_secret-input", str(raised.exception))
+
+    def test_allowlisted_provider_protocol_rejection_is_specific_and_terminal(self) -> None:
+        emitter = ListEmitter()
+        loop = ChatLoop(
+            model_factory=FakeFactory([FakeModel(
+                [], protocol_error_code="DUPLICATE_TOOL_ARGUMENT",
+            )]),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id="conv1",
+            reader=FakeMaterialPort(skill_material()),
+            control_request_id="chatctrl1",
+            emitter=emitter,
+        )
+
+        with self.assertRaises(ChatLoopError) as raised:
+            loop.turn("hello")
+
+        self.assertEqual("DUPLICATE_TOOL_ARGUMENT", str(raised.exception))
+        self.assertEqual(
+            {"code": "DUPLICATE_TOOL_ARGUMENT", "reason": "DeepSeekProtocolError"},
+            emitter.events[-1][1],
+        )
+
+    def test_unallowlisted_provider_code_remains_generic(self) -> None:
+        emitter = ListEmitter()
+        loop = ChatLoop(
+            model_factory=FakeFactory([FakeModel(
+                [], protocol_error_code="PRIVATE_secret-input",
+            )]),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id="conv1",
+            reader=FakeMaterialPort(skill_material()),
+            control_request_id="chatctrl1",
+            emitter=emitter,
+        )
+
+        with self.assertRaises(ChatLoopError) as raised:
+            loop.turn("hello")
+
+        self.assertEqual("MODEL_STREAM_FAILED", str(raised.exception))
+        self.assertEqual("MODEL_STREAM_FAILED", emitter.events[-1][1]["code"])
+        self.assertNotIn("PRIVATE_secret-input", str(emitter.events))
+        self.assertNotIn("PRIVATE_secret-input", str(raised.exception))
+
     def test_forged_runtime_argument_is_rejected_before_tool(self):
         reader = FakeMaterialPort(skill_material())
         first = FakeModel([AIMessageChunk(
@@ -335,6 +489,7 @@ class ErrorBoundaryTests(unittest.TestCase):
             loop.turn("你好")
         self.assertEqual(ERROR, emitter.events[-1][0])
         self.assertEqual("MODEL_STREAM_FAILED", emitter.events[-1][1]["code"])
+        self.assertNotIn("secret-input", str(emitter.events))
 
     def test_empty_message_rejected(self):
         loop = ChatLoop(
