@@ -2,11 +2,22 @@ import { parseView } from './api/contracts';
 import { toView } from './api/adapter';
 import type { RunView } from './presentation';
 import { readChatStream } from './chatStream.mjs';
+import { persistedChatErrorCode } from './errorPresentation';
 
 export type Session = { userId: string; username: string; role: string };
 export type Conversation = { id: string; title: string; updatedAt: string };
 export type ChatEvent = { type: 'workflow_confirm'; workflowKey: string; title: string } | { type: 'interaction_required'; runId: string };
-export type Message = { id: string; role: 'user' | 'assistant'; text: string; createdAt: string; event?: ChatEvent; delivery?: string; reasoning?: string; tools?: string[] };
+export type Message = {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  createdAt: string;
+  event?: ChatEvent;
+  delivery?: string;
+  errorCode?: string;
+  reasoning?: string;
+  tools?: string[];
+};
 export type ChatStreamEvent = { type: string; sequence: number; messageId: string; inputMessageId: string; text?: string; tool?: string; code?: string; workflowKey?: string; title?: string; runId?: string };
 export type Workflow = { key: string; name: string; description: string; inputHint: string };
 export type RunItem = { id: string; workflowKey: string; title: string; status: string; input: string; createdAt: string };
@@ -176,6 +187,7 @@ export const productApi = {
     return {
       items: (payload.messages ?? []).map((row) => {
         const event = contentEvent(row.content) ?? refEvent(row);
+        const errorCode = persistedChatErrorCode(row.content);
         return {
           id: idOf(row.id),
           role: row.role === 'user' ? 'user' as const : 'assistant' as const,
@@ -185,6 +197,7 @@ export const productApi = {
           tools: Array.isArray((row.content as Row)?.tools) ? ((row.content as Row).tools as unknown[]).filter((value): value is string => typeof value === 'string') : [],
           createdAt: textOf(row.createdAt),
           ...(event ? { event } : {}),
+          ...(errorCode ? { errorCode } : {}),
         };
       }),
     };

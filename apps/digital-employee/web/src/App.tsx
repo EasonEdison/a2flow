@@ -6,6 +6,7 @@ import { MemorySettingsPage } from './components/MemorySettingsPage';
 import { ChatApplications } from './components/ChatApplications';
 import './chat.css';
 import { FixturePreview } from './FixturePreview';
+import { chatErrorPresentation } from './errorPresentation';
 import { apiErrorMessage, productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
@@ -158,7 +159,11 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
             if (event.type === 'reasoning_delta') return { ...item, reasoning: (item.reasoning ?? '') + (event.text ?? '') };
             if (event.type === 'tool_call') return { ...item, tools: [...(item.tools ?? []), event.tool ?? '工具'] };
             if (event.type === 'done') return { ...item, delivery: 'completed' };
-            if (event.type === 'error') return { ...item, delivery: 'unconfirmed' };
+            if (event.type === 'error') return {
+              ...item,
+              delivery: 'unconfirmed',
+              errorCode: event.code,
+            };
             // Confirmations become actionable only through the saved history.
             return item;
           });
@@ -176,7 +181,7 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
     {error ? <p className="chat-error" role="alert">{error}</p> : null}</header>
     <div className="message-flow" ref={flowRef}>{messages.map(message => <article className={`message ${message.role}`} key={message.id}><span>{message.role === 'user' ? '你' : 'AI'}</span><div>
       {message.delivery ? <small>{message.delivery === 'waiting_action' ? '已交给卡片交互 · 以卡片状态为准' : message.delivery === 'completed' ? '已完成' : message.delivery === 'failed' ? '执行失败 · 未自动重试' : message.delivery === 'running' ? (busy ? '执行中' : '执行中或状态待确认 · 正在读取保存的进度') : message.delivery === 'unconfirmed' ? '结果待确认' : ''}</small> : null}
-      {message.reasoning || message.tools?.length ? <details key={`${message.id}-${message.delivery === 'running'}`} open={message.delivery === 'running'}><summary>执行详情 · {message.tools?.length ?? 0} 次工具调用</summary>{message.reasoning ? <MarkdownContent markdown={message.reasoning} /> : null}{message.tools?.map((tool, index) => <p key={index}>调用工具：{tool}</p>)}</details> : null}
+      {message.reasoning || message.tools?.length || message.delivery === 'failed' ? <details key={`${message.id}-${message.delivery === 'running'}`} open={message.delivery === 'running'}><summary>执行详情 · {message.tools?.length ?? 0} 次工具调用</summary>{message.delivery === 'failed' ? <p>失败原因：{chatErrorPresentation(message.errorCode)}</p> : null}{message.reasoning ? <MarkdownContent markdown={message.reasoning} /> : null}{message.tools?.map((tool, index) => <p key={index}>调用工具：{tool}</p>)}</details> : null}
       <MarkdownContent markdown={message.text} />
       {message.event?.type === 'workflow_confirm' && (!message.delivery || message.delivery === 'completed') ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><button className="primary" onClick={async () => {
         try { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', '来自对话的工作请求'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }
