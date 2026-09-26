@@ -74,7 +74,7 @@ def test_registered_descriptor_rejections() -> None:
         registered_method(replace(Plan(), context_field="title"))
     bundle = descriptor_pb2.FileDescriptorSet()
     bundle.file.add().ParseFromString(content.DESCRIPTOR.serialized_pb)
-    with pytest.raises(TransportError, match="EXACT_PLATFORM_CONTEXT_REQUIRED"):
+    with pytest.raises(TransportError, match="DESCRIPTOR_DEPENDENCY_INVALID"):
         registered_method(
             replace(
                 Plan(), descriptor_set_base64=base64.b64encode(bundle.SerializeToString()).decode()
@@ -91,12 +91,17 @@ def test_endpoints_fail_closed() -> None:
         Endpoint("https://example.com", 5000)
 
 
-def test_standard_protoc_json_names_preserve_strict_authority() -> None:
+def test_context_wire_compatibility_ignores_unrelated_protocol_changes() -> None:
     bundle = descriptor_pb2.FileDescriptorSet.FromString(base64.b64decode(descriptor()))
     for message in bundle.file[0].message_type:
         runtime = cap.DESCRIPTOR.message_types_by_name[message.name]
         for item in message.field:
             item.json_name = runtime.fields_by_name[item.name].json_name
+    context = bundle.file[0].message_type[0]
+    context.field[0].json_name = "platformUser"
+    context.field.add(name="extra_context", number=99, type=9)
+    bundle.file[0].message_type.add(name="UnrelatedMessage")
+    bundle.file[0].service.clear()
     standard = bundle.SerializeToString()
     assert registered_method(
         replace(Plan(), descriptor_set_base64=base64.b64encode(standard).decode())
@@ -104,13 +109,12 @@ def test_standard_protoc_json_names_preserve_strict_authority() -> None:
     # Normalization must not alter the submitted descriptor.
     assert bundle.SerializeToString() == standard
     for attribute, value in (
-        ("json_name", "untrustedIdentity"),
         ("number", 999),
         ("type", descriptor_pb2.FieldDescriptorProto.TYPE_STRING),
     ):
         changed = descriptor_pb2.FileDescriptorSet.FromString(standard)
         setattr(changed.file[0].message_type[0].field[0], attribute, value)
-        with pytest.raises(TransportError, match="EXACT_PLATFORM_CONTEXT_REQUIRED"):
+        with pytest.raises(TransportError, match="INCOMPATIBLE_EXECUTION_CONTEXT"):
             registered_method(replace(
                 Plan(), descriptor_set_base64=base64.b64encode(changed.SerializeToString()).decode()
             ))
@@ -120,13 +124,45 @@ def test_modified_platform_context_and_streaming_are_rejected() -> None:
     bundle = descriptor_pb2.FileDescriptorSet.FromString(base64.b64decode(descriptor()))
     bundle.file[0].message_type[0].field[0].type = descriptor_pb2.FieldDescriptorProto.TYPE_STRING
     tampered = base64.b64encode(bundle.SerializeToString()).decode()
-    with pytest.raises(TransportError, match="EXACT_PLATFORM_CONTEXT_REQUIRED"):
+    with pytest.raises(TransportError, match="INCOMPATIBLE_EXECUTION_CONTEXT"):
         registered_method(replace(Plan(), descriptor_set_base64=tampered))
     bundle = descriptor_pb2.FileDescriptorSet.FromString(base64.b64decode(descriptor()))
     bundle.file[1].service[0].method[0].server_streaming = True
     streaming = base64.b64encode(bundle.SerializeToString()).decode()
     with pytest.raises(TransportError, match="REGISTERED_UNARY_CONTEXT_REQUIRED"):
         registered_method(replace(Plan(), descriptor_set_base64=streaming))
+
+
+@pytest.mark.parametrize("change", ["missing", "repeated", "oneof", "environment"])
+def test_injected_context_incompatible_fields_are_rejected(change: str) -> None:
+    bundle = descriptor_pb2.FileDescriptorSet.FromString(base64.b64decode(descriptor()))
+    context = bundle.file[0].message_type[0]
+    if change == "missing":
+        del context.field[0]
+        # Remove the now-unused synthetic optional oneof too.
+        context.ClearField("oneof_decl")
+    elif change == "repeated":
+        context.field[0].ClearField("oneof_index")
+        context.field[0].ClearField("proto3_optional")
+        context.ClearField("oneof_decl")
+        context.field[0].label = descriptor_pb2.FieldDescriptorProto.LABEL_REPEATED
+    elif change == "oneof":
+        index = len(context.oneof_decl)
+        context.oneof_decl.add(name="exclusive_platform_fields")
+        context.field[2].oneof_index = index
+        context.field[3].oneof_index = index
+        # Real oneofs must precede synthetic ones in a valid proto3 descriptor.
+        context.oneof_decl.reverse()
+        for item in context.field:
+            if item.HasField("oneof_index"):
+                item.oneof_index = index - item.oneof_index
+    else:
+        environment = next(item for item in bundle.file[0].enum_type if item.name == "Environment")
+        next(item for item in environment.value if item.name == "PRT").number = 99
+    with pytest.raises(TransportError, match="INCOMPATIBLE_EXECUTION_CONTEXT"):
+        registered_method(replace(
+            Plan(), descriptor_set_base64=base64.b64encode(bundle.SerializeToString()).decode()
+        ))
 
 
 def test_real_rpc_transport_and_rejection_before_dispatch() -> None:

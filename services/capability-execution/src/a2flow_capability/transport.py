@@ -93,51 +93,31 @@ class Endpoint:
         return grpc.secure_channel(target, credentials, options=options)
 
 
-def _normalize_canonical_json_names(
-    candidate: descriptor_pb2.DescriptorProto,
-    authority: descriptor_pb2.DescriptorProto,
-    runtime: Descriptor,
-) -> None:
-    """Ignore only protoc's redundant explicit default JSON names.
+def _validate_injected_context(context: Descriptor) -> None:
+    """Check only fields written by the platform, not the whole protocol.
 
-    The final full descriptor comparison still rejects custom JSON names and
-    any changes to field types, numbers, options, dependencies or services.
+    Extra fields, messages, methods and JSON-name metadata are irrelevant.
+    Field numbers/types and environment values must retain their wire meaning.
     """
-    fields = {field.name: field for field in authority.field}
-    for field in candidate.field:
-        expected = fields.get(field.name)
-        runtime_field = runtime.fields_by_name.get(field.name)
+    authority = cap.ExecutionContext.DESCRIPTOR
+    for name in ("user_id", "environment", "request_id", "client"):
+        field = context.fields_by_name.get(name)
+        expected = authority.fields_by_name[name]
         if (
-            expected is not None
-            and runtime_field is not None
-            and not expected.HasField("json_name")
-            and field.HasField("json_name")
-            and field.json_name == runtime_field.json_name
+            field is None
+            or field.number != expected.number
+            or field.type != expected.type
+            or field.is_repeated
+            or (field.containing_oneof is not None and len(field.containing_oneof.fields) > 1)
         ):
-            field.ClearField("json_name")
-    nested = {message.name: message for message in authority.nested_type}
-    for message in candidate.nested_type:
-        expected_message = nested.get(message.name)
-        runtime_message = runtime.nested_types_by_name.get(message.name)
-        if expected_message is not None and runtime_message is not None:
-            _normalize_canonical_json_names(message, expected_message, runtime_message)
-
-
-def _matches_platform_descriptor(
-    candidate: descriptor_pb2.FileDescriptorProto | None,
-    authority: descriptor_pb2.FileDescriptorProto,
-) -> bool:
-    if candidate is None:
-        return False
-    normalized = descriptor_pb2.FileDescriptorProto()
-    normalized.CopyFrom(candidate)
-    messages = {message.name: message for message in authority.message_type}
-    for message in normalized.message_type:
-        expected = messages.get(message.name)
-        runtime = cap.DESCRIPTOR.message_types_by_name.get(message.name)
-        if expected is not None and runtime is not None:
-            _normalize_canonical_json_names(message, expected, runtime)
-    return normalized == authority
+            raise TransportError("INCOMPATIBLE_EXECUTION_CONTEXT")
+    environment = context.fields_by_name["environment"].enum_type
+    expected_environment = authority.fields_by_name["environment"].enum_type
+    assert expected_environment is not None
+    for name in ("PRT", "ONLINE"):
+        value = environment.values_by_name.get(name) if environment is not None else None
+        if value is None or value.number != expected_environment.values_by_name[name].number:
+            raise TransportError("INCOMPATIBLE_EXECUTION_CONTEXT")
 
 
 def registered_method(plan: RpcPlan) -> MethodDescriptor:
@@ -149,9 +129,6 @@ def registered_method(plan: RpcPlan) -> MethodDescriptor:
         pending = {file.name: file for file in bundle.file}
         if len(pending) != len(bundle.file):
             raise TransportError("DUPLICATE_DESCRIPTOR_FILE")
-        authority = descriptor_pb2.FileDescriptorProto.FromString(cap.DESCRIPTOR.serialized_pb)
-        if not _matches_platform_descriptor(pending.get(authority.name), authority):
-            raise TransportError("EXACT_PLATFORM_CONTEXT_REQUIRED")
         pool = descriptor_pool.DescriptorPool()
         resolved: set[str] = set()
         while pending:
@@ -172,6 +149,7 @@ def registered_method(plan: RpcPlan) -> MethodDescriptor:
             or field.message_type.full_name != "a2flow.capability.v1.ExecutionContext"
         ):
             raise TransportError("REGISTERED_UNARY_CONTEXT_REQUIRED")
+        _validate_injected_context(field.message_type)
         return method
     except TransportError:
         raise
@@ -220,9 +198,9 @@ class GrpcTransport:
         # ParseDict preserves exact integers and rejects unknown business fields.
         payload: JsonObject = dict(business)
         payload[field.json_name] = {
-            "userId": str(context.user_id),
+            "user_id": str(context.user_id),
             "environment": context.environment,
-            "requestId": context.request_id,
+            "request_id": context.request_id,
             "client": context.client,
         }
         try:
