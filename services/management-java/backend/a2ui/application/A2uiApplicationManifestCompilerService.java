@@ -155,7 +155,7 @@ public class A2uiApplicationManifestCompilerService {
         Map<String, A2uiCurrentCapabilityContract> capabilities = currentCapabilityResolver.resolve(
                 referencedActionCodes(draft));
         A2uiApplicationBuild build = compiler.compile(
-                draft, catalogComponents, capabilities, environment);
+                draft, catalogComponents, capabilities, environment, functionContract);
         log.info("A2UI Application发布manifest编译完成, appCode:{}, environment:{}, appBuildId:{}, "
                         + "capabilityCount:{}",
                 assetKey, environment, build.getAppBuildId(), capabilities.size());

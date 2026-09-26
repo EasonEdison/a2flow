@@ -442,6 +442,7 @@ public final class A2uiApplicationModels {
         private String digest;
         private A2uiCatalogSourceType catalogSourceType;
         private Map<String, A2uiComponentOriginType> componentOrigins;
+        private Map<String, Object> functionContract;
     }
 
     @Value
