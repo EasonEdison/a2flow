@@ -78,7 +78,10 @@ public class A2uiApplicationShowRenderer {
         }
         try {
             officialComponentValidator.validateMessages(
-                    messages, artifact.getCatalog().getComponentOrigins());
+                    messages, artifact.getCatalog().getComponentOrigins(),
+                    artifact.getCatalog().getCatalogId(),
+                    artifact.getCatalog().getCatalogSourceType(),
+                    artifact.getCatalog().getFunctionContract());
         } catch (ValidationException exception) {
             throw new RenderException(Code.MESSAGE_INVALID, ERROR_MESSAGE_INVALID, exception);
         }
