@@ -5,12 +5,14 @@
 ## 真实契约
 
 - RPC：`a2flow.content.v1.ContentService` 的 12 个 unary 方法一一对应 `content.*` 能力；所有能力共用由仓库 `content.proto` 编译出的 FileDescriptorSet，但各自固定 `methodName`、输入字段和嵌套 request mapping。
-- 客户端：能力发布合同仍为唯一 `COMMON` variant；真实 dry-run 使用可信客户端 `PC`，由 M 选择该 `COMMON` 合同并把 `PC` 写入 RPC `TrustedContext.client`。`COMMON` 不是运行态客户端身份。
+- 客户端：本场景能力发布合同只支持 `PC` variant，dry-run 也固定使用可信客户端 `PC`，由 M 把 `PC` 写入 RPC `TrustedContext.client`；不依赖 `COMMON` fallback。
 - 组件：复用 B 已注册的 official basic catalog 组件。阅读确认使用 `ChoicePicker(multipleSelection)`；选题在重复候选卡内用按钮提交标量 `topicId`，避免把单选数组错误映射到 protobuf string；稿件编辑使用 `TextField(longText)` 和已真实注册的 `Markdown`。
 - 下载：唯一新增依赖是 B 注册的 `TextDownload`。它只接收 `label/filename/mediaType/content` 和标准 `Checkable` 字段，使用内联 Blob，不接受 URL。
 - 关系：Skill 通过 `SKILL_BINDINGS_REPLACE` 写入能力和 Application 关系；可选 Workflow 使用既有 v2 graph，并由 `WORKFLOW_DRAFT_UPDATE` 重新校验三个 Skill 的专员关系。
 
 稿件 DataModel 将 `draftTitle/draftMarkdown` 与 `savedTitle/savedMarkdown` 分离。保存成功后 adapter 才更新 `savedArtifactId/savedArtifactRevision`，同时原子清空旧 export；确认、导出和下载均用 official `equals/required` checks 阻断未保存内容，下载还核对 export 的 artifact ID/revision 与当前保存身份一致。
+
+创建项目的 `outputFormat` 是内容形态枚举，只允许 `ARTICLE` 或 `SPOKEN_SCRIPT`，与稿件导出格式不是同一概念；当前验收样例固定使用 `ARTICLE`。`SaveArtifact` 的模型输入保持扁平，但 request mapping 会按 `kind` 分别写入 `body.readingBrief`、`body.topicPlan` 或 `body.manuscript`，一次请求只能出现一个 protobuf oneof 分支。
 
 ## 浏览器执行（真实 PRT）
 

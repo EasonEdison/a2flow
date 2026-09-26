@@ -10,6 +10,7 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationManifestCompilerSer
 import dev.a2flow.management.a2ui.catalog
         .A2uiOfficialBasicCatalogImporter.OfficialBasicCatalogSnapshot;
 import dev.a2flow.management.a2ui.registry.A2uiAtomRegistryService;
+import dev.a2flow.management.a2ui.registry.A2uiAtomAuthoringProjection;
 import dev.a2flow.management.a2ui.registry.A2uiComponentOriginType;
 import dev.a2flow.management.a2ui.registry.A2uiRegistryValidationException;
 import dev.a2flow.management.access.AssetAuthorizationService;
@@ -36,6 +37,17 @@ public final class A2uiOfficialCatalogImportTest {
                     atom.getA2uiContract().get("componentOriginType"))) {
                 throw new AssertionError("official atom origin lost");
             }
+            Map<String, Object> projected = A2uiAtomAuthoringProjection.project(atom, Map.of());
+            for (String key : List.of("officialCatalogId", "officialSourceCommit", "officialSchema")) {
+                if (projected.get(key) == null || !projected.get(key).equals(atom.getA2uiContract().get(key))) {
+                    throw new AssertionError("official atom projection lost " + key);
+                }
+            }
+        }
+        ComponentAsset custom = new ComponentAsset().setA2uiContract(Map.of(
+                "componentOriginType", "PLATFORM_CUSTOM", "officialSchema", Map.of("fake", true)));
+        if (A2uiAtomAuthoringProjection.project(custom, Map.of()).containsKey("officialSchema")) {
+            throw new AssertionError("custom atom projected official schema");
         }
 
         A2uiCatalogRegistryService service = new A2uiCatalogRegistryService();

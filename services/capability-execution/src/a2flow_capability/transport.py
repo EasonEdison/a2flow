@@ -14,7 +14,7 @@ from typing import Protocol, cast
 import grpc
 from a2flow.capability.v1 import capability_pb2 as cap
 from google.protobuf import descriptor_pb2, descriptor_pool, json_format, message_factory
-from google.protobuf.descriptor import MethodDescriptor
+from google.protobuf.descriptor import Descriptor, MethodDescriptor
 from google.protobuf.message import DecodeError, Message
 from jsonschema import Draft7Validator
 
@@ -93,6 +93,33 @@ class Endpoint:
         return grpc.secure_channel(target, credentials, options=options)
 
 
+def _validate_injected_context(context: Descriptor) -> None:
+    """Check only fields written by the platform, not the whole protocol.
+
+    Extra fields, messages, methods and JSON-name metadata are irrelevant.
+    Field numbers/types and environment values must retain their wire meaning.
+    """
+    authority = cap.ExecutionContext.DESCRIPTOR
+    for name in ("user_id", "environment", "request_id", "client"):
+        field = context.fields_by_name.get(name)
+        expected = authority.fields_by_name[name]
+        if (
+            field is None
+            or field.number != expected.number
+            or field.type != expected.type
+            or field.is_repeated
+            or (field.containing_oneof is not None and len(field.containing_oneof.fields) > 1)
+        ):
+            raise TransportError("INCOMPATIBLE_EXECUTION_CONTEXT")
+    environment = context.fields_by_name["environment"].enum_type
+    expected_environment = authority.fields_by_name["environment"].enum_type
+    assert expected_environment is not None
+    for name in ("PRT", "ONLINE"):
+        value = environment.values_by_name.get(name) if environment is not None else None
+        if value is None or value.number != expected_environment.values_by_name[name].number:
+            raise TransportError("INCOMPATIBLE_EXECUTION_CONTEXT")
+
+
 def registered_method(plan: RpcPlan) -> MethodDescriptor:
     if len(plan.descriptor_set_base64) > 2_800_000:
         raise TransportError("DESCRIPTOR_TOO_LARGE")
@@ -102,9 +129,6 @@ def registered_method(plan: RpcPlan) -> MethodDescriptor:
         pending = {file.name: file for file in bundle.file}
         if len(pending) != len(bundle.file):
             raise TransportError("DUPLICATE_DESCRIPTOR_FILE")
-        authority = descriptor_pb2.FileDescriptorProto.FromString(cap.DESCRIPTOR.serialized_pb)
-        if pending.get(authority.name) != authority:
-            raise TransportError("EXACT_PLATFORM_CONTEXT_REQUIRED")
         pool = descriptor_pool.DescriptorPool()
         resolved: set[str] = set()
         while pending:
@@ -125,6 +149,7 @@ def registered_method(plan: RpcPlan) -> MethodDescriptor:
             or field.message_type.full_name != "a2flow.capability.v1.ExecutionContext"
         ):
             raise TransportError("REGISTERED_UNARY_CONTEXT_REQUIRED")
+        _validate_injected_context(field.message_type)
         return method
     except TransportError:
         raise
@@ -173,9 +198,9 @@ class GrpcTransport:
         # ParseDict preserves exact integers and rejects unknown business fields.
         payload: JsonObject = dict(business)
         payload[field.json_name] = {
-            "userId": str(context.user_id),
+            "user_id": str(context.user_id),
             "environment": context.environment,
-            "requestId": context.request_id,
+            "request_id": context.request_id,
             "client": context.client,
         }
         try:

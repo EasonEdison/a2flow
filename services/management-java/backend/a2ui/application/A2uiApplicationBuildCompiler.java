@@ -59,6 +59,7 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiled
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledSuccessBranch;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledSurfaceDeclaration;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityContract;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityVariantContract;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiInteractionMode;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiLoadBinding;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiMappingSource;
@@ -104,6 +105,13 @@ public class A2uiApplicationBuildCompiler {
     private static final String FIELD_SOURCE = "source";
     private static final String FIELD_TYPE = "type";
     private static final String SOURCE_MODEL_INPUT = "MODEL_INPUT";
+    private static final String CLIENT_PC = "PC";
+    private static final String CLIENT_APP = "APP";
+    private static final String CLIENT_COMMON = "COMMON";
+    private static final List<String> CLIENT_MODE_PC = List.of(CLIENT_PC);
+    private static final List<String> CLIENT_MODE_APP = List.of(CLIENT_APP);
+    private static final List<String> CLIENT_MODE_DIFFERENT = List.of(CLIENT_PC, CLIENT_APP);
+    private static final List<String> CLIENT_MODE_COMMON = List.of(CLIENT_COMMON);
     private static final String TARGET_REQUEST_WRAPPER = "request";
     private static final String BUSINESS_DATA_ROOT_POINTER = "/data";
     private static final String TYPE_INTEGER = "integer";
@@ -466,7 +474,7 @@ public class A2uiApplicationBuildCompiler {
             validateContextSchema(binding, declaration, contextFieldsByDeclarationKey);
             A2uiCurrentCapabilityContract currentCapability = requireCurrentCapability(
                     binding.getCapability(), currentCapabilities);
-            validateCapabilitySchema(currentCapability, binding.getRequestMappings(), paramsSchema,
+            validateCapabilitySchemas(currentCapability, binding.getRequestMappings(), paramsSchema,
                     binding.getContextSchema());
             List<A2uiCompiledResultAdapter> success = compileAdapters(
                     binding.getSuccessOutcome(), binding.getResultAdapters(), false,
@@ -632,7 +640,7 @@ public class A2uiApplicationBuildCompiler {
             if (currentCapability.getSideEffect() != A2uiSideEffectLevel.READ_ONLY) {
                 throw failure(CAPABILITY_LOAD_SIDE_EFFECT_INVALID);
             }
-            validateCapabilitySchema(currentCapability, binding.getRequestMappings(), paramsSchema, null);
+            validateCapabilitySchemas(currentCapability, binding.getRequestMappings(), paramsSchema, null);
             compiled.add(new A2uiCompiledLoadBinding(
                     binding.getBindingId(),
                     compileCapability(binding.getCapability(), currentCapabilities),
@@ -671,12 +679,22 @@ public class A2uiApplicationBuildCompiler {
         List<A2uiCapabilitySchemaAudit> audits = actionCodes.stream()
                 .sorted()
                 .map(actionCode -> currentCapabilities.get(actionCode))
-                .map(contract -> new A2uiCapabilitySchemaAudit(
-                        contract.getActionCode(),
-                        A2uiImmutableJsonSupport.digest(contract.getModelContract()),
-                        A2uiImmutableJsonSupport.digest(contract.getResultContract())))
+                .map(this::capabilityAudit)
                 .collect(Collectors.toList());
         return Collections.unmodifiableList(audits);
+    }
+
+    private A2uiCapabilitySchemaAudit capabilityAudit(A2uiCurrentCapabilityContract contract) {
+        Map<String, Object> modelContracts = new TreeMap<>();
+        Map<String, Object> resultContracts = new TreeMap<>();
+        for (A2uiCurrentCapabilityVariantContract variant : capabilityVariants(contract)) {
+            modelContracts.put(variant.getClientType(), variant.getModelContract());
+            resultContracts.put(variant.getClientType(), variant.getResultContract());
+        }
+        return new A2uiCapabilitySchemaAudit(
+                contract.getActionCode(),
+                A2uiImmutableJsonSupport.digest(modelContracts),
+                A2uiImmutableJsonSupport.digest(resultContracts));
     }
 
     private A2uiCurrentCapabilityContract requireCurrentCapability(A2uiCapabilityActionRef capability,
@@ -689,10 +707,50 @@ public class A2uiApplicationBuildCompiler {
                 || current.getSideEffect() == null) {
             throw failure(CAPABILITY_REFERENCE_INVALID);
         }
+        capabilityVariants(current);
         return current;
     }
 
-    private void validateCapabilitySchema(A2uiCurrentCapabilityContract capability,
+    void validateCapabilitySchemas(A2uiCurrentCapabilityContract capability,
+            List<A2uiRequestMapping> mappings, Map<String, Object> paramsSchema,
+            Map<String, Object> contextSchema) {
+        for (A2uiCurrentCapabilityVariantContract variant : capabilityVariants(capability)) {
+            validateCapabilitySchema(variant, mappings, paramsSchema, contextSchema);
+        }
+    }
+
+    private List<A2uiCurrentCapabilityVariantContract> capabilityVariants(
+            A2uiCurrentCapabilityContract capability) {
+        if (capability == null || capability.getClientVariants() == null) {
+            throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
+        }
+        Set<String> clientKeys = capability.getClientVariants().keySet();
+        List<String> clients;
+        if (clientKeys.equals(Set.of(CLIENT_PC))) {
+            clients = CLIENT_MODE_PC;
+        } else if (clientKeys.equals(Set.of(CLIENT_APP))) {
+            clients = CLIENT_MODE_APP;
+        } else if (clientKeys.equals(Set.of(CLIENT_PC, CLIENT_APP))) {
+            clients = CLIENT_MODE_DIFFERENT;
+        } else if (clientKeys.equals(Set.of(CLIENT_COMMON))) {
+            clients = CLIENT_MODE_COMMON;
+        } else {
+            throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
+        }
+        List<A2uiCurrentCapabilityVariantContract> variants = new ArrayList<>();
+        for (String client : clients) {
+            A2uiCurrentCapabilityVariantContract variant = capability.getClientVariants().get(client);
+            if (variant == null || !Objects.equals(client, variant.getClientType())
+                    || variant.getModelContract() == null || variant.getModelContract().isEmpty()
+                    || variant.getResultContract() == null || variant.getResultContract().isEmpty()) {
+                throw failure(CAPABILITY_SCHEMA_INCOMPATIBLE);
+            }
+            variants.add(variant);
+        }
+        return variants;
+    }
+
+    private void validateCapabilitySchema(A2uiCurrentCapabilityVariantContract capability,
             List<A2uiRequestMapping> mappings, Map<String, Object> paramsSchema,
             Map<String, Object> contextSchema) {
         if (capability.getModelContract() == null || capability.getResultContract() == null
