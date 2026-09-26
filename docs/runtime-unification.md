@@ -1,5 +1,13 @@
 # Runtime unification: incremental delivery
 
+## RPC 兼容性边界（2026-09-26）
+
+- 不比较 Java 与 Python 的整份描述符，不比较字段总数，也不要求请求传齐接口中的可选字段。
+- 新增无关字段、消息、方法及 JSON 名称元数据不构成拒绝原因。
+- 根据注册描述符解析实际服务、单次调用方法及参数映射；实际传入参数仍遵循必填与类型约束。
+- 执行服务只校验实际注入的 `user_id / environment / request_id / client` 的字段编号、类型和单值语义，以及 `PRT / ONLINE` 的枚举值。共享 oneof 不能让这些字段相互覆盖。
+- 身份上下文由服务端注入，不能从模型业务参数覆盖；此约束与描述符是否完全一致无关。
+
 ## Delivered source
 
 - The attended B-side binds its authenticated user and configured environment
