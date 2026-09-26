@@ -100,18 +100,23 @@ def _validate_injected_context(context: Descriptor) -> None:
     Field numbers/types and environment values must retain their wire meaning.
     """
     authority = cap.ExecutionContext.DESCRIPTOR
+    used_oneofs: set[str] = set()
     for name in ("user_id", "environment", "request_id", "client"):
-        field = context.fields_by_name.get(name)
         expected = authority.fields_by_name[name]
+        field = context.fields_by_number.get(expected.number)
         if (
             field is None
             or field.number != expected.number
             or field.type != expected.type
             or field.is_repeated
-            or (field.containing_oneof is not None and len(field.containing_oneof.fields) > 1)
         ):
             raise TransportError("INCOMPATIBLE_EXECUTION_CONTEXT")
-    environment = context.fields_by_name["environment"].enum_type
+        if field.containing_oneof is not None:
+            oneof_name = field.containing_oneof.name
+            if oneof_name in used_oneofs:
+                raise TransportError("INCOMPATIBLE_EXECUTION_CONTEXT")
+            used_oneofs.add(oneof_name)
+    environment = context.fields_by_number[authority.fields_by_name["environment"].number].enum_type
     expected_environment = authority.fields_by_name["environment"].enum_type
     assert expected_environment is not None
     for name in ("PRT", "ONLINE"):
@@ -197,14 +202,16 @@ class GrpcTransport:
         request: Message = message_factory.GetMessageClass(method.input_type)()
         # ParseDict preserves exact integers and rejects unknown business fields.
         payload: JsonObject = dict(business)
-        payload[field.json_name] = {
-            "user_id": str(context.user_id),
-            "environment": context.environment,
-            "request_id": context.request_id,
-            "client": context.client,
-        }
         try:
             json_format.ParseDict(payload, request, ignore_unknown_fields=False)
+            # Inject by wire number, independent of the registered field/JSON names.
+            trusted = cap.ExecutionContext(
+                user_id=context.user_id,
+                environment=cap.Environment.Value(context.environment),
+                request_id=context.request_id,
+                client=context.client,
+            )
+            getattr(request, field.name).ParseFromString(trusted.SerializeToString())
         except (ValueError, TypeError, json_format.ParseError) as error:
             raise TransportError("INVALID_PROTOBUF_ARGUMENTS", "REQUEST_MAPPING_INVALID") from error
         wire = request.SerializeToString()
