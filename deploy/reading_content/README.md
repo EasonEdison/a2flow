@@ -7,6 +7,7 @@
 - RPC：`a2flow.content.v1.ContentService` 的 12 个 unary 方法一一对应 `content.*` 能力；所有能力共用由仓库 `content.proto` 编译出的 FileDescriptorSet，但各自固定 `methodName`、输入字段和嵌套 request mapping。
 - 客户端：本场景能力发布合同只支持 `PC` variant，dry-run 也固定使用可信客户端 `PC`，由 M 把 `PC` 写入 RPC `TrustedContext.client`；不依赖 `COMMON` fallback。
 - 组件：复用 B 已注册的 official basic catalog 组件。阅读确认使用 `ChoicePicker(multipleSelection)`；选题在重复候选卡内用按钮提交标量 `topicId`，避免把单选数组错误映射到 protobuf string；稿件编辑使用 `TextField(longText)` 和已真实注册的 `Markdown`。
+- `ChoicePicker.options` 必须是具体数组；模板先用 `[]`，再通过 Show inputBinding 将 `APP_PARAMS /options` 写入组件的 `options`。不能把 `{path:"/options"}` 当作数组。`value` 仍使用 DataModel 路径绑定。M 编译/预览按锁定的官方 schema 校验；B SDK 独立校验实际渲染载荷，不改写官方合同。
 - 下载：唯一新增依赖是 B 注册的 `TextDownload`。它只接收 `label/filename/mediaType/content` 和标准 `Checkable` 字段，使用内联 Blob，不接受 URL。
 - 关系：Skill 通过 `SKILL_BINDINGS_REPLACE` 写入能力和 Application 关系；可选 Workflow 使用既有 v2 graph，并由 `WORKFLOW_DRAFT_UPDATE` 重新校验三个 Skill 的专员关系。
 
@@ -18,7 +19,7 @@
 
 将本目录作为 M 同源静态内容提供，管理员登录后打开 `import.html`。页面不会自动执行，只有用户勾选审核确认并点击“创建并发布阅读创作示例到 PRT”后才调用 `/api/management/v2/handler`。
 
-点击“加载本项目 Content RPC 契约”会显式读取同目录的 `content-descriptor.txt`，校验 base64 后填入文本框，但不会开始 authoring 或发布。也可以手工粘贴 base64 FileDescriptorSet 文本，或选择含同一内容的文本文件（两者同时提供时粘贴文本优先），并填写固定 `targetKey`、M 当前专员 ID。页面用当前 HttpOnly 同源会话，代码无法读取或输出该 Cookie。失败不会自动重放发布请求；再次点击时按稳定 actionCode/appCode/skillCode 查找并复用已有资产，若发现重复身份或不同 digest 的活动变更会停止。
+点击“加载本项目 Content RPC 契约”会显式读取同目录的 `content-descriptor.txt`，校验 base64 后填入文本框，但不会开始 authoring 或发布。也可以手工粘贴 base64 FileDescriptorSet 文本，或选择含同一内容的文本文件（两者同时提供时粘贴文本优先），并填写固定 `targetKey`、M 当前专员 ID。页面用当前 HttpOnly 同源会话，代码无法读取或输出该 Cookie。失败不会自动重放发布请求；再次点击时按稳定 actionCode/appCode/skillCode 查找并复用已有资产，发现重复身份时停止。已有 ACTIVE 变更允许继续编辑：仅在服务端 `allowedActions` 包含 `DEPLOY_PREPROD` 时，用当前草稿的精确 `expectedDigest` 发布，不把变更初建时的摘要当作不可修改的最新摘要，也不使用强制发布。
 
 `content-descriptor.txt` 是部署静态资源，不含凭据，不得手写。当前文件由本仓库 `packages/rpc-contracts/proto/a2flow/content/v1/content.proto` 在集成提交 `4dde853` 上生成，并通过 `grpc_tools.protoc --include_imports` 纳入 `services/management-java/proto/a2flow/capability/v1/capability.proto`；原始 FileDescriptorSet 的 SHA-256 为 `eb261f17724397d5bf935f15283bbfdbe08cf69f54458b475280d3ceea8917b7`。协议变更时必须从同一待部署提交重新生成 base64 文本，并让离线测试核对 12 个方法后再随本目录部署。
 
@@ -55,6 +56,7 @@ node deploy/reading_content/author-prt.mjs
 ```sh
 node deploy/reading_content/author-prt.mjs --check
 node deploy/reading_content/test-assets.mjs
+node deploy/reading_content/test-sdk.mjs apps/digital-employee/web
 ```
 
 ## ONLINE 后续门禁
