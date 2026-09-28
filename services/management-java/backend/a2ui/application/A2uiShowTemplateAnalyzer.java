@@ -82,6 +82,7 @@ final class A2uiShowTemplateAnalyzer {
     }
 
     void validateInputBindings(A2uiShowTemplate show) {
+        Map<Integer, List<String>> targetPathsByMessage = new HashMap<>();
         for (A2uiShowInputBinding binding : show.getInputBindings()) {
             if (binding == null
                     || binding.getTargetMessageIndex() < 0
@@ -97,7 +98,22 @@ final class A2uiShowTemplateAnalyzer {
                     && (isBlank(sourcePath) || containsForbiddenContext(sourcePath))) {
                 throw failure(SHOW_INPUT_AUTHORITY_FORBIDDEN);
             }
+            List<String> writtenTargets = targetPathsByMessage.computeIfAbsent(
+                    binding.getTargetMessageIndex(), ignored -> new ArrayList<>());
+            if (writtenTargets.stream().anyMatch(existing -> pathsConflict(
+                    existing, binding.getTargetPath()))) {
+                throw failure(SHOW_INVALID);
+            }
+            writtenTargets.add(binding.getTargetPath());
         }
+    }
+
+    private boolean pathsConflict(String left, String right) {
+        return left.equals(right)
+                || "/".equals(left)
+                || "/".equals(right)
+                || left.startsWith(right + "/")
+                || right.startsWith(left + "/");
     }
 
     String validateServerMessage(Map<String, Object> message) {
