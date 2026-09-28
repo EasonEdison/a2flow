@@ -43,8 +43,8 @@ class ChatVerticalTest(unittest.TestCase):
         registry = operations()
         model = ScriptedModel(rounds=[
             [_call(0, "runner-skill", "use_skill", {"skillKey": "activity-planning/plan"})],
-            [_call(0, "runner-card", "render_application", {"applicationKey": APPLICATION_KEY,
-                "data": {"prompt": "Choose", "options": [{"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
+            [_call(0, "runner-card", "render_application", {"appCode": APPLICATION_KEY,
+                "params": {"prompt": "Choose", "options": [{"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
         ])
         def assets(owner, conversation, control):
             return ChatAssets(reader, registry, owner, conversation, control,
@@ -83,8 +83,8 @@ class ChatVerticalTest(unittest.TestCase):
             [_call(0, "skill", "use_skill", {"skillKey": "activity-planning/plan"})],
             [_call(0, "budget", "execute_ability", {"abilityKey": BUDGET_KEY,
                 "arguments": {"participants": 3, "budgetMinor": 1000}})],
-            [_call(0, "card", "render_application", {"applicationKey": APPLICATION_KEY,
-                "data": {"prompt": "Choose a plan", "options": [{"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
+            [_call(0, "card", "render_application", {"appCode": APPLICATION_KEY,
+                "params": {"prompt": "Choose a plan", "options": [{"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
         ])
         emitter = ListEmitter()
         with conversations.session(OWNER, conversation, "1") as (saver, thread_id):

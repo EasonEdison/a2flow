@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Callable
+from typing import Any, Callable, TypedDict
 
 from skill_registry import (
     InvocationScope as RegistryScope,
@@ -30,9 +30,30 @@ from ..ability_execution import (
 from ..application_runtime import ApplicationRuntime
 from ..models import ActionRejected, json_copy
 from ..service import require_owner
+from .cards import JsonObject
 
 
 _CHAT_SKILL_TOOLS = frozenset({"execute_ability", "render_application"})
+_APPLICATION_CONTRACT_TOOL = "query_skill_dependencies"
+_APPLICATION_USAGE = (
+    "Call render_application with this appCode and params that satisfy "
+    "paramsSchema."
+)
+
+
+class ApplicationContract(TypedDict):
+    """Published model input contract for one admitted Application."""
+
+    appCode: str
+    description: str
+    usage: str
+    paramsSchema: JsonObject
+
+
+class SkillDependencies(TypedDict):
+    """Bound Application contracts returned to the model."""
+
+    applications: list[ApplicationContract]
 
 
 def _versions(value):
@@ -124,7 +145,15 @@ class ChatAssets:
         """Return the current turn's model-callable Skill tools."""
 
         admitted = self._admission
-        return frozenset() if admitted is None else admitted.required_tools
+        if admitted is None:
+            return frozenset()
+        tools = set(admitted.required_tools)
+        if (
+            admitted.application_keys
+            and "render_application" in admitted.required_tools
+        ):
+            tools.add(_APPLICATION_CONTRACT_TOOL)
+        return frozenset(tools)
 
     def begin_turn(self):
         """Clear turn-local Skill admission and interaction state."""
@@ -330,6 +359,68 @@ class ChatAssets:
         ):
             raise ActionRejected("RESET_REQUIRED")
         return resolved
+
+    def _application_contract(self, application_key: str) -> ApplicationContract:
+        """Project one local-profile model contract from its bound release."""
+
+        resolved = self._application(application_key)
+        application = resolved["application"]
+        description = application.get("description")
+        template = application.get("surfaceTemplate")
+        params_schema = (
+            template.get("inputSchema") if type(template) is dict else None
+        )
+        if (
+            type(description) is not str
+            or type(params_schema) is not dict
+        ):
+            raise ActionRejected("APPLICATION_CONTRACT_INVALID")
+        return {
+            "appCode": application_key,
+            "description": description,
+            "usage": _APPLICATION_USAGE,
+            "paramsSchema": json_copy(params_schema),
+        }
+
+    def query_skill_dependencies(
+        self,
+        application_codes: list[str],
+    ) -> SkillDependencies:
+        """Read current model inputs for explicitly bound Applications."""
+
+        if (
+            type(application_codes) is not list
+            or not 1 <= len(application_codes) <= 20
+            or any(
+                type(code) is not str or not code or len(code) > 128
+                for code in application_codes
+            )
+            or len(application_codes) != len(set(application_codes))
+        ):
+            raise ActionRejected("ARGUMENT_INVALID")
+        admitted = self._require_admission()
+        if "render_application" not in admitted.required_tools:
+            raise ActionRejected("APPLICATION_NOT_ALLOWED")
+        self.check_versions()
+        applications = []
+        for app_code in application_codes:
+            if app_code not in admitted.application_keys:
+                raise ActionRejected("APPLICATION_NOT_ALLOWED")
+            contract = self._application_contract(app_code)
+            if (
+                type(contract) is not dict
+                or set(contract) != {
+                    "appCode", "description", "usage", "paramsSchema",
+                }
+                or contract.get("appCode") != app_code
+                or type(contract.get("description")) is not str
+                or contract.get("usage") != _APPLICATION_USAGE
+                or type(contract.get("paramsSchema")) is not dict
+            ):
+                raise ActionRejected("APPLICATION_CONTRACT_INVALID")
+            applications.append(json_copy(contract))
+        self.check_versions()
+        return {"applications": applications}
 
     def action_binding(self, application_key, action_name):
         """Resolve one server-owned Action policy for Chat Action ingress."""

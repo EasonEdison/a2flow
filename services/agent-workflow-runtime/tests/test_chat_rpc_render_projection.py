@@ -1,11 +1,13 @@
 """Real RPC Chat render projection through the public Chat Tool."""
 
+import hashlib
 import json
 import unittest
 from threading import Lock
 from types import SimpleNamespace
 
 from langchain.tools import ToolRuntime
+from a2flow_asset_store.java_runtime import PROFILE
 from skillweave_contracts import TrustedContext
 from skillweave_contracts.models import (
     ConversationInvocationScope,
@@ -14,6 +16,7 @@ from skillweave_contracts.models import (
 
 from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
 from agent_workflow_runtime.chat.tools import build_chat_tools
+from agent_workflow_runtime.models import ActionRejected
 from agent_workflow_runtime.rpc_client import (
     CatalogDescriptor,
     ReleaseIdentity,
@@ -26,6 +29,55 @@ OWNER = TrustedContext(1009, "PRT")
 
 
 class RpcChatRenderProjectionTests(unittest.TestCase):
+    def test_query_contract_uses_published_description_and_runtime_schema(
+        self,
+    ) -> None:
+        params_schema = {
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "required": ["title"],
+            "additionalProperties": False,
+        }
+        payload = json.dumps({
+            "appCode": "draft-editor",
+            "description": "Edit and review a saved draft.",
+            "paramsSchema": params_schema,
+            "catalog": {"catalogId": "catalog", "digest": "sha256:catalog"},
+            "componentTypes": [],
+        }, separators=(",", ":"), sort_keys=True)
+        record = {
+            "definition": {
+                "runtimeProfile": PROFILE,
+                "assetKey": "draft-editor",
+                "sourceId": "source-1",
+                "sourceDigest": "sha256:" + "0" * 64,
+                "payloadDigest": hashlib.sha256(payload.encode()).hexdigest(),
+                "payloadJson": payload,
+            },
+        }
+        assets = object.__new__(RpcChatAssets)
+        runtime = SimpleNamespace(params_schema=params_schema)
+        assets.application_description = lambda application_key: (record, runtime)
+
+        self.assertEqual(
+            {
+                "appCode": "draft-editor",
+                "description": "Edit and review a saved draft.",
+                "usage": (
+                    "Call render_application with this appCode and params that "
+                    "satisfy paramsSchema."
+                ),
+                "paramsSchema": params_schema,
+            },
+            assets._application_contract("draft-editor"),
+        )
+
+        runtime.params_schema = {"type": "object"}
+        with self.assertRaisesRegex(
+            ActionRejected, "APPLICATION_CONTRACT_INVALID",
+        ):
+            assets._application_contract("draft-editor")
+
     def test_tool_uses_canonical_business_state_and_omits_protocol_and_secrets(
         self,
     ) -> None:
@@ -118,12 +170,12 @@ class RpcChatRenderProjectionTests(unittest.TestCase):
             conversation_id="conversation-rpc-render",
             control_request_id="control-rpc-render",
             chat_assets=assets,
-        )[3]
+        )[4]
         message = render_tool.invoke({
             "name": "render_application",
             "args": {
-                "applicationKey": "draft-editor",
-                "data": {"modelInput": "not-rendered-state"},
+                "appCode": "draft-editor",
+                "params": {"modelInput": "not-rendered-state"},
                 "runtime": runtime,
             },
             "id": "render-call",
@@ -133,7 +185,7 @@ class RpcChatRenderProjectionTests(unittest.TestCase):
         content = json.loads(message.content)
         rendered = content["renderedApplication"]
         self.assertEqual("card-rpc-render", rendered["cardId"])
-        self.assertEqual("draft-editor", rendered["applicationKey"])
+        self.assertEqual("draft-editor", rendered["appCode"])
         self.assertEqual(
             [{
                 "surfaceId": "main",
