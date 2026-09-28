@@ -11,6 +11,7 @@ from agent_workflow_runtime.models import ActionRejected
 from agent_workflow_runtime.rpc_client import (
     ActionExecutionObservation,
     ReleaseIdentity,
+    RpcFailure,
     RuntimeSession,
 )
 from skillweave_contracts import TrustedContext
@@ -143,7 +144,12 @@ class RpcChatActionObservationTests(unittest.TestCase):
         )
         service = RpcChatActionService(store, lambda *_: assets)
 
-        with self.assertRaisesRegex(ActionRejected, "ACTION_OUTCOME_UNKNOWN"):
+        with (
+            self.assertLogs(
+                "agent_workflow_runtime.chat.rpc_actions", level="ERROR"
+            ) as captured,
+            self.assertRaisesRegex(ActionRejected, "ACTION_OUTCOME_UNKNOWN"),
+        ):
             service.execute(
                 owner,
                 "conversation-1",
@@ -154,10 +160,40 @@ class RpcChatActionObservationTests(unittest.TestCase):
                 expected_revision=0,
             )
 
+        log = "\n".join(captured.output)
+        self.assertIn("stage=response_projection", log)
+        self.assertIn("exception_type=AttributeError", log)
+        self.assertIn("error_code=ACTION_OUTCOME_UNKNOWN", log)
+        self.assertIn("request_id=request-1", log)
+        self.assertNotIn("真实标题", log)
+
         observation = store.fail.call_args.kwargs["observation"]
         self.assertEqual({"artifactId": "artifact-1"}, observation.result)
         self.assertTrue(observation.capability_success)
         self.assertTrue(observation.business_success)
+
+        assets.rpc.act.side_effect = RpcFailure("RPC_EXECUTION_FAILED")
+        store.fail.reset_mock()
+        with (
+            self.assertLogs(
+                "agent_workflow_runtime.chat.rpc_actions", level="ERROR"
+            ) as rpc_captured,
+            self.assertRaisesRegex(ActionRejected, "ACTION_OUTCOME_UNKNOWN"),
+        ):
+            service.execute(
+                owner,
+                "conversation-1",
+                "card-1",
+                request_id="request-2",
+                action_name="save",
+                inputs={"surfaceId": "main", "sourceComponentId": "save", "context": {}},
+                expected_revision=0,
+            )
+        rpc_log = "\n".join(rpc_captured.output)
+        self.assertIn("stage=engine_act", rpc_log)
+        self.assertIn("exception_type=RpcFailure", rpc_log)
+        self.assertIn("error_code=RPC_EXECUTION_FAILED", rpc_log)
+        self.assertIn("request_id=request-2", rpc_log)
 
 
 if __name__ == "__main__":

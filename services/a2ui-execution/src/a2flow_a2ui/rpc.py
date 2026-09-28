@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from typing import TypeVar, cast
 
@@ -30,6 +31,7 @@ from .models import (
 from .runtime import A2uiRuntimeService
 
 Response = TypeVar("Response")
+LOG = logging.getLogger(__name__)
 
 
 def _json(value: JsonValue) -> bytes:
@@ -206,6 +208,7 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
         return self._respond(
             context,
             lambda: _describe(self._service.describe(request.app_code, _context(request.context))),
+            stage="describe",
         )
 
     def Activate(
@@ -222,6 +225,7 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
                     _context(request.context),
                 )
             ),
+            stage="activate",
         )
 
     def Act(
@@ -257,19 +261,47 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
                 )
             )
 
-        return self._respond(context, execute)
+        return self._respond(context, execute, stage="act")
 
     def _respond(
-        self, context: grpc.ServicerContext, operation: Callable[[], Response]
+        self,
+        context: grpc.ServicerContext,
+        operation: Callable[[], Response],
+        *,
+        stage: str,
     ) -> Response:
         try:
             return operation()
         except A2uiError as error:
+            LOG.warning(
+                "a2ui_rpc_failed stage=%s exception_type=%s error_code=%s",
+                stage,
+                type(error).__name__,
+                error.code,
+            )
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, error.code)
-        except ReleaseStorageError:
+        except ReleaseStorageError as error:
+            LOG.warning(
+                "a2ui_rpc_failed stage=%s exception_type=%s error_code=%s",
+                stage,
+                type(error).__name__,
+                "CAPABILITY_RELEASE_STORAGE_UNAVAILABLE",
+            )
             context.abort(grpc.StatusCode.UNAVAILABLE, "CAPABILITY_RELEASE_STORAGE_UNAVAILABLE")
         except ReleaseError as error:
+            LOG.warning(
+                "a2ui_rpc_failed stage=%s exception_type=%s error_code=%s",
+                stage,
+                type(error).__name__,
+                error.code,
+            )
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, error.code)
-        except Exception:
+        except Exception as error:
+            LOG.error(
+                "a2ui_rpc_failed stage=%s exception_type=%s error_code=%s",
+                stage,
+                type(error).__name__,
+                "A2UI_EXECUTION_FAILED",
+            )
             context.abort(grpc.StatusCode.INTERNAL, "A2UI_EXECUTION_FAILED")
         raise AssertionError("unreachable")

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
+from unittest.mock import Mock
 
 import grpc
 import pytest
@@ -20,6 +22,34 @@ from a2flow_a2ui.models import (
 )
 from a2flow_a2ui.rpc import A2uiRpcService
 from a2flow_a2ui.runtime import A2uiRuntimeService, _execution_map, _predicate, map_request
+
+
+def test_rpc_internal_failure_logs_only_safe_stage_type_and_code(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class SecretFailure(Exception):
+        pass
+
+    context = Mock()
+    context.abort.side_effect = RuntimeError("abort")
+    service = A2uiRpcService(cast(Any, None))
+
+    with (
+        caplog.at_level(logging.ERROR, logger="a2flow_a2ui.rpc"),
+        pytest.raises(RuntimeError, match="abort"),
+    ):
+        service._respond(
+            context,
+            lambda: (_ for _ in ()).throw(SecretFailure("private manuscript body")),
+            stage="act",
+        )
+
+    message = caplog.text
+    assert "stage=act" in message
+    assert "exception_type=SecretFailure" in message
+    assert "error_code=A2UI_EXECUTION_FAILED" in message
+    assert "private manuscript body" not in message
+    context.abort.assert_called_once_with(grpc.StatusCode.INTERNAL, "A2UI_EXECUTION_FAILED")
 
 
 def build_json() -> JsonObject:
