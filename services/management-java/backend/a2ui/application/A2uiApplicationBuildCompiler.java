@@ -261,6 +261,7 @@ public class A2uiApplicationBuildCompiler {
         return new A2uiApplicationBuild(
                 buildId,
                 draft.getAppCode(),
+                draft.getDescription(),
                 sourceDigest,
                 draft.getProtocolVersion(),
                 draft.getProtocolStatus(),

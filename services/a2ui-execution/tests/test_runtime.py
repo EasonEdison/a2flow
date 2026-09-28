@@ -26,6 +26,7 @@ def build_json() -> JsonObject:
     return {
         "appBuildId": "build-1",
         "appCode": "demo.app",
+        "description": "Demo application",
         "sourceDigest": "sha256:build",
         "protocolVersion": "v0.9.1",
         "protocolStatus": "ACTIVE",
@@ -167,6 +168,7 @@ def build_json() -> JsonObject:
 def test_catalog_function_contract_is_optional_and_preserved() -> None:
     legacy = ApplicationBuild.model_validate(build_json())
     assert legacy.catalog.function_contract is None
+    assert legacy.description == "Demo application"
 
     current = build_json()
     function_contract: JsonObject = {
