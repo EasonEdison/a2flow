@@ -115,6 +115,10 @@ assert.match(draftSkill.markdown, /顶层必须填写 projectId、kind=MANUSCRIP
 assert.match(draftSkill.markdown, /body 分支只填写 manuscriptTitle\/manuscriptMarkdown\/citations/);
 assert.match(draftSkill.markdown, /inputRefs 至少包含已确认的 TOPIC_PLAN.*kind=ARTIFACT.*revision=content\.artifact\.get 返回的 revision/s);
 assert.match(draftSkill.markdown, /每个 citation 的 referenceKind\/referenceId\/revision.*inputRefs.*kind\/id\/revision/s);
+assert.match(draftSkill.markdown, /本轮 use_skill 返回.*content-manuscript-editor\.paramsSchema\.required.*逐项完整构造 data.*不代表可以省略 required 字段/s);
+assert.match(draftSkill.markdown, /export 必须显式传 \{artifactId:"",artifactRevision:0,filename:"",mediaType:"",content:""\}.*只表示未导出.*不得伪造/s);
+assert.match(draftSkill.markdown, /project\.currentManuscriptId 非空.*只要求展示或继续编辑.*content\.artifact\.get.*真实 MANUSCRIPT.*不得再次调用 content\.artifact\.save/s);
+assert.match(draftSkill.markdown, /project\.get 返回的真实 id\/revision.*projectId\/projectRevision.*artifact\.get 返回的真实 id\/revision\/body\/inputRefs.*savedArtifactId\/savedArtifactRevision/s);
 
 const [reading, topic, manuscript] = buildApplications();
 const choice = reading.showTemplate.messageTemplates[1].updateComponents.components[8];
