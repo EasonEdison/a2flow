@@ -333,6 +333,20 @@ class ExecutionSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class ActionExecutionObservation:
+    """Business facts produced by one Action, excluding trusted runtime context."""
+
+    binding_id: str
+    action_code: str
+    arguments: JsonObject
+    result: JsonValue
+    capability_success: bool
+    business_success: bool | None
+    capability_error_code: str | None = None
+    presentation_error_code: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeResult:
     release: ApplicationRelease
     params: JsonObject
@@ -345,6 +359,7 @@ class RuntimeResult:
     session: RuntimeSession
     interaction_mode: InteractionMode
     business_success: bool
+    action_observation: ActionExecutionObservation | None = None
 
 
 class PublishedApplicationReader(Protocol):

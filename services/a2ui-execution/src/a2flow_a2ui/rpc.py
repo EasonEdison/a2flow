@@ -142,7 +142,7 @@ def _describe(value: PublishedApplication) -> a2ui_pb2.DescribeResponse:
 
 
 def _response(value: RuntimeResult) -> a2ui_pb2.RuntimeResponse:
-    return a2ui_pb2.RuntimeResponse(
+    response = a2ui_pb2.RuntimeResponse(
         release=_release(value.release),
         params_json=_json(value.params),
         messages_json=_json(list(value.messages)),
@@ -178,6 +178,22 @@ def _response(value: RuntimeResult) -> a2ui_pb2.RuntimeResponse:
         interaction_mode=value.interaction_mode.value,
         business_success=value.business_success,
     )
+    if value.action_observation is not None:
+        observed = value.action_observation
+        response.action_observation.CopyFrom(
+            a2ui_pb2.ActionExecutionObservation(
+                binding_id=observed.binding_id,
+                action_code=observed.action_code,
+                arguments_json=_json(observed.arguments),
+                result_json=_json(observed.result),
+                capability_success=observed.capability_success,
+                capability_error_code=observed.capability_error_code or "",
+                presentation_error_code=observed.presentation_error_code or "",
+            )
+        )
+        if observed.business_success is not None:
+            response.action_observation.business_success = observed.business_success
+    return response
 
 
 class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):

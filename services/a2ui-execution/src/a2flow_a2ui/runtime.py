@@ -28,6 +28,7 @@ from .ledger import PROTOCOL_VERSION, SurfaceLedger
 from .models import (
     A2uiError,
     ActionBinding,
+    ActionExecutionObservation,
     ApplicationBuild,
     BusinessPredicate,
     BusinessPredicateOperator,
@@ -52,6 +53,11 @@ from .models import (
     ShowInputSource,
     TrustedCard,
 )
+
+_OBSERVATION_PRIVATE_KEYS = frozenset({
+    "authorization", "cookie", "credential", "credentials",
+    "credentialhandle", "runtimesessiontoken", "transportauthority", "targetendpoint",
+})
 
 
 def _trusted(context: TrustedContext, now: datetime | None = None) -> JsonObject:
@@ -175,6 +181,41 @@ def map_request(
                 value = [item for item, flag in zip(value, mask.value, strict=False) if flag]
         result = write(result, mapping.target_path, value)
     return require_object(result, "A2UI_REQUEST_MAPPING_INVALID")
+
+
+def observable_request(
+    mappings: tuple[RequestMapping, ...],
+    *,
+    action: JsonObject,
+    params: JsonObject,
+    trusted: JsonObject,
+) -> JsonObject:
+    """Return exact mapped business values, without trusted/internal mappings."""
+
+    visible = tuple(
+        item for item in mappings
+        if item.source in {
+            MappingSource.ACTION_CONTEXT, MappingSource.APP_PARAMS, MappingSource.CONSTANT,
+        }
+    )
+    mapped = map_request(
+        visible, action=action, params=params, trusted=trusted, previous=None,
+    )
+
+    return require_object(_observable_value(mapped), "A2UI_ACTION_OBSERVATION_INVALID")
+
+
+def _observable_value(value: JsonValue) -> JsonValue:
+    if isinstance(value, dict):
+        return {
+            key: _observable_value(child)
+            for key, child in value.items()
+            if key.replace("_", "").replace("-", "").lower()
+            not in _OBSERVATION_PRIVATE_KEYS
+        }
+    if isinstance(value, list):
+        return [_observable_value(child) for child in value]
+    return copy.deepcopy(value)
 
 
 def _message(value: JsonValue) -> JsonObject:
@@ -569,14 +610,57 @@ class A2uiRuntimeService:
             trusted=trusted,
             previous=None,
         )
+        observable_arguments = observable_request(
+            binding.request_mappings,
+            action=action_context,
+            params=card.params,
+            trusted=trusted,
+        )
         result = self._capabilities.execute_action_code(
             binding.capability.action_code, arguments, _child_context(context, binding.binding_id)
         )
         if result.action_code != binding.capability.action_code:
             raise A2uiError("A2UI_CAPABILITY_RESULT_INVALID")
-        selected = _select(binding, result)
-        messages, next_ledger = adapt(
-            ledger, selected.outcome, selected.adapters, result, trusted, action_context
+        capability_error = result.error_code.value if result.error_code else None
+        try:
+            selected = _select(binding, result)
+        except A2uiError as error:
+            observation = ActionExecutionObservation(
+                binding.binding_id, result.action_code, observable_arguments,
+                _observable_value(result.data), result.success, None,
+                capability_error, error.code,
+            )
+            summary = ExecutionSummary(
+                binding.binding_id, result.action_code, result.success,
+                result.capability_version, capability_error,
+            )
+            return self._response(
+                published, card.params, (), ledger, (summary,), False, None, card.session,
+                action_observation=observation,
+            )
+        try:
+            messages, next_ledger = adapt(
+                ledger, selected.outcome, selected.adapters, result, trusted, action_context
+            )
+        except A2uiError as error:
+            observation = ActionExecutionObservation(
+                binding.binding_id, result.action_code, observable_arguments,
+                _observable_value(result.data), result.success, selected.succeeded,
+                capability_error, error.code,
+            )
+            summary = ExecutionSummary(
+                binding.binding_id, result.action_code, selected.succeeded,
+                result.capability_version,
+                None if selected.succeeded else capability_error,
+            )
+            return self._response(
+                published, card.params, (), ledger, (summary,), False, None, card.session,
+                action_observation=observation,
+            )
+        observation = ActionExecutionObservation(
+            binding.binding_id, result.action_code, observable_arguments,
+            _observable_value(result.data), result.success, selected.succeeded,
+            capability_error, None,
         )
         summary = ExecutionSummary(
             binding.binding_id,
@@ -596,6 +680,7 @@ class A2uiRuntimeService:
             selected.complete,
             selected.branch_id,
             card.session,
+            action_observation=observation,
         )
 
     def _resolve_action(
@@ -669,6 +754,8 @@ class A2uiRuntimeService:
         complete: bool,
         branch: str | None,
         session: RuntimeSession,
+        *,
+        action_observation: ActionExecutionObservation | None = None,
     ) -> RuntimeResult:
         actions = tuple(
             EmittedActionDeclaration(
@@ -690,7 +777,13 @@ class A2uiRuntimeService:
             branch,
             session,
             published.build.interaction_mode,
-            all(item.success for item in executions),
+            (
+                action_observation.business_success
+                if action_observation is not None
+                and action_observation.business_success is not None
+                else all(item.success for item in executions)
+            ),
+            action_observation,
         )
 
     def _check_context(self, context: TrustedContext) -> None:

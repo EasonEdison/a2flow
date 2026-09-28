@@ -1,9 +1,9 @@
 """Skill admission and durable Chat cards backed by the deterministic RPC host."""
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import asdict
-import json
 from typing import Any, cast
 from uuid import uuid4
 
@@ -12,17 +12,31 @@ from skillweave_contracts import TrustedContext
 
 from ..application_runtime import PreparedApplication
 from ..models import ActionRejected
-from ..rpc_client import ApplicationDescription, ReleaseIdentity, RpcClient, RuntimeResult, RuntimeSession, TrustedCard
+from ..rpc_client import (
+    ApplicationDescription,
+    JsonValue as RpcJsonValue,
+    ReleaseIdentity,
+    RpcClient,
+    RuntimeResult,
+    RuntimeSession,
+    TrustedCard,
+)
 from .assets import ChatAssets
+from .cards import JsonObject, JsonValue
+
+_PRIVATE_OBSERVATION_KEYS = frozenset({
+    "authorization", "cookie", "credential", "credentials", "credentialhandle",
+    "runtimesessiontoken", "transportauthority", "targetendpoint",
+})
 
 
-def plain(value: Any) -> Any:
+def plain(value: RpcJsonValue) -> JsonValue:
     """Detach frozen RPC JSON without changing exact integer values."""
     if isinstance(value, Mapping):
         return {key: plain(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [plain(item) for item in value]
-    return value
+    return cast(JsonValue, value)
 
 
 def prepare_result(result: RuntimeResult, version: str) -> PreparedApplication:
@@ -51,6 +65,30 @@ def runtime_metadata(result: RuntimeResult) -> dict[str, Any]:
             "params": plain(result.params)}
 
 
+def rendered_business_state(result: RuntimeResult) -> JsonObject:
+    """Project canonical surface DataModels without components or protocol messages."""
+
+    surfaces = []
+    for message in result.snapshot:
+        update = message.get("updateDataModel")
+        if (not isinstance(update, Mapping) or update.get("path") != "/"
+                or type(update.get("surfaceId")) is not str):
+            continue
+        surfaces.append({"surfaceId": update["surfaceId"],
+                         "data": plain(update.get("value"))})
+
+    def sanitize(value: JsonValue) -> JsonValue:
+        if isinstance(value, Mapping):
+            return {key: sanitize(item) for key, item in value.items()
+                    if key.replace("_", "").replace("-", "").lower()
+                    not in _PRIVATE_OBSERVATION_KEYS}
+        if isinstance(value, list):
+            return [sanitize(item) for item in value]
+        return value
+
+    return {"surfaces": sanitize(surfaces)}
+
+
 def trusted_card(owner: TrustedContext, card: dict[str, Any],
                  metadata: dict[str, Any], revision: int) -> TrustedCard:
     private = metadata["rpc"]
@@ -64,6 +102,8 @@ class RpcChatAssets(ChatAssets):
         super().__init__(operation_registry={}, application_validator=lambda _: True,
                          data_validator=lambda _: True, **kwargs)
         self.rpc = rpc
+        self._action_descriptions: dict[str, str | None] = {}
+        self._render_observations: dict[str, dict[str, Any]] = {}
 
     def admit_skill(self, skill_key: str) -> dict[str, Any]:
         value = super().admit_skill(skill_key)
@@ -79,6 +119,11 @@ class RpcChatAssets(ChatAssets):
                 raise ActionRejected("RESET_REQUIRED")
             abilities.append({"abilityKey": key, "description": description.description,
                               "inputSchema": plain(description.input_schema)})
+            current = self._action_descriptions.get(description.action_code)
+            if current is None and description.action_code not in self._action_descriptions:
+                self._action_descriptions[description.action_code] = description.description
+            elif current != description.description:
+                self._action_descriptions[description.action_code] = None
         for key in sorted(admitted.application_keys):
             _, application = self.application_description(key)
             applications.append({"applicationKey": key, "paramsSchema": plain(application.params_schema),
@@ -88,6 +133,20 @@ class RpcChatAssets(ChatAssets):
         value["content"]["dependencies"] = {"abilities": abilities, "applications": applications}
         self.check_versions()
         return value
+
+    def action_description(self, action_code: str) -> str | None:
+        """Return only an unambiguous description from the admitted published Ability."""
+
+        return self._action_descriptions.get(action_code)
+
+    def action_descriptions(self) -> dict[str, str | None]:
+        """Snapshot admitted Ability descriptions before business dispatch."""
+
+        return dict(self._action_descriptions)
+
+    def render_observation(self, card_id: str) -> dict[str, Any] | None:
+        value = self._render_observations.get(card_id)
+        return None if value is None else cast(dict[str, Any], plain(value))
 
     def _record(self, kind: str, key: str) -> dict[str, Any]:
         admitted = self._require_admission()
@@ -143,8 +202,13 @@ class RpcChatAssets(ChatAssets):
                 "recordedVersions": [list(item) for item in admitted.recorded_versions],
                 "applicationKey": application_key, "applicationVersion": prepared.application_version,
                 "rpc": runtime_metadata(result),
+                "observation": {"arguments": rendered_business_state(result)},
             }
             saved = self._card_sink(prepared, metadata)
+            self._render_observations[saved["cardId"]] = {
+                "cardId": saved["cardId"], "applicationKey": application_key,
+                "arguments": rendered_business_state(result),
+            }
             if prepared.interactive:
                 self._waiting_action = saved
             return saved
