@@ -193,9 +193,18 @@ def build_chat_tools(
         emitter = _EMITTER.get()
         if emitter is not None:
             emitter.emit("application_rendered", {"card": json_copy(saved)})
+        rendered = chat_assets.render_observation(saved["cardId"])
+        observation = {
+            "renderedApplication": rendered,
+            "applicationPurpose": "Conversation display or interaction.",
+            "visibility": (
+                "The Application was prepared and saved; this does not assert "
+                "that the user viewed it."
+            ),
+        }
         return (
             json.dumps(
-                {"rendered": True, "cardId": saved["cardId"]},
+                observation,
                 ensure_ascii=False,
                 sort_keys=True,
             ),

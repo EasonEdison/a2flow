@@ -904,6 +904,16 @@ class ChatLoopSkillTests(unittest.TestCase):
         loop, model = _loop(rounds, assets, reader, emitter)
         self.assertEqual("Final answer", loop.turn("Use the demo Skill"))
         self.assertEqual(3, len(model.observed))
+        render_result = next(
+            message for message in model.observed[2]
+            if isinstance(message, ToolMessage)
+            and message.name == "render_application"
+        )
+        self.assertIn("renderedApplication", render_result.content)
+        self.assertIn("Saved result", render_result.content)
+        self.assertIn("does not assert", render_result.content)
+        self.assertNotIn("components", render_result.content)
+        self.assertNotIn("protocolProfile", render_result.content)
         kinds = [kind for kind, _ in emitter.events]
         self.assertIn("application_rendered", kinds)
         self.assertNotIn("waiting_action", kinds)

@@ -5,9 +5,15 @@ from __future__ import unicode_literals
 import hashlib
 import json
 import unittest
+from dataclasses import dataclass
 from types import SimpleNamespace
 
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import (
+    AIMessageChunk,
+    HumanMessage,
+    RemoveMessage,
+)
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatGenerationChunk
 from pydantic import Field
@@ -33,6 +39,12 @@ from agent_workflow_runtime.chat import (
 )
 from agent_workflow_runtime.deepseek_model import DeepSeekProtocolError
 from agent_workflow_runtime.models import ActionRejected
+from agent_workflow_runtime.chat.loop import (
+    _ACTION_OBSERVATION_MARKER,
+    _ChatObservationStateMiddleware,
+    _OBSERVATION_CURSOR,
+)
+from agent_workflow_runtime.assembly import build_agent
 
 OWNER = TrustedContext(user_id=1009, environment="PRT")
 
@@ -582,6 +594,212 @@ class ToolConstructionTests(unittest.TestCase):
             _EMITTER.reset(token)
         self.assertEqual(WORKFLOW_CONFIRM, emitter.events[0][0])
         self.assertIn("proposed", content)
+
+
+@dataclass(frozen=True)
+class Observation:
+    sequence: int
+    event_id: str
+    kind: str
+    card_id: str
+    application_key: str
+    request_id: str | None = None
+    action_name: str | None = None
+    description: str | None = None
+    arguments: dict | None = None
+    status: str | None = None
+    result: object = None
+    presentation_status: str | None = None
+    error_code: str | None = None
+
+
+class ChatObservationTests(unittest.TestCase):
+    @staticmethod
+    def _loop(*, saver, thread_id, model, loader):
+        return ChatLoop(
+            model_factory=FakeFactory([model]),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id="conv-observations",
+            reader=FakeMaterialPort(skill_material()),
+            control_request_id="observation-turn",
+            checkpointer=saver,
+            thread_id=thread_id,
+            observation_loader=loader,
+        )
+
+    def test_empty_checkpoint_commits_actions_before_user_and_does_not_repeat(self):
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        observations = [
+            Observation(
+                10, "render-1", "RENDERED", "card-1", "draft-editor",
+            ),
+            Observation(
+                20,
+                "action-1",
+                "ACTION",
+                "card-1",
+                "draft-editor",
+                request_id="request-1",
+                action_name="save",
+                description="Save the edited draft",
+                arguments={"artifactId": "artifact-1", "revision": 4},
+                status="COMPLETED",
+                result={"savedRevision": 5},
+                presentation_status="COMPLETED",
+            ),
+        ]
+        calls = []
+
+        def loader(after_sequence):
+            calls.append(after_sequence)
+            return [
+                item for item in observations
+                if item.sequence > after_sequence
+            ][:100]
+
+        saver = InMemorySaver()
+        first_model = FakeModel([AIMessageChunk(content="first reply")])
+        first = self._loop(
+            saver=saver,
+            thread_id="observation-thread",
+            model=first_model,
+            loader=loader,
+        )
+        self.assertEqual("first reply", first.turn("continue"))
+        human_contents = [
+            message.content for message in first_model.observed[0]
+            if message.type == "human"
+        ]
+        self.assertIn(_ACTION_OBSERVATION_MARKER, human_contents[0])
+        self.assertIn('"executionArguments"', human_contents[0])
+        self.assertIn('"systemOutcome"', human_contents[0])
+        self.assertEqual("continue", human_contents[1])
+        self.assertNotIn("render-1", "\n".join(human_contents))
+
+        second_model = FakeModel([AIMessageChunk(content="second reply")])
+        second = self._loop(
+            saver=saver,
+            thread_id="observation-thread",
+            model=second_model,
+            loader=loader,
+        )
+        self.assertEqual("second reply", second.turn("continue again"))
+        all_content = "\n".join(
+            str(message.content) for message in second_model.observed[0]
+        )
+        self.assertEqual(1, all_content.count(_ACTION_OBSERVATION_MARKER))
+        self.assertEqual([0, 20], calls)
+
+    def test_private_cursor_survives_remove_all_messages(self):
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        saver = InMemorySaver()
+        calls = []
+        observation = Observation(
+            41,
+            "action-41",
+            "ACTION",
+            "card-41",
+            "draft-editor",
+            action_name="save",
+            status="COMPLETED",
+        )
+
+        def loader(after_sequence):
+            calls.append(after_sequence)
+            return [observation] if after_sequence == 0 else []
+
+        model = FakeModel([AIMessageChunk(content="first")])
+        graph = build_agent(
+            model,
+            (),
+            {},
+            harness_profile_key=model.configuration.harness_profile_key,
+            checkpointer=saver,
+            middleware=[_ChatObservationStateMiddleware(
+                loader,
+                HumanMessage(content="first user"),
+            )],
+        )
+        config = {"configurable": {"thread_id": "summarized-thread"}}
+        list(graph.stream(
+            {"messages": []}, config=config, stream_mode=["messages", "values"],
+        ))
+        graph.update_state(config, {
+            "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)],
+        })
+        snapshot = graph.get_state(config)
+        self.assertEqual([], snapshot.values["messages"])
+        checkpoint = saver.get_tuple(config)
+        self.assertEqual(
+            41,
+            checkpoint.checkpoint["channel_values"][_OBSERVATION_CURSOR],
+        )
+
+        second_model = FakeModel([AIMessageChunk(content="second")])
+        second_graph = build_agent(
+            second_model,
+            (),
+            {},
+            harness_profile_key=second_model.configuration.harness_profile_key,
+            checkpointer=saver,
+            middleware=[_ChatObservationStateMiddleware(
+                loader,
+                HumanMessage(content="second user"),
+            )],
+        )
+        list(second_graph.stream(
+            {"messages": []}, config=config, stream_mode=["messages", "values"],
+        ))
+        self.assertEqual([0, 41], calls)
+        self.assertNotIn(
+            _ACTION_OBSERVATION_MARKER,
+            "\n".join(str(message.content) for message in second_model.observed[0]),
+        )
+
+    def test_model_failure_keeps_observation_checkpoint_and_does_not_resume(self):
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        observation = Observation(
+            1,
+            "action-failed-model",
+            "ACTION",
+            "card-1",
+            "draft-editor",
+            action_name="save",
+            arguments={"artifactId": "artifact-1"},
+            status="COMPLETED",
+            result={"saved": True},
+        )
+        calls = []
+
+        def loader(after_sequence):
+            calls.append(after_sequence)
+            return [observation] if after_sequence == 0 else []
+
+        saver = InMemorySaver()
+        failed = self._loop(
+            saver=saver,
+            thread_id="failed-thread",
+            model=FakeModel([], raise_on_stream=True),
+            loader=loader,
+        )
+        with self.assertRaisesRegex(ChatLoopError, "MODEL_STREAM_FAILED"):
+            failed.turn("trigger failure")
+
+        unused_model = FakeModel([AIMessageChunk(content="must not resume")])
+        blocked = self._loop(
+            saver=saver,
+            thread_id="failed-thread",
+            model=unused_model,
+            loader=loader,
+        )
+        with self.assertRaisesRegex(ChatLoopError, "MODEL_STREAM_FAILED"):
+            blocked.turn("new text")
+        self.assertEqual([], unused_model.observed)
+        self.assertEqual([0], calls)
 
 
 if __name__ == "__main__":
