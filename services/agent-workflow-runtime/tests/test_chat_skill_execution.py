@@ -1,17 +1,20 @@
 """Focused clean-room checks for bounded Skill execution in ordinary Chat."""
 
 import asyncio
+from collections.abc import AsyncIterator, Iterator
 import hashlib
 import json
 from types import SimpleNamespace
 import unittest
 
-from langchain.agents.middleware import ModelRequest, ModelResponse
+import httpx2
+from langchain.agents.middleware import ModelRequest, ModelResponse, ToolCallRequest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGenerationChunk
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic import Field
+from langsmith import tracing_context
+from pydantic import Field, SecretStr
 
 from skill_registry.ports import MaterialPort, SkillMaterial
 from skill_registry.resources import PackageEntry, PackageEntryDescriptor
@@ -32,6 +35,7 @@ from agent_workflow_runtime.chat.loop import (
     _ChatSkillToolAdmission,
 )
 from agent_workflow_runtime.chat.tools import build_chat_tools
+from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.models import ActionRejected
 
 
@@ -41,6 +45,80 @@ CALCULATE_KEY = "demo.calculate"
 CONFIRM_KEY = "demo.confirm"
 DISPLAY_KEY = "demo.display"
 CHOICE_KEY = "demo.choice"
+
+
+class _DeepSeekWire(httpx2.SyncByteStream, httpx2.AsyncByteStream):
+    def __init__(self, records: list[dict[str, object]]) -> None:
+        self._parts = [
+            ("data: " + json.dumps(record) + "\n\n").encode()
+            for record in records
+        ]
+        self._parts.append(b"data: [DONE]\n\n")
+
+    def __iter__(self) -> Iterator[bytes]:
+        yield from self._parts
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for part in self._parts:
+            yield part
+
+    def close(self) -> None:
+        return None
+
+    async def aclose(self) -> None:
+        return None
+
+
+def _deepseek_stream(
+    *,
+    content: str = "",
+    tool_name: str | None = None,
+    arguments: dict[str, object] | None = None,
+    call_id: str = "call-fixture",
+) -> list[dict[str, object]]:
+    def chunk(
+        delta: dict[str, object] | None = None,
+        finish_reason: str | None = None,
+        usage: dict[str, int] | None = None,
+    ) -> dict[str, object]:
+        return {
+            "id": "fixture-response",
+            "object": "chat.completion.chunk",
+            "created": 7,
+            "model": "deepseek-v4-pro",
+            "choices": [] if delta is None else [{
+                "index": 0,
+                "delta": delta,
+                "finish_reason": finish_reason,
+            }],
+            "usage": usage,
+        }
+
+    delta: dict[str, object] = {
+        "role": "assistant",
+        "content": content,
+        "reasoning_content": "fixture reasoning",
+    }
+    if tool_name is not None:
+        delta["tool_calls"] = [{
+            "index": 0,
+            "id": call_id,
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "arguments": json.dumps(arguments or {}),
+            },
+        }]
+    finish = "tool_calls" if tool_name is not None else "stop"
+    return [
+        chunk(delta),
+        chunk({}, finish),
+        chunk(usage={
+            "prompt_tokens": 2,
+            "completion_tokens": 3,
+            "total_tokens": 5,
+        }),
+    ]
 
 
 def _digest(content):
@@ -685,6 +763,96 @@ class ChatLoopSkillTests(unittest.TestCase):
         )
         self.assertEqual(frozenset(), assets.admitted_tool_names())
 
+    def test_real_deepseek_wire_rejects_hidden_tool_then_allows_use_skill(self) -> None:
+        responses = [
+            _deepseek_stream(
+                tool_name="execute_ability",
+                arguments={
+                    "abilityKey": CALCULATE_KEY,
+                    "arguments": {"value": 99},
+                },
+                call_id="hidden-ability",
+            ),
+            _deepseek_stream(
+                tool_name="use_skill",
+                arguments={"skillKey": SKILL_KEY},
+                call_id="admit-skill",
+            ),
+            _deepseek_stream(
+                tool_name="execute_ability",
+                arguments={
+                    "abilityKey": CALCULATE_KEY,
+                    "arguments": {"value": 3},
+                },
+                call_id="allowed-ability",
+            ),
+            _deepseek_stream(content="Calculated"),
+        ]
+        requests: list[dict[str, object]] = []
+
+        def transport(request: httpx2.Request) -> httpx2.Response:
+            self.assertEqual("api.deepseek.com", request.url.host)
+            self.assertEqual("/chat/completions", request.url.path)
+            requests.append(json.loads(request.content))
+            return httpx2.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                stream=_DeepSeekWire(responses[len(requests) - 1]),
+            )
+
+        http_client = httpx2.Client(transport=httpx2.MockTransport(transport))
+        http_async_client = httpx2.AsyncClient(
+            transport=httpx2.MockTransport(transport),
+        )
+        self.addCleanup(http_client.close)
+        self.addCleanup(lambda: asyncio.run(http_async_client.aclose()))
+        factory = DeepSeekModelFactory(
+            lambda *args: {
+                "model_id": "deepseek-v4-pro",
+                "credential_ref": "synthetic",
+            },
+            lambda *args: SecretStr("synthetic-offline-key"),
+            http_client=http_client,
+            http_async_client=http_async_client,
+        )
+        calls: list[tuple[dict[str, object], TrustedContext]] = []
+        assets, reader, _ = _assets(operations=_operations(calls=calls))
+        loop = ChatLoop(
+            model_factory=factory,
+            model_reference="deepseek-v4-pro",
+            owner=OWNER,
+            conversation_id="conv1",
+            reader=reader,
+            control_request_id="chatctrl1",
+            chat_assets=assets,
+        )
+
+        with tracing_context(enabled=False):
+            self.assertEqual("Calculated", loop.turn("Use the Skill"))
+
+        wire_tools = [
+            {tool["function"]["name"] for tool in request["tools"]}
+            for request in requests
+        ]
+        self.assertEqual(
+            [
+                {"use_skill", "propose_workflow_run"},
+                {"use_skill", "propose_workflow_run"},
+                {
+                    "use_skill", "propose_workflow_run",
+                    "execute_ability", "render_application",
+                },
+                {
+                    "use_skill", "propose_workflow_run",
+                    "execute_ability", "render_application",
+                },
+            ],
+            wire_tools,
+        )
+        self.assertIn("call use_skill", requests[1]["messages"][-1]["content"])
+        self.assertEqual([({"value": 3}, OWNER)], calls)
+        self.assertEqual(1, len(reader.calls))
+
     def test_failed_admission_does_not_open_execution_tools(self) -> None:
         assets = GateAssets()
         reader = Reader()
@@ -878,6 +1046,82 @@ class ChatLoopSkillTests(unittest.TestCase):
 
 
 class ChatSkillToolAdmissionMiddlewareTests(unittest.TestCase):
+    def test_sync_and_async_tool_boundaries_reject_only_unadmitted_skill_tools(
+        self,
+    ) -> None:
+        assets = GateAssets()
+        middleware = _ChatSkillToolAdmission(assets)
+        hidden_ability = ToolCallRequest(
+            tool_call={
+                "name": "execute_ability",
+                "args": {},
+                "id": "hidden-ability",
+                "type": "tool_call",
+            },
+            tool=None,
+            state={},
+            runtime=None,
+        )
+        sync_calls: list[str] = []
+
+        def sync_handler(request: ToolCallRequest) -> ToolMessage:
+            sync_calls.append(request.tool_call["name"])
+            return ToolMessage(
+                content="called",
+                name=request.tool_call["name"],
+                tool_call_id=request.tool_call["id"] or "",
+            )
+
+        rejected = middleware.wrap_tool_call(hidden_ability, sync_handler)
+        self.assertIsInstance(rejected, ToolMessage)
+        self.assertEqual("error", rejected.status)
+        self.assertEqual(
+            "Error: call use_skill in the current turn for a Skill that admits this tool.",
+            rejected.content,
+        )
+        self.assertEqual([], sync_calls)
+
+        assets.names = frozenset({"execute_ability"})
+        allowed = middleware.wrap_tool_call(hidden_ability, sync_handler)
+        self.assertEqual("called", allowed.content)
+        self.assertEqual(["execute_ability"], sync_calls)
+
+        def business_failure(request: ToolCallRequest) -> ToolMessage:
+            del request
+            raise ActionRejected("BUSINESS_FAILURE")
+
+        with self.assertRaisesRegex(ActionRejected, "BUSINESS_FAILURE"):
+            middleware.wrap_tool_call(hidden_ability, business_failure)
+
+        assets.names = frozenset()
+        hidden_render = ToolCallRequest(
+            tool_call={
+                "name": "render_application",
+                "args": {},
+                "id": "hidden-render",
+                "type": "tool_call",
+            },
+            tool=None,
+            state={},
+            runtime=None,
+        )
+        async_calls: list[str] = []
+
+        async def async_handler(request: ToolCallRequest) -> ToolMessage:
+            async_calls.append(request.tool_call["name"])
+            return ToolMessage(
+                content="called",
+                name=request.tool_call["name"],
+                tool_call_id=request.tool_call["id"] or "",
+            )
+
+        async_rejected = asyncio.run(
+            middleware.awrap_tool_call(hidden_render, async_handler),
+        )
+        self.assertIsInstance(async_rejected, ToolMessage)
+        self.assertEqual("error", async_rejected.status)
+        self.assertEqual([], async_calls)
+
     def test_sync_and_async_hooks_preserve_prompt_without_accumulation(self) -> None:
         assets = GateAssets()
         tools = list(build_chat_tools(
