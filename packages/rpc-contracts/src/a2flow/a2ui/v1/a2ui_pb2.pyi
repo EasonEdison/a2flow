@@ -310,6 +310,44 @@ class ExecutionSummary(google.protobuf.message.Message):
 Global___ExecutionSummary: typing_extensions.TypeAlias = ExecutionSummary
 
 @typing.final
+class ActionExecutionObservation(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    BINDING_ID_FIELD_NUMBER: builtins.int
+    ACTION_CODE_FIELD_NUMBER: builtins.int
+    ARGUMENTS_JSON_FIELD_NUMBER: builtins.int
+    RESULT_JSON_FIELD_NUMBER: builtins.int
+    CAPABILITY_SUCCESS_FIELD_NUMBER: builtins.int
+    BUSINESS_SUCCESS_FIELD_NUMBER: builtins.int
+    CAPABILITY_ERROR_CODE_FIELD_NUMBER: builtins.int
+    PRESENTATION_ERROR_CODE_FIELD_NUMBER: builtins.int
+    binding_id: builtins.str
+    action_code: builtins.str
+    arguments_json: builtins.bytes
+    result_json: builtins.bytes
+    capability_success: builtins.bool
+    business_success: builtins.bool
+    capability_error_code: builtins.str
+    presentation_error_code: builtins.str
+    def __init__(
+        self,
+        *,
+        binding_id: builtins.str = ...,
+        action_code: builtins.str = ...,
+        arguments_json: builtins.bytes = ...,
+        result_json: builtins.bytes = ...,
+        capability_success: builtins.bool = ...,
+        business_success: builtins.bool | None = ...,
+        capability_error_code: builtins.str = ...,
+        presentation_error_code: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_business_success", b"_business_success", "business_success", b"business_success"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_business_success", b"_business_success", "action_code", b"action_code", "arguments_json", b"arguments_json", "binding_id", b"binding_id", "business_success", b"business_success", "capability_error_code", b"capability_error_code", "capability_success", b"capability_success", "presentation_error_code", b"presentation_error_code", "result_json", b"result_json"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_business_success", b"_business_success"]) -> typing.Literal["business_success"] | None: ...
+
+Global___ActionExecutionObservation: typing_extensions.TypeAlias = ActionExecutionObservation
+
+@typing.final
 class RuntimeResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -326,6 +364,7 @@ class RuntimeResponse(google.protobuf.message.Message):
     SESSION_FIELD_NUMBER: builtins.int
     INTERACTION_MODE_FIELD_NUMBER: builtins.int
     BUSINESS_SUCCESS_FIELD_NUMBER: builtins.int
+    ACTION_OBSERVATION_FIELD_NUMBER: builtins.int
     params_json: builtins.bytes
     messages_json: builtins.bytes
     snapshot_json: builtins.bytes
@@ -345,6 +384,8 @@ class RuntimeResponse(google.protobuf.message.Message):
     def catalog(self) -> Global___CatalogDescriptor: ...
     @property
     def session(self) -> Global___RuntimeSession: ...
+    @property
+    def action_observation(self) -> Global___ActionExecutionObservation: ...
     def __init__(
         self,
         *,
@@ -361,8 +402,9 @@ class RuntimeResponse(google.protobuf.message.Message):
         session: Global___RuntimeSession | None = ...,
         interaction_mode: builtins.str = ...,
         business_success: builtins.bool = ...,
+        action_observation: Global___ActionExecutionObservation | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["catalog", b"catalog", "release", b"release", "session", b"session"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["actions", b"actions", "business_success", b"business_success", "catalog", b"catalog", "complete_interaction", b"complete_interaction", "error_code", b"error_code", "executions", b"executions", "interaction_mode", b"interaction_mode", "messages_json", b"messages_json", "params_json", b"params_json", "release", b"release", "selected_branch_id", b"selected_branch_id", "session", b"session", "snapshot_json", b"snapshot_json"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["action_observation", b"action_observation", "catalog", b"catalog", "release", b"release", "session", b"session"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["action_observation", b"action_observation", "actions", b"actions", "business_success", b"business_success", "catalog", b"catalog", "complete_interaction", b"complete_interaction", "error_code", b"error_code", "executions", b"executions", "interaction_mode", b"interaction_mode", "messages_json", b"messages_json", "params_json", b"params_json", "release", b"release", "selected_branch_id", b"selected_branch_id", "session", b"session", "snapshot_json", b"snapshot_json"]) -> None: ...
 
 Global___RuntimeResponse: typing_extensions.TypeAlias = RuntimeResponse

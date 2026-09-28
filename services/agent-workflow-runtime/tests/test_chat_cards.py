@@ -1,6 +1,7 @@
 """Offline card lifecycle contract plus opt-in disposable PostgreSQL coverage."""
 
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import json
 import os
@@ -11,7 +12,7 @@ from uuid import uuid4
 from skillweave_contracts import TrustedContext
 
 from agent_workflow_runtime.application_runtime import PreparedApplication
-from agent_workflow_runtime.chat.cards import ChatCardStore
+from agent_workflow_runtime.chat.cards import ActionObservation, ChatCardStore
 from agent_workflow_runtime.models import ActionRejected
 
 
@@ -38,6 +39,8 @@ def metadata(conversation="conversation-1", *, tool_call="tool-1"):
                                  ["APPLICATION:choice-card", "version-1"]],
             "conversationId": conversation, "controlRequestId": "turn-1",
             "toolCallId": tool_call,
+            "observation": {"description": "Choose one option",
+                            "arguments": {"prompt": "Choose"}},
             "binding": {"operationRef": "ability.confirm", "secret": "server-only"}}
 
 
@@ -46,6 +49,7 @@ class MemoryStorage:
 
     def __init__(self):
         self.cards, self.requests, self.order = {}, {}, []
+        self.observations, self.observation_heads = {}, {}
         self.lock, self.setup_called = RLock(), False
 
     def setup(self):
@@ -54,11 +58,13 @@ class MemoryStorage:
     @contextmanager
     def transaction(self):
         with self.lock:
-            snapshot = deepcopy((self.cards, self.requests, self.order))
+            snapshot = deepcopy((self.cards, self.requests, self.order,
+                                 self.observations, self.observation_heads))
             try:
                 yield MemoryTransaction(self)
             except BaseException:
-                self.cards, self.requests, self.order = snapshot
+                (self.cards, self.requests, self.order, self.observations,
+                 self.observation_heads) = snapshot
                 raise
 
 
@@ -111,6 +117,25 @@ class MemoryTransaction:
         if key not in self.storage.requests:
             raise AssertionError("missing request")
         self.storage.requests[key] = deepcopy(request)
+
+    def append_observation(self, scope, event_id, payload):
+        event_key = (*scope, event_id)
+        existing = self.storage.observations.get(event_key)
+        if existing is not None:
+            if existing["payload"] != payload:
+                raise AssertionError("observation conflict")
+            return deepcopy(existing)
+        sequence = self.storage.observation_heads.get(scope, 1)
+        self.storage.observation_heads[scope] = sequence + 1
+        row = {"sequence": sequence, "event_id": event_id,
+               "payload": deepcopy(payload)}
+        self.storage.observations[event_key] = row
+        return deepcopy(row)
+
+    def list_observations(self, scope, after_sequence, limit):
+        rows = [deepcopy(value) for key, value in self.storage.observations.items()
+                if key[:3] == scope and value["sequence"] > after_sequence]
+        return sorted(rows, key=lambda item: item["sequence"])[:limit]
 
 
 class ChatCardContract:
@@ -187,6 +212,13 @@ class ChatCardContract:
         self.assert_code("ACTION_REQUEST_CONFLICT", lambda: self.store.claim(
             self.owner, self.conversation, card["cardId"], "request-1", "confirm",
             {"optionId": "first"}, 0))
+        observations = self.store.list_observations(
+            self.owner, self.conversation, after_sequence=0)
+        self.assertEqual(["RENDERED", "ACTION"], [item.kind for item in observations])
+        self.assertEqual([1, 2], [item.sequence for item in observations])
+        self.assertEqual("request-1", observations[1].request_id)
+        self.assertIsNone(observations[1].arguments)
+        self.assertEqual(result, observations[1].result)
 
     def test_business_failure_waits_and_new_request_uses_new_revision(self):
         card = self.save()
@@ -219,6 +251,11 @@ class ChatCardContract:
             self.owner, self.conversation, card["cardId"], "request-2", "confirm", {}, 2))
         self.assert_code("ACTION_FAILURE_CONFLICT", lambda: self.store.fail(
             self.owner, self.conversation, card["cardId"], "request-1", "OTHER_ERROR"))
+        observations = self.store.list_observations(
+            self.owner, self.conversation, after_sequence=1)
+        self.assertEqual(1, len(observations))
+        self.assertEqual("UNKNOWN", observations[0].status)
+        self.assertEqual("BUSINESS_DISPATCH_EXCEPTION", observations[0].error_code)
 
     def test_selection_and_ingress_are_fail_closed(self):
         card = self.save()
@@ -228,6 +265,8 @@ class ChatCardContract:
             self.owner, self.conversation, card["cardId"], "request-1", {}, True, True))
         self.assertEqual("EXECUTING", self.store.read(
             self.owner, self.conversation, card["cardId"])["status"])
+        self.assertEqual(["RENDERED"], [item.kind for item in self.store.list_observations(
+            self.owner, self.conversation, after_sequence=0)])
         self.assert_code("CARD_ENVIRONMENT_MISMATCH", lambda: self.store.list(
             TrustedContext(self.owner.user_id, "ONLINE"), self.conversation))
         self.assert_code("TRUSTED_CONTEXT_REQUIRED", lambda: self.store.list(
@@ -259,14 +298,29 @@ class OfflineChatCardTests(ChatCardContract, unittest.TestCase):
         self.assertTrue(claim["dispatch"])
         display["snapshotMessages"] = [{"surface": "after"}]
         value = PreparedApplication(base.application_key, base.application_version, False, json.dumps(display))
+        observation = ActionObservation(
+            description="Save manuscript",
+            arguments={"title": "Nested", "body": {"text": "safe"}},
+            result={"artifactId": "artifact-1"},
+            capability_success=True,
+            business_success=True,
+        )
         done = self.store.finish(self.owner, self.conversation, saved["cardId"], "rpc-request", {"saved": True},
-                                 True, False, prepared=value, binding_metadata=private)
+                                 True, False, prepared=value, binding_metadata=private,
+                                 observation=observation)
         self.assertEqual(done["status"], "DISPLAY_ONLY")
         self.assertEqual(done["display"]["snapshotMessages"], [{"surface": "after"}])
         self.assertNotIn("private-session", json.dumps(done))
         self.assertEqual(self.store.replay(self.owner, self.conversation, saved["cardId"],
                                           "rpc-request", "save", inputs, 0), done)
         self.assertEqual(self.store.get_binding(self.owner, self.conversation, saved["cardId"])["metadata"], private)
+        observed = self.store.list_observations(
+            self.owner, self.conversation, after_sequence=1)[0]
+        self.assertEqual(observation.arguments, observed.arguments)
+        self.assertEqual(observation.result, observed.result)
+        self.assertTrue(observed.capability_success)
+        self.assertTrue(observed.business_success)
+        self.assertNotIn("private-session", json.dumps(observed.result))
 
     def make_store(self):
         self.memory = MemoryStorage()
@@ -295,6 +349,34 @@ class PostgresChatCardTests(ChatCardContract, unittest.TestCase):
         unknown = restarted.fail(self.owner, self.conversation, card["cardId"],
                                   "request-crash", "PROCESS_TERMINATED")
         self.assertEqual(("UNKNOWN", 2), (unknown["status"], unknown["revision"]))
+
+    def test_concurrent_cards_allocate_one_committed_conversation_sequence(self):
+        first = self.save(tool_call="tool-concurrent-1")
+        second = self.save(tool_call="tool-concurrent-2")
+        self.store.claim(self.owner, self.conversation, first["cardId"],
+                         "request-concurrent-1", "confirm", {}, 0)
+        self.store.claim(self.owner, self.conversation, second["cardId"],
+                         "request-concurrent-2", "confirm", {}, 0)
+
+        def finish(card_id, request_id):
+            return self.store.finish(
+                self.owner, self.conversation, card_id, request_id,
+                {"requestId": request_id}, True, True,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                pool.submit(finish, first["cardId"], "request-concurrent-1"),
+                pool.submit(finish, second["cardId"], "request-concurrent-2"),
+            ]
+            for future in futures:
+                future.result(timeout=5)
+
+        observations = self.store.list_observations(
+            self.owner, self.conversation, after_sequence=0,
+        )
+        self.assertEqual([1, 2, 3, 4], [item.sequence for item in observations])
+        self.assertEqual(4, len({item.event_id for item in observations}))
 
 
 if __name__ == "__main__":

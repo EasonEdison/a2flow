@@ -76,6 +76,16 @@ message ExecutionSummary {
   int32 capability_version = 4;
   string error_code = 5;
 }
+message ActionExecutionObservation {
+  string binding_id = 1;
+  string action_code = 2;
+  bytes arguments_json = 3;
+  bytes result_json = 4;
+  bool capability_success = 5;
+  optional bool business_success = 6;
+  string capability_error_code = 7;
+  string presentation_error_code = 8;
+}
 message RuntimeResponse {
   ApplicationRelease release = 1;
   bytes params_json = 2;
@@ -91,6 +101,7 @@ message RuntimeResponse {
   RuntimeSession session = 11;
   string interaction_mode = 12;
   bool business_success = 13;
+  ActionExecutionObservation action_observation = 14;
 }
 service A2uiExecution {
   rpc Describe(DescribeRequest) returns (DescribeResponse);

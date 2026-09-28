@@ -5,12 +5,15 @@ before business dispatch and never guesses whether an uncertain operation is
 safe to retry. Business retries and compensation remain outside this module.
 """
 
-from contextlib import contextmanager
-from copy import deepcopy
-from hashlib import sha256
+from __future__ import annotations
+
 import json
 import re
-from typing import Any
+from contextlib import contextmanager
+from copy import deepcopy
+from dataclasses import asdict, dataclass
+from hashlib import sha256
+from typing import Any, Literal, Never, TypeAlias, TypedDict, cast
 
 import psycopg
 from psycopg.rows import dict_row
@@ -20,12 +23,61 @@ from skillweave_contracts import TrustedContext
 from ..application_runtime import PreparedApplication
 from ..models import ActionRejected
 
-
 _ERROR_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,127}")
 _MAX_DISPLAY_BYTES = 1_048_576
 _MAX_METADATA_BYTES = 262_144
 _MAX_INPUT_BYTES = 65_536
 _MAX_RESULT_BYTES = 262_144
+_MAX_OBSERVATION_BYTES = _MAX_RESULT_BYTES + _MAX_METADATA_BYTES + _MAX_INPUT_BYTES
+
+JsonValue: TypeAlias = (
+    bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"] | None
+)
+JsonObject: TypeAlias = dict[str, JsonValue]
+Scope: TypeAlias = tuple[str, int, str]
+ObservationKind: TypeAlias = Literal["RENDERED", "ACTION"]
+ObservationStatus: TypeAlias = Literal["SUCCEEDED", "FAILED", "UNKNOWN", "REJECTED"]
+PresentationStatus: TypeAlias = Literal["SUCCEEDED", "FAILED"]
+
+
+@dataclass(frozen=True, slots=True)
+class ActionObservation:
+    arguments: JsonObject
+    result: JsonValue
+    capability_success: bool
+    business_success: bool | None
+    description: str | None = None
+    presentation_status: PresentationStatus = "SUCCEEDED"
+    presentation_error_code: str | None = None
+    capability_error_code: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ChatObservation:
+    sequence: int
+    event_id: str
+    kind: ObservationKind
+    card_id: str
+    application_key: str
+    request_id: str | None = None
+    action_name: str | None = None
+    description: str | None = None
+    arguments: JsonObject | None = None
+    status: ObservationStatus | None = None
+    result: JsonValue = None
+    capability_success: bool | None = None
+    business_success: bool | None = None
+    presentation_status: PresentationStatus | None = None
+    capability_error_code: str | None = None
+    presentation_error_code: str | None = None
+    error_code: str | None = None
+
+
+class ObservationRow(TypedDict):
+    sequence: int
+    event_id: str
+    payload: JsonObject
+
 
 DDL = (
     """CREATE TABLE IF NOT EXISTS chat_a2ui_cards (
@@ -53,12 +105,26 @@ DDL = (
         FOREIGN KEY (environment,user_id,conversation_id,card_id)
           REFERENCES chat_a2ui_cards(environment,user_id,conversation_id,card_id)
     )""",
+    """CREATE TABLE IF NOT EXISTS chat_a2ui_observation_heads (
+        environment TEXT NOT NULL, user_id BIGINT NOT NULL,
+        conversation_id TEXT NOT NULL, next_sequence BIGINT NOT NULL DEFAULT 1
+          CHECK (next_sequence > 0),
+        PRIMARY KEY (environment,user_id,conversation_id)
+    )""",
+    """CREATE TABLE IF NOT EXISTS chat_a2ui_observations (
+        environment TEXT NOT NULL, user_id BIGINT NOT NULL,
+        conversation_id TEXT NOT NULL, sequence BIGINT NOT NULL CHECK (sequence > 0),
+        event_id TEXT NOT NULL, payload JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+        PRIMARY KEY (environment,user_id,conversation_id,sequence),
+        UNIQUE (environment,user_id,conversation_id,event_id)
+    )""",
     """CREATE INDEX IF NOT EXISTS chat_a2ui_cards_conversation_order
        ON chat_a2ui_cards(environment,user_id,conversation_id,created_at,card_id)""",
 )
 
 
-def _reject(code):
+def _reject(code: str) -> Never:
     raise ActionRejected(code)
 
 
@@ -183,6 +249,63 @@ def _persist_option_selection(display, inputs):
     return updated
 
 
+def _event_payload(
+    card: dict[str, Any],
+    *,
+    kind: ObservationKind,
+    request_id: str | None = None,
+    action_name: str | None = None,
+    description: str | None = None,
+    arguments: JsonObject | None = None,
+    status: ObservationStatus | None = None,
+    result: JsonValue = None,
+    capability_success: bool | None = None,
+    business_success: bool | None = None,
+    presentation_status: PresentationStatus | None = None,
+    capability_error_code: str | None = None,
+    presentation_error_code: str | None = None,
+    error_code: str | None = None,
+) -> JsonObject:
+    value = {"kind": kind, "cardId": card["card_id"],
+             "applicationKey": card["display"]["applicationKey"]}
+    optional = {"requestId": request_id, "actionName": action_name,
+                "description": description, "arguments": arguments,
+                "status": status, "result": result,
+                "capabilitySuccess": capability_success,
+                "businessSuccess": business_success,
+                "presentationStatus": presentation_status,
+                "capabilityErrorCode": capability_error_code,
+                "presentationErrorCode": presentation_error_code,
+                "errorCode": error_code}
+    value.update({key: item for key, item in optional.items() if item is not None})
+    copied, _ = _json_copy(value, "INVALID_CHAT_OBSERVATION", _MAX_OBSERVATION_BYTES)
+    if copied["kind"] not in {"RENDERED", "ACTION"}:
+        _reject("INVALID_CHAT_OBSERVATION")
+    return cast(JsonObject, copied)
+
+
+def _typed_observation(row: ObservationRow) -> ChatObservation:
+    value = cast(JsonObject, deepcopy(row["payload"]))
+    return ChatObservation(
+        sequence=cast(int, row["sequence"]), event_id=cast(str, row["event_id"]),
+        kind=cast(ObservationKind, value["kind"]),
+        card_id=cast(str, value["cardId"]),
+        application_key=cast(str, value["applicationKey"]),
+        request_id=cast(str | None, value.get("requestId")),
+        action_name=cast(str | None, value.get("actionName")),
+        description=cast(str | None, value.get("description")),
+        arguments=cast(JsonObject | None, value.get("arguments")),
+        status=cast(ObservationStatus | None, value.get("status")),
+        result=cast(JsonValue, value.get("result")),
+        capability_success=cast(bool | None, value.get("capabilitySuccess")),
+        business_success=cast(bool | None, value.get("businessSuccess")),
+        presentation_status=cast(PresentationStatus | None, value.get("presentationStatus")),
+        capability_error_code=cast(str | None, value.get("capabilityErrorCode")),
+        presentation_error_code=cast(str | None, value.get("presentationErrorCode")),
+        error_code=cast(str | None, value.get("errorCode")),
+    )
+
+
 class ChatCardStore:
     """PostgreSQL card store with an explicit test-only storage injection seam."""
 
@@ -224,6 +347,20 @@ class ChatCardStore:
                 _reject("CARD_STORE_OPERATION_UNCONFIRMED")
             if not inserted and stored["save_fingerprint"] != card["save_fingerprint"]:
                 _reject("CARD_REPLAY_CONFLICT")
+            if inserted:
+                observed = metadata.get("observation")
+                description = observed.get("description") if type(observed) is dict else None
+                arguments = observed.get("arguments") if type(observed) is dict else None
+                if description is not None and type(description) is not str:
+                    _reject("INVALID_CHAT_OBSERVATION")
+                if arguments is not None and type(arguments) is not dict:
+                    _reject("INVALID_CHAT_OBSERVATION")
+                transaction.append_observation(
+                    _scope(owner, conversation_id),
+                    card_id + ":rendered",
+                    _event_payload(card, kind="RENDERED", description=description,
+                                   arguments=cast(JsonObject | None, arguments)),
+                )
             return _public(stored)
 
     def list(self, owner, conversation_id):
@@ -251,6 +388,22 @@ class ChatCardStore:
                 _reject("CARD_NOT_FOUND")
             return {"card": _public(card),
                     "metadata": deepcopy(card["binding_metadata"])}
+
+    def list_observations(
+        self, owner: TrustedContext, conversation_id: str, *, after_sequence: int,
+        limit: int = 100,
+    ) -> list[ChatObservation]:
+        """Read one committed conversation prefix; no acknowledgement is stored here."""
+
+        owner = _owner(owner, self._environment)
+        conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
+        if type(after_sequence) is not int or after_sequence < 0:
+            _reject("INVALID_OBSERVATION_CURSOR")
+        if type(limit) is not int or limit < 1 or limit > 100:
+            _reject("INVALID_OBSERVATION_LIMIT")
+        with self._storage.transaction() as transaction:
+            return [_typed_observation(row) for row in transaction.list_observations(
+                _scope(owner, conversation_id), after_sequence, limit)]
 
     def replay(self, owner: TrustedContext, conversation_id: str, card_id: str, request_id: str,
                action_name: str, inputs: dict[str, Any], expected_revision: int) -> dict[str, Any] | None:
@@ -335,7 +488,9 @@ class ChatCardStore:
     def finish(self, owner: TrustedContext, conversation_id: str, card_id: str, request_id: str,
                result: Any, business_success: bool, completes: bool, *,
                prepared: PreparedApplication | None = None,
-               binding_metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+               binding_metadata: dict[str, Any] | None = None,
+               observation: ActionObservation | None = None,
+               observation_status: ObservationStatus | None = None) -> dict[str, Any]:
         owner = _owner(owner, self._environment)
         conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
         card_id = _identifier(card_id, "INVALID_CARD_ID", limit=128)
@@ -344,7 +499,10 @@ class ChatCardStore:
         if type(business_success) is not bool or type(completes) is not bool:
             _reject("INVALID_ACTION_OUTCOME")
         finish_payload = {"result": result, "businessSuccess": business_success,
-                          "completes": completes}
+                          "completes": completes,
+                          "observationStatus": observation_status,
+                          "observation": (None if observation is None
+                                          else asdict(observation))}
         update = None
         if prepared is not None or binding_metadata is not None:
             display, waiting_status = _validate_prepared(prepared)
@@ -395,10 +553,36 @@ class ChatCardStore:
             request["card_snapshot"] = _public(card)
             transaction.update_card(card)
             transaction.update_request(request)
+            transaction.append_observation(
+                scope, "action:" + card_id + ":" + request_id,
+                _event_payload(
+                    card, kind="ACTION", request_id=request_id,
+                    action_name=request["payload"]["actionName"],
+                    description=None if observation is None else observation.description,
+                    arguments=None if observation is None else observation.arguments,
+                    status=(observation_status or
+                            ("SUCCEEDED" if business_success else "FAILED")),
+                    result=result if observation is None else observation.result,
+                    capability_success=(None if observation is None
+                                        else observation.capability_success),
+                    business_success=(
+                        None if observation is None and observation_status == "REJECTED"
+                        else business_success if observation is None
+                        else observation.business_success
+                    ),
+                    presentation_status=(None if observation is None
+                                         else observation.presentation_status),
+                    capability_error_code=(None if observation is None
+                                           else observation.capability_error_code),
+                    presentation_error_code=(None if observation is None
+                                             else observation.presentation_error_code),
+                    error_code=None,
+                ),
+            )
             return _public(card)
 
     def fail(self, owner: TrustedContext, conversation_id: str, card_id: str, request_id: str,
-             error_code: str) -> dict[str, Any]:
+             error_code: str, *, observation: ActionObservation | None = None) -> dict[str, Any]:
         owner = _owner(owner, self._environment)
         conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
         card_id = _identifier(card_id, "INVALID_CARD_ID", limit=128)
@@ -427,6 +611,30 @@ class ChatCardStore:
             request["card_snapshot"] = _public(card)
             transaction.update_card(card)
             transaction.update_request(request)
+            transaction.append_observation(
+                scope, "action:" + card_id + ":" + request_id,
+                _event_payload(
+                    card, kind="ACTION", request_id=request_id,
+                    action_name=request["payload"]["actionName"],
+                    description=None if observation is None else observation.description,
+                    arguments=None if observation is None else observation.arguments,
+                    status=("UNKNOWN" if observation is None
+                            or observation.business_success is None
+                            else "SUCCEEDED" if observation.business_success else "FAILED"),
+                    result=None if observation is None else observation.result,
+                    capability_success=(None if observation is None
+                                        else observation.capability_success),
+                    business_success=(None if observation is None
+                                      else observation.business_success),
+                    presentation_status=(None if observation is None
+                                         else observation.presentation_status),
+                    capability_error_code=(None if observation is None
+                                           else observation.capability_error_code),
+                    presentation_error_code=(None if observation is None
+                                             else observation.presentation_error_code),
+                    error_code=error_code,
+                ),
+            )
             return _public(card)
 
 
@@ -543,3 +751,44 @@ class _PostgresTransaction:
              request["request_id"])).fetchone()
         if row is None:
             _reject("CARD_STORE_OPERATION_UNCONFIRMED")
+
+    def append_observation(
+        self, scope: Scope, event_id: str, payload: JsonObject
+    ) -> ObservationRow:
+        self._connection.execute(
+            """INSERT INTO chat_a2ui_observation_heads
+              (environment,user_id,conversation_id,next_sequence)
+              VALUES (%s,%s,%s,1) ON CONFLICT DO NOTHING""", scope)
+        head = self._connection.execute(
+            """SELECT next_sequence FROM chat_a2ui_observation_heads
+              WHERE environment=%s AND user_id=%s AND conversation_id=%s
+              FOR UPDATE""", scope).fetchone()
+        existing = self._connection.execute(
+            """SELECT sequence,event_id,payload FROM chat_a2ui_observations
+              WHERE environment=%s AND user_id=%s AND conversation_id=%s
+              AND event_id=%s""", (*scope, event_id)).fetchone()
+        if existing is not None:
+            if existing["payload"] != payload:
+                _reject("CHAT_OBSERVATION_CONFLICT")
+            return cast(ObservationRow, dict(existing))
+        sequence = head["next_sequence"]
+        self._connection.execute(
+            """UPDATE chat_a2ui_observation_heads SET next_sequence=%s
+              WHERE environment=%s AND user_id=%s AND conversation_id=%s""",
+            (sequence + 1, *scope))
+        row = self._connection.execute(
+            """INSERT INTO chat_a2ui_observations
+              (environment,user_id,conversation_id,sequence,event_id,payload)
+              VALUES (%s,%s,%s,%s,%s,%s) RETURNING sequence,event_id,payload""",
+            (*scope, sequence, event_id, Jsonb(payload))).fetchone()
+        return cast(ObservationRow, dict(row))
+
+    def list_observations(
+        self, scope: Scope, after_sequence: int, limit: int
+    ) -> list[ObservationRow]:
+        rows = self._connection.execute(
+            """SELECT sequence,event_id,payload FROM chat_a2ui_observations
+              WHERE environment=%s AND user_id=%s AND conversation_id=%s
+              AND sequence>%s ORDER BY sequence LIMIT %s""",
+            (*scope, after_sequence, limit)).fetchall()
+        return [cast(ObservationRow, dict(row)) for row in rows]
