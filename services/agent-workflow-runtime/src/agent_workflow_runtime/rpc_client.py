@@ -156,6 +156,18 @@ class ExecutionSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class ActionExecutionObservation:
+    binding_id: str
+    action_code: str
+    arguments: JsonObject
+    result: JsonValue
+    capability_success: bool
+    business_success: bool | None
+    capability_error_code: str | None
+    presentation_error_code: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeResult:
     release: ReleaseIdentity
     params: JsonObject
@@ -169,6 +181,7 @@ class RuntimeResult:
     session: RuntimeSession
     interaction_mode: str
     business_success: bool
+    action_observation: ActionExecutionObservation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,6 +406,15 @@ class RpcClient:
             raise RpcFailure("RPC_SESSION_MISMATCH")
         executions = tuple(ExecutionSummary(item.binding_id, item.action_code, item.success, item.capability_version,
                                             item.error_code) for item in value.executions)
+        observation = None
+        if value.HasField("action_observation"):
+            item = value.action_observation
+            observation = ActionExecutionObservation(
+                item.binding_id, item.action_code, _object(item.arguments_json),
+                _decode(item.result_json), item.capability_success,
+                item.business_success if item.HasField("business_success") else None,
+                item.capability_error_code or None, item.presentation_error_code or None,
+            )
         return RuntimeResult(release, _object(value.params_json), _messages(value.messages_json), _messages(value.snapshot_json),
                              executions, _actions(value.actions), value.complete_interaction, value.selected_branch_id,
-                             catalog, session, _mode(value.interaction_mode), value.business_success)
+                             catalog, session, _mode(value.interaction_mode), value.business_success, observation)

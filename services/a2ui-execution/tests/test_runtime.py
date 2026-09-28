@@ -272,6 +272,174 @@ def test_activate_and_action_preserve_release_session_and_trusted_child_request(
     assert result.snapshot[-1]["updateDataModel"]["value"] == {"greeting": "hello A2Flow"}  # type: ignore[index]
     assert capabilities.calls[0][1] == {"name": "A2Flow"}
     assert capabilities.calls[0][2].request_id.startswith("a2ui:")
+    observation = result.action_observation
+    assert observation is not None
+    assert observation.arguments == {"name": "A2Flow"}
+    assert observation.result == {
+        "decisionType": "READING",
+        "greeting": "hello A2Flow",
+    }
+    assert observation.business_success is True
+    assert observation.presentation_error_code is None
+
+
+def test_action_observation_records_mapped_business_values_and_filters_authority() -> None:
+    raw = build_json()
+    binding = cast(dict[str, Any], raw["actionBindings"][0])  # type: ignore[index]
+    binding["requestMappings"].extend(
+        [
+            {
+                "source": "APP_PARAMS",
+                "sourcePath": "/title",
+                "targetPath": "/draftTitle",
+                "constantValue": None,
+            },
+            {
+                "source": "CONSTANT",
+                "sourcePath": None,
+                "targetPath": "/options",
+                "constantValue": {
+                    "kind": "MANUSCRIPT",
+                    "endpoint": "business-endpoint",
+                    "title": "保留业务标题",
+                    "credentials": {"token": "secret"},
+                },
+            },
+            {
+                "source": "TRUSTED_CONTEXT",
+                "sourcePath": "/userId",
+                "targetPath": "/userId",
+                "constantValue": None,
+            },
+        ]
+    )
+    build = ApplicationBuild.model_validate(raw)
+    release = ApplicationRelease(
+        "demo.app", "app-build", "sha256:app", "build-1", Environment.PRT
+    )
+    published = PublishedApplication(release, build)
+    capabilities = Capabilities()
+    runtime = A2uiRuntimeService(Releases(published), capabilities)
+    activated = runtime.activate(
+        "demo.app", {"title": "用户草稿"}, "app-build", "sha256:app", context()
+    )
+    action = {
+        "version": "v0.9.1",
+        "action": {
+            "name": "demo.submit",
+            "surfaceId": "main",
+            "sourceComponentId": "submit",
+            "timestamp": "2026-09-25T00:00:00Z",
+            "context": {"name": "A2Flow"},
+        },
+    }
+
+    result = runtime.act(
+        TrustedCard(
+            0, published.release, activated.session, 1, activated.params, activated.snapshot
+        ),
+        "correlation",
+        activated.session.token,
+        "build-1",
+        1,
+        "request-2",
+        action,
+        context("request-2"),
+    )
+
+    assert capabilities.calls[0][1]["userId"] == 0
+    observation = result.action_observation
+    assert observation is not None
+    assert observation.arguments == {
+        "name": "A2Flow",
+        "draftTitle": "用户草稿",
+        "options": {
+            "kind": "MANUSCRIPT",
+            "endpoint": "business-endpoint",
+            "title": "保留业务标题",
+        },
+    }
+
+
+class InvalidPresentationCapabilities(Capabilities):
+    def execute_action_code(
+        self, action_code: str, arguments: JsonObject, context: TrustedContext
+    ) -> ExecutionResult:
+        self.calls.append((action_code, arguments, context))
+        return ExecutionResult(
+            True,
+            action_code,
+            "cap-build",
+            "sha256:cap",
+            3,
+            context.client,
+            context.environment,
+            context.environment,
+            context.request_id,
+            {
+                "decisionType": "READING",
+                "receiptId": "receipt-1",
+                "details": {
+                    "title": "保留结果标题",
+                    "endpoint": "business-endpoint",
+                    "credentialHandle": "private-handle",
+                },
+            },
+        )
+
+
+def test_presentation_failure_preserves_business_result_and_old_ledger() -> None:
+    build = ApplicationBuild.model_validate(build_json())
+    release = ApplicationRelease(
+        "demo.app", "app-build", "sha256:app", "build-1", Environment.PRT
+    )
+    published = PublishedApplication(release, build)
+    capabilities = InvalidPresentationCapabilities()
+    runtime = A2uiRuntimeService(Releases(published), capabilities)
+    activated = runtime.activate(
+        "demo.app", {"title": "提交"}, "app-build", "sha256:app", context()
+    )
+    action = {
+        "version": "v0.9.1",
+        "action": {
+            "name": "demo.submit",
+            "surfaceId": "main",
+            "sourceComponentId": "submit",
+            "timestamp": "2026-09-25T00:00:00Z",
+            "context": {"name": "A2Flow"},
+        },
+    }
+
+    result = runtime.act(
+        TrustedCard(
+            0, published.release, activated.session, 3, activated.params, activated.snapshot
+        ),
+        "correlation",
+        activated.session.token,
+        "build-1",
+        3,
+        "request-presentation",
+        action,
+        context("request-presentation"),
+    )
+
+    assert len(capabilities.calls) == 1
+    assert result.snapshot == activated.snapshot
+    assert result.messages == ()
+    assert result.complete_interaction is False
+    assert result.business_success is True
+    observation = result.action_observation
+    assert observation is not None
+    assert observation.result == {
+        "decisionType": "READING",
+        "receiptId": "receipt-1",
+        "details": {
+            "title": "保留结果标题",
+            "endpoint": "business-endpoint",
+        },
+    }
+    assert observation.business_success is True
+    assert observation.presentation_error_code == "A2UI_ADAPTER_SOURCE_MISSING"
 
 
 @pytest.mark.parametrize(
@@ -438,6 +606,11 @@ def test_existing_grpc_contract_describe_activate_and_act() -> None:
         assert acted.complete_interaction is True
         assert acted.release == activated.release
         assert acted.session == activated.session
+        assert acted.action_observation.binding_id == "submit-binding"
+        assert json.loads(acted.action_observation.arguments_json) == {"name": "RPC"}
+        assert json.loads(acted.action_observation.result_json)["decisionType"] == "READING"
+        assert acted.action_observation.business_success is True
+        assert acted.action_observation.presentation_error_code == ""
     finally:
         channel.close()
         server.stop(0).wait(timeout=3)
