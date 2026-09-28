@@ -34,7 +34,11 @@ from agent_workflow_runtime.chat.loop import (
     ChatLoopError,
     _ChatSkillToolAdmission,
 )
-from agent_workflow_runtime.chat.tools import build_chat_tools
+from agent_workflow_runtime.chat.tools import (
+    QuerySkillDependenciesModelArgs,
+    RenderModelArgs,
+    build_chat_tools,
+)
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.models import ActionRejected
 
@@ -196,7 +200,20 @@ def _ability(key, *, version="v1"):
 
 def _application(key):
     interactive = key == CHOICE_KEY
+    properties = (
+        {
+            "prompt": {"type": "string"},
+            "options": {"type": "array"},
+        }
+        if interactive
+        else {"text": {"type": "string"}}
+    )
     return {
+        "description": (
+            "Let the user choose one option."
+            if interactive
+            else "Show one saved result."
+        ),
         "asset": {
             "applicationKey": key,
             "protocolProfileRef": "a2flow.mvp08.v1",
@@ -222,7 +239,12 @@ def _application(key):
         "surfaceTemplate": {
             "rootId": "root",
             "components": [{"id": "root", "component": "Text"}],
-            "inputSchema": {"type": "object"},
+            "inputSchema": {
+                "type": "object",
+                "properties": properties,
+                "required": list(properties),
+                "additionalProperties": False,
+            },
         },
     }
 
@@ -435,7 +457,11 @@ class GateAssets:
         self.names = (
             frozenset({"execute_ability"})
             if skill_key == "execute-only"
-            else frozenset({"execute_ability", "render_application"})
+            else frozenset({
+                "execute_ability",
+                "query_skill_dependencies",
+                "render_application",
+            })
         )
         return {
             "content": {"instructions": "fixture", "resources": []},
@@ -447,14 +473,37 @@ class GateAssets:
     ) -> dict[str, object]:
         return {"abilityKey": ability_key, "output": dict(arguments)}
 
+    def query_skill_dependencies(
+        self, application_codes: list[str],
+    ) -> dict[str, object]:
+        return {"applications": [
+            {
+                "appCode": app_code,
+                "description": "Fixture Application.",
+                "usage": (
+                    "Call render_application with this appCode and params that "
+                    "satisfy paramsSchema."
+                ),
+                "paramsSchema": {"type": "object"},
+            }
+            for app_code in application_codes
+        ]}
+
     def render_application(
         self,
-        application_key: str,
-        data: dict[str, object],
+        app_code: str,
+        params: dict[str, object],
         tool_call_id: str,
     ) -> dict[str, object]:
-        del data
-        return {"cardId": "card:" + tool_call_id, "applicationKey": application_key}
+        del params
+        return {"cardId": "card:" + tool_call_id, "applicationKey": app_code}
+
+    def render_observation(self, card_id: str) -> dict[str, object]:
+        return {
+            "cardId": card_id,
+            "applicationKey": CHOICE_KEY,
+            "arguments": {},
+        }
 
 
 def _call(index, call_id, name, arguments):
@@ -491,7 +540,11 @@ class ChatAssetsTests(unittest.TestCase):
         self.assertEqual(frozenset(), assets.admitted_tool_names())
         assets.admit_skill(SKILL_KEY)
         self.assertEqual(
-            frozenset({"execute_ability", "render_application"}),
+            frozenset({
+                "execute_ability",
+                "query_skill_dependencies",
+                "render_application",
+            }),
             assets.admitted_tool_names(),
         )
         assets.begin_turn()
@@ -506,6 +559,76 @@ class ChatAssetsTests(unittest.TestCase):
         with self.assertRaisesRegex(ActionRejected, "SKILL_NOT_FOUND"):
             rejected.admit_skill(SKILL_KEY)
         self.assertEqual(frozenset(), rejected.admitted_tool_names())
+
+    def test_query_skill_dependencies_is_bound_and_returns_model_inputs(self):
+        assets, reader, _ = _assets()
+        with self.assertRaisesRegex(ActionRejected, "SKILL_NOT_ADMITTED"):
+            assets.query_skill_dependencies([DISPLAY_KEY])
+        assets.admit_skill(SKILL_KEY)
+
+        value = assets.query_skill_dependencies([DISPLAY_KEY, CHOICE_KEY])
+
+        self.assertEqual(
+            [DISPLAY_KEY, CHOICE_KEY],
+            [item["appCode"] for item in value["applications"]],
+        )
+        self.assertEqual(
+            {"appCode", "description", "usage", "paramsSchema"},
+            set(value["applications"][0]),
+        )
+        self.assertEqual(
+            ["text"], value["applications"][0]["paramsSchema"]["required"],
+        )
+        self.assertIn("render_application", value["applications"][0]["usage"])
+        with self.assertRaisesRegex(ActionRejected, "APPLICATION_NOT_ALLOWED"):
+            assets.query_skill_dependencies(["demo.unbound"])
+        with self.assertRaisesRegex(ActionRejected, "ARGUMENT_INVALID"):
+            assets.query_skill_dependencies([DISPLAY_KEY, DISPLAY_KEY])
+
+        class EmptyDescriptionReader(Reader):
+            def resolve_application(self, key, context):
+                resolved = super().resolve_application(key, context)
+                resolved["application"]["description"] = ""
+                return resolved
+
+        empty_assets, _, _ = _assets(EmptyDescriptionReader())
+        empty_assets.admit_skill(SKILL_KEY)
+        self.assertEqual(
+            "",
+            empty_assets.query_skill_dependencies([DISPLAY_KEY])[
+                "applications"
+            ][0]["description"],
+        )
+
+        reader.ability_version = "v2"
+        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
+            assets.query_skill_dependencies([DISPLAY_KEY])
+
+    def test_model_schemas_use_only_new_application_argument_names(self):
+        self.assertEqual(
+            {
+                "a2uiApplicationCodeList": [DISPLAY_KEY],
+            },
+            QuerySkillDependenciesModelArgs.model_validate({
+                "a2uiApplicationCodeList": [DISPLAY_KEY],
+            }).model_dump(),
+        )
+        with self.assertRaises(ValueError):
+            QuerySkillDependenciesModelArgs.model_validate({
+                "a2uiApplicationCodeList": [DISPLAY_KEY, DISPLAY_KEY],
+            })
+        self.assertEqual(
+            {"appCode": DISPLAY_KEY, "params": {"text": "saved"}},
+            RenderModelArgs.model_validate({
+                "appCode": DISPLAY_KEY,
+                "params": {"text": "saved"},
+            }).model_dump(),
+        )
+        with self.assertRaises(ValueError):
+            RenderModelArgs.model_validate({
+                "applicationKey": DISPLAY_KEY,
+                "data": {"text": "saved"},
+            })
 
     def test_bound_ability_rechecks_version_immediately_before_dispatch(self):
         reader = Reader()
@@ -665,16 +788,19 @@ class ChatLoopSkillTests(unittest.TestCase):
                 {"use_skill", "propose_workflow_run"},
                 {
                     "use_skill", "propose_workflow_run",
-                    "execute_ability", "render_application",
+                    "execute_ability", "query_skill_dependencies",
+                    "render_application",
                 },
                 {"use_skill", "propose_workflow_run"},
                 {
                     "use_skill", "propose_workflow_run",
-                    "execute_ability", "render_application",
+                    "execute_ability", "query_skill_dependencies",
+                    "render_application",
                 },
                 {
                     "use_skill", "propose_workflow_run",
-                    "execute_ability", "render_application",
+                    "execute_ability", "query_skill_dependencies",
+                    "render_application",
                 },
             ],
             [set(names) for names in model.bound_tool_sets],
@@ -738,11 +864,13 @@ class ChatLoopSkillTests(unittest.TestCase):
                 {"use_skill", "propose_workflow_run"},
                 {
                     "use_skill", "propose_workflow_run",
-                    "execute_ability", "render_application",
+                    "execute_ability", "query_skill_dependencies",
+                    "render_application",
                 },
                 {
                     "use_skill", "propose_workflow_run",
-                    "execute_ability", "render_application",
+                    "execute_ability", "query_skill_dependencies",
+                    "render_application",
                 },
             ],
             [set(names) for names in second_model.bound_tool_sets],
@@ -840,14 +968,33 @@ class ChatLoopSkillTests(unittest.TestCase):
                 {"use_skill", "propose_workflow_run"},
                 {
                     "use_skill", "propose_workflow_run",
-                    "execute_ability", "render_application",
+                    "execute_ability", "query_skill_dependencies",
+                    "render_application",
                 },
                 {
                     "use_skill", "propose_workflow_run",
-                    "execute_ability", "render_application",
+                    "execute_ability", "query_skill_dependencies",
+                    "render_application",
                 },
             ],
             wire_tools,
+        )
+        admitted_schemas = {
+            tool["function"]["name"]: tool["function"]["parameters"]
+            for tool in requests[2]["tools"]
+        }
+        self.assertEqual(
+            {"a2uiApplicationCodeList"},
+            set(admitted_schemas["query_skill_dependencies"]["properties"]),
+        )
+        application_codes_schema = admitted_schemas[
+            "query_skill_dependencies"
+        ]["properties"]["a2uiApplicationCodeList"]
+        self.assertEqual(1, application_codes_schema["minItems"])
+        self.assertEqual(20, application_codes_schema["maxItems"])
+        self.assertEqual(
+            {"appCode", "params"},
+            set(admitted_schemas["render_application"]["properties"]),
         )
         self.assertIn("call use_skill", requests[1]["messages"][-1]["content"])
         self.assertEqual([({"value": 3}, OWNER)], calls)
@@ -883,7 +1030,8 @@ class ChatLoopSkillTests(unittest.TestCase):
                 {"use_skill", "propose_workflow_run"},
                 {
                     "use_skill", "propose_workflow_run",
-                    "execute_ability", "render_application",
+                    "execute_ability", "query_skill_dependencies",
+                    "render_application",
                 },
                 {"use_skill", "propose_workflow_run", "execute_ability"},
             ],
@@ -895,17 +1043,31 @@ class ChatLoopSkillTests(unittest.TestCase):
         emitter = ListEmitter()
         rounds = [
             [_call(0, "skill-1", "use_skill", {"skillKey": SKILL_KEY})],
+            [_call(0, "query-1", "query_skill_dependencies", {
+                "a2uiApplicationCodeList": [DISPLAY_KEY],
+            })],
             [_call(0, "display-1", "render_application", {
-                "applicationKey": DISPLAY_KEY,
-                "data": {"text": "Saved result"},
+                "appCode": DISPLAY_KEY,
+                "params": {"text": "Saved result"},
             })],
             [AIMessageChunk(content="Final answer")],
         ]
         loop, model = _loop(rounds, assets, reader, emitter)
         self.assertEqual("Final answer", loop.turn("Use the demo Skill"))
-        self.assertEqual(3, len(model.observed))
-        render_result = next(
+        self.assertEqual(4, len(model.observed))
+        query_result = next(
             message for message in model.observed[2]
+            if isinstance(message, ToolMessage)
+            and message.name == "query_skill_dependencies"
+        )
+        query_content = json.loads(query_result.content)
+        self.assertEqual(
+            {"appCode", "description", "usage", "paramsSchema"},
+            set(query_content["applications"][0]),
+        )
+        self.assertEqual(DISPLAY_KEY, query_content["applications"][0]["appCode"])
+        render_result = next(
+            message for message in model.observed[3]
             if isinstance(message, ToolMessage)
             and message.name == "render_application"
         )
@@ -931,8 +1093,8 @@ class ChatLoopSkillTests(unittest.TestCase):
                 "arguments": {"value": 2},
             })],
             [_call(0, "choice-1", "render_application", {
-                "applicationKey": CHOICE_KEY,
-                "data": {
+                "appCode": CHOICE_KEY,
+                "params": {
                     "prompt": "Choose",
                     "options": [
                         {"label": "A", "value": "a"},
@@ -960,8 +1122,8 @@ class ChatLoopSkillTests(unittest.TestCase):
         assets, _, _ = _assets(reader, _operations(calls=calls))
         emitter = ListEmitter()
         render_arguments = {
-            "applicationKey": CHOICE_KEY,
-            "data": {
+            "appCode": CHOICE_KEY,
+            "params": {
                 "prompt": "Choose",
                 "options": [
                     {"label": "A", "value": "a"},

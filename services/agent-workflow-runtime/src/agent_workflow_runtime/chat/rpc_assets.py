@@ -7,7 +7,11 @@ from dataclasses import asdict
 from typing import Any, cast
 from uuid import uuid4
 
-from a2flow_asset_store.java_runtime import PROFILE, is_java_asset
+from a2flow_asset_store.java_runtime import (
+    PROFILE,
+    is_java_asset,
+    validate_java_asset,
+)
 from skillweave_contracts import TrustedContext
 
 from ..application_runtime import PreparedApplication
@@ -21,13 +25,17 @@ from ..rpc_client import (
     RuntimeSession,
     TrustedCard,
 )
-from .assets import ChatAssets
+from .assets import ApplicationContract, ChatAssets, _APPLICATION_USAGE
 from .cards import JsonObject, JsonValue
 
 _PRIVATE_OBSERVATION_KEYS = frozenset({
     "authorization", "cookie", "credential", "credentials", "credentialhandle",
     "runtimesessiontoken", "transportauthority", "targetendpoint",
 })
+_APPLICATION_QUERY_USAGE = (
+    "Call query_skill_dependencies with a2uiApplicationCodeList before "
+    "render_application."
+)
 
 
 def plain(value: RpcJsonValue) -> JsonValue:
@@ -109,7 +117,7 @@ class RpcChatAssets(ChatAssets):
         value = super().admit_skill(skill_key)
         admitted = self._require_admission()
         abilities = []
-        applications = []
+        application_codes = []
         for key in sorted(admitted.ability_keys):
             record = self._record("ABILITY", key)
             description = self.rpc.resolve(self.owner, record["definition"]["assetKey"],
@@ -125,12 +133,16 @@ class RpcChatAssets(ChatAssets):
             elif current != description.description:
                 self._action_descriptions[description.action_code] = None
         for key in sorted(admitted.application_keys):
-            _, application = self.application_description(key)
-            applications.append({"applicationKey": key, "paramsSchema": plain(application.params_schema),
-                                 "interactionMode": application.interaction_mode})
+            application_codes.append(key)
         # Models see only callable business contracts; never transport targets,
         # descriptors, private session tokens or service credentials.
-        value["content"]["dependencies"] = {"abilities": abilities, "applications": applications}
+        value["content"]["dependencies"] = {
+            "abilities": abilities,
+            "applications": {
+                "appCodes": application_codes,
+                "usage": _APPLICATION_QUERY_USAGE,
+            },
+        }
         self.check_versions()
         return value
 
@@ -181,6 +193,29 @@ class RpcChatAssets(ChatAssets):
                 description.release.digest != definition["sourceDigest"]):
             raise ActionRejected("RESET_REQUIRED")
         return record, description
+
+    def _application_contract(self, application_key: str) -> ApplicationContract:
+        """Project only the model-facing contract from one admitted release."""
+
+        record, runtime = self.application_description(application_key)
+        build = validate_java_asset(
+            "APPLICATION", application_key, record["definition"],
+        )
+        description = build.get("description")
+        published_schema = plain(build.get("paramsSchema"))
+        runtime_schema = plain(runtime.params_schema)
+        if (
+            type(description) is not str
+            or type(published_schema) is not dict
+            or published_schema != runtime_schema
+        ):
+            raise ActionRejected("APPLICATION_CONTRACT_INVALID")
+        return {
+            "appCode": application_key,
+            "description": description,
+            "usage": _APPLICATION_USAGE,
+            "paramsSchema": runtime_schema,
+        }
 
     def render_application(self, application_key: str, data: dict[str, Any],
                            tool_call_id: str) -> dict[str, Any]:

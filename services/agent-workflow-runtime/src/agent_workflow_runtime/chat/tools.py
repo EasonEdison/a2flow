@@ -22,7 +22,6 @@ from skill_registry.use_skill import (
 )
 from skillweave_contracts import CONTRACT_REVISION
 from skillweave_contracts.models import (
-    ConversationInvocationScope,
     TrustedContext,
     TrustedInvocationContext,
     UseSkillRequest,
@@ -31,8 +30,8 @@ from skillweave_contracts.models import (
 )
 
 from .events import WORKFLOW_CONFIRM
-from ..mvp_tools import AbilityArgs, AbilityModelArgs, RenderArgs, RenderModelArgs
-from ..models import json_copy
+from ..mvp_tools import AbilityArgs
+from ..models import ActionRejected, json_copy
 
 _EMITTER: ContextVar[Any] = ContextVar("a2flow_chat_emitter", default=None)
 
@@ -77,6 +76,42 @@ class ProposeModelArgs(_Closed):
 
 class ProposeArgs(ProposeModelArgs):
     model_config = ConfigDict(extra="forbid", strict=True, arbitrary_types_allowed=True)
+    runtime: ToolRuntime[TrustedInvocationContext]
+
+
+def _unique_application_codes(values: list[str]) -> list[str]:
+    if len(values) != len(set(values)):
+        raise ValueError("a2uiApplicationCodeList must contain unique app codes")
+    return values
+
+
+ApplicationCodeList = Annotated[
+    list[Identifier],
+    Field(min_length=1, max_length=20),
+    AfterValidator(_unique_application_codes),
+]
+
+
+class QuerySkillDependenciesModelArgs(_Closed):
+    a2uiApplicationCodeList: ApplicationCodeList
+
+
+class QuerySkillDependenciesArgs(QuerySkillDependenciesModelArgs):
+    model_config = ConfigDict(
+        extra="forbid", strict=True, arbitrary_types_allowed=True,
+    )
+    runtime: ToolRuntime[TrustedInvocationContext]
+
+
+class RenderModelArgs(_Closed):
+    appCode: Identifier
+    params: dict[str, Any]
+
+
+class RenderArgs(RenderModelArgs):
+    model_config = ConfigDict(
+        extra="forbid", strict=True, arbitrary_types_allowed=True,
+    )
     runtime: ToolRuntime[TrustedInvocationContext]
 
 
@@ -176,24 +211,53 @@ def build_chat_tools(
         }
 
     @tool(
+        "query_skill_dependencies",
+        args_schema=QuerySkillDependenciesArgs,
+        response_format="content_and_artifact",
+    )
+    def query_skill_dependencies_tool(
+        a2uiApplicationCodeList: list[str],
+        runtime: ToolRuntime[TrustedInvocationContext],
+    ):
+        """Query current input contracts for Skill-bound A2UI Applications before rendering."""
+        chat_assets.validate_context(runtime.context)
+        value = chat_assets.query_skill_dependencies(a2uiApplicationCodeList)
+        return json.dumps(value, ensure_ascii=False, sort_keys=True), {
+            "appCodes": list(a2uiApplicationCodeList),
+        }
+
+    @tool(
         "render_application",
         args_schema=RenderArgs,
         response_format="content_and_artifact",
     )
     def render_application_tool(
-        applicationKey: str,
-        data: dict[str, Any],
+        appCode: str,
+        params: dict[str, Any],
         runtime: ToolRuntime[TrustedInvocationContext],
     ):
-        """Prepare and persist one Skill-bound conversation Application."""
+        """Render one Skill-bound Application with params matching its queried contract."""
         chat_assets.validate_context(runtime.context)
         saved = chat_assets.render_application(
-            applicationKey, data, runtime.tool_call_id,
+            appCode, params, runtime.tool_call_id,
         )
         emitter = _EMITTER.get()
         if emitter is not None:
             emitter.emit("application_rendered", {"card": json_copy(saved)})
         rendered = chat_assets.render_observation(saved["cardId"])
+        if (
+            type(rendered) is not dict
+            or rendered.get("applicationKey") != appCode
+        ):
+            raise ActionRejected("RENDER_OBSERVATION_MISMATCH")
+        rendered = {
+            "appCode": appCode,
+            **{
+                key: value
+                for key, value in rendered.items()
+                if key != "applicationKey"
+            },
+        }
         observation = {
             "renderedApplication": rendered,
             "applicationRole": "Conversation display or interaction.",
@@ -209,7 +273,7 @@ def build_chat_tools(
                 sort_keys=True,
             ),
             {
-                "applicationKey": applicationKey,
+                "appCode": appCode,
                 "cardId": saved["cardId"],
             },
         )
@@ -218,5 +282,6 @@ def build_chat_tools(
         use_skill_tool,
         propose_tool,
         execute_ability_tool,
+        query_skill_dependencies_tool,
         render_application_tool,
     )

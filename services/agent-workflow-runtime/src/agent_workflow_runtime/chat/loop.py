@@ -31,13 +31,14 @@ from typing_extensions import NotRequired
 from ..assembly import build_agent
 from ..deepseek_model import DeepSeekProtocolError
 from ..models import ActionRejected
+from ..mvp_tools import AbilityModelArgs
 from ..service import require_owner
 from .cards import ChatObservation
 from .events import DONE, ERROR, ListEmitter, TEXT_DELTA, TOOL_CALL
 from .tools import (
     _EMITTER,
-    AbilityModelArgs,
     ProposeModelArgs,
+    QuerySkillDependenciesModelArgs,
     RenderModelArgs,
     UseSkillModelArgs,
     build_chat_tools,
@@ -59,10 +60,13 @@ _CHAT_BOOTSTRAP_TOOLS: Final[frozenset[str]] = frozenset({
 _TURN_LOCAL_SKILL_PROMPT: Final[str] = (
     "Skill admission is local to the current turn. Historical use_skill results "
     "do not admit a Skill for this turn; call use_skill again before using Skill "
-    "Ability or Application tools."
+    "Ability or Application tools. For an admitted Application, call "
+    "query_skill_dependencies with a2uiApplicationCodeList, then call "
+    "render_application with appCode and params matching paramsSchema."
 )
 _SKILL_TOOL_NAMES: Final[frozenset[str]] = frozenset({
     "execute_ability",
+    "query_skill_dependencies",
     "render_application",
 })
 _SKILL_TOOL_ADMISSION_ERROR: Final[str] = (
@@ -539,6 +543,9 @@ class ChatLoop:
             if self._chat_assets is not None:
                 validators.update({
                     "execute_ability": AbilityModelArgs.model_validate,
+                    "query_skill_dependencies": (
+                        QuerySkillDependenciesModelArgs.model_validate
+                    ),
                     "render_application": RenderModelArgs.model_validate,
                 })
             graph = build_agent(
