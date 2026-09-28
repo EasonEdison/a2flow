@@ -75,6 +75,7 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiResultTr
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiResultTransformType;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiScannedActionDeclaration;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowInputBinding;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowTemplate;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSideEffectLevel;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSuccessBranch;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSurfaceDeclaration;
