@@ -274,12 +274,12 @@ test('structured parameter definitions round-trip through the Application params
         submitText: {
           type: 'string',
           description: '提交按钮文案',
-          example: '立即提交',
+          examples: ['立即提交'],
         },
         retryCount: {
           type: 'integer',
           description: '允许重试次数',
-          example: 2,
+          examples: [2],
         },
       },
       required: ['submitText'],
@@ -287,10 +287,35 @@ test('structured parameter definitions round-trip through the Application params
     'closed params schema',
   );
   assertDeepEqual(
-    readA2uiParameterDefinitions(schema),
+    readA2uiParameterDefinitions(schema).map(({ schema: _schema, schemaType: _type, ...item }) => item),
     definitions,
     'parameter definition round-trip',
   );
+});
+
+test('editing a flat parameter preserves nested schemas and unrelated constraints', () => {
+  const original = {
+    type: 'object', additionalProperties: false, description: '稿件参数',
+    properties: {
+      refs: {type: 'array', minItems: 1, items: {type: 'object', properties: {
+        id: {type: 'string', minLength: 1},
+      }, required: ['id'], additionalProperties: false}},
+      title: {type: 'string', minLength: 1},
+    }, required: ['refs'],
+  };
+  const rows = readA2uiParameterDefinitions(original);
+  rows[1].description = '标题';
+  const next = buildA2uiParamsSchema(rows, original);
+  assertDeepEqual((next.properties as Record<string, unknown>).refs, original.properties.refs,
+    'nested array contract survives unrelated edits');
+  assertDeepEqual((next.properties as Record<string, unknown>).title,
+    {type: 'string', minLength: 1, description: '标题'}, 'constraints survive description edit');
+  assertDeepEqual(next.description, original.description, 'root annotations survive');
+  rows[0].name = 'references';
+  const renamed = buildA2uiParamsSchema(rows, original);
+  assertDeepEqual((renamed.properties as Record<string, unknown>).references,
+    original.properties.refs, 'rename retains nested contract');
+  assertDeepEqual(original.properties.title, {type: 'string', minLength: 1}, 'no source mutation');
 });
 
 test('explicit capability data bindings resolve into Binding-owned update messages', () => {
