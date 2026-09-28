@@ -977,6 +977,81 @@ class ChatObservationTests(unittest.TestCase):
         self.assertEqual(101, len(loaded))
         self.assertEqual([0, 100], calls)
 
+    def test_real_card_store_observations_flow_into_native_history(self):
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        from agent_workflow_runtime.chat.cards import (
+            ActionObservation,
+            ChatCardStore,
+        )
+        from test_chat_cards import MemoryStorage, metadata, prepared
+
+        conversation = "store-observation-conversation"
+        store = ChatCardStore(
+            "unused",
+            environment="PRT",
+            _storage=MemoryStorage(),
+        )
+        store.setup()
+        card = store.save(
+            OWNER,
+            conversation,
+            prepared(),
+            metadata(conversation),
+        )
+        store.claim(
+            OWNER,
+            conversation,
+            card["cardId"],
+            "store-request",
+            "confirm",
+            {"optionId": "second"},
+            0,
+        )
+        store.finish(
+            OWNER,
+            conversation,
+            card["cardId"],
+            "store-request",
+            {"artifactId": "artifact-store", "revision": 3},
+            True,
+            True,
+            observation=ActionObservation(
+                arguments={"artifactId": "artifact-store", "revision": 2},
+                result={"artifactId": "artifact-store", "revision": 3},
+                capability_success=True,
+                business_success=True,
+                description="Save the selected artifact",
+            ),
+        )
+
+        model = FakeModel([AIMessageChunk(content="observed")])
+        loop = ChatLoop(
+            model_factory=FakeFactory([model]),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id=conversation,
+            reader=FakeMaterialPort(skill_material()),
+            control_request_id="store-observation-turn",
+            checkpointer=InMemorySaver(),
+            thread_id="store-observation-thread",
+            observation_loader=lambda cursor: store.list_observations(
+                OWNER,
+                conversation,
+                after_sequence=cursor,
+                limit=100,
+            ),
+        )
+        self.assertEqual("observed", loop.turn("continue from saved action"))
+        content = "\n".join(
+            str(message.content) for message in model.observed[0]
+        )
+        self.assertIn("Save the selected artifact", content)
+        self.assertIn('"capabilitySuccess": true', content)
+        self.assertIn('"businessSuccess": true', content)
+        self.assertIn('"revision": 3', content)
+        self.assertEqual(1, content.count(_ACTION_OBSERVATION_MARKER))
+
 
 if __name__ == "__main__":
     unittest.main()
