@@ -53,7 +53,7 @@ class ChatVerticalTest(unittest.TestCase):
         runner = ChatLoopRunner(model_factory=Factory(model), model_reference="deepseek-v4-flash",
             environment="PRT", reader=reader, conversation_store=conversations,
             history_loader=lambda *args: [], assets_factory=assets,
-            card_context=lambda *args: [{"cardId": "historical-card", "status": "COMPLETED", "result": {"accepted": True}}])
+            observation_loader=lambda *args, **kwargs: [])
         conversation = str(uuid4())
         async def execute():
             return [event async for event in runner.iterate(user_id=OWNER.user_id,
@@ -64,7 +64,7 @@ class ChatVerticalTest(unittest.TestCase):
         self.assertEqual("done", kinds[-1])
         card = next(event["card"] for event in events if event["type"] == "application_rendered")
         self.assertEqual(card, store.read(OWNER, conversation, card["cardId"]))
-        self.assertIn("historical-card", str(model.observed[0]))
+        self.assertNotIn("Recent saved Application states", str(model.observed[0]))
 
     def test_sdk_skill_ability_card_action_and_restart_read(self):
         dsn = os.environ["A2FLOW_TEST_CHAT_CARDS_DSN"]

@@ -105,6 +105,7 @@ class ChatAssets:
         )
         self._admission: _SkillAdmission | None = None
         self._waiting_action: dict[str, Any] | None = None
+        self._render_observations: dict[str, dict[str, Any]] = {}
         self._render_lock = Lock()
 
     @property
@@ -131,6 +132,7 @@ class ChatAssets:
         self._admission = None
         with self._render_lock:
             self._waiting_action = None
+            self._render_observations.clear()
 
     def waiting_action(self):
         with self._render_lock:
@@ -433,4 +435,24 @@ class ChatAssets:
                 raise ActionRejected("INVALID_CARD_DESCRIPTOR")
             if prepared.interactive:
                 self._waiting_action = saved
+            display = prepared.display()
+            self._render_observations[saved["cardId"]] = {
+                "cardId": saved["cardId"],
+                "applicationKey": application_key,
+                "arguments": {
+                    "surfaces": [{
+                        "surfaceId": display["rootId"],
+                        "data": display["data"],
+                    }],
+                },
+            }
         return json_copy(saved)
+
+    def render_observation(self, card_id: str) -> dict[str, Any]:
+        """Return the turn-local rendered business state for Tool history."""
+
+        with self._render_lock:
+            observation = self._render_observations.get(card_id)
+            if observation is None:
+                raise ActionRejected("RENDER_OBSERVATION_NOT_AVAILABLE")
+            return json_copy(observation)

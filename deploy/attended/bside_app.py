@@ -158,11 +158,6 @@ def create_app_from_environment():
     def chat_cards(user_id, conversation_id):
         return card_store.list(memory_owner(user_id), conversation_id)
 
-    def card_context(owner, conversation_id):
-        return [{"cardId": card["cardId"], "applicationKey": card["display"]["applicationKey"],
-                 "status": card["status"], "result": card.get("result")}
-                for card in card_store.list(owner, conversation_id)[-20:]]
-
     def chat_action(user_id, conversation_id, card_id, payload):
         try:
             return card_actions.execute(memory_owner(user_id), conversation_id, card_id,
@@ -210,7 +205,7 @@ def create_app_from_environment():
         history_loader=legacy_history,
         personal_memory=personal_memory,
         assets_factory=assets_factory,
-        card_context=card_context,
+        observation_loader=card_store.list_observations,
     )
 
     return create_app(
