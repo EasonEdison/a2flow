@@ -23,7 +23,6 @@ from langchain.agents.middleware.types import PrivateStateAttr
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Command
-from skillweave_contracts import JsonObject, JsonValue
 from skillweave_contracts.models import (
     ConversationInvocationScope, TrustedInvocationContext,
 )
@@ -33,6 +32,7 @@ from ..assembly import build_agent
 from ..deepseek_model import DeepSeekProtocolError
 from ..models import ActionRejected
 from ..service import require_owner
+from .cards import ChatObservation
 from .events import DONE, ERROR, ListEmitter, TEXT_DELTA, TOOL_CALL
 from .tools import (
     _EMITTER,
@@ -116,24 +116,6 @@ class _ChatToolAdmissionPort(Protocol):
         ...
 
 
-class _ChatObservationPort(Protocol):
-    """Stable, owner-scoped fact read from the conversation card store."""
-
-    sequence: int
-    event_id: str
-    kind: str
-    card_id: str
-    application_key: str
-    request_id: str | None
-    action_name: str | None
-    description: str | None
-    arguments: JsonObject | None
-    status: str | None
-    result: JsonValue | None
-    presentation_status: str | None
-    error_code: str | None
-
-
 class _ChatObservationState(AgentState):
     """Checkpointed cursor hidden from model input and graph output."""
 
@@ -142,11 +124,11 @@ class _ChatObservationState(AgentState):
     ]
 
 
-ObservationLoader = Callable[[int], Sequence[_ChatObservationPort]]
+ObservationLoader = Callable[[int], Sequence[ChatObservation]]
 
 
 def _action_observation_message(
-    observation: _ChatObservationPort,
+    observation: ChatObservation,
 ) -> HumanMessage:
     """Project one durable Action fact without forging a ToolMessage pair."""
 
@@ -157,12 +139,22 @@ def _action_observation_message(
         user_submission["actionName"] = observation.action_name
 
     system_outcome: dict[str, Any] = {"status": observation.status}
+    system_outcome["capabilitySuccess"] = observation.capability_success
+    system_outcome["businessSuccess"] = observation.business_success
     if observation.result is not None:
         system_outcome["result"] = observation.result
     if observation.presentation_status is not None:
         system_outcome["presentationStatus"] = observation.presentation_status
+    if observation.capability_error_code is not None:
+        system_outcome["capabilityErrorCode"] = (
+            observation.capability_error_code
+        )
+    if observation.presentation_error_code is not None:
+        system_outcome["presentationErrorCode"] = (
+            observation.presentation_error_code
+        )
     if observation.error_code is not None:
-        system_outcome["errorCode"] = observation.error_code
+        system_outcome["platformErrorCode"] = observation.error_code
 
     fact: dict[str, Any] = {
         "eventId": observation.event_id,
@@ -194,12 +186,12 @@ def _action_observation_message(
 def _read_observations(
     loader: ObservationLoader,
     cursor: int,
-) -> tuple[_ChatObservationPort, ...]:
+) -> tuple[ChatObservation, ...]:
     """Read one bounded, strictly ordered committed prefix."""
 
     if type(cursor) is not int or cursor < 0:
         raise ChatLoopError("INVALID_OBSERVATION_CURSOR")
-    observations: list[_ChatObservationPort] = []
+    observations: list[ChatObservation] = []
     previous = cursor
     event_ids: set[str] = set()
     while True:
@@ -232,7 +224,18 @@ def _read_observations(
                 or not application_key
                 or (
                     kind == "ACTION"
-                    and (type(status) is not str or not status)
+                    and (
+                        type(status) is not str
+                        or not status
+                        or (
+                            observation.capability_success is not None
+                            and type(observation.capability_success) is not bool
+                        )
+                        or (
+                            observation.business_success is not None
+                            and type(observation.business_success) is not bool
+                        )
+                    )
                 )
             ):
                 raise ChatLoopError("INVALID_CHAT_OBSERVATIONS")

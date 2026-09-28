@@ -613,7 +613,11 @@ class Observation:
     arguments: dict | None = None
     status: str | None = None
     result: object = None
+    capability_success: bool | None = None
+    business_success: bool | None = None
     presentation_status: str | None = None
+    capability_error_code: str | None = None
+    presentation_error_code: str | None = None
     error_code: str | None = None
 
 
@@ -651,7 +655,8 @@ class ChatObservationTests(unittest.TestCase):
                 arguments={"artifactId": "artifact-1", "revision": 4},
                 status="COMPLETED",
                 result={"savedRevision": 5},
-                presentation_status="COMPLETED",
+                capability_success=True,
+                business_success=True,
             ),
         ]
         calls = []
@@ -709,6 +714,8 @@ class ChatObservationTests(unittest.TestCase):
             "draft-editor",
             action_name="save",
             status="COMPLETED",
+            capability_success=True,
+            business_success=True,
         )
 
         def loader(after_sequence):
@@ -776,6 +783,8 @@ class ChatObservationTests(unittest.TestCase):
             arguments={"artifactId": "artifact-1"},
             status="COMPLETED",
             result={"saved": True},
+            capability_success=True,
+            business_success=True,
         )
         calls = []
 
@@ -841,6 +850,8 @@ class ChatObservationTests(unittest.TestCase):
             arguments={"artifactId": "artifact-7"},
             status="COMPLETED",
             result={"revision": 8},
+            capability_success=True,
+            business_success=True,
         )
         calls = []
 
@@ -896,16 +907,51 @@ class ChatObservationTests(unittest.TestCase):
             action_name="export",
             arguments={"format": "MARKDOWN"},
             status="UNKNOWN",
+            capability_success=None,
+            business_success=None,
             error_code="ACTION_OUTCOME_UNKNOWN",
         ))
         fact = json.loads(str(message.content).split("\n", 2)[-1])
         self.assertEqual("UNKNOWN", fact["systemOutcome"]["status"])
         self.assertEqual(
             "ACTION_OUTCOME_UNKNOWN",
-            fact["systemOutcome"]["errorCode"],
+            fact["systemOutcome"]["platformErrorCode"],
         )
+        self.assertIsNone(fact["systemOutcome"]["capabilitySuccess"])
+        self.assertIsNone(fact["systemOutcome"]["businessSuccess"])
         self.assertNotIn("result", fact["systemOutcome"])
         self.assertNotIn("functionDescription", fact)
+
+    def test_presentation_failure_keeps_actual_business_result_and_error(self):
+        message = _action_observation_message(Observation(
+            2,
+            "presentation-failure",
+            "ACTION",
+            "card-presentation",
+            "draft-editor",
+            request_id="request-presentation",
+            action_name="save",
+            arguments={"artifactId": "artifact-2"},
+            status="SUCCEEDED",
+            result={"revision": 3},
+            capability_success=True,
+            business_success=True,
+            presentation_status="FAILED",
+            presentation_error_code="RESULT_ADAPTER_FAILED",
+            error_code="ACTION_PRESENTATION_FAILED",
+        ))
+        fact = json.loads(str(message.content).split("\n", 2)[-1])
+        outcome = fact["systemOutcome"]
+        self.assertEqual({"revision": 3}, outcome["result"])
+        self.assertTrue(outcome["capabilitySuccess"])
+        self.assertTrue(outcome["businessSuccess"])
+        self.assertEqual("FAILED", outcome["presentationStatus"])
+        self.assertEqual(
+            "RESULT_ADAPTER_FAILED", outcome["presentationErrorCode"],
+        )
+        self.assertEqual(
+            "ACTION_PRESENTATION_FAILED", outcome["platformErrorCode"],
+        )
 
     def test_observation_reader_drains_all_pages_without_silent_truncation(self):
         observations = [
@@ -930,6 +976,81 @@ class ChatObservationTests(unittest.TestCase):
         loaded = _read_observations(loader, 0)
         self.assertEqual(101, len(loaded))
         self.assertEqual([0, 100], calls)
+
+    def test_real_card_store_observations_flow_into_native_history(self):
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        from agent_workflow_runtime.chat.cards import (
+            ActionObservation,
+            ChatCardStore,
+        )
+        from test_chat_cards import MemoryStorage, metadata, prepared
+
+        conversation = "store-observation-conversation"
+        store = ChatCardStore(
+            "unused",
+            environment="PRT",
+            _storage=MemoryStorage(),
+        )
+        store.setup()
+        card = store.save(
+            OWNER,
+            conversation,
+            prepared(),
+            metadata(conversation),
+        )
+        store.claim(
+            OWNER,
+            conversation,
+            card["cardId"],
+            "store-request",
+            "confirm",
+            {"optionId": "second"},
+            0,
+        )
+        store.finish(
+            OWNER,
+            conversation,
+            card["cardId"],
+            "store-request",
+            {"artifactId": "artifact-store", "revision": 3},
+            True,
+            True,
+            observation=ActionObservation(
+                arguments={"artifactId": "artifact-store", "revision": 2},
+                result={"artifactId": "artifact-store", "revision": 3},
+                capability_success=True,
+                business_success=True,
+                description="Save the selected artifact",
+            ),
+        )
+
+        model = FakeModel([AIMessageChunk(content="observed")])
+        loop = ChatLoop(
+            model_factory=FakeFactory([model]),
+            model_reference="deepseek-v4-flash",
+            owner=OWNER,
+            conversation_id=conversation,
+            reader=FakeMaterialPort(skill_material()),
+            control_request_id="store-observation-turn",
+            checkpointer=InMemorySaver(),
+            thread_id="store-observation-thread",
+            observation_loader=lambda cursor: store.list_observations(
+                OWNER,
+                conversation,
+                after_sequence=cursor,
+                limit=100,
+            ),
+        )
+        self.assertEqual("observed", loop.turn("continue from saved action"))
+        content = "\n".join(
+            str(message.content) for message in model.observed[0]
+        )
+        self.assertIn("Save the selected artifact", content)
+        self.assertIn('"capabilitySuccess": true', content)
+        self.assertIn('"businessSuccess": true', content)
+        self.assertIn('"revision": 3', content)
+        self.assertEqual(1, content.count(_ACTION_OBSERVATION_MARKER))
 
 
 if __name__ == "__main__":
