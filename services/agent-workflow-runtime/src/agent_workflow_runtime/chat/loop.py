@@ -130,7 +130,11 @@ class _ChatObservationPort(Protocol):
     arguments: JsonObject | None
     status: str | None
     result: JsonValue | None
+    capability_success: bool | None
+    business_success: bool | None
     presentation_status: str | None
+    capability_error_code: str | None
+    presentation_error_code: str | None
     error_code: str | None
 
 
@@ -157,12 +161,22 @@ def _action_observation_message(
         user_submission["actionName"] = observation.action_name
 
     system_outcome: dict[str, Any] = {"status": observation.status}
+    system_outcome["capabilitySuccess"] = observation.capability_success
+    system_outcome["businessSuccess"] = observation.business_success
     if observation.result is not None:
         system_outcome["result"] = observation.result
     if observation.presentation_status is not None:
         system_outcome["presentationStatus"] = observation.presentation_status
+    if observation.capability_error_code is not None:
+        system_outcome["capabilityErrorCode"] = (
+            observation.capability_error_code
+        )
+    if observation.presentation_error_code is not None:
+        system_outcome["presentationErrorCode"] = (
+            observation.presentation_error_code
+        )
     if observation.error_code is not None:
-        system_outcome["errorCode"] = observation.error_code
+        system_outcome["platformErrorCode"] = observation.error_code
 
     fact: dict[str, Any] = {
         "eventId": observation.event_id,
@@ -232,7 +246,18 @@ def _read_observations(
                 or not application_key
                 or (
                     kind == "ACTION"
-                    and (type(status) is not str or not status)
+                    and (
+                        type(status) is not str
+                        or not status
+                        or (
+                            observation.capability_success is not None
+                            and type(observation.capability_success) is not bool
+                        )
+                        or (
+                            observation.business_success is not None
+                            and type(observation.business_success) is not bool
+                        )
+                    )
                 )
             ):
                 raise ChatLoopError("INVALID_CHAT_OBSERVATIONS")

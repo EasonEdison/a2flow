@@ -613,7 +613,11 @@ class Observation:
     arguments: dict | None = None
     status: str | None = None
     result: object = None
+    capability_success: bool | None = None
+    business_success: bool | None = None
     presentation_status: str | None = None
+    capability_error_code: str | None = None
+    presentation_error_code: str | None = None
     error_code: str | None = None
 
 
@@ -651,7 +655,8 @@ class ChatObservationTests(unittest.TestCase):
                 arguments={"artifactId": "artifact-1", "revision": 4},
                 status="COMPLETED",
                 result={"savedRevision": 5},
-                presentation_status="COMPLETED",
+                capability_success=True,
+                business_success=True,
             ),
         ]
         calls = []
@@ -709,6 +714,8 @@ class ChatObservationTests(unittest.TestCase):
             "draft-editor",
             action_name="save",
             status="COMPLETED",
+            capability_success=True,
+            business_success=True,
         )
 
         def loader(after_sequence):
@@ -776,6 +783,8 @@ class ChatObservationTests(unittest.TestCase):
             arguments={"artifactId": "artifact-1"},
             status="COMPLETED",
             result={"saved": True},
+            capability_success=True,
+            business_success=True,
         )
         calls = []
 
@@ -841,6 +850,8 @@ class ChatObservationTests(unittest.TestCase):
             arguments={"artifactId": "artifact-7"},
             status="COMPLETED",
             result={"revision": 8},
+            capability_success=True,
+            business_success=True,
         )
         calls = []
 
@@ -896,16 +907,51 @@ class ChatObservationTests(unittest.TestCase):
             action_name="export",
             arguments={"format": "MARKDOWN"},
             status="UNKNOWN",
+            capability_success=None,
+            business_success=None,
             error_code="ACTION_OUTCOME_UNKNOWN",
         ))
         fact = json.loads(str(message.content).split("\n", 2)[-1])
         self.assertEqual("UNKNOWN", fact["systemOutcome"]["status"])
         self.assertEqual(
             "ACTION_OUTCOME_UNKNOWN",
-            fact["systemOutcome"]["errorCode"],
+            fact["systemOutcome"]["platformErrorCode"],
         )
+        self.assertIsNone(fact["systemOutcome"]["capabilitySuccess"])
+        self.assertIsNone(fact["systemOutcome"]["businessSuccess"])
         self.assertNotIn("result", fact["systemOutcome"])
         self.assertNotIn("functionDescription", fact)
+
+    def test_presentation_failure_keeps_actual_business_result_and_error(self):
+        message = _action_observation_message(Observation(
+            2,
+            "presentation-failure",
+            "ACTION",
+            "card-presentation",
+            "draft-editor",
+            request_id="request-presentation",
+            action_name="save",
+            arguments={"artifactId": "artifact-2"},
+            status="SUCCEEDED",
+            result={"revision": 3},
+            capability_success=True,
+            business_success=True,
+            presentation_status="FAILED",
+            presentation_error_code="RESULT_ADAPTER_FAILED",
+            error_code="ACTION_PRESENTATION_FAILED",
+        ))
+        fact = json.loads(str(message.content).split("\n", 2)[-1])
+        outcome = fact["systemOutcome"]
+        self.assertEqual({"revision": 3}, outcome["result"])
+        self.assertTrue(outcome["capabilitySuccess"])
+        self.assertTrue(outcome["businessSuccess"])
+        self.assertEqual("FAILED", outcome["presentationStatus"])
+        self.assertEqual(
+            "RESULT_ADAPTER_FAILED", outcome["presentationErrorCode"],
+        )
+        self.assertEqual(
+            "ACTION_PRESENTATION_FAILED", outcome["platformErrorCode"],
+        )
 
     def test_observation_reader_drains_all_pages_without_silent_truncation(self):
         observations = [
