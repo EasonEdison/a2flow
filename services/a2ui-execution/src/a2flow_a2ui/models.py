@@ -251,6 +251,7 @@ class CapabilitySchemaAudit(_PublishedModel):
 class ApplicationBuild(_PublishedModel):
     app_build_id: str = Field(alias="appBuildId", min_length=1)
     app_code: str = Field(alias="appCode", min_length=1)
+    description: str
     source_digest: str = Field(alias="sourceDigest", min_length=1)
     protocol_version: str = Field(alias="protocolVersion", pattern=r"^v0\.9\.1$")
     protocol_status: str = Field(alias="protocolStatus", min_length=1)

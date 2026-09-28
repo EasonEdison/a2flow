@@ -224,7 +224,7 @@ public final class A2uiOfficialComponentSchemaValidatorTest {
                 1, "/updateComponents/components/8/options",
                 A2uiShowInputSource.APP_PARAMS, "/options", true, null);
         return new A2uiApplicationBuild(
-                "build", "app", "source", "v0.9.1", "CURRENT_PRODUCTION",
+                "build", "app", "locked schema contract", "source", "v0.9.1", "CURRENT_PRODUCTION",
                 "420c6183c400e4b84fe3f9e084906725062a6d56",
                 Map.of("messages", "digest"), "PRT", catalog, "show", "show-digest",
                 paramsSchema,

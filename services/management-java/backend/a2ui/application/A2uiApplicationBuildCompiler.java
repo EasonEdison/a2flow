@@ -261,6 +261,7 @@ public class A2uiApplicationBuildCompiler {
         return new A2uiApplicationBuild(
                 buildId,
                 draft.getAppCode(),
+                draft.getDescription(),
                 sourceDigest,
                 draft.getProtocolVersion(),
                 draft.getProtocolStatus(),
@@ -741,6 +742,7 @@ public class A2uiApplicationBuildCompiler {
     void validateCapabilitySchemas(A2uiCurrentCapabilityContract capability,
             List<A2uiRequestMapping> mappings, Map<String, Object> paramsSchema,
             Map<String, Object> contextSchema) {
+        validateRequestMappingTargets(mappings);
         for (A2uiCurrentCapabilityVariantContract variant : capabilityVariants(capability)) {
             validateCapabilitySchema(variant, mappings, paramsSchema, contextSchema);
         }
@@ -987,6 +989,7 @@ public class A2uiApplicationBuildCompiler {
         if (mappings == null) {
             throw failure(DRAFT_INVALID);
         }
+        validateRequestMappingTargets(mappings);
         List<A2uiCompiledRequestMapping> compiled = new ArrayList<>();
         for (A2uiRequestMapping mapping : mappings) {
             if (mapping == null || mapping.getSource() == null || isBlank(mapping.getTargetPath())) {
@@ -1079,6 +1082,7 @@ public class A2uiApplicationBuildCompiler {
         if (bindings == null) {
             return Collections.emptyList();
         }
+        validateMessageTemplateBindingTargets(bindings);
         List<A2uiCompiledMessageTemplateBinding> compiled = new ArrayList<>();
         for (A2uiMessageTemplateBinding binding : bindings) {
             if (binding == null
@@ -1097,6 +1101,57 @@ public class A2uiApplicationBuildCompiler {
         }
         compiled.sort(Comparator.comparing(A2uiCompiledMessageTemplateBinding::getTargetPath));
         return Collections.unmodifiableList(compiled);
+    }
+
+    /** 同一Capability请求内，每个规范化目标只能由一个来源写入。 */
+    void validateRequestMappingTargets(List<A2uiRequestMapping> mappings) {
+        if (mappings == null) {
+            throw failure(DRAFT_INVALID);
+        }
+        List<String> writtenTargets = new ArrayList<>();
+        for (A2uiRequestMapping mapping : mappings) {
+            if (mapping == null || isBlank(mapping.getTargetPath())) {
+                continue;
+            }
+            String target = canonicalCapabilityTargetPath(mapping.getTargetPath());
+            if (writtenTargets.stream().anyMatch(existing -> pathsConflict(existing, target))) {
+                throw failure(DRAFT_INVALID);
+            }
+            writtenTargets.add(target);
+        }
+    }
+
+    /** 同一MESSAGE_TEMPLATE adapter内禁止相同或父子目标被多个来源覆盖。 */
+    void validateMessageTemplateBindingTargets(List<A2uiMessageTemplateBinding> bindings) {
+        if (bindings == null) {
+            return;
+        }
+        List<String> writtenTargets = new ArrayList<>();
+        for (A2uiMessageTemplateBinding binding : bindings) {
+            if (binding == null || isBlank(binding.getTargetPath())) {
+                continue;
+            }
+            String target = binding.getTargetPath();
+            if (writtenTargets.stream().anyMatch(existing -> pathsConflict(existing, target))) {
+                throw failure(RESULT_ADAPTER_INVALID);
+            }
+            writtenTargets.add(target);
+        }
+    }
+
+    private String canonicalCapabilityTargetPath(String targetPath) {
+        String requestPrefix = "/" + TARGET_REQUEST_WRAPPER;
+        return targetPath.startsWith(requestPrefix + "/")
+                ? targetPath.substring(requestPrefix.length())
+                : targetPath;
+    }
+
+    private boolean pathsConflict(String left, String right) {
+        return left.equals(right)
+                || "/".equals(left)
+                || "/".equals(right)
+                || left.startsWith(right + "/")
+                || right.startsWith(left + "/");
     }
 
     /** 校验并新建只读结果转换，避免作者态对象后续修改污染已发布 Build。 */

@@ -7,8 +7,13 @@ import java.util.Map;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityContract;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityVariantContract;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiMappingSource;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiMessageTemplateBinding;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiRequestMapping;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiResultSource;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSideEffectLevel;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowInputBinding;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowInputSource;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowTemplate;
 import dev.a2flow.management.model.CapabilityActionDraft;
 
 /** Published client variants are preserved and every declared schema is validated. */
@@ -58,8 +63,57 @@ public final class A2uiCapabilityVariantContractTest {
         LinkedHashMap<String, Object> extra = variants("PC", modelContract("title"));
         extra.put("APP", variant(modelContract("title")));
         mustSchemaFailure(() -> resolver.contract(draft(List.of("PC"), extra), ACTION_CODE));
+        verifyPhaseLocalSingleSource(compiler);
         System.out.println("A2UI_CAPABILITY_VARIANTS_PASS: PC preserved, COMMON compatible, "
                 + "map order ignored, all variants validated, missing and extra keys rejected");
+    }
+
+    private static void verifyPhaseLocalSingleSource(A2uiApplicationBuildCompiler compiler) {
+        A2uiShowInputBinding title = showBinding(0, "/updateDataModel/value/title");
+        A2uiShowInputBinding titleChild = showBinding(0, "/updateDataModel/value/title/value");
+        mustValidationFailure("A2UI_SHOW_INVALID", () ->
+                new A2uiShowTemplateAnalyzer().validateInputBindings(new A2uiShowTemplate()
+                        .setMessageTemplates(List.of(Map.of()))
+                        .setInputBindings(List.of(title, titleChild))));
+        new A2uiShowTemplateAnalyzer().validateInputBindings(new A2uiShowTemplate()
+                .setMessageTemplates(List.of(Map.of(), Map.of()))
+                .setInputBindings(List.of(title, showBinding(1, title.getTargetPath()))));
+
+        compiler.validateRequestMappingTargets(List.of(
+                mapping("/profile/name"), mapping("/profile/age")));
+        mustValidationFailure("A2UI_APPLICATION_DRAFT_INVALID", () ->
+                compiler.validateRequestMappingTargets(List.of(
+                        mapping("/title"), mapping("/request/title"))));
+        mustValidationFailure("A2UI_APPLICATION_DRAFT_INVALID", () ->
+                compiler.validateRequestMappingTargets(List.of(
+                        mapping("/profile"), mapping("/request/profile/name"))));
+
+        A2uiMessageTemplateBinding parent = new A2uiMessageTemplateBinding()
+                .setTargetPath("/updateDataModel/value/export")
+                .setSource(A2uiResultSource.CONSTANT)
+                .setConstantValue(Map.of());
+        A2uiMessageTemplateBinding child = new A2uiMessageTemplateBinding()
+                .setTargetPath("/updateDataModel/value/export/content")
+                .setSource(A2uiResultSource.CONSTANT)
+                .setConstantValue("text");
+        mustValidationFailure("A2UI_RESULT_ADAPTER_INVALID", () ->
+                compiler.validateMessageTemplateBindingTargets(List.of(parent, child)));
+    }
+
+    private static A2uiShowInputBinding showBinding(int messageIndex, String targetPath) {
+        return new A2uiShowInputBinding()
+                .setTargetMessageIndex(messageIndex)
+                .setTargetPath(targetPath)
+                .setSource(A2uiShowInputSource.APP_PARAMS)
+                .setSourcePath("/title")
+                .setRequired(true);
+    }
+
+    private static A2uiRequestMapping mapping(String targetPath) {
+        return new A2uiRequestMapping()
+                .setSource(A2uiMappingSource.CONSTANT)
+                .setTargetPath(targetPath)
+                .setConstantValue("test");
     }
 
     private static A2uiCurrentCapabilityVariantContract typedVariant(String client, String field) {
@@ -111,6 +165,17 @@ public final class A2uiCapabilityVariantContractTest {
             return;
         }
         throw new AssertionError("incompatible capability variants were accepted");
+    }
+
+    private static void mustValidationFailure(String errorCode, Runnable action) {
+        try {
+            action.run();
+        } catch (A2uiApplicationValidationException expected) {
+            check(errorCode.equals(expected.getErrorCode()),
+                    "unexpected error code: " + expected.getErrorCode());
+            return;
+        }
+        throw new AssertionError("conflicting target paths were accepted");
     }
 
     private static void check(boolean condition, String message) {

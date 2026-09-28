@@ -615,6 +615,7 @@ public final class A2uiApplicationModels {
     public static class A2uiApplicationBuild {
         private String appBuildId;
         private String appCode;
+        private String description;
         private String sourceDigest;
         private String protocolVersion;
         private String protocolStatus;
