@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Callable, cast
+import logging
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from skillweave_contracts import TrustedContext
 
@@ -12,6 +14,8 @@ from ..models import ActionRejected
 from ..rpc_client import RpcFailure
 from .cards import ActionObservation, ChatCardStore, JsonObject, JsonValue
 from .rpc_assets import RpcChatAssets, plain, prepare_result, runtime_metadata, trusted_card
+
+LOG = logging.getLogger(__name__)
 
 
 class RpcChatActionService:
@@ -57,12 +61,14 @@ class RpcChatActionService:
         # The DB claim is committed before RPC. No lock or transaction spans
         # network execution, and a timeout never triggers a business retry.
         observation: ActionObservation | None = None
+        stage = "engine_act"
         try:
             result = assets.rpc.act(owner, persisted,
                                     {"version": persisted.session.protocol_version,
                                      "action": {"name": action_name, **inputs,
-                                                "timestamp": datetime.now(timezone.utc).isoformat()}},
+                                                "timestamp": datetime.now(UTC).isoformat()}},
                                     request_id, correlation_id=card_id)
+            stage = "response_projection"
             observed = result.action_observation
             if observed is None:
                 return self.store.fail(owner, conversation_id, card_id, request_id,
@@ -84,17 +90,27 @@ class RpcChatActionService:
                                        observation=observation)
             updated_metadata = {**metadata, "rpc": runtime_metadata(result)}
             prepared = prepare_result(result, card["display"]["applicationVersion"])
+            stage = "card_finish"
             return self.store.finish(owner, conversation_id, card_id, request_id,
                                      plain(observed.result),
                                      result.business_success, result.complete_interaction,
                                      prepared=prepared, binding_metadata=updated_metadata,
                                      observation=observation)
         except RpcFailure as error:
+            LOG.error(
+                "rpc_chat_action_failed stage=%s exception_type=%s error_code=%s "
+                "request_id=%s",
+                stage,
+                type(error).__name__,
+                error.code,
+                request_id,
+            )
             if error.code == "RESET_REQUIRED":
                 # The RPC contract guarantees this precondition precedes any
                 # business dispatch. Save a rejected outcome, not unknown success.
                 prepared = PreparedApplication(card["display"]["applicationKey"],
-                    card["display"]["applicationVersion"], description.interaction_mode == "INTERACTIVE",
+                    card["display"]["applicationVersion"],
+                    description.interaction_mode == "INTERACTIVE",
                     json.dumps(card["display"], ensure_ascii=False, allow_nan=False))
                 self.store.finish(owner, conversation_id, card_id, request_id,
                                   {"errorCode": "RESET_REQUIRED"}, False, False,
@@ -106,7 +122,15 @@ class RpcChatActionService:
                 "ACTION_OUTCOME_UNKNOWN", observation=observation,
             )
             raise ActionRejected("ACTION_OUTCOME_UNKNOWN") from None
-        except Exception:
+        except Exception as error:
+            LOG.error(
+                "rpc_chat_action_failed stage=%s exception_type=%s error_code=%s "
+                "request_id=%s",
+                stage,
+                type(error).__name__,
+                "ACTION_OUTCOME_UNKNOWN",
+                request_id,
+            )
             self.store.fail(
                 owner, conversation_id, card_id, request_id,
                 "ACTION_OUTCOME_UNKNOWN", observation=observation,
