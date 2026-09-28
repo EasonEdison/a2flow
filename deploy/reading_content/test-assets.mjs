@@ -115,12 +115,29 @@ assert.match(draftSkill.markdown, /顶层必须填写 projectId、kind=MANUSCRIP
 assert.match(draftSkill.markdown, /body 分支只填写 manuscriptTitle\/manuscriptMarkdown\/citations/);
 assert.match(draftSkill.markdown, /inputRefs 至少包含已确认的 TOPIC_PLAN.*kind=ARTIFACT.*revision=content\.artifact\.get 返回的 revision/s);
 assert.match(draftSkill.markdown, /每个 citation 的 referenceKind\/referenceId\/revision.*inputRefs.*kind\/id\/revision/s);
-assert.match(draftSkill.markdown, /本轮 use_skill 返回.*content-manuscript-editor\.paramsSchema\.required.*逐项完整构造 data.*不代表可以省略 required 字段/s);
-assert.match(draftSkill.markdown, /export 必须显式传 \{artifactId:"",artifactRevision:0,filename:"",mediaType:"",content:""\}.*只表示未导出.*不得伪造/s);
+for (const skill of skillSpecs) {
+  assert.ok(skill.markdown.includes(`query_skill_dependencies({a2uiApplicationCodeList:["${skill.applicationCode}"]})`));
+  assert.ok(skill.markdown.includes(`render_application({appCode:"${skill.applicationCode}",params})`));
+}
+assert.match(draftSkill.markdown, /初始状态由发布模板提供/);
+assert.doesNotMatch(draftSkill.markdown, /export 必须显式传|构造 data|本轮 use_skill 返回/);
 assert.match(draftSkill.markdown, /project\.currentManuscriptId 非空.*只要求展示或继续编辑.*content\.artifact\.get.*真实 MANUSCRIPT.*不得再次调用 content\.artifact\.save/s);
 assert.match(draftSkill.markdown, /project\.get 返回的真实 id\/revision.*projectId\/projectRevision.*artifact\.get 返回的真实 id\/revision\/body\/inputRefs.*savedArtifactId\/savedArtifactRevision/s);
 
 const [reading, topic, manuscript] = buildApplications();
+for (const application of [reading, topic, manuscript]) {
+  const { paramsSchema, inputBindings, messageTemplates } = application.showTemplate;
+  const initial = messageTemplates.find(message => message.updateDataModel?.path === '/').updateDataModel.value;
+  for (const field of ['status', 'confirmationId', 'export', 'selectedPointIds', 'userNotes']) {
+    assert.ok(!Object.hasOwn(paramsSchema.properties, field), `${application.appCode}: ${field} is not model input`);
+    assert.ok(!paramsSchema.required.includes(field));
+    assert.ok(!inputBindings.some(binding => binding.source === 'APP_PARAMS' && binding.sourcePath === `/${field}`));
+  }
+  assert.equal(initial.status, '');
+  assert.equal(initial.confirmationId, '');
+}
+assert.deepEqual(manuscript.showTemplate.messageTemplates[2].updateDataModel.value.export,
+  { artifactId: '', artifactRevision: 0, filename: '', mediaType: '', content: '' });
 const choice = reading.showTemplate.messageTemplates[1].updateComponents.components[8];
 assert.equal(choice.id, 'selection');
 assert.deepEqual(choice.options, [], 'official ChoicePicker.options must be an array, not a DataBinding');

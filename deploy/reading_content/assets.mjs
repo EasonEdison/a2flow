@@ -248,7 +248,6 @@ export function buildApplications() {
     prompt: stringItem, projectId: stringItem, artifactId: stringItem, projectRevision: integerItem,
     points: { type: 'array', items: readingPointItem },
     options: { type: 'array', items: { type: 'object', properties: { label: stringItem, value: stringItem }, required: ['label', 'value'] } },
-    selectedPointIds: { type: 'array', items: stringItem }, userNotes: stringItem, confirmationId: stringItem, status: stringItem,
   };
   const readingKeys = Object.keys(readingProperties);
   const readingContext = contextSchema({ projectId: stringItem, artifactId: stringItem, selectedPointIds: { type: 'array', items: stringItem }, userNotes: stringItem, expectedProjectRevision: integerItem });
@@ -271,7 +270,10 @@ export function buildApplications() {
         { id: 'confirm', component: 'Button', child: 'confirmText', variant: 'primary', checks: [{ condition: fn('length', { value: ref('/selectedPointIds'), min: 1 }), message: '至少选择一个阅读要点' }], action: { event: { name: 'confirmReading', context: { ...binding('projectId'), ...binding('artifactId'), ...binding('selectedPointIds'), ...binding('userNotes'), expectedProjectRevision: ref('/projectRevision') } } } },
         { id: 'confirmText', component: 'Text', text: '确认阅读要点' },
       ] } },
-      { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value: Object.fromEntries(readingKeys.map(key => [key, readingProperties[key].type === 'array' ? [] : readingProperties[key].type === 'integer' ? 0 : ''])) } },
+      { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value: {
+        ...Object.fromEntries(readingKeys.map(key => [key, readingProperties[key].type === 'array' ? [] : readingProperties[key].type === 'integer' ? 0 : ''])),
+        selectedPointIds: [], userNotes: '', confirmationId: '', status: '',
+      } } },
     ], inputBindings: [...appInputBindings(readingKeys), {
       targetMessageIndex: 1, targetPath: '/updateComponents/components/8/options',
       source: 'APP_PARAMS', sourcePath: '/options', required: true,
@@ -287,7 +289,7 @@ export function buildApplications() {
 
   const topicProperties = {
     prompt: stringItem, projectId: stringItem, artifactId: stringItem, projectRevision: integerItem,
-    topics: { type: 'array', items: topicItem }, confirmationId: stringItem, status: stringItem,
+    topics: { type: 'array', items: topicItem },
   };
   const topicKeys = Object.keys(topicProperties);
   const topicContext = contextSchema({ projectId: stringItem, artifactId: stringItem, topicId: stringItem, editedTitle: stringItem, editedAngle: stringItem, expectedProjectRevision: integerItem });
@@ -309,7 +311,10 @@ export function buildApplications() {
         { id: 'confirmTopicText', component: 'Text', text: '确认这个选题' },
         { id: 'status', component: 'Text', text: ref('/status'), variant: 'caption' },
       ] } },
-      { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value: Object.fromEntries(topicKeys.map(key => [key, topicProperties[key].type === 'array' ? [] : topicProperties[key].type === 'integer' ? 0 : ''])) } },
+      { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value: {
+        ...Object.fromEntries(topicKeys.map(key => [key, topicProperties[key].type === 'array' ? [] : topicProperties[key].type === 'integer' ? 0 : ''])),
+        confirmationId: '', status: '',
+      } } },
     ], inputBindings: appInputBindings(topicKeys) }, loadBindings: [],
     actionBindings: [actionBinding({ bindingId: 'confirm_topic', componentId: 'confirmTopic', actionName: 'confirmTopic', capability: 'content.topic.confirm', schema: topicContext, keys: ['projectId', 'artifactId', 'topicId', 'editedTitle', 'editedAngle', 'expectedProjectRevision'], complete: true, decisionType: 'TOPIC', adapters: adapter('topic_confirmed', {
       confirmationId: '',
@@ -327,8 +332,6 @@ export function buildApplications() {
     projectId: stringItem, projectRevision: integerItem, draftTitle: stringItem, draftMarkdown: stringItem,
     savedTitle: stringItem, savedMarkdown: stringItem, savedArtifactId: stringItem, savedArtifactRevision: integerItem,
     inputRefs: { type: 'array', items: referenceItem }, citations: { type: 'array', items: citationItem },
-    status: stringItem, confirmationId: stringItem,
-    export: { type: 'object', properties: { artifactId: stringItem, artifactRevision: integerItem, filename: stringItem, mediaType: stringItem, content: stringItem }, required: ['artifactId', 'artifactRevision', 'filename', 'mediaType', 'content'] },
   };
   const manuscriptKeys = Object.keys(manuscriptProperties);
   const saveContext = contextSchema({ projectId: stringItem, kind: stringItem, manuscriptTitle: stringItem, manuscriptMarkdown: stringItem, citations: { type: 'array', items: citationItem }, inputRefs: { type: 'array', items: referenceItem }, origin: stringItem });
@@ -393,17 +396,17 @@ export const skillSpecs = [
   {
     skillCode: 'reading-material-analysis', nameCn: '阅读材料分析', applicationCode: 'reading-point-selector',
     capabilities: ['content.project.create', 'content.project.list', 'content.project.get', 'content.source.save', 'content.source.get', 'content.artifact.save', 'content.artifact.get', 'content.confirmation.get', 'content.reading.confirm'],
-    markdown: `---\nname: reading-material-analysis\ndescription: 保存阅读材料、生成有原文依据的阅读要点，并交给用户多选确认\n---\n\n# 阅读材料分析\n\n创建项目时 outputFormat 只能取 ARTICLE 或 SPOKEN_SCRIPT；本场景默认 ARTICLE，不能填写 Markdown。先创建或读取项目并保存原文，再调用 content.artifact.save：kind 必须为 READING_BRIEF，只填写 readingPoints/questions/usableMaterials 分支，inputRefs 使用 kind=SOURCE。非模型建议的要点必须引用原文中真实存在的原句。能力响应中的展示数据路径是 body.readingBrief.points；调用 reading-point-selector 时，把该 points 规范化为展示列表，把每个 id/claim 规范化为 options 的 value/label；不得代替用户选择。只有 confirmReading 成功且响应 decisionType=READING 才视为本阶段完成。\n`,
+    markdown: `---\nname: reading-material-analysis\ndescription: 保存阅读材料、生成有原文依据的阅读要点，并交给用户多选确认\n---\n\n# 阅读材料分析\n\n创建项目时 outputFormat 只能取 ARTICLE 或 SPOKEN_SCRIPT；本场景默认 ARTICLE，不能填写 Markdown。先创建或读取项目并保存原文，再调用 content.artifact.save：kind 必须为 READING_BRIEF，只填写 readingPoints/questions/usableMaterials 分支，inputRefs 使用 kind=SOURCE。非模型建议的要点必须引用原文中真实存在的原句。能力响应中的展示数据路径是 body.readingBrief.points；调用 reading-point-selector 时，把该 points 规范化为展示列表，把每个 id/claim 规范化为 options 的 value/label；不得代替用户选择。只有 confirmReading 成功且响应 decisionType=READING 才视为本阶段完成。渲染前先调用 query_skill_dependencies({a2uiApplicationCodeList:["reading-point-selector"]})，按返回的 paramsSchema 填写 params，再调用 render_application({appCode:"reading-point-selector",params})。只传契约声明的调用参数，用户选择、确认和状态的初始值由发布模板提供，不得代替用户输入或伪造确认。\n`,
   },
   {
     skillCode: 'content-topic-planning', nameCn: '内容选题规划', applicationCode: 'content-topic-selector',
     capabilities: ['content.project.get', 'content.artifact.get', 'content.artifact.save', 'content.confirmation.get', 'content.topic.confirm'],
-    markdown: `---\nname: content-topic-planning\ndescription: 基于已确认阅读要点生成选题，并等待用户编辑和确认\n---\n\n# 内容选题规划\n\n只基于 decisionType=READING 的确认记录生成选题。调用 content.artifact.save 时 kind 必须为 TOPIC_PLAN，只填写 topics 分支，inputRefs 使用 kind=ARTIFACT 指向已确认的 READING_BRIEF；每个候选都要保留 sourcePointIds。能力响应中的展示数据路径是 body.topicPlan.topics；使用 content-topic-selector 展示候选。每张候选卡中的标题和角度可编辑，必须由用户点击该卡的 confirmTopic；只有响应 decisionType=TOPIC 才算确认，不能替用户确认。\n`,
+    markdown: `---\nname: content-topic-planning\ndescription: 基于已确认阅读要点生成选题，并等待用户编辑和确认\n---\n\n# 内容选题规划\n\n只基于 decisionType=READING 的确认记录生成选题。调用 content.artifact.save 时 kind 必须为 TOPIC_PLAN，只填写 topics 分支，inputRefs 使用 kind=ARTIFACT 指向已确认的 READING_BRIEF；每个候选都要保留 sourcePointIds。能力响应中的展示数据路径是 body.topicPlan.topics；使用 content-topic-selector 展示候选。每张候选卡中的标题和角度可编辑，必须由用户点击该卡的 confirmTopic；只有响应 decisionType=TOPIC 才算确认，不能替用户确认。渲染前先调用 query_skill_dependencies({a2uiApplicationCodeList:["content-topic-selector"]})，按返回的 paramsSchema 填写 params，再调用 render_application({appCode:"content-topic-selector",params})。只传契约声明的调用参数，用户选择、确认和状态的初始值由发布模板提供，不得代替用户输入或伪造确认。\n`,
   },
   {
     skillCode: 'content-draft-writing', nameCn: '内容稿件创作', applicationCode: 'content-manuscript-editor',
     capabilities: ['content.project.get', 'content.artifact.get', 'content.artifact.save', 'content.confirmation.get', 'content.manuscript.confirm', 'content.manuscript.export'],
-    markdown: `---\nname: content-draft-writing\ndescription: 基于已确认选题创作、编辑、保存、确认和导出稿件\n---\n\n# 内容稿件创作\n\n只基于 decisionType=TOPIC 的确认记录创作稿件。先调用 content.project.get；project.currentSelectionId 是 confirmationId，不是 artifactId。调用 content.confirmation.get({confirmationId: currentSelectionId})；如果 currentSelectionId 为空，或该响应 decisionType 不是 TOPIC，立即停止并请用户先确认选题，不得自行生成确认。从 TOPIC 确认记录的 artifactId、topicId、editedTitle 和 editedAngle 取得用户最终确认结果；稿件标题和角度必须采用 editedTitle 和 editedAngle。该确认记录不含产物 revision，使用该响应的 artifactId 调用 content.artifact.get，确认 kind=TOPIC_PLAN 并取得 artifact revision 和 body.topicPlan.topics；topicId 只用于在候选中定位证据与 sourcePointIds，不得用原候选 title/angle 覆盖用户确认后的 editedTitle/editedAngle。调用 content.artifact.save 时顶层必须填写 projectId、kind=MANUSCRIPT、inputRefs 和 origin，body 分支只填写 manuscriptTitle/manuscriptMarkdown/citations。inputRefs 至少包含已确认的 TOPIC_PLAN：kind=ARTIFACT、id=上述 artifactId、revision=content.artifact.get 返回的 revision。citation 的 referenceKind 只能是 SOURCE 或 ARTIFACT，且每个 citation 的 referenceKind/referenceId/revision 必须在 inputRefs 中存在完全一致的 kind/id/revision。能力响应中的已保存正文路径是 body.manuscript.title 和 body.manuscript.bodyMarkdown。调用 render_application 前，必须以本轮 use_skill 返回的 dependencies.applications 中 content-manuscript-editor.paramsSchema.required 为准逐项完整构造 data；initialMessages 的默认值不代表可以省略 required 字段。首次渲染尚未导出时，export 必须显式传 {artifactId:"",artifactRevision:0,filename:"",mediaType:"",content:""}；该空对象只表示未导出，不得伪造文件名、媒体类型或导出内容。若 project.currentManuscriptId 非空且用户只要求展示或继续编辑已保存稿件，调用 content.artifact.get 读取该 id 对应的真实 MANUSCRIPT，不得再次调用 content.artifact.save。渲染时使用 project.get 返回的真实 id/revision 作为 projectId/projectRevision，使用 artifact.get 返回的真实 id/revision/body/inputRefs 映射 draftTitle/draftMarkdown、savedTitle/savedMarkdown、savedArtifactId/savedArtifactRevision、citations 和 inputRefs；不存在真实确认或导出结果时，confirmationId 和 export 保持上述空值。使用 content-manuscript-editor 编辑和预览；saveManuscriptDraft 返回的新 artifact id/revision 是后续唯一有效保存身份。存在未保存标题或正文时 confirmManuscript、exportManuscript 和下载都会被组件 checks 阻断。导出 format 只能是 MARKDOWN 或 TXT；最终确认必须返回 decisionType=MANUSCRIPT。不得对旧 artifact 执行确认或导出。\n`,
+    markdown: `---\nname: content-draft-writing\ndescription: 基于已确认选题创作、编辑、保存、确认和导出稿件\n---\n\n# 内容稿件创作\n\n只基于 decisionType=TOPIC 的确认记录创作稿件。先调用 content.project.get；project.currentSelectionId 是 confirmationId，不是 artifactId。调用 content.confirmation.get({confirmationId: currentSelectionId})；如果 currentSelectionId 为空，或该响应 decisionType 不是 TOPIC，立即停止并请用户先确认选题，不得自行生成确认。从 TOPIC 确认记录的 artifactId、topicId、editedTitle 和 editedAngle 取得用户最终确认结果；稿件标题和角度必须采用 editedTitle 和 editedAngle。该确认记录不含产物 revision，使用该响应的 artifactId 调用 content.artifact.get，确认 kind=TOPIC_PLAN 并取得 artifact revision 和 body.topicPlan.topics；topicId 只用于在候选中定位证据与 sourcePointIds，不得用原候选 title/angle 覆盖用户确认后的 editedTitle/editedAngle。调用 content.artifact.save 时顶层必须填写 projectId、kind=MANUSCRIPT、inputRefs 和 origin，body 分支只填写 manuscriptTitle/manuscriptMarkdown/citations。inputRefs 至少包含已确认的 TOPIC_PLAN：kind=ARTIFACT、id=上述 artifactId、revision=content.artifact.get 返回的 revision。citation 的 referenceKind 只能是 SOURCE 或 ARTIFACT，且每个 citation 的 referenceKind/referenceId/revision 必须在 inputRefs 中存在完全一致的 kind/id/revision。能力响应中的已保存正文路径是 body.manuscript.title 和 body.manuscript.bodyMarkdown。渲染前先调用 query_skill_dependencies({a2uiApplicationCodeList:["content-manuscript-editor"]})，按返回的 paramsSchema 填写 params，再调用 render_application({appCode:"content-manuscript-editor",params})。只填写模型调用参数，不填写布局、Action、status、confirmationId 或 export；未确认、未导出的初始状态由发布模板提供，不得伪造已确认或已导出事实。若 project.currentManuscriptId 非空且用户只要求展示或继续编辑已保存稿件，调用 content.artifact.get 读取该 id 对应的真实 MANUSCRIPT，不得再次调用 content.artifact.save。渲染时使用 project.get 返回的真实 id/revision 作为 projectId/projectRevision，使用 artifact.get 返回的真实 id/revision/body/inputRefs 映射 draftTitle/draftMarkdown、savedTitle/savedMarkdown、savedArtifactId/savedArtifactRevision、citations 和 inputRefs。使用 content-manuscript-editor 编辑和预览；saveManuscriptDraft 返回的新 artifact id/revision 是后续唯一有效保存身份。存在未保存标题或正文时 confirmManuscript、exportManuscript 和下载都会被组件 checks 阻断。导出 format 只能是 MARKDOWN 或 TXT；最终确认必须返回 decisionType=MANUSCRIPT。不得对旧 artifact 执行确认或导出。\n`,
   },
 ];
 
