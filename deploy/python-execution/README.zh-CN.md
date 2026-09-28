@@ -23,6 +23,20 @@
 
 两个 Compose 应各自使用保留的私有 env 文件；组合 Java Compose 时必须同时使用原文件和 override，并明确指定服务，不能默认重启整套无关服务。
 
+更新使用 Python 执行器的 B 服务时，命令必须显式包含 Python override；仅使用 Java
+Compose 会保留 standalone Java 目标 `127.0.0.1:8793`，不能用于该组合部署：
+
+```bash
+docker compose --env-file <management.env> \
+  -f ../java-management/compose.yaml \
+  -f ./management.override.yaml \
+  -f <private-overrides...> \
+  up -d --no-deps --force-recreate bside
+```
+
+重建后必须核对 B 容器内 `A2FLOW_ENGINE_RPC_TARGET=127.0.0.1:8794`，并用同一
+mTLS 配置执行一次只读 `Describe`；端口监听本身不证明 B 已连接 Python 执行器。
+
 ## 回退与验收
 
 保留旧镜像、Java 静态 release 及旧 B 端 RPC 目标。服务回退只切换部署，不撤销已完成的内容写入；不得自动清库或补偿业务事务。当前仅验收 PRT；ONLINE 需要独立内容库、配置和发布门禁证明。
