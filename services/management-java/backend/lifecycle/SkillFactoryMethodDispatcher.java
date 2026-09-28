@@ -596,7 +596,7 @@ public class SkillFactoryMethodDispatcher {
         }
         if (exception instanceof A2uiApplicationValidationException validation) {
             return SkillFactoryExecutionResult.fail(validation.getMessage(), errorData(
-                    validation.getErrorCode(), null, null));
+                    validation.getErrorCode(), null, validation.getFieldPath()));
         }
         if (exception instanceof A2uiActionGatewayException gateway) {
             return SkillFactoryExecutionResult.fail(gateway.getMessage(), errorData(

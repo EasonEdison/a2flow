@@ -75,6 +75,7 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiResultTr
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiResultTransformType;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiScannedActionDeclaration;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowInputBinding;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiShowTemplate;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSideEffectLevel;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSuccessBranch;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiSurfaceDeclaration;
@@ -129,7 +130,10 @@ public class A2uiApplicationBuildCompiler {
     private static final String BUSINESS_PREDICATE_IS_ARRAY = "IS_ARRAY";
     private static final String FIELD_CREATE_SURFACE = "createSurface";
     private static final String FIELD_UPDATE_COMPONENTS = "updateComponents";
+    private static final String FIELD_UPDATE_DATA_MODEL = "updateDataModel";
     private static final String FIELD_DELETE_SURFACE = "deleteSurface";
+    private static final String FIELD_PATH = "path";
+    private static final String FIELD_VALUE = "value";
     private static final String FOOTER_COMPONENT_TYPE = "Container";
     private static final String FOOTER_TYPE_FIELD = "component";
     private static final String FIELD_COMPONENTS = "components";
@@ -190,6 +194,8 @@ public class A2uiApplicationBuildCompiler {
         ShowFacts showFacts = showTemplateAnalyzer.analyze(
                 draft.getShowTemplate(), draft.getCatalog().getCatalogId());
         showTemplateAnalyzer.validateInputBindings(draft.getShowTemplate());
+        validateActivationDataModelSources(
+                draft.getShowTemplate(), draft.getLoadBindings());
         validateFooterComponents(draft);
         // 仅约束 Application 参数子集，编译时阻止运行时无法校验的规则进入不可变 Build。
         paramsSchemaValidator.validate(draft.getShowTemplate().getParamsSchema());
@@ -1154,6 +1160,190 @@ public class A2uiApplicationBuildCompiler {
                 || right.startsWith(left + "/");
     }
 
+    /**
+     * 校验首次Show与顺序Load阶段中可静态定位的DataModel来源。
+     * Action ResultAdapter属于后续用户操作状态迁移，不参与Activation单源门禁。
+     */
+    void validateActivationDataModelSources(A2uiShowTemplate show,
+            List<A2uiLoadBinding> loadBindings) {
+        if (show == null || loadBindings == null) {
+            return;
+        }
+        List<DataModelTarget> showTargets = showDataModelTargets(show);
+        requireNoDataModelConflicts(showTargets);
+
+        List<A2uiLoadBinding> orderedLoads = loadBindings.stream()
+                .filter(Objects::nonNull)
+                .filter(binding -> !isBlank(binding.getBindingId()))
+                .sorted(Comparator.comparing(A2uiLoadBinding::getBindingId))
+                .collect(Collectors.toList());
+        List<DataModelTarget> priorSuccessTargets = new ArrayList<>();
+        for (A2uiLoadBinding load : orderedLoads) {
+            List<DataModelTarget> successTargets = loadDataModelTargets(
+                    load.getResultAdapters(), "load." + load.getBindingId() + ".success");
+            List<DataModelTarget> failureTargets = loadDataModelTargets(
+                    load.getFailureResultAdapters(), "load." + load.getBindingId() + ".failure");
+            requireNoDataModelConflicts(successTargets);
+            requireNoDataModelConflicts(failureTargets);
+            requireNoDataModelConflicts(showTargets, successTargets);
+            requireNoDataModelConflicts(showTargets, failureTargets);
+            requireNoDataModelConflicts(priorSuccessTargets, successTargets);
+            requireNoDataModelConflicts(priorSuccessTargets, failureTargets);
+            // Java/Python Activation均在失败后停止；只有成功目标会与后续Load共存。
+            priorSuccessTargets.addAll(successTargets);
+        }
+    }
+
+    private List<DataModelTarget> showDataModelTargets(A2uiShowTemplate show) {
+        List<Map<String, Object>> messages = show.getMessageTemplates();
+        if (messages == null || show.getInputBindings() == null) {
+            return Collections.emptyList();
+        }
+        Set<Integer> dynamicAddressMessages = new HashSet<>();
+        for (A2uiShowInputBinding binding : show.getInputBindings()) {
+            if (binding != null
+                    && binding.getTargetMessageIndex() >= 0
+                    && binding.getTargetMessageIndex() < messages.size()
+                    && updateDataModel(messages.get(binding.getTargetMessageIndex())) != null
+                    && mutatesDataModelAddress(binding.getTargetPath())) {
+                dynamicAddressMessages.add(binding.getTargetMessageIndex());
+            }
+        }
+        List<DataModelTarget> targets = new ArrayList<>();
+        for (A2uiShowInputBinding binding : show.getInputBindings()) {
+            if (binding == null
+                    || binding.getTargetMessageIndex() < 0
+                    || binding.getTargetMessageIndex() >= messages.size()
+                    || dynamicAddressMessages.contains(binding.getTargetMessageIndex())) {
+                continue;
+            }
+            DataModelTarget target = boundDataModelTarget(
+                    messages.get(binding.getTargetMessageIndex()), binding.getTargetPath(),
+                    "show." + binding.getTargetMessageIndex());
+            if (target != null) {
+                targets.add(target);
+            }
+        }
+        return targets;
+    }
+
+    private List<DataModelTarget> loadDataModelTargets(List<A2uiResultAdapter> adapters,
+            String phase) {
+        if (adapters == null) {
+            return Collections.emptyList();
+        }
+        List<DataModelTarget> targets = new ArrayList<>();
+        for (A2uiResultAdapter adapter : adapters) {
+            if (adapter == null || adapter.getType() != A2uiResultAdapterType.MESSAGE_TEMPLATE
+                    || adapter.getMessageTemplate() == null
+                    || adapterAddressIsDynamic(adapter)) {
+                // PASSTHROUGH及动态surface/path无法在发布期静态定位，不猜测目标。
+                continue;
+            }
+            DataModelTarget target = staticDataModelTarget(adapter.getMessageTemplate(), phase);
+            if (target != null) {
+                targets.add(target);
+            }
+        }
+        return targets;
+    }
+
+    private boolean adapterAddressIsDynamic(A2uiResultAdapter adapter) {
+        if (adapter.getBindings() == null) {
+            return false;
+        }
+        return adapter.getBindings().stream()
+                .filter(Objects::nonNull)
+                .map(A2uiMessageTemplateBinding::getTargetPath)
+                .anyMatch(this::mutatesDataModelAddress);
+    }
+
+    private boolean mutatesDataModelAddress(String targetPath) {
+        return !isBlank(targetPath)
+                && (pathsConflict(targetPath, "/updateDataModel/surfaceId")
+                || pathsConflict(targetPath, "/updateDataModel/path"));
+    }
+
+    private DataModelTarget boundDataModelTarget(Map<String, Object> message,
+            String bindingTargetPath, String phase) {
+        String valuePrefix = "/updateDataModel/" + FIELD_VALUE;
+        if (isBlank(bindingTargetPath)
+                || !(bindingTargetPath.equals(valuePrefix)
+                || bindingTargetPath.startsWith(valuePrefix + "/"))) {
+            return null;
+        }
+        DataModelTarget base = staticDataModelTarget(message, phase);
+        if (base == null) {
+            return null;
+        }
+        String suffix = bindingTargetPath.substring(valuePrefix.length());
+        String logicalPath = "/".equals(base.path())
+                ? (suffix.isEmpty() ? "/" : suffix)
+                : base.path() + suffix;
+        return new DataModelTarget(phase, base.surfaceId(), logicalPath);
+    }
+
+    private DataModelTarget staticDataModelTarget(Map<String, Object> message, String phase) {
+        Map<?, ?> update = updateDataModel(message);
+        if (update == null) {
+            return null;
+        }
+        Object rawSurfaceId = update.get(FIELD_SURFACE_ID);
+        Object rawPath = update.get(FIELD_PATH);
+        if (!(rawSurfaceId instanceof String) || isBlank((String) rawSurfaceId)
+                || !(rawPath instanceof String) || isBlank((String) rawPath)
+                || !validJsonPointer((String) rawPath)) {
+            return null;
+        }
+        return new DataModelTarget(phase, (String) rawSurfaceId, (String) rawPath);
+    }
+
+    private Map<?, ?> updateDataModel(Map<String, Object> message) {
+        if (message == null || !(message.get(FIELD_UPDATE_DATA_MODEL) instanceof Map)) {
+            return null;
+        }
+        return (Map<?, ?>) message.get(FIELD_UPDATE_DATA_MODEL);
+    }
+
+    private void requireNoDataModelConflicts(List<DataModelTarget> targets) {
+        for (int leftIndex = 0; leftIndex < targets.size(); leftIndex++) {
+            for (int rightIndex = leftIndex + 1; rightIndex < targets.size(); rightIndex++) {
+                requireNoDataModelConflict(targets.get(leftIndex), targets.get(rightIndex));
+            }
+        }
+    }
+
+    private void requireNoDataModelConflicts(List<DataModelTarget> left,
+            List<DataModelTarget> right) {
+        for (DataModelTarget leftTarget : left) {
+            for (DataModelTarget rightTarget : right) {
+                requireNoDataModelConflict(leftTarget, rightTarget);
+            }
+        }
+    }
+
+    private void requireNoDataModelConflict(DataModelTarget left, DataModelTarget right) {
+        if (left.surfaceId().equals(right.surfaceId())
+                && pathsConflict(left.path(), right.path())) {
+            throw failure(DRAFT_INVALID, dataModelConflictFieldPath(left, right));
+        }
+    }
+
+    private String dataModelConflictFieldPath(DataModelTarget left, DataModelTarget right) {
+        String targetPath = left.path().length() <= right.path().length()
+                ? left.path() : right.path();
+        return "/activationDataModel/"
+                + pointerSegment(left.phase()) + "/"
+                + pointerSegment(right.phase()) + "/"
+                + pointerSegment(left.surfaceId()) + targetPath;
+    }
+
+    private String pointerSegment(String value) {
+        return value.replace("~", "~0").replace("/", "~1");
+    }
+
+    private record DataModelTarget(String phase, String surfaceId, String path) { }
+
     /** 校验并新建只读结果转换，避免作者态对象后续修改污染已发布 Build。 */
     private A2uiCompiledResultTransform compileResultTransform(A2uiResultTransform transform,
             Map<String, Object> contextSchema) {
@@ -1498,4 +1688,8 @@ public class A2uiApplicationBuildCompiler {
         return new A2uiApplicationValidationException(errorCode);
     }
 
+    private A2uiApplicationValidationException failure(
+            A2uiApplicationErrorCode errorCode, String fieldPath) {
+        return new A2uiApplicationValidationException(errorCode, fieldPath);
+    }
 }
