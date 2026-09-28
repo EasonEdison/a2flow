@@ -174,7 +174,7 @@ const A2uiShowAuthoringEditor: React.FC<A2uiShowAuthoringEditorProps> = ({
   const updateParameters = (definitions: A2uiParameterDefinition[]) => {
     onShowTemplateChange({
       ...showTemplate,
-      paramsSchema: buildA2uiParamsSchema(definitions),
+      paramsSchema: buildA2uiParamsSchema(definitions, showTemplate.paramsSchema),
     });
   };
 

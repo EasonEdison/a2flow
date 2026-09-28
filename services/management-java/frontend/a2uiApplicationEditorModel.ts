@@ -244,6 +244,9 @@ export interface A2uiParameterDefinition {
   required: boolean;
   description?: string;
   example?: unknown;
+  /** Schema rules not exposed by the flat parameter form must survive edits. */
+  schema?: Record<string, unknown>;
+  schemaType?: A2uiParameterType;
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
@@ -254,23 +257,27 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
 
 export function buildA2uiParamsSchema(
   definitions: A2uiParameterDefinition[],
+  originalSchema: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const required = definitions?.filter((item) => item.required)?.map?.((item) => item.name);
   const schema: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
+    ...jsonClone(originalSchema),
     properties: Object.fromEntries(
       definitions.map((item) => [
         item.name,
         {
           type: item.type,
+          ...(item.schemaType === item.type ? jsonClone(item.schema || {}) : {}),
           ...(item.description ? { description: item.description } : {}),
-          ...(item.example !== undefined ? { example: jsonClone(item.example) } : {}),
+          ...(item.example !== undefined ? { examples: [jsonClone(item.example)] } : {}),
         },
       ]),
     ),
   };
   if (required.length) schema.required = required;
+  else delete schema.required;
   return schema;
 }
 
@@ -298,7 +305,12 @@ export function readA2uiParameterDefinitions(
         type: type as A2uiParameterType,
         required: required.has(name),
         ...(typeof property.description === 'string' ? { description: property.description } : {}),
-        ...('example' in property ? { example: jsonClone(property.example) } : {}),
+        ...(Array.isArray(property.examples) && property.examples.length
+          ? { example: jsonClone(property.examples[0]) } : {}),
+        schema: jsonClone(Object.fromEntries(Object.entries(property).filter(
+          ([key]) => !['type', 'description', 'examples'].includes(key),
+        ))),
+        schemaType: type as A2uiParameterType,
       },
     ];
   });
