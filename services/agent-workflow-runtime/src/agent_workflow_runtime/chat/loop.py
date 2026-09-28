@@ -14,10 +14,12 @@ from langchain.agents.middleware import (
     AgentMiddleware,
     ModelRequest,
     ModelResponse,
+    ToolCallRequest,
     hook_config,
 )
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
+from langgraph.types import Command
 from skillweave_contracts.models import (
     ConversationInvocationScope, TrustedInvocationContext,
 )
@@ -53,6 +55,13 @@ _TURN_LOCAL_SKILL_PROMPT: Final[str] = (
     "Skill admission is local to the current turn. Historical use_skill results "
     "do not admit a Skill for this turn; call use_skill again before using Skill "
     "Ability or Application tools."
+)
+_SKILL_TOOL_NAMES: Final[frozenset[str]] = frozenset({
+    "execute_ability",
+    "render_application",
+})
+_SKILL_TOOL_ADMISSION_ERROR: Final[str] = (
+    "Error: call use_skill in the current turn for a Skill that admits this tool."
 )
 
 
@@ -180,6 +189,38 @@ class _ChatSkillToolAdmission(AgentMiddleware):
         ],
     ) -> ModelResponse[Any]:
         return await handler(self._prepare(request))
+
+    def _tool_rejection(self, request: ToolCallRequest) -> ToolMessage | None:
+        name = request.tool_call["name"]
+        if (
+            name not in _SKILL_TOOL_NAMES
+            or name in self._chat_assets.admitted_tool_names()
+        ):
+            return None
+        return ToolMessage(
+            content=_SKILL_TOOL_ADMISSION_ERROR,
+            name=name,
+            tool_call_id=request.tool_call["id"] or "",
+            status="error",
+        )
+
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+    ) -> ToolMessage | Command[Any]:
+        rejection = self._tool_rejection(request)
+        return rejection if rejection is not None else handler(request)
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[
+            [ToolCallRequest], Awaitable[ToolMessage | Command[Any]]
+        ],
+    ) -> ToolMessage | Command[Any]:
+        rejection = self._tool_rejection(request)
+        return rejection if rejection is not None else await handler(request)
 
 
 class _InteractiveCardStop(AgentMiddleware):
