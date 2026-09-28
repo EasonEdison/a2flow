@@ -2,6 +2,8 @@
 
 from __future__ import unicode_literals
 
+import asyncio
+from contextlib import contextmanager
 import hashlib
 import json
 import unittest
@@ -43,6 +45,8 @@ from agent_workflow_runtime.chat.loop import (
     _ACTION_OBSERVATION_MARKER,
     _ChatObservationStateMiddleware,
     _OBSERVATION_CURSOR,
+    _action_observation_message,
+    _read_observations,
 )
 from agent_workflow_runtime.assembly import build_agent
 
@@ -800,6 +804,132 @@ class ChatObservationTests(unittest.TestCase):
             blocked.turn("new text")
         self.assertEqual([], unused_model.observed)
         self.assertEqual([0], calls)
+
+    def test_attended_runner_reads_incremental_observations_without_system_dump(self):
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        from deploy.attended.chat_runner import ChatLoopRunner
+
+        saver = InMemorySaver()
+
+        class ConversationStore:
+            @contextmanager
+            def session(self, owner, conversation_id, turn_id):
+                del owner, conversation_id, turn_id
+                yield saver, "runner-observation-thread"
+
+        first_model = FakeModel([AIMessageChunk(content="first")])
+        second_model = FakeModel([AIMessageChunk(content="second")])
+
+        class ModelFactory:
+            def __init__(self):
+                self.models = [first_model, second_model]
+
+            def create(self, reference, owner):
+                del reference, owner
+                return self.models.pop(0)
+
+        observation = Observation(
+            7,
+            "runner-action",
+            "ACTION",
+            "runner-card",
+            "draft-editor",
+            request_id="runner-request",
+            action_name="save",
+            description="Save the draft",
+            arguments={"artifactId": "artifact-7"},
+            status="COMPLETED",
+            result={"revision": 8},
+        )
+        calls = []
+
+        def load(owner, conversation_id, *, after_sequence, limit):
+            calls.append((owner, conversation_id, after_sequence, limit))
+            return [observation] if after_sequence == 0 else []
+
+        runner = ChatLoopRunner(
+            model_factory=ModelFactory(),
+            model_reference="deepseek-v4-flash",
+            environment="PRT",
+            reader=FakeMaterialPort(skill_material()),
+            conversation_store=ConversationStore(),
+            history_loader=lambda *args: [],
+            observation_loader=load,
+            system_prompt="base prompt",
+        )
+
+        async def run(text, turn_id):
+            return [event async for event in runner.iterate(
+                user_id=OWNER.user_id,
+                conversation_id=99,
+                text=text,
+                turn_id=turn_id,
+            )]
+
+        first_events = asyncio.run(run("first user", "1"))
+        second_events = asyncio.run(run("second user", "2"))
+        self.assertEqual("done", first_events[-1]["type"])
+        self.assertEqual("done", second_events[-1]["type"])
+        self.assertEqual([0, 7], [call[2] for call in calls])
+        self.assertTrue(all(call[3] == 100 for call in calls))
+        first_humans = [
+            str(message.content) for message in first_model.observed[0]
+            if message.type == "human"
+        ]
+        self.assertIn(_ACTION_OBSERVATION_MARKER, first_humans[0])
+        self.assertEqual("first user", first_humans[1])
+        second_content = "\n".join(
+            str(message.content) for message in second_model.observed[0]
+        )
+        self.assertEqual(1, second_content.count(_ACTION_OBSERVATION_MARKER))
+        self.assertNotIn("Recent saved Application states", second_content)
+
+    def test_unknown_action_keeps_error_without_inventing_result(self):
+        message = _action_observation_message(Observation(
+            1,
+            "unknown-action",
+            "ACTION",
+            "card-unknown",
+            "draft-editor",
+            request_id="request-unknown",
+            action_name="export",
+            arguments={"format": "MARKDOWN"},
+            status="UNKNOWN",
+            error_code="ACTION_OUTCOME_UNKNOWN",
+        ))
+        fact = json.loads(str(message.content).split("\n", 2)[-1])
+        self.assertEqual("UNKNOWN", fact["systemOutcome"]["status"])
+        self.assertEqual(
+            "ACTION_OUTCOME_UNKNOWN",
+            fact["systemOutcome"]["errorCode"],
+        )
+        self.assertNotIn("result", fact["systemOutcome"])
+        self.assertNotIn("functionDescription", fact)
+
+    def test_observation_reader_drains_all_pages_without_silent_truncation(self):
+        observations = [
+            Observation(
+                sequence,
+                f"render-{sequence}",
+                "RENDERED",
+                f"card-{sequence}",
+                "draft-editor",
+            )
+            for sequence in range(1, 102)
+        ]
+        calls = []
+
+        def loader(after_sequence):
+            calls.append(after_sequence)
+            return [
+                observation for observation in observations
+                if observation.sequence > after_sequence
+            ][:100]
+
+        loaded = _read_observations(loader, 0)
+        self.assertEqual(101, len(loaded))
+        self.assertEqual([0, 100], calls)
 
 
 if __name__ == "__main__":

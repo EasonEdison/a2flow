@@ -196,7 +196,7 @@ def build_chat_tools(
         rendered = chat_assets.render_observation(saved["cardId"])
         observation = {
             "renderedApplication": rendered,
-            "applicationPurpose": "Conversation display or interaction.",
+            "applicationRole": "Conversation display or interaction.",
             "visibility": (
                 "The Application was prepared and saved; this does not assert "
                 "that the user viewed it."

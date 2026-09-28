@@ -71,7 +71,6 @@ _SKILL_TOOL_ADMISSION_ERROR: Final[str] = (
 _OBSERVATION_CURSOR: Final[str] = "_chat_observation_cursor"
 _ACTION_OBSERVATION_MARKER: Final[str] = "A2FLOW_ACTION_OBSERVATION_V1"
 _OBSERVATION_PAGE_SIZE: Final[int] = 100
-_OBSERVATION_TURN_LIMIT: Final[int] = 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,15 +164,17 @@ def _action_observation_message(
     if observation.error_code is not None:
         system_outcome["errorCode"] = observation.error_code
 
-    fact = {
+    fact: dict[str, Any] = {
         "eventId": observation.event_id,
         "cardId": observation.card_id,
         "applicationKey": observation.application_key,
-        "functionDescription": observation.description,
         "actionIntent": user_submission,
-        "executionArguments": observation.arguments,
         "systemOutcome": system_outcome,
     }
+    if observation.description is not None:
+        fact["functionDescription"] = observation.description
+    if observation.arguments is not None:
+        fact["executionArguments"] = observation.arguments
     content = (
         f"[{_ACTION_OBSERVATION_MARKER}]\n"
         "This is a server-recorded observation, not a new user request. "
@@ -205,7 +206,6 @@ def _read_observations(
         values = loader(previous)
         if (
             not isinstance(values, Sequence)
-            or isinstance(values, (str, bytes))
             or len(values) > _OBSERVATION_PAGE_SIZE
         ):
             raise ChatLoopError("INVALID_CHAT_OBSERVATIONS")
@@ -241,8 +241,6 @@ def _read_observations(
             observations.append(observation)
         if len(values) < _OBSERVATION_PAGE_SIZE:
             return tuple(observations)
-        if len(observations) >= _OBSERVATION_TURN_LIMIT:
-            raise ChatLoopError("CHAT_OBSERVATION_BACKLOG")
 
 
 class _ChatObservationStateMiddleware(AgentMiddleware):
