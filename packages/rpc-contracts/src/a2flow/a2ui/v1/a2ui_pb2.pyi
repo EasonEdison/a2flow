@@ -83,31 +83,23 @@ class TrustedCard(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     USER_ID_FIELD_NUMBER: builtins.int
-    RELEASE_FIELD_NUMBER: builtins.int
-    SESSION_FIELD_NUMBER: builtins.int
-    REVISION_FIELD_NUMBER: builtins.int
     PARAMS_JSON_FIELD_NUMBER: builtins.int
     SNAPSHOT_JSON_FIELD_NUMBER: builtins.int
+    APP_CODE_FIELD_NUMBER: builtins.int
     user_id: builtins.int
-    revision: builtins.int
     params_json: builtins.bytes
     snapshot_json: builtins.bytes
-    @property
-    def release(self) -> Global___ApplicationRelease: ...
-    @property
-    def session(self) -> Global___RuntimeSession: ...
+    app_code: builtins.str
     def __init__(
         self,
         *,
         user_id: builtins.int | None = ...,
-        release: Global___ApplicationRelease | None = ...,
-        session: Global___RuntimeSession | None = ...,
-        revision: builtins.int = ...,
         params_json: builtins.bytes = ...,
         snapshot_json: builtins.bytes = ...,
+        app_code: builtins.str = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_user_id", b"_user_id", "release", b"release", "session", b"session", "user_id", b"user_id"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_user_id", b"_user_id", "params_json", b"params_json", "release", b"release", "revision", b"revision", "session", b"session", "snapshot_json", b"snapshot_json", "user_id", b"user_id"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_user_id", b"_user_id", "user_id", b"user_id"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_user_id", b"_user_id", "app_code", b"app_code", "params_json", b"params_json", "snapshot_json", b"snapshot_json", "user_id", b"user_id"]) -> None: ...
     def WhichOneof(self, oneof_group: typing.Literal["_user_id", b"_user_id"]) -> typing.Literal["user_id"] | None: ...
 
 Global___TrustedCard: typing_extensions.TypeAlias = TrustedCard
@@ -119,12 +111,8 @@ class ActivateRequest(google.protobuf.message.Message):
     CONTEXT_FIELD_NUMBER: builtins.int
     APP_CODE_FIELD_NUMBER: builtins.int
     PARAMS_JSON_FIELD_NUMBER: builtins.int
-    EXPECTED_SOURCE_ID_FIELD_NUMBER: builtins.int
-    EXPECTED_DIGEST_FIELD_NUMBER: builtins.int
     app_code: builtins.str
     params_json: builtins.bytes
-    expected_source_id: builtins.str
-    expected_digest: builtins.str
     @property
     def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
     def __init__(
@@ -133,11 +121,9 @@ class ActivateRequest(google.protobuf.message.Message):
         context: a2flow.capability.v1.capability_pb2.ExecutionContext | None = ...,
         app_code: builtins.str = ...,
         params_json: builtins.bytes = ...,
-        expected_source_id: builtins.str = ...,
-        expected_digest: builtins.str = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["app_code", b"app_code", "context", b"context", "expected_digest", b"expected_digest", "expected_source_id", b"expected_source_id", "params_json", b"params_json"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["app_code", b"app_code", "context", b"context", "params_json", b"params_json"]) -> None: ...
 
 Global___ActivateRequest: typing_extensions.TypeAlias = ActivateRequest
 
@@ -226,15 +212,9 @@ class ActRequest(google.protobuf.message.Message):
     CONTEXT_FIELD_NUMBER: builtins.int
     CARD_FIELD_NUMBER: builtins.int
     CORRELATION_ID_FIELD_NUMBER: builtins.int
-    RUNTIME_SESSION_TOKEN_FIELD_NUMBER: builtins.int
-    APP_BUILD_ID_FIELD_NUMBER: builtins.int
-    EXPECTED_SURFACE_REVISION_FIELD_NUMBER: builtins.int
     IDEMPOTENCY_KEY_FIELD_NUMBER: builtins.int
     ACTION_MESSAGE_JSON_FIELD_NUMBER: builtins.int
     correlation_id: builtins.str
-    runtime_session_token: builtins.str
-    app_build_id: builtins.str
-    expected_surface_revision: builtins.int
     idempotency_key: builtins.str
     action_message_json: builtins.bytes
     @property
@@ -247,14 +227,11 @@ class ActRequest(google.protobuf.message.Message):
         context: a2flow.capability.v1.capability_pb2.ExecutionContext | None = ...,
         card: Global___TrustedCard | None = ...,
         correlation_id: builtins.str = ...,
-        runtime_session_token: builtins.str = ...,
-        app_build_id: builtins.str = ...,
-        expected_surface_revision: builtins.int = ...,
         idempotency_key: builtins.str = ...,
         action_message_json: builtins.bytes = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["card", b"card", "context", b"context"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["action_message_json", b"action_message_json", "app_build_id", b"app_build_id", "card", b"card", "context", b"context", "correlation_id", b"correlation_id", "expected_surface_revision", b"expected_surface_revision", "idempotency_key", b"idempotency_key", "runtime_session_token", b"runtime_session_token"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["action_message_json", b"action_message_json", "card", b"card", "context", b"context", "correlation_id", b"correlation_id", "idempotency_key", b"idempotency_key"]) -> None: ...
 
 Global___ActRequest: typing_extensions.TypeAlias = ActRequest
 
@@ -371,7 +348,6 @@ class RuntimeResponse(google.protobuf.message.Message):
     complete_interaction: builtins.bool
     selected_branch_id: builtins.str
     error_code: builtins.str
-    """RESET_REQUIRED is emitted before capability invocation when publication changes."""
     interaction_mode: builtins.str
     business_success: builtins.bool
     @property

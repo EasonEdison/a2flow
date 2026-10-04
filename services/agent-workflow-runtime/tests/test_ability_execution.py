@@ -81,7 +81,6 @@ class AbilityExecutionTest(unittest.TestCase):
         response = execute_ability(
             ability(), self.operation, arguments, self.owner,
             authorization=MODEL_AUTHORIZATION,
-            before_dispatch=lambda: None,
         )
         self.assertEqual(
             {"abilityKey": "demo.calculate", "output": {"accepted": True, "doubled": 2},
@@ -98,7 +97,6 @@ class AbilityExecutionTest(unittest.TestCase):
         response = execute_ability(
             ability(), action_operation, {"value": 1}, self.owner,
             authorization=ACTION_AUTHORIZATION,
-            before_dispatch=lambda: None,
         )
         self.assertTrue(response["output"]["accepted"])
         for operation, authorization, code in (
@@ -112,7 +110,6 @@ class AbilityExecutionTest(unittest.TestCase):
                 execute_ability(
                     ability(), operation, {"value": 1}, self.owner,
                     authorization=authorization,
-                    before_dispatch=lambda: None,
                 )
 
     def test_owner_must_be_exact_trusted_context(self):
@@ -130,7 +127,6 @@ class AbilityExecutionTest(unittest.TestCase):
                 execute_ability(
                     ability(), self.operation, {"value": 1}, owner,
                     authorization=MODEL_AUTHORIZATION,
-                    before_dispatch=lambda: None,
                 )
         self.assertEqual([], self.calls)
 
@@ -151,7 +147,6 @@ class AbilityExecutionTest(unittest.TestCase):
                 execute_ability(
                     resolved, operation, arguments, self.owner,
                     authorization=MODEL_AUTHORIZATION,
-                    before_dispatch=lambda: None,
                 )
         self.assertEqual([], self.calls)
 
@@ -173,34 +168,16 @@ class AbilityExecutionTest(unittest.TestCase):
                 execute_ability(
                     resolved, operation, {"value": 1}, self.owner,
                     authorization=MODEL_AUTHORIZATION,
-                    before_dispatch=lambda: None,
                     success_policy_ref=policy_ref,
                 )
 
-    def test_dispatch_guard_runs_after_input_validation_and_before_execute(self):
-        version = {"current": "v1"}
-
-        def validate_input_then_change_version(value):
-            valid = valid_input(value)
-            version["current"] = "v2"
-            return valid
-
-        operation = replace(
-            self.operation,
-            validate_input=validate_input_then_change_version,
+    def test_execution_has_no_old_release_dispatch_guard(self):
+        result = execute_ability(
+            ability(), self.operation, {"value": 1}, self.owner,
+            authorization=MODEL_AUTHORIZATION,
         )
-
-        def require_current_version():
-            if version["current"] != "v1":
-                raise ActionRejected("RESET_REQUIRED")
-
-        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
-            execute_ability(
-                ability(), operation, {"value": 1}, self.owner,
-                authorization=MODEL_AUTHORIZATION,
-                before_dispatch=require_current_version,
-            )
-        self.assertEqual([], self.calls)
+        self.assertEqual({"accepted": True, "doubled": 2}, result["output"])
+        self.assertEqual(1, len(self.calls))
 
 
 if __name__ == "__main__":

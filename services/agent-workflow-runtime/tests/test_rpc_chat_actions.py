@@ -24,7 +24,6 @@ class RpcChatActionObservationTests(unittest.TestCase):
         session = RuntimeSession("token", "build-1", "v0.9.1", "catalog", "1", "digest")
         card = {
             "cardId": "card-1",
-            "revision": 0,
             "display": {
                 "protocolProfile": "a2flow.java-rpc.v1",
                 "applicationKey": "app",
@@ -39,7 +38,6 @@ class RpcChatActionObservationTests(unittest.TestCase):
         }
         metadata = {
             "skillKey": "skill",
-            "recordedVersions": [["SKILL:skill", "version-1"]],
             "rpc": {
                 "release": asdict(release),
                 "session": asdict(session),
@@ -53,7 +51,12 @@ class RpcChatActionObservationTests(unittest.TestCase):
         store.fail.return_value = {**card, "status": "UNKNOWN", "revision": 2}
 
         assets = Mock()
-        assets.application_description.return_value = ({}, SimpleNamespace(release=release))
+        assets.application_description.return_value = (
+            {"versionId": "version-2"},
+            SimpleNamespace(release=release, catalog=SimpleNamespace(protocol_version="v0.9.1"), actions=(SimpleNamespace(
+                action_name="save", surface_id="main", component_id="save",
+            ),)),
+        )
         assets.action_descriptions.return_value = {"content.manuscript.save": "保存稿件"}
         assets.rpc.act.return_value = SimpleNamespace(
             action_observation=ActionExecutionObservation(
@@ -76,7 +79,6 @@ class RpcChatActionObservationTests(unittest.TestCase):
             request_id="request-1",
             action_name="save",
             inputs={"surfaceId": "main", "sourceComponentId": "save", "context": {}},
-            expected_revision=0,
         )
 
         self.assertEqual("UNKNOWN", actual["status"])
@@ -98,7 +100,6 @@ class RpcChatActionObservationTests(unittest.TestCase):
         session = RuntimeSession("token", "build-1", "v0.9.1", "catalog", "1", "digest")
         card = {
             "cardId": "card-1",
-            "revision": 0,
             "display": {
                 "protocolProfile": "a2flow.java-rpc.v1",
                 "applicationKey": "app",
@@ -113,7 +114,6 @@ class RpcChatActionObservationTests(unittest.TestCase):
         }
         metadata = {
             "skillKey": "skill",
-            "recordedVersions": [["SKILL:skill", "version-1"]],
             "rpc": {
                 "release": asdict(release),
                 "session": asdict(session),
@@ -126,7 +126,12 @@ class RpcChatActionObservationTests(unittest.TestCase):
         store.claim.return_value = {"dispatch": True, "card": card, "metadata": metadata}
         store.fail.return_value = {**card, "status": "UNKNOWN", "revision": 2}
         assets = Mock()
-        assets.application_description.return_value = ({}, SimpleNamespace(release=release))
+        assets.application_description.return_value = (
+            {"versionId": "version-2"},
+            SimpleNamespace(release=release, catalog=SimpleNamespace(protocol_version="v0.9.1"), actions=(SimpleNamespace(
+                action_name="save", surface_id="main", component_id="save",
+            ),)),
+        )
         assets.action_descriptions.return_value = {"content.manuscript.save": "保存稿件"}
         # Deliberately lacks RuntimeResult.release: runtime_metadata will fail only
         # after the actual execution observation has been constructed.
@@ -157,7 +162,6 @@ class RpcChatActionObservationTests(unittest.TestCase):
                 request_id="request-1",
                 action_name="save",
                 inputs={"surfaceId": "main", "sourceComponentId": "save", "context": {}},
-                expected_revision=0,
             )
 
         log = "\n".join(captured.output)
@@ -187,7 +191,6 @@ class RpcChatActionObservationTests(unittest.TestCase):
                 request_id="request-2",
                 action_name="save",
                 inputs={"surfaceId": "main", "sourceComponentId": "save", "context": {}},
-                expected_revision=0,
             )
         rpc_log = "\n".join(rpc_captured.output)
         self.assertIn("stage=engine_act", rpc_log)

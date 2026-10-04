@@ -269,15 +269,11 @@ def context(request_id: str = "request-1") -> TrustedContext:
     return TrustedContext(0, Environment.PRT, request_id, "PC")
 
 
-def test_activate_and_action_preserve_release_session_and_trusted_child_request() -> None:
-    runtime, capabilities, published = service()
-    activated = runtime.activate(
-        "demo.app", {"title": "提交"}, "app-build", "sha256:app", context()
-    )
+def test_activate_and_action_use_current_release_and_trusted_child_request() -> None:
+    runtime, capabilities, _ = service()
+    activated = runtime.activate("demo.app", {"title": "提交"}, context())
     assert activated.snapshot[1]["updateComponents"]["components"][1]["label"] == "提交"  # type: ignore[index]
-    card = TrustedCard(
-        0, published.release, activated.session, 7, activated.params, activated.snapshot
-    )
+    card = TrustedCard(0, "demo.app", activated.params, activated.snapshot)
     action = {
         "version": "v0.9.1",
         "action": {
@@ -291,9 +287,6 @@ def test_activate_and_action_preserve_release_session_and_trusted_child_request(
     result = runtime.act(
         card,
         "correlation",
-        activated.session.token,
-        "build-1",
-        7,
         "request-2",
         action,
         context("request-2"),
@@ -352,9 +345,7 @@ def test_action_observation_records_mapped_business_values_and_filters_authority
     published = PublishedApplication(release, build)
     capabilities = Capabilities()
     runtime = A2uiRuntimeService(Releases(published), capabilities)
-    activated = runtime.activate(
-        "demo.app", {"title": "用户草稿"}, "app-build", "sha256:app", context()
-    )
+    activated = runtime.activate("demo.app", {"title": "用户草稿"}, context())
     action = {
         "version": "v0.9.1",
         "action": {
@@ -367,13 +358,8 @@ def test_action_observation_records_mapped_business_values_and_filters_authority
     }
 
     result = runtime.act(
-        TrustedCard(
-            0, published.release, activated.session, 1, activated.params, activated.snapshot
-        ),
+        TrustedCard(0, "demo.app", activated.params, activated.snapshot),
         "correlation",
-        activated.session.token,
-        "build-1",
-        1,
         "request-2",
         action,
         context("request-2"),
@@ -428,9 +414,7 @@ def test_presentation_failure_preserves_business_result_and_old_ledger() -> None
     published = PublishedApplication(release, build)
     capabilities = InvalidPresentationCapabilities()
     runtime = A2uiRuntimeService(Releases(published), capabilities)
-    activated = runtime.activate(
-        "demo.app", {"title": "提交"}, "app-build", "sha256:app", context()
-    )
+    activated = runtime.activate("demo.app", {"title": "提交"}, context())
     action = {
         "version": "v0.9.1",
         "action": {
@@ -443,13 +427,8 @@ def test_presentation_failure_preserves_business_result_and_old_ledger() -> None
     }
 
     result = runtime.act(
-        TrustedCard(
-            0, published.release, activated.session, 3, activated.params, activated.snapshot
-        ),
+        TrustedCard(0, "demo.app", activated.params, activated.snapshot),
         "correlation",
-        activated.session.token,
-        "build-1",
-        3,
         "request-presentation",
         action,
         context("request-presentation"),
@@ -497,12 +476,8 @@ def test_invalid_business_predicate_dialect_is_rejected_while_loading_publicatio
 
 def test_act_rejects_authority_input_before_capability() -> None:
     runtime, capabilities, published = service()
-    activated = runtime.activate(
-        "demo.app", {"title": "提交"}, "app-build", "sha256:app", context()
-    )
-    card = TrustedCard(
-        0, published.release, activated.session, 1, activated.params, activated.snapshot
-    )
+    activated = runtime.activate("demo.app", {"title": "提交"}, context())
+    card = TrustedCard(0, "demo.app", activated.params, activated.snapshot)
     action = {
         "version": "v0.9.1",
         "action": {
@@ -517,9 +492,6 @@ def test_act_rejects_authority_input_before_capability() -> None:
         runtime.act(
             card,
             "correlation",
-            activated.session.token,
-            "build-1",
-            1,
             "request-2",
             action,
             context("request-2"),
@@ -527,11 +499,54 @@ def test_act_rejects_authority_input_before_capability() -> None:
     assert capabilities.calls == []
 
 
-def test_release_change_is_rejected_before_capability() -> None:
+def test_activate_uses_current_release_without_caller_version_gate() -> None:
     runtime, capabilities, _ = service()
-    with pytest.raises(A2uiError, match="RESET_REQUIRED"):
-        runtime.activate("demo.app", {"title": "x"}, "stale", "sha256:app", context())
+    activated = runtime.activate("demo.app", {"title": "x"}, context())
+    assert activated.release.source_id == "app-build"
     assert capabilities.calls == []
+
+
+def test_old_card_action_executes_against_current_application_release() -> None:
+    original = PublishedApplication(
+        ApplicationRelease(
+            "demo.app", "app-build-v1", "sha256:app-v1", "build-1", Environment.PRT,
+        ),
+        ApplicationBuild.model_validate(build_json()),
+    )
+    releases = Releases(original)
+    capabilities = Capabilities()
+    runtime = A2uiRuntimeService(releases, capabilities)
+    activated = runtime.activate("demo.app", {"title": "v1 card"}, context())
+
+    current_json = build_json()
+    current_json["appBuildId"] = "build-2"
+    current_json["sourceDigest"] = "sha256:build-2"
+    releases.published = PublishedApplication(
+        ApplicationRelease(
+            "demo.app", "app-build-v2", "sha256:app-v2", "build-2", Environment.PRT,
+        ),
+        ApplicationBuild.model_validate(current_json),
+    )
+    result = runtime.act(
+        TrustedCard(0, "demo.app", activated.params, activated.snapshot),
+        "correlation",
+        "request-v2",
+        {
+            "version": "v0.9.1",
+            "action": {
+                "name": "demo.submit",
+                "surfaceId": "main",
+                "sourceComponentId": "submit",
+                "timestamp": "2026-10-04T00:00:00Z",
+                "context": {"name": "current"},
+            },
+        },
+        context("request-v2"),
+    )
+
+    assert result.release.source_id == "app-build-v2"
+    assert result.release.app_build_id == "build-2"
+    assert capabilities.calls[0][1] == {"name": "current"}
 
 
 def test_ledger_batch_is_atomic_and_replayable() -> None:
@@ -595,8 +610,6 @@ def test_existing_grpc_contract_describe_activate_and_act() -> None:
                 context=owner,
                 app_code="demo.app",
                 params_json=b'{"title":"RPC"}',
-                expected_source_id="app-build",
-                expected_digest="sha256:app",
             )
         )
         action_context = capability_pb2.ExecutionContext(
@@ -610,16 +623,11 @@ def test_existing_grpc_contract_describe_activate_and_act() -> None:
                 context=action_context,
                 card=a2ui_pb2.TrustedCard(
                     user_id=0,
-                    release=activated.release,
-                    session=activated.session,
-                    revision=2,
+                    app_code="demo.app",
                     params_json=activated.params_json,
                     snapshot_json=activated.snapshot_json,
                 ),
                 correlation_id="rpc-correlation",
-                runtime_session_token=activated.session.token,
-                app_build_id=activated.session.app_build_id,
-                expected_surface_revision=2,
                 idempotency_key="rpc-act",
                 action_message_json=json.dumps(
                     {
@@ -637,7 +645,7 @@ def test_existing_grpc_contract_describe_activate_and_act() -> None:
         )
         assert acted.complete_interaction is True
         assert acted.release == activated.release
-        assert acted.session == activated.session
+        assert acted.session.app_build_id == activated.session.app_build_id
         assert acted.action_observation.binding_id == "submit-binding"
         assert json.loads(acted.action_observation.arguments_json) == {"name": "RPC"}
         assert json.loads(acted.action_observation.result_json)["decisionType"] == "READING"

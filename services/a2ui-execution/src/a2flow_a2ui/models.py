@@ -317,9 +317,7 @@ class RuntimeSession:
 @dataclass(frozen=True, slots=True)
 class TrustedCard:
     user_id: int
-    release: ApplicationRelease
-    session: RuntimeSession
-    revision: int
+    app_code: str
     params: JsonObject
     snapshot: tuple[JsonObject, ...]
 

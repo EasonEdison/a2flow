@@ -29,17 +29,12 @@ class RuntimeAssets:
     def current_versions(self):
         return tuple(self.reader.versions(self.run.owner, self.run.definition_key))
 
-    def check_versions(self):
-        if dict(self.current_versions()) != dict(self.run.versions):
-            raise ActionRejected("RESET_REQUIRED")
-
     def _context(self, context):
         require_owner(context.trusted_context)
         if (context.trusted_context != self.run.owner
                 or context.invocation_scope.kind != "WORKFLOW"
                 or context.invocation_scope.run_id != self.run.run_id):
             raise ActionRejected("RUN_BINDING_MISMATCH")
-        self.check_versions()
         return self.run.context(self.bound_node_id) if self.bound_node_id is not None else context
 
     def context(self, context):
@@ -65,10 +60,7 @@ class RuntimeAssets:
         context = self._context(context)
         resolved = self.reader.resolve_application(key, context)
         current = dict(self.current_versions())
-        recorded = tuple(resolved["recordedVersions"])
-        if not recorded or any(current.get(key) != version for key, version in recorded):
-            raise ActionRejected("RESET_REQUIRED")
-        # Validated subset resolution is augmented by the full run closure.
+        # Current subset resolution is augmented by the full current workflow closure.
         resolved = {**resolved, "recordedVersions": tuple(current.items())}
         application = resolved["application"]
         if (application["asset"]["applicationKey"] != key
@@ -81,7 +73,7 @@ class RuntimeAssets:
         ability = self.reader.resolve_ability(ability_key, context)
         if ability.publication_metadata.ability_key != ability_key:
             raise ActionRejected("ABILITY_BINDING_MISMATCH")
-        if f"ABILITY:{ability.asset_id}" not in dict(self.run.versions):
+        if f"ABILITY:{ability.asset_id}" not in dict(self.current_versions()):
             raise ActionRejected("ABILITY_NOT_ALLOWED")
         spec = self.operations.get(ability.operation_ref)
         validate_ability_definition(ability, spec)
@@ -99,7 +91,6 @@ class RuntimeAssets:
             arguments,
             self.run.owner,
             authorization=MODEL_AUTHORIZATION,
-            before_dispatch=self.check_versions,
         )
 
     def versions(self, interaction):
@@ -140,8 +131,6 @@ class RuntimeAssets:
         resolved, policy, ability, spec = self._action_binding(
             interaction.application_key, action_name, interaction.context,
         )
-        if resolved["resolvedVersion"]["versionId"] != interaction.application_version:
-            raise ActionRejected("RESET_REQUIRED")
         if interaction.display_json is None:
             raise ActionRejected("CARD_NOT_FOUND")
         try:

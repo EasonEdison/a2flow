@@ -29,9 +29,6 @@ class Fixture(ui_rpc.A2uiExecutionServicer, cap_rpc.CapabilityExecutionServicer)
 
     def Activate(self, request, context):
         self.calls += 1
-        if request.expected_source_id != "source":
-            context.abort(grpc.StatusCode.FAILED_PRECONDITION, "RESET_REQUIRED")
-        assert request.expected_digest == "digest"
         assert json.loads(request.params_json)["exact"] == 2**63 - 1
         result = self.result(request.context, request.params_json)
         if request.context.request_id == "wrong-response":
@@ -46,7 +43,7 @@ class Fixture(ui_rpc.A2uiExecutionServicer, cap_rpc.CapabilityExecutionServicer)
 
     def Act(self, request, context):
         assert request.card.HasField("user_id") and request.card.user_id == -(2**63)
-        assert request.runtime_session_token == "private" and request.expected_surface_revision == 3
+        assert request.card.app_code == "app"
         assert request.idempotency_key == request.context.request_id
         return self.result(request.context, request.card.params_json)
 
@@ -60,9 +57,6 @@ class Fixture(ui_rpc.A2uiExecutionServicer, cap_rpc.CapabilityExecutionServicer)
         self.calls += 1
         if request.context.request_id == "timeout":
             Event().wait(0.05)
-        if request.expected_source_id != "ability-source":
-            context.abort(grpc.StatusCode.FAILED_PRECONDITION, "SOURCE_VERSION_CHANGED")
-        assert request.expected_source_digest == "ability-digest"
         return cap.ExecuteResponse(success=True, action_code="ability", capability_version=1,
             resolved_environment=request.context.environment, data_json=request.arguments_json,
             request_id=request.context.request_id, source_id="ability-source", source_digest="ability-digest")
@@ -87,29 +81,28 @@ class ClientTest(unittest.TestCase):
     def test_all_methods_and_exact_integer(self):
         description = self.client.describe(self.owner, "app", "describe")
         self.assertEqual(self.fixture.calls, 0)
-        result = self.client.activate(self.owner, "app", {"exact": 2**63 - 1}, description.release, "activate")
+        result = self.client.activate(self.owner, "app", {"exact": 2**63 - 1}, "activate")
         self.assertEqual(result.params["exact"], 2**63 - 1)
         with self.assertRaises(TypeError):
             result.params["exact"] = 0
-        card = TrustedCard(self.owner.user_id, result.release, result.session, 3, result.params, result.snapshot)
+        card = TrustedCard(self.owner.user_id, "app", result.params, result.snapshot)
         acted = self.client.act(self.owner, card, {"version": "v0.9.1", "action": {}}, "act", correlation_id="card")
         self.assertEqual(acted.session, result.session)
         ability = self.client.resolve(self.owner, "asset", "resolve")
-        executed = self.client.execute(self.owner, "asset", {"exact": 2**63 - 1}, ability.source_id, ability.source_digest, "execute")
+        executed = self.client.execute(self.owner, "asset", {"exact": 2**63 - 1}, "execute")
         self.assertEqual(thaw(executed.data), {"exact": 2**63 - 1})
         self.assertEqual(executed.resolved_environment, "PRT")
 
-    def test_reset_and_no_retry(self):
-        with self.assertRaises(RpcFailure) as error:
-            self.client.execute(self.owner, "asset", {}, "old", "ability-digest", "execute")
-        self.assertEqual(error.exception.code, "RESET_REQUIRED")
+    def test_execute_resolves_the_current_release_without_a_pinned_identity(self):
+        result = self.client.execute(self.owner, "asset", {}, "execute")
+        self.assertEqual(result.source_id, "ability-source")
         self.assertEqual(self.fixture.calls, 1)
 
-    def test_response_mismatch_is_not_pre_execution_reset(self):
-        description = self.client.describe(self.owner, "app", "describe")
-        with self.assertRaises(RpcFailure) as error:
-            self.client.activate(self.owner, "app", {"exact": 2**63 - 1}, description.release, "wrong-response")
-        self.assertEqual(error.exception.code, "RPC_RESPONSE_RELEASE_MISMATCH")
+    def test_activate_accepts_the_current_release_returned_by_the_service(self):
+        result = self.client.activate(
+            self.owner, "app", {"exact": 2**63 - 1}, "wrong-response",
+        )
+        self.assertEqual(result.release.source_id, "unexpected-source")
         self.assertEqual(self.fixture.calls, 1)
 
     def test_configuration_fails_closed(self):
@@ -127,7 +120,7 @@ class ClientTest(unittest.TestCase):
         short = RpcClient(f"127.0.0.1:{self.port}", loopback_plaintext=True, timeout=0.02)
         try:
             with self.assertRaises(RpcFailure) as error:
-                short.execute(self.owner, "asset", {}, "ability-source", "ability-digest", "timeout")
+                short.execute(self.owner, "asset", {}, "timeout")
             self.assertEqual(error.exception.code, "RPC_TIMEOUT_OUTCOME_UNKNOWN")
             self.assertEqual(self.fixture.calls, 1)
         finally:

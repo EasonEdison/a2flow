@@ -59,26 +59,24 @@ public class A2uiFacadeSmoke {
         var facade = new A2uiRuntimeFacade((key, env, user) -> published, port);
         var context = new CapabilityRpcContext(Long.MIN_VALUE, ReleaseEnvironment.PRT, "request", "PC");
         check(facade.describe(context, "app").actions().size() == 1 && calls.get() == 0, "describe no calls");
-        var activated = facade.activate(context, new ActivateRequest("app", "source", "digest", Map.of("label", "hello")));
+        var activated = facade.activate(context, new ActivateRequest("app", Map.of("label", "hello")));
         check(calls.get() == 2 && activated.executions().size() == 2, "ordered loads");
         check(activated.businessSuccess() && !activated.session().getRuntimeSessionToken().isBlank(), "session and success");
         check(JsonSupport.toJSON(activated.snapshot()).contains("hello"), "show APP_PARAMS binding");
-        var card = new TrustedCard(Long.MIN_VALUE, identity, activated.session(), 4,
-                activated.params(), activated.snapshot());
-        var invocation = new A2uiActionInvocation("correlation", activated.session().getRuntimeSessionToken(),
-                "build", 4, "request", Map.of("version", "v0.9.1", "action", Map.of(
+        var card = new TrustedCard(Long.MIN_VALUE, "app", activated.params(), activated.snapshot());
+        var invocation = new A2uiActionInvocation("correlation", "request",
+                Map.of("version", "v0.9.1", "action", Map.of(
                 "name", "click", "surfaceId", "surface", "sourceComponentId", "button",
                 "timestamp", "2026-01-01T00:00:00Z", "context", Map.of())));
         var action = facade.act(context, new ActionRequest(card, invocation));
         check(action.businessSuccess() && "first".equals(action.selectedBranchId()) && action.completeInteraction(),
                 "first branch and completion intent only");
         var changed = new A2uiRuntimeFacade((key, env, user) -> new PublishedApplication(
-                new ReleaseIdentity("app", "new-source", "digest", "build", ReleaseEnvironment.PRT), decoded), port);
+                new ReleaseIdentity("app", "new-source", "new-digest", "build", ReleaseEnvironment.PRT), decoded), port);
         int before = calls.get();
-        expect("RESET_REQUIRED", () -> facade.activate(context,
-                new ActivateRequest("app", "old", "digest", Map.of("label", "hello"))));
-        expect("RESET_REQUIRED", () -> changed.act(context, new ActionRequest(card, invocation)));
-        check(calls.get() == before, "stale card no capability");
+        var current = changed.act(context, new ActionRequest(card, invocation));
+        check("new-source".equals(current.release().sourceId()), "old card uses current release");
+        check(calls.get() == before + 1, "current action dispatched once");
         expect("A2UI_CARD_CONTEXT_MISMATCH", () -> facade.act(
                 new CapabilityRpcContext(0, ReleaseEnvironment.PRT, "request", "PC"), new ActionRequest(card, invocation)));
         // Load失败后不再执行第二条；NO_UI_MESSAGES保留完整可恢复首屏。
@@ -87,7 +85,7 @@ public class A2uiFacadeSmoke {
             failCalls.incrementAndGet();
             return CapabilityToolResult.builder().success(false).actionCode(key).data(Map.of()).build();
         })).activate(new CapabilityRpcContext(0, ReleaseEnvironment.PRT, "zero", "PC"),
-                new ActivateRequest("app", "source", "digest", Map.of("label", "zero")));
+                new ActivateRequest("app", Map.of("label", "zero")));
         check(failCalls.get() == 1 && !failed.businessSuccess() && failed.executions().size() == 1, "failure stops loads, userId zero");
         System.out.println("A2UI_FACADE_SMOKE_PASS checks=" + checks);
     }

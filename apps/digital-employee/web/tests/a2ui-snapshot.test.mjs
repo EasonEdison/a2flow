@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { basicCatalog } from '@a2ui/react/v0_9';
-import { actionRequest, cardIsOperable, createSnapshotProcessor, persistedSnapshotKey } from '../src/a2uiSnapshot.mjs';
+import { actionRequest, actionResponsePending, cardIsOperable, createSnapshotProcessor, persistedSnapshotKey } from '../src/a2uiSnapshot.mjs';
 import { fixtureCard } from './a2ui-fixture.mjs';
 
 test('complete v0.9.1 snapshot restores nested components and per-surface DataModel', () => {
@@ -42,15 +42,15 @@ test('submission matches all action coordinates and sends context only, never tr
   assert.throws(() => actionRequest(fixtureCard('COMPLETED'), event));
 });
 
-test('submission lock changes only for a new persisted revision or display snapshot', () => {
+test('status updates do not remount display and confirmed terminal responses release submission lock', () => {
   const card = fixtureCard();
   const statusOnly = structuredClone(card);
   statusOnly.status = 'EXECUTING';
   assert.equal(persistedSnapshotKey(statusOnly), persistedSnapshotKey(card));
-
-  const revised = structuredClone(card);
-  revised.revision += 1;
-  assert.notEqual(persistedSnapshotKey(revised), persistedSnapshotKey(card));
+  assert.equal(actionResponsePending(statusOnly), true);
+  assert.equal(actionResponsePending(fixtureCard('UNKNOWN')), true);
+  assert.equal(actionResponsePending(fixtureCard('WAITING_ACTION')), false);
+  assert.equal(actionResponsePending(fixtureCard('COMPLETED')), false);
 
   const redisplayed = structuredClone(card);
   redisplayed.display.snapshotMessages[2].updateDataModel.value.description = 'persisted';

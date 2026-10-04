@@ -508,17 +508,10 @@ class A2uiRuntimeService:
         self,
         app_code: str,
         params: JsonObject,
-        expected_source_id: str,
-        expected_digest: str,
         context: TrustedContext,
     ) -> RuntimeResult:
         self._check_context(context)
         published = self._releases.current(app_code, context)
-        if (
-            published.release.source_id != expected_source_id
-            or published.release.digest != expected_digest
-        ):
-            raise A2uiError("RESET_REQUIRED")
         trusted = _trusted(context)
         messages, ledger = _show(published.build, params, trusted)
         all_messages = list(messages)
@@ -565,9 +558,6 @@ class A2uiRuntimeService:
         self,
         card: TrustedCard,
         correlation_id: str,
-        runtime_session_token: str,
-        app_build_id: str,
-        expected_surface_revision: int,
         idempotency_key: str,
         action_message: JsonObject,
         context: TrustedContext,
@@ -575,30 +565,17 @@ class A2uiRuntimeService:
         self._check_context(context)
         if (
             card.user_id != context.user_id
-            or card.release.environment is not context.environment
-            or card.revision != expected_surface_revision
+            or not card.app_code.strip()
             or context.request_id != idempotency_key
         ):
             raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
-        published = self._releases.current(card.release.app_code, context)
-        if published.release != card.release:
-            raise A2uiError("RESET_REQUIRED")
+        published = self._releases.current(card.app_code, context)
         build = published.build
         if (
-            expected_surface_revision < 0
-            or not correlation_id.strip()
-            or not runtime_session_token.strip()
-            or not app_build_id.strip()
+            not correlation_id.strip()
             or not idempotency_key.strip()
-            or card.session.token != runtime_session_token
-            or card.session.app_build_id != app_build_id
-            or build.app_build_id != card.session.app_build_id
-            or build.protocol_version != card.session.protocol_version
-            or build.catalog.catalog_id != card.session.catalog_id
-            or build.catalog.revision != card.session.catalog_revision
-            or build.catalog.digest != card.session.catalog_digest
         ):
-            raise A2uiError("A2UI_RUNTIME_SESSION_MISMATCH")
+            raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
         validate_schema(build.params_schema, card.params, "A2UI_PARAMS_INVALID")
         ledger = SurfaceLedger.replay(card.snapshot)
         binding, action_context = self._resolve_action(build, ledger, action_message)
@@ -635,7 +612,7 @@ class A2uiRuntimeService:
                 result.capability_version, capability_error,
             )
             return self._response(
-                published, card.params, (), ledger, (summary,), False, None, card.session,
+                published, card.params, (), ledger, (summary,), False, None, _session(build),
                 action_observation=observation,
             )
         try:
@@ -654,7 +631,7 @@ class A2uiRuntimeService:
                 None if selected.succeeded else capability_error,
             )
             return self._response(
-                published, card.params, (), ledger, (summary,), False, None, card.session,
+                published, card.params, (), ledger, (summary,), False, None, _session(build),
                 action_observation=observation,
             )
         observation = ActionExecutionObservation(
@@ -679,7 +656,7 @@ class A2uiRuntimeService:
             (summary,),
             selected.complete,
             selected.branch_id,
-            card.session,
+            _session(build),
             action_observation=observation,
         )
 

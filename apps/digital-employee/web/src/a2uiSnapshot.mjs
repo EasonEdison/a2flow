@@ -3,9 +3,9 @@ import { A2uiMessageListSchema, MessageProcessor, extractRefFields } from '@a2ui
 export const RPC_PROFILE = 'a2flow.java-rpc.v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
-/** Changes only when a new persisted revision or display snapshot has arrived. */
+/** Changes only when persisted display content changes; transport revisions are not model input. */
 export function persistedSnapshotKey(card) {
-  return JSON.stringify([card.cardId, card.revision, card.display]);
+  return JSON.stringify([card.cardId, card.display]);
 }
 
 /** A complete persisted snapshot is replayed into a fresh official processor, never patched onto another card. */
@@ -73,6 +73,10 @@ export function createSnapshotProcessor(display, catalogs) {
 
 export function cardIsOperable(card) {
   return ['WAITING_ACTION', 'DISPLAY_ONLY'].includes(card.status) && Array.isArray(card.display.actions) && card.display.actions.length > 0;
+}
+
+export function actionResponsePending(card) {
+  return card.status === 'EXECUTING' || card.status === 'UNKNOWN';
 }
 
 /** The official binder has resolved event.context against this surface's current DataModel. */

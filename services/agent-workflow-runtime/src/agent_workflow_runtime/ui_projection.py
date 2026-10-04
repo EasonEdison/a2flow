@@ -193,11 +193,6 @@ class PostgresMvpView(PostgresProjection):
                 "SELECT document FROM runtime_mvp_views WHERE user_id=%s AND environment=%s AND run_id=%s",
                 key).fetchone()
             if existing is not None:
-                saved = existing["document"]
-                if (saved["definitionKey"], saved["definitionVersion"]) != (
-                    document["definitionKey"], document["definitionVersion"]
-                ):
-                    raise ActionRejected("RESET_REQUIRED")
                 return
             row = connection.execute(
                 "UPDATE runtime_mvp_catalog SET last_seq=last_seq+1 WHERE user_id=%s AND environment=%s RETURNING last_seq",

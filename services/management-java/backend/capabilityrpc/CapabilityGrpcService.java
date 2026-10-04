@@ -31,14 +31,15 @@ public final class CapabilityGrpcService extends CapabilityExecutionGrpc.Capabil
             if (!request.getArgumentsJson().isValidUtf8() || request.getArgumentsJson().size() > 1024 * 1024) {
                 throw new IllegalArgumentException("UTF8 arguments limited to 1MiB");
             }
-            var result = service.executePinned(request.getAssetKey(), request.getArgumentsJson().toStringUtf8(), context,
-                    request.getExpectedSourceId(), request.getExpectedSourceDigest());
+            var executed = service.executeCurrent(request.getAssetKey(), request.getArgumentsJson().toStringUtf8(), context);
+            var plan = executed.plan();
+            var result = executed.result();
             observer.onNext(ExecuteResponse.newBuilder().setSuccess(result.isSuccess()).setActionCode(empty(result.getActionCode()))
                     .setCapabilityVersion(result.getCapabilityVersion()).setResolvedEnvironment(context.toProto().getEnvironment())
                     .setDataJson(ByteString.copyFromUtf8(JsonSupport.toJSON(result.getData())))
                     .setErrorCode(result.getErrorCode() == null ? "" : result.getErrorCode().name())
                     .setMessage(empty(result.getMessage())).setRequestId(context.requestId())
-                    .setSourceId(request.getExpectedSourceId()).setSourceDigest(request.getExpectedSourceDigest()).build());
+                    .setSourceId(plan.getSourceId()).setSourceDigest(plan.getSourceDigest()).build());
             observer.onCompleted();
         } catch (Exception e) { fail(observer, e); }
     }

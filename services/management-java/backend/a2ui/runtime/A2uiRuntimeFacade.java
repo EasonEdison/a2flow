@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import org.springframework.stereotype.Service;
 import dev.a2flow.management.a2ui.runtime.A2uiRuntimeContracts.*;
 import dev.a2flow.management.a2ui.runtime.action.A2uiCapabilityOutcomeEvaluator;
@@ -55,10 +54,6 @@ public final class A2uiRuntimeFacade {
         validateContext(context);
         if (request == null || request.params() == null) { throw new RuntimeFailure("A2UI_REQUEST_INVALID"); }
         var published = publications.current(request.appCode(), context.environment(), context.userId());
-        if (!Objects.equals(published.identity().sourceId(), request.expectedSourceId())
-                || !Objects.equals(published.identity().digest(), request.expectedDigest())) {
-            throw new RuntimeFailure("RESET_REQUIRED");
-        }
         var build = published.build();
         var supplemental = clock.capture();
         var trusted = trusted(context, supplemental);
@@ -96,15 +91,13 @@ public final class A2uiRuntimeFacade {
             throw new RuntimeFailure("A2UI_REQUEST_INVALID");
         }
         var card = request.card();
-        if (card.release() == null || card.userId() != context.userId()
-                || card.release().environment() != context.environment() || card.params() == null
-                || card.snapshot() == null || card.revision() != request.invocation().getExpectedSurfaceRevision()
-                || !Objects.equals(context.requestId(), request.invocation().getIdempotencyKey())) {
+        if (card.userId() != context.userId() || card.appCode() == null || card.appCode().isBlank()
+                || card.params() == null || card.snapshot() == null
+                || !context.requestId().equals(request.invocation().getIdempotencyKey())) {
             throw new RuntimeFailure("A2UI_CARD_CONTEXT_MISMATCH");
         }
-        var published = publications.current(card.release().appCode(), context.environment(), context.userId());
-        if (!published.identity().equals(card.release())) { throw new RuntimeFailure("RESET_REQUIRED"); }
-        var resolved = bindings.resolve(request.invocation(), card.session(), published.build());
+        var published = publications.current(card.appCode(), context.environment(), context.userId());
+        var resolved = bindings.resolve(request.invocation(), published.build());
         var ledger = reducer.reduce(A2uiRuntimeSurfaceLedger.empty(), card.snapshot());
         if (!ledger.hasSurface(resolved.getSurfaceId())) { throw new RuntimeFailure("A2UI_SURFACE_NOT_FOUND"); }
         var binding = resolved.getBinding();
@@ -117,7 +110,15 @@ public final class A2uiRuntimeFacade {
                 trusted(context, supplemental), resolved.getActionContext());
         return response(published, card.params(), batch.toWireMessages(), batch.getNextLedger(),
                 List.of(summary(binding.getBindingId(), result, selected.isSucceeded())),
-                selected.isCompletesWorkflowInteraction(), selected.getBranchId(), card.session());
+                selected.isCompletesWorkflowInteraction(), selected.getBranchId(), session(published.build()));
+    }
+
+    private dev.a2flow.management.a2ui.gateway.A2uiActionGatewayModels.A2uiRuntimeSession session(
+            dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiApplicationBuild build) {
+        var catalog = build.getCatalog();
+        return new dev.a2flow.management.a2ui.gateway.A2uiActionGatewayModels.A2uiRuntimeSession(
+                java.util.UUID.randomUUID().toString(), build.getAppBuildId(), build.getProtocolVersion(),
+                catalog.getCatalogId(), catalog.getRevision(), catalog.getDigest());
     }
 
     private CapabilityExecutionResult execute(String actionCode, Map<String, Object> arguments,

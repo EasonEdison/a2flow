@@ -601,8 +601,8 @@ class ChatAssetsTests(unittest.TestCase):
         )
 
         reader.ability_version = "v2"
-        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
-            assets.query_skill_dependencies([DISPLAY_KEY])
+        refreshed = assets.query_skill_dependencies([DISPLAY_KEY])
+        self.assertEqual(DISPLAY_KEY, refreshed["applications"][0]["appCode"])
 
     def test_model_schemas_use_only_new_application_argument_names(self):
         self.assertEqual(
@@ -630,7 +630,7 @@ class ChatAssetsTests(unittest.TestCase):
                 "data": {"text": "saved"},
             })
 
-    def test_bound_ability_rechecks_version_immediately_before_dispatch(self):
+    def test_bound_ability_uses_current_skill_without_old_version_gate(self):
         reader = Reader()
         calls = []
         assets, _, _ = _assets(reader, _operations(calls=calls))
@@ -649,9 +649,9 @@ class ChatAssetsTests(unittest.TestCase):
             reader, _operations(reader=reader, calls=calls),
         )
         assets.admit_skill(SKILL_KEY)
-        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
-            assets.execute_ability(CALCULATE_KEY, {"value": 2})
-        self.assertEqual([], calls)
+        result = assets.execute_ability(CALCULATE_KEY, {"value": 2})
+        self.assertEqual({"doubled": 4}, result["output"])
+        self.assertEqual(1, len(calls))
 
     def test_render_metadata_and_action_binding_are_server_resolved(self):
         assets, _, sink = _assets()
@@ -681,9 +681,8 @@ class ChatAssetsTests(unittest.TestCase):
         self.assertTrue(policy["completeInteractionOnSuccess"])
         self.assertEqual(CONFIRM_KEY, ability.publication_metadata.ability_key)
         self.assertTrue(spec.action_allowed)
-        assets.check_versions(metadata["recordedVersions"])
-        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
-            assets.check_versions([["SKILL:chat-skill", "old"]])
+        self.assertNotIn("recordedVersions", metadata)
+        self.assertEqual("v1", assets.refresh_admission().version_id)
 
 
 class SeededChatAssetsIntegrationTests(unittest.TestCase):

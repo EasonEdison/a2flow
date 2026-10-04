@@ -12,18 +12,15 @@ class ChatActionService:
         self.store, self.assets_factory = store, assets_factory
 
     def execute(self, owner, conversation_id, card_id, *, request_id,
-                action_name, inputs, expected_revision):
+                action_name, inputs):
         saved = self.store.get_binding(owner, conversation_id, card_id)
         if saved is None:
             raise ActionRejected("CARD_NOT_FOUND")
         card, metadata = saved["card"], saved["metadata"]
         assets = self.assets_factory(owner, conversation_id)
         assets.admit_skill(metadata["skillKey"])
-        assets.check_versions(metadata["recordedVersions"])
         resolved, policy, ability, operation = assets.action_binding(
             card["display"]["applicationKey"], action_name)
-        if resolved["resolvedVersion"]["versionId"] != card["display"]["applicationVersion"]:
-            raise ActionRejected("RESET_REQUIRED")
         if not operation.action_allowed:
             raise ActionRejected("ACTION_NOT_ALLOWED")
         safe_inputs = json_copy(inputs)
@@ -40,13 +37,11 @@ class ChatActionService:
             raise ActionRejected("INVALID_ACTION_POLICY")
         evaluation = SimpleNamespace(validate_result=operation.validate_result,
             success_policy=result_policy(ability, policy["successPolicyRef"]))
-        assets.check_versions(metadata["recordedVersions"])
         claim = self.store.claim(owner, conversation_id, card_id, request_id,
-                                 action_name, safe_inputs, expected_revision)
+                                 action_name, safe_inputs)
         if not claim["dispatch"]:
             return claim["card"]
         try:
-            assets.check_versions(metadata["recordedVersions"])
             result = json_copy(operation.execute(safe_inputs, owner))
             success = business_succeeded(evaluation, result)
             return self.store.finish(owner, conversation_id, card_id, request_id,

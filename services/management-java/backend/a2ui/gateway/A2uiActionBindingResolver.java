@@ -4,7 +4,6 @@ import static dev.a2flow.management.a2ui.gateway.A2uiActionGatewayErrorCode.ACTI
 import static dev.a2flow.management.a2ui.gateway.A2uiActionGatewayErrorCode.ACTION_NOT_BOUND;
 import static dev.a2flow.management.a2ui.gateway.A2uiActionGatewayErrorCode.ACTION_SOURCE_INVALID;
 import static dev.a2flow.management.a2ui.gateway.A2uiActionGatewayErrorCode.BUILD_ACTION_CLOSURE_INVALID;
-import static dev.a2flow.management.a2ui.gateway.A2uiActionGatewayErrorCode.RUNTIME_SESSION_MISMATCH;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -19,7 +18,6 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiApplicat
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledActionBinding;
 import dev.a2flow.management.a2ui.gateway.A2uiActionGatewayModels.A2uiActionInvocation;
 import dev.a2flow.management.a2ui.gateway.A2uiActionGatewayModels.A2uiResolvedAction;
-import dev.a2flow.management.a2ui.gateway.A2uiActionGatewayModels.A2uiRuntimeSession;
 
 /**
  * v0.9.1 Action 到不可变 Build ActionBinding 的唯一解析器。
@@ -47,8 +45,8 @@ public class A2uiActionBindingResolver {
 
     /** 解析并验证一个完整 Action；失败时不会返回 binding 或部分 context。 */
     public A2uiResolvedAction resolve(A2uiActionInvocation invocation,
-            A2uiRuntimeSession session, A2uiApplicationBuild build) {
-        validateSession(invocation, session, build);
+            A2uiApplicationBuild build) {
+        validateInvocation(invocation, build);
         Map<String, Object> action = parseAction(invocation.getMessage());
         String name = stringValue(action.get(ACTION_NAME_KEY));
         String surfaceId = stringValue(action.get(ACTION_SURFACE_ID_KEY));
@@ -77,24 +75,17 @@ public class A2uiActionBindingResolver {
                 binding);
     }
 
-    private void validateSession(A2uiActionInvocation invocation,
-            A2uiRuntimeSession session, A2uiApplicationBuild build) {
-        if (invocation == null || session == null || build == null
+    private void validateInvocation(A2uiActionInvocation invocation,
+            A2uiApplicationBuild build) {
+        if (invocation == null || build == null
                 || isBlank(invocation.getCorrelationId())
-                || isBlank(invocation.getRuntimeSessionToken())
-                || isBlank(invocation.getAppBuildId())
                 || isBlank(invocation.getIdempotencyKey())
-                || invocation.getExpectedSurfaceRevision() < 0
-                || !Objects.equals(invocation.getRuntimeSessionToken(), session.getRuntimeSessionToken())
-                || !Objects.equals(invocation.getAppBuildId(), session.getAppBuildId())
-                || !Objects.equals(build.getAppBuildId(), session.getAppBuildId())
-                || !Objects.equals(PROTOCOL_VERSION, session.getProtocolVersion())
-                || !Objects.equals(build.getProtocolVersion(), session.getProtocolVersion())
+                || !Objects.equals(PROTOCOL_VERSION, build.getProtocolVersion())
                 || build.getCatalog() == null
-                || !Objects.equals(build.getCatalog().getCatalogId(), session.getCatalogId())
-                || !Objects.equals(build.getCatalog().getRevision(), session.getCatalogRevision())
-                || !Objects.equals(build.getCatalog().getDigest(), session.getCatalogDigest())) {
-            throw new A2uiActionGatewayException(RUNTIME_SESSION_MISMATCH);
+                || isBlank(build.getCatalog().getCatalogId())
+                || isBlank(build.getCatalog().getRevision())
+                || isBlank(build.getCatalog().getDigest())) {
+            throw new A2uiActionGatewayException(ACTION_INVALID);
         }
     }
 

@@ -163,7 +163,7 @@ def _public(card):
     value = {"cardId": card["card_id"],
              "conversationId": card["conversation_id"],
              "display": deepcopy(card["display"]), "status": card["status"],
-             "revision": card["revision"]}
+             }
     if card["has_result"]:
         value["result"] = deepcopy(card["result"])
     return value
@@ -178,7 +178,7 @@ def _card_id(owner, conversation_id, control_request_id, tool_call_id):
 
 def _validate_metadata(value, conversation_id):
     copied, _ = _json_copy(value, "INVALID_CARD_METADATA", _MAX_METADATA_BYTES)
-    required = {"skillKey", "recordedVersions", "conversationId",
+    required = {"skillKey", "conversationId",
                 "controlRequestId", "toolCallId"}
     if type(copied) is not dict or not required.issubset(copied):
         _reject("INVALID_CARD_METADATA")
@@ -187,18 +187,6 @@ def _validate_metadata(value, conversation_id):
     _identifier(copied["toolCallId"], "INVALID_CARD_METADATA", limit=256)
     if copied["conversationId"] != conversation_id:
         _reject("CARD_CONVERSATION_MISMATCH")
-    versions = copied["recordedVersions"]
-    if type(versions) is not list or len(versions) > 256:
-        _reject("INVALID_CARD_METADATA")
-    keys = []
-    for pair in versions:
-        if (type(pair) is not list or len(pair) != 2
-                or type(pair[0]) is not str or not pair[0] or len(pair[0]) > 256
-                or type(pair[1]) is not str or not pair[1] or len(pair[1]) > 256):
-            _reject("INVALID_CARD_METADATA")
-        keys.append(pair[0])
-    if len(keys) != len(set(keys)):
-        _reject("INVALID_CARD_METADATA")
     return copied
 
 
@@ -406,14 +394,13 @@ class ChatCardStore:
                 _scope(owner, conversation_id), after_sequence, limit)]
 
     def replay(self, owner: TrustedContext, conversation_id: str, card_id: str, request_id: str,
-               action_name: str, inputs: dict[str, Any], expected_revision: int) -> dict[str, Any] | None:
+               action_name: str, inputs: dict[str, Any]) -> dict[str, Any] | None:
         """Return a completed receipt before reinterpreting a newer publication."""
         owner = _owner(owner, self._environment)
         conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
         card_id = _identifier(card_id, "INVALID_CARD_ID", limit=128)
         request_id = _identifier(request_id, "INVALID_REQUEST_ID", limit=256)
-        payload = {"actionName": action_name, "inputs": inputs,
-                   "expectedRevision": expected_revision}
+        payload = {"actionName": action_name, "inputs": inputs}
         with self._storage.transaction() as transaction:
             request = transaction.get_request(_scope(owner, conversation_id), card_id, request_id)
             if request is None:
@@ -427,19 +414,16 @@ class ChatCardStore:
             _reject("ACTION_REQUEST_BUSY")
 
     def claim(self, owner: TrustedContext, conversation_id: str, card_id: str, request_id: str,
-              action_name: str, inputs: dict[str, Any], expected_revision: int) -> dict[str, Any]:
+              action_name: str, inputs: dict[str, Any]) -> dict[str, Any]:
         owner = _owner(owner, self._environment)
         conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
         card_id = _identifier(card_id, "INVALID_CARD_ID", limit=128)
         request_id = _identifier(request_id, "INVALID_REQUEST_ID", limit=256)
         action_name = _identifier(action_name, "INVALID_ACTION_NAME")
-        if type(expected_revision) is not int or expected_revision < 0:
-            _reject("INVALID_EXPECTED_REVISION")
         inputs, _ = _json_copy(inputs, "INVALID_ACTION_INPUT", _MAX_INPUT_BYTES)
         if type(inputs) is not dict:
             _reject("INVALID_ACTION_INPUT")
-        payload = {"actionName": action_name, "inputs": inputs,
-                   "expectedRevision": expected_revision}
+        payload = {"actionName": action_name, "inputs": inputs}
         scope = _scope(owner, conversation_id)
         with self._storage.transaction() as transaction:
             card = transaction.get_card(scope, card_id, lock=True)
@@ -468,8 +452,6 @@ class ChatCardStore:
                            card["display"].get("protocolProfile") == "a2flow.java-rpc.v1")
             if card["status"] != "WAITING_ACTION" and not rpc_display:
                 _reject("CARD_NOT_ACTIONABLE")
-            if card["revision"] != expected_revision:
-                _reject("STALE_CARD_REVISION")
             if not _action_is_bound(card, action_name):
                 _reject("ACTION_NOT_BOUND")
             request = {"environment": owner.environment, "user_id": owner.user_id,
@@ -536,11 +518,10 @@ class ChatCardStore:
                 display, waiting_status, metadata = update
                 # Only trusted runtime state changes; card and Skill ownership cannot change.
                 for field in ("skillKey", "conversationId", "controlRequestId", "toolCallId",
-                              "recordedVersions", "applicationKey", "applicationVersion"):
+                              "applicationKey"):
                     if metadata.get(field) != card["binding_metadata"].get(field):
                         _reject("CARD_BINDING_MISMATCH")
-                if (display["applicationKey"] != card["display"]["applicationKey"] or
-                        display["applicationVersion"] != card["display"]["applicationVersion"]):
+                if display["applicationKey"] != card["display"]["applicationKey"]:
                     _reject("CARD_BINDING_MISMATCH")
                 card["display"], card["binding_metadata"] = display, metadata
             card["status"] = ("COMPLETED" if business_success and completes

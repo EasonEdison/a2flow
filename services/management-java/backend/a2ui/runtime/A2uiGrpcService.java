@@ -41,27 +41,20 @@ public final class A2uiGrpcService extends A2uiExecutionGrpc.A2uiExecutionImplBa
     @Override
     public void activate(ActivateRequest request, StreamObserver<RuntimeResponse> observer) {
         respond(observer, () -> response(facade.activate(context(request.getContext()),
-                new A2uiRuntimeContracts.ActivateRequest(request.getAppCode(), request.getExpectedSourceId(),
-                        request.getExpectedDigest(), read(request.getParamsJson(), OBJECT)))));
+                new A2uiRuntimeContracts.ActivateRequest(request.getAppCode(),
+                        read(request.getParamsJson(), OBJECT)))));
     }
 
     @Override
     public void act(ActRequest request, StreamObserver<RuntimeResponse> observer) {
         respond(observer, () -> {
             var card = request.getCard();
-            if (!card.hasUserId() || !card.hasRelease() || !card.hasSession()) {
+            if (!card.hasUserId() || card.getAppCode().isBlank()) {
                 throw new A2uiRuntimeContracts.RuntimeFailure("A2UI_CARD_CONTEXT_MISMATCH");
             }
-            var source = card.getRelease();
-            var session = card.getSession();
             var trusted = new A2uiRuntimeContracts.TrustedCard(card.getUserId(),
-                    new A2uiRuntimeContracts.ReleaseIdentity(source.getAppCode(), source.getSourceId(),
-                            source.getDigest(), source.getAppBuildId(), environment(source.getEnvironment())),
-                    new A2uiRuntimeSession(session.getToken(), session.getAppBuildId(), session.getProtocolVersion(),
-                            session.getCatalogId(), session.getCatalogRevision(), session.getCatalogDigest()),
-                    card.getRevision(), read(card.getParamsJson(), OBJECT), read(card.getSnapshotJson(), MESSAGES));
-            var invocation = new A2uiActionInvocation(request.getCorrelationId(), request.getRuntimeSessionToken(),
-                    request.getAppBuildId(), request.getExpectedSurfaceRevision(), request.getIdempotencyKey(),
+                    card.getAppCode(), read(card.getParamsJson(), OBJECT), read(card.getSnapshotJson(), MESSAGES));
+            var invocation = new A2uiActionInvocation(request.getCorrelationId(), request.getIdempotencyKey(),
                     read(request.getActionMessageJson(), OBJECT));
             return response(facade.act(context(request.getContext()),
                     new A2uiRuntimeContracts.ActionRequest(trusted, invocation)));

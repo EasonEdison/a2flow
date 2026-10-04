@@ -76,7 +76,7 @@ def verify(path: Path) -> None:
         payload = {"surfaceId": config["surfaceId"], "sourceComponentId": config["componentId"],
                    "context": config["actionContext"]}
         arguments = dict(request_id="action-1", action_name=config["actionName"],
-                         inputs=payload, expected_revision=card["revision"])
+                         inputs=payload)
         final = action.execute(owner, conversation, card["cardId"], **arguments)
         assert final["status"] == "COMPLETED", final
         assert final["result"]["businessSuccess"] is True, final["result"]

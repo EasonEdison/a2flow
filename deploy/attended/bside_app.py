@@ -162,7 +162,7 @@ def create_app_from_environment():
         try:
             return card_actions.execute(memory_owner(user_id), conversation_id, card_id,
                 request_id=payload["requestId"], action_name=payload["actionName"],
-                inputs=payload["inputs"], expected_revision=payload["expectedRevision"])
+                inputs=payload["inputs"])
         except ActionRejected as exc:
             raise BsideError(exc.code, 409) from exc
 

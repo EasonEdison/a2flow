@@ -120,18 +120,17 @@ class RuntimeSession:
 @dataclass(frozen=True, slots=True)
 class TrustedCard:
     user_id: int
-    release: ReleaseIdentity
-    session: RuntimeSession
-    revision: int
+    app_code: str
     params: JsonObject
     snapshot: tuple[JsonObject, ...]
 
     def __post_init__(self) -> None:
         params = freeze(self.params)
         snapshot = freeze(self.snapshot)
-        if not isinstance(params, Mapping) or not isinstance(snapshot, tuple) or any(
+        if (type(self.app_code) is not str or not self.app_code
+                or not isinstance(params, Mapping) or not isinstance(snapshot, tuple) or any(
             not isinstance(message, Mapping) for message in snapshot
-        ):
+        )):
             raise RpcFailure("A2UI_CARD_CONTEXT_MISMATCH")
         object.__setattr__(self, "params", params)
         object.__setattr__(self, "snapshot", snapshot)
@@ -316,8 +315,6 @@ class RpcClient:
             return operation(request, timeout=self._timeout, wait_for_ready=False)
         except grpc.RpcError as exception:
             detail = exception.details() or ""
-            if detail in ("RESET_REQUIRED", "SOURCE_VERSION_CHANGED"):
-                raise RpcFailure("RESET_REQUIRED") from None
             if exception.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                 raise RpcFailure("RPC_TIMEOUT_OUTCOME_UNKNOWN") from None
             if exception.code() in (grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIED):
@@ -345,58 +342,40 @@ class RpcClient:
                                   value.source_id, value.source_digest)
 
     def activate(self, owner: TrustedContext, app_code: str, params: JsonObject,
-                 expected_release: ReleaseIdentity, request_id: str) -> RuntimeResult:
+                 request_id: str) -> RuntimeResult:
         context = self._context(owner, request_id)
-        if expected_release.app_code != app_code or expected_release.environment != owner.environment:
-            raise RpcFailure("RPC_RELEASE_MISMATCH")
         value = self._call(self._ui.Activate, ui.ActivateRequest(context=context, app_code=app_code,
-                           params_json=_encode(params), expected_source_id=expected_release.source_id,
-                           expected_digest=expected_release.digest))
-        return self._result(value, owner, expected_release)
+                           params_json=_encode(params)))
+        return self._result(value, owner, app_code)
 
     def act(self, owner: TrustedContext, card: TrustedCard, action_message: JsonObject, request_id: str,
             *, correlation_id: str) -> RuntimeResult:
         context = self._context(owner, request_id)
-        if card.user_id != owner.user_id or card.release.environment != owner.environment or type(card.revision) is not int or card.revision < 0:
+        if card.user_id != owner.user_id:
             raise RpcFailure("A2UI_CARD_CONTEXT_MISMATCH")
-        release = card.release
-        session = card.session
-        trusted = ui.TrustedCard(user_id=card.user_id, release=ui.ApplicationRelease(app_code=release.app_code,
-                    source_id=release.source_id, digest=release.digest, app_build_id=release.app_build_id,
-                    environment=cap.Environment.Value(release.environment)),
-                    session=ui.RuntimeSession(token=session.token, app_build_id=session.app_build_id,
-                        protocol_version=session.protocol_version, catalog_id=session.catalog_id,
-                        catalog_revision=session.catalog_revision, catalog_digest=session.catalog_digest),
-                    revision=card.revision, params_json=_encode(card.params), snapshot_json=_encode(card.snapshot))
+        trusted = ui.TrustedCard(user_id=card.user_id, app_code=card.app_code,
+                                 params_json=_encode(card.params),
+                                 snapshot_json=_encode(card.snapshot))
         value = self._call(self._ui.Act, ui.ActRequest(context=context, card=trusted,
-                correlation_id=correlation_id, runtime_session_token=session.token, app_build_id=release.app_build_id,
-                expected_surface_revision=card.revision, idempotency_key=request_id, action_message_json=_encode(action_message)))
-        result = self._result(value, owner, release)
-        if result.session != session:
-            raise RpcFailure("RPC_SESSION_MISMATCH")
-        return result
+                correlation_id=correlation_id, idempotency_key=request_id,
+                action_message_json=_encode(action_message)))
+        return self._result(value, owner, card.app_code)
 
     def execute(self, owner: TrustedContext, asset_key: str, arguments: JsonObject,
-                expected_source_id: str, expected_source_digest: str, request_id: str) -> AbilityResult:
-        if not expected_source_id or not expected_source_digest:
-            raise RpcFailure("RPC_RELEASE_MISMATCH")
+                request_id: str) -> AbilityResult:
         value = self._call(self._cap.Execute, cap.ExecuteRequest(asset_key=asset_key, context=self._context(owner, request_id),
-                    arguments_json=_encode(arguments), expected_source_id=expected_source_id,
-                    expected_source_digest=expected_source_digest))
+                    arguments_json=_encode(arguments)))
         environment = _environment(value.resolved_environment)
-        if (environment != owner.environment or value.request_id != request_id or value.source_id != expected_source_id
-                or value.source_digest != expected_source_digest or not value.action_code):
+        if (environment != owner.environment or value.request_id != request_id
+                or not value.source_id or not value.source_digest or not value.action_code):
             raise RpcFailure("RPC_RELEASE_MISMATCH")
         return AbilityResult(value.success, value.action_code, value.capability_version, environment, _decode(value.data_json),
                              value.error_code, value.message, value.request_id, value.source_id, value.source_digest)
 
-    def _result(self, value: ui.RuntimeResponse, owner: TrustedContext, expected: ReleaseIdentity) -> RuntimeResult:
+    def _result(self, value: ui.RuntimeResponse, owner: TrustedContext, app_code: str) -> RuntimeResult:
         if value.error_code:
             raise RpcFailure(value.error_code)
-        release = _release(value.release, owner, expected.app_code)
-        if release != expected:
-            # 响应后才发现不匹配，不能声称业务尚未执行；只有服务端前置拒绝可转为RESET_REQUIRED。
-            raise RpcFailure("RPC_RESPONSE_RELEASE_MISMATCH")
+        release = _release(value.release, owner, app_code)
         catalog = _catalog(value.catalog)
         session = RuntimeSession(value.session.token, value.session.app_build_id, value.session.protocol_version,
                                  value.session.catalog_id, value.session.catalog_revision, value.session.catalog_digest)

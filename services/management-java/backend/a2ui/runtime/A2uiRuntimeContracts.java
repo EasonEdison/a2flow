@@ -13,11 +13,10 @@ public final class A2uiRuntimeContracts {
     public record ReleaseIdentity(String appCode, String sourceId, String digest,
             String appBuildId, ReleaseEnvironment environment) { }
     public record PublishedApplication(ReleaseIdentity identity, A2uiApplicationBuild build) { }
-    public record ActivateRequest(String appCode, String expectedSourceId, String expectedDigest,
-            Map<String, Object> params) { }
-    /** Python 从持久化读取并鉴权；调用前持有消息级租约，提交时 CAS revision。 */
-    public record TrustedCard(long userId, ReleaseIdentity release, A2uiRuntimeSession session,
-            long revision, Map<String, Object> params, List<Map<String, Object>> snapshot) { }
+    public record ActivateRequest(String appCode, Map<String, Object> params) { }
+    /** Python 从持久化读取并鉴权；Action 始终按当前用户与环境的有效发布解析。 */
+    public record TrustedCard(long userId, String appCode,
+            Map<String, Object> params, List<Map<String, Object>> snapshot) { }
     public record ActionRequest(TrustedCard card, A2uiActionInvocation invocation) { }
     public record ExecutionSummary(String bindingId, String actionCode, boolean success,
             int capabilityVersion, String errorCode) { }

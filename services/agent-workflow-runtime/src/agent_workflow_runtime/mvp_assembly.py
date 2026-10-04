@@ -190,9 +190,6 @@ class MvpRuntimeHost:
         with self._checkpointer_factory() as saver:
             def graph_factory(run, lifecycle):
                 resolved = self.reader.resolve_workflow(run.definition_key, run.owner)
-                if (dict(resolved.effective_versions) != dict(run.versions)
-                        or run.entry_node_id != resolved.definition.get("entryNodeId")):
-                    raise ActionRejected("RESET_REQUIRED")
                 definition = resolved.definition
                 configuration = RuntimeAssets(
                     self.reader, run, self.operation_specs, definition,

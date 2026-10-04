@@ -10,7 +10,7 @@ import lombok.Value;
 /**
  * Action Gateway Slice G 的 transport-neutral 领域 DTO。
  *
- * <p>上游把平台 correlation/session/Build/revision/idempotency 与官方 v0.9.1 message 分层传入；
+ * <p>上游把平台 correlation/idempotency 与官方 v0.9.1 message 分层传入；
  * resolver 输出闭合 Action，mapper 输出精确 CapabilityAction 参数。这里不表达 HTTP/SSE、审批、
  * 执行结果、ResultAdapter、ledger 或 render ack。
  */
@@ -32,9 +32,6 @@ public final class A2uiActionGatewayModels {
     @Value
     public static class A2uiActionInvocation {
         private String correlationId;
-        private String runtimeSessionToken;
-        private String appBuildId;
-        private long expectedSurfaceRevision;
         private String idempotencyKey;
         private Map<String, Object> message;
     }

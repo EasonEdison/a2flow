@@ -101,7 +101,7 @@ class ChatVerticalTest(unittest.TestCase):
         action = card["display"]["actions"][0]["actionName"]
         service = ChatActionService(store, assets_factory)
         payload = dict(request_id="request-1", action_name=action,
-                       inputs={"optionId": "a", "confirmed": True}, expected_revision=0)
+                       inputs={"optionId": "a", "confirmed": True})
         completed = service.execute(OWNER, conversation, card["cardId"], **payload)
         self.assertEqual("COMPLETED", completed["status"])
         self.assertEqual("a", completed["display"]["data"]["optionId"])
