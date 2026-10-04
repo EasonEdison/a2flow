@@ -38,6 +38,21 @@ test('registered validMessageExample has priority over schema-derived examples',
   assert.equal(source.document?.components[0].text, 'registered value');
 });
 
+test('non-empty invalid registered example fails closed instead of using a schema example', () => {
+  const source = resolveA2uiAtomPreviewSource({
+    id: 'button',
+    componentCode: 'Button',
+    type: 'Button',
+    nameCn: '按钮',
+    componentOriginType: 'A2UI_OFFICIAL',
+    officialSchema: { type: 'object' },
+    validMessageExample: { component: 'Text', text: 'wrong component type' },
+  });
+  assert.equal(source.kind, 'UNAVAILABLE');
+  assert.match(source.description, /不会静默改用 Schema 示例/);
+  assert.equal(source.document, undefined);
+});
+
 test('Tabs schema-derived example includes two referenced panels', () => {
   const source = resolveA2uiAtomPreviewSource({
     id: 'tabs',
