@@ -5,4 +5,5 @@ export const RPC_PROFILE: string;
 export function persistedSnapshotKey(card: ChatCard): string;
 export function createSnapshotProcessor(display: ChatCard['display'], catalogs: Catalog<ReactComponentImplementation>[]): MessageProcessor<ReactComponentImplementation>;
 export function cardIsOperable(card: ChatCard): boolean;
+export function actionResponsePending(card: ChatCard): boolean;
 export function actionRequest(card: ChatCard, event: A2uiClientAction): { actionName: string; inputs: { surfaceId: string; sourceComponentId: string; context: Record<string, unknown> } };

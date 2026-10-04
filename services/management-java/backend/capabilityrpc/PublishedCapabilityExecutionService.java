@@ -1,6 +1,7 @@
 package dev.a2flow.management.capabilityrpc;
 
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.ai.chat.model.ToolContext;
 import dev.a2flow.management.agentcore.runtime.engine.model.BaseAgentContext;
 import dev.a2flow.management.agentcore.runtime.tool.CapabilityActionExecutor;

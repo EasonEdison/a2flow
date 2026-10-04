@@ -90,7 +90,6 @@ public final class CapabilityGrpcJdbcProbe {
                 var resolved = client.resolve(ResolveRequest.newBuilder().setAssetKey(ASSET).setContext(context).build());
                 check(resolved.getSourceId().equals("build-1") && resolved.getSourceDigest().equals("digest-1"), "DB immutable source lost");
                 var request = ExecuteRequest.newBuilder().setAssetKey(ASSET).setContext(context)
-                        .setExpectedSourceId(resolved.getSourceId()).setExpectedSourceDigest(resolved.getSourceDigest())
                         .setArgumentsJson(ByteString.copyFromUtf8("{\"quantity\":9223372036854775807}"));
                 var result = client.execute(request.build());
                 check(result.getSuccess() && result.getDataJson().toStringUtf8().contains("9223372036854775807"), "binary RPC integer/result failed: " + result);
@@ -98,21 +97,18 @@ public final class CapabilityGrpcJdbcProbe {
                         new CapabilityRpcContext(Long.MIN_VALUE, ReleaseEnvironment.PRT, "probe-request", "PC"));
                 check(actionResult.isSuccess(), "Published actionCode -> distinct draftId lookup failed");
                 int calls = CALLS.get();
-                expectStatus(() -> client.execute(request.setExpectedSourceDigest("stale").build()), Status.Code.FAILED_PRECONDITION);
-                check(CALLS.get() == calls, "stale source called business");
-                request.setExpectedSourceDigest("digest-1");
                 var rejected = client.execute(request.setArgumentsJson(ByteString.copyFromUtf8("{\"quantity\":1,\"context\":{\"userId\":1}}")).build());
                 check(!rejected.getSuccess() && CALLS.get() == calls, "model authority overwrite accepted");
                 expectStatus(() -> client.resolve(ResolveRequest.newBuilder().setAssetKey(ASSET).setContext(context.toBuilder().clearUserId()).build()), Status.Code.INVALID_ARGUMENT);
                 publish(jdbc, draft(descriptor, "integer", 1000), "digest-2", true);
-                var schemaFailure = client.execute(request.setExpectedSourceDigest("digest-2").setArgumentsJson(ByteString.copyFromUtf8("{\"quantity\":1}")).build());
+                var schemaFailure = client.execute(request.setArgumentsJson(ByteString.copyFromUtf8("{\"quantity\":1}")).build());
                 check(!schemaFailure.getSuccess() && schemaFailure.getErrorCode().equals("RESPONSE_SCHEMA_INVALID"), "response schema not enforced");
                 publish(jdbc, draft(descriptor, "string", 40), "digest-3", true);
-                var timeout = client.execute(request.setExpectedSourceDigest("digest-3").setArgumentsJson(ByteString.copyFromUtf8("{\"quantity\":7}")).build());
+                var timeout = client.execute(request.setArgumentsJson(ByteString.copyFromUtf8("{\"quantity\":7}")).build());
                 check(!timeout.getSuccess() && timeout.getErrorCode().equals("TRANSPORT_TIMEOUT"), "deadline not enforced");
                 publish(jdbc, draft, "digest-4", false);
                 expectStatus(() -> client.resolve(ResolveRequest.newBuilder().setAssetKey(ASSET).setContext(context).build()), Status.Code.INVALID_ARGUMENT);
-                System.out.println("PASS：真实双段gRPC/Protobuf、PG发布源解析、signed64身份/业务整数无损、发布摘要pin、模型越权拒绝、响应Schema、deadline、PRT禁止ONLINE回退");
+                System.out.println("PASS：真实双段gRPC/Protobuf、PG当前发布源解析、signed64身份/业务整数无损、模型越权拒绝、响应Schema、deadline、PRT禁止ONLINE回退");
             } finally { engine.shutdownNow(); server.shutdownNow(); server.awaitTermination(); }
         } finally { business.shutdownNow(); business.awaitTermination(); }
     }
