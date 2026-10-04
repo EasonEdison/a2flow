@@ -15,13 +15,15 @@
 
 创建项目的 `outputFormat` 是内容形态枚举，只允许 `ARTICLE` 或 `SPOKEN_SCRIPT`，与稿件导出格式不是同一概念；当前验收样例固定使用 `ARTICLE`。`SaveArtifact` 的模型输入保持扁平，但 request mapping 会按 `kind` 分别写入 `body.readingBrief`、`body.topicPlan` 或 `body.manuscript`，一次请求只能出现一个 protobuf oneof 分支。
 
+内容素材保存和三类确认不接收 `projectRevision` / `expectedProjectRevision`；项目 revision 仅作为服务内部历史信息返回，不作为模型或卡片提交业务操作的门槛。
+
 ## 浏览器执行（真实 PRT）
 
 将本目录作为 M 同源静态内容提供，管理员登录后打开 `import.html`。页面不会自动执行，只有用户勾选审核确认并点击“创建并发布阅读创作示例到 PRT”后才调用 `/api/management/v2/handler`。
 
 点击“加载本项目 Content RPC 契约”会显式读取同目录的 `content-descriptor.txt`，校验 base64 后填入文本框，但不会开始 authoring 或发布。也可以手工粘贴 base64 FileDescriptorSet 文本，或选择含同一内容的文本文件（两者同时提供时粘贴文本优先），并填写固定 `targetKey`、M 当前专员 ID。页面用当前 HttpOnly 同源会话，代码无法读取或输出该 Cookie。失败不会自动重放发布请求；再次点击时按稳定 actionCode/appCode/skillCode 查找并复用已有资产，发现重复身份时停止。已有 ACTIVE 变更允许继续编辑：仅在服务端 `allowedActions` 包含 `DEPLOY_PREPROD` 时，用当前草稿的精确 `expectedDigest` 发布，不把变更初建时的摘要当作不可修改的最新摘要，也不使用强制发布。
 
-`content-descriptor.txt` 是部署静态资源，不含凭据，不得手写。当前文件由本仓库 `packages/rpc-contracts/proto/a2flow/content/v1/content.proto` 在集成提交 `4dde853` 上生成，并通过 `grpc_tools.protoc --include_imports` 纳入 `services/management-java/proto/a2flow/capability/v1/capability.proto`；原始 FileDescriptorSet 的 SHA-256 为 `eb261f17724397d5bf935f15283bbfdbe08cf69f54458b475280d3ceea8917b7`。协议变更时必须从同一待部署提交重新生成 base64 文本，并让离线测试核对 12 个方法后再随本目录部署。
+`content-descriptor.txt` 是部署静态资源，不含凭据，不得手写。当前文件从本仓库待部署版本的 `packages/rpc-contracts/proto/a2flow/content/v1/content.proto` 生成，并通过 `grpc_tools.protoc --include_imports` 纳入 `services/management-java/proto/a2flow/capability/v1/capability.proto`；原始 FileDescriptorSet 的 SHA-256 为 `77dac512117bff10646427cb525b9f1d1eb439892d44113067af0094ffe421ca`。协议变更时必须从同一待部署提交重新生成 base64 文本，并让离线测试核对 12 个方法后再随本目录部署。
 
 空库首次导入应保留“同步 M 内置锁定的 Google A2UI Official Basic Catalog”勾选。该操作调用无客户端 schema 参数的管理员固定方法，由 M 从随二进制发布的资源读取 [Google A2UI v0.9.1 Basic Catalog](https://github.com/a2ui-project/a2ui/blob/420c6183c400e4b84fe3f9e084906725062a6d56/specification/v0_9_1/catalogs/basic/catalog.json)：协议版本 `v0.9.1`、source commit `420c6183c400e4b84fe3f9e084906725062a6d56`、catalog SHA-256 `8cc94d0a482e67048f9fc989964ca5da56fe42f531d919315a508989fb22e13e`。服务端会再次核对原文件、rules 和协议文档摘要；页面不上传、不拼装、不简化官方 schema。`Markdown` 与 `TextDownload` 仍由本项目作为独立扩展注册，绝不标记为 Official。
 

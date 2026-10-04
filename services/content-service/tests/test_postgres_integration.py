@@ -70,7 +70,6 @@ def test_complete_content_kernel() -> None:
         "读书笔记",
         "注意力不是无限资源。主动安排休息能保护注意力。",
         "https://example.invalid/note",
-        1,
     )
     source_context = context(user_id, "save-source")
     source = service.save_source(source_context, source_command)
@@ -118,11 +117,11 @@ def test_complete_content_kernel() -> None:
     with pytest.raises(ContentError, match="UNKNOWN_SELECTED_POINT"):
         service.confirm_reading(
             confirm_context,
-            ConfirmReadingCommand(project.id, brief_record.id, ("missing",), None, 2),
+            ConfirmReadingCommand(project.id, brief_record.id, ("missing",), None),
         )
     reading = service.confirm_reading(
         confirm_context,
-        ConfirmReadingCommand(project.id, brief_record.id, ("p1",), "个人理解", 2),
+        ConfirmReadingCommand(project.id, brief_record.id, ("p1",), "个人理解"),
     )
     assert reading.selection.selected_point_ids == ("p1",)
     assert (
@@ -163,7 +162,6 @@ def test_complete_content_kernel() -> None:
             "t1",
             "注意力不是意志力",
             "从资源管理切入",
-            3,
         ),
     )
 
@@ -184,7 +182,7 @@ def test_complete_content_kernel() -> None:
     )
     service.confirm_manuscript(
         context(user_id, "confirm-manuscript"),
-        ConfirmManuscriptCommand(project.id, manuscript_record.id, 4),
+        ConfirmManuscriptCommand(project.id, manuscript_record.id),
     )
     markdown = service.export_manuscript(
         context(user_id, "export-md"),
@@ -202,11 +200,15 @@ def test_complete_content_kernel() -> None:
 
     with pytest.raises(ContentError, match="CONTENT_NOT_FOUND"):
         service.get_project(context(user_id + 1, "foreign"), GetProjectQuery(project.id))
-    with pytest.raises(ContentError, match="PROJECT_REVISION_CONFLICT"):
-        service.save_source(
-            context(user_id, "stale"),
-            SaveSourceCommand(project.id, "旧版本", "不会提交", None, 1),
-        )
+    replacement = service.save_source(
+        context(user_id, "replace-source"),
+        SaveSourceCommand(project.id, "新版本", "显式保存的新版本", None),
+    )
+    assert replacement.revision == 2
+    replaced_project = service.get_project(
+        context(user_id, "after-replace"), GetProjectQuery(project.id)
+    )
+    assert replaced_project.revision == 6
     with pytest.raises(ContentError, match="ENVIRONMENT_MISMATCH"):
         service.get_project(
             context(user_id, "wrong-env", Environment.ONLINE),

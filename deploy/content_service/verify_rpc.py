@@ -62,19 +62,12 @@ def verify(target: str) -> None:
         assert any(item.id == project.id for item in page.list)
         assert page.total >= 1 and page.page == 1 and page.page_size == 20
 
-        def current_revision() -> int:
-            return stub.GetProject(
-                pb.GetProjectRequest(context=context("project-read"), project_id=project.id),
-                timeout=10,
-            ).revision
-
         source = stub.SaveSource(
             pb.SaveSourceRequest(
                 context=context("source"),
                 project_id=project.id,
                 title="自己的笔记",
                 body="专注需要明确目标，也需要安排休息。",
-                expected_project_revision=current_revision(),
             ),
             timeout=10,
         )
@@ -114,7 +107,6 @@ def verify(target: str) -> None:
             artifact_id=brief.id,
             selected_point_ids=["p1"],
             user_notes="加入我读书时的体会",
-            expected_project_revision=current_revision(),
         )
         reading = stub.ConfirmReading(reading_request, timeout=10)
         assert list(reading.selected_point_ids) == ["p1"]
@@ -153,7 +145,6 @@ def verify(target: str) -> None:
                 topic_id="t1",
                 edited_title="我的读书习惯",
                 edited_angle="先明确一个小目标",
-                expected_project_revision=current_revision(),
             ),
             timeout=10,
         )
@@ -208,7 +199,6 @@ def verify(target: str) -> None:
                 context=context("final"),
                 project_id=project.id,
                 artifact_id=manuscript.id,
-                expected_project_revision=current_revision(),
             ),
             timeout=10,
         )
@@ -240,19 +230,16 @@ def verify(target: str) -> None:
             ),
             (grpc.StatusCode.NOT_FOUND,),
         )
-        rejected(
-            lambda: stub.SaveSource(
-                pb.SaveSourceRequest(
-                    context=context("stale"),
-                    project_id=project.id,
-                    title="旧revision",
-                    body="不应该写入",
-                    expected_project_revision=project.revision,
-                ),
-                timeout=10,
+        next_source = stub.SaveSource(
+            pb.SaveSourceRequest(
+                context=context("new-source-version"),
+                project_id=project.id,
+                title="新的素材版本",
+                body="显式保存新的素材版本，不提交项目 revision。",
             ),
-            (grpc.StatusCode.ABORTED, grpc.StatusCode.FAILED_PRECONDITION),
+            timeout=10,
         )
+        assert next_source.id != source.id and next_source.revision == source.revision + 1
         missing = context("missing")
         missing.ClearField("user_id")
         rejected(
@@ -270,8 +257,8 @@ def verify(target: str) -> None:
             (grpc.StatusCode.PERMISSION_DENIED, grpc.StatusCode.FAILED_PRECONDITION),
         )
     print(
-        "CONTENT_RPC_PASS: 12 methods, confirmations, replay, "
-        "owner isolation, CAS, environment, export"
+        "CONTENT_RPC_PASS: 12 methods, confirmations, replay, owner isolation, "
+        "revision-free business inputs, environment, export"
     )
 
 

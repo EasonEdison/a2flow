@@ -21,7 +21,7 @@ def test_trusted_context_accepts_full_signed_int64() -> None:
 
 def test_source_limit_uses_original_text_length() -> None:
     with pytest.raises(ContentError, match="INVALID_SOURCE_BODY"):
-        SaveSourceCommand(uuid4(), "source", " " * 30_001, None, 1)
+        SaveSourceCommand(uuid4(), "source", " " * 30_001, None)
 
 
 def test_required_evidence_rejects_blank_text() -> None:

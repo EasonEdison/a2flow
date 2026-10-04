@@ -1,6 +1,7 @@
 # 阅读到创作助手：业务与技术设计
 
 状态：2026-09-23 用户确认方案，修正为仅 M 端使用 Java，其余服务使用 Python。字段和接口是目标契约，实施前须对照现有 RPC / 发布 / A2UI 契约复用，不代表已有实现。
+2026-10-04 简化决定覆盖本文旧版本门槛：普通业务请求不再接收 `projectRevision` / `expectedProjectRevision`，模型和卡片不读取后回填项目版本。项目 revision 继续作为内部历史字段递增；写事务仍锁定项目行并保留 requestId 幂等、owner/环境隔离、引用与业务事实校验。M 发布草稿 CAS、发布历史和不可变内容版本不受影响。
 
 ## 1. 系统职责
 
@@ -22,7 +23,7 @@
 
 | 表 | 主要字段 | 约束与含义 |
 | --- | --- | --- |
-| content_project | id、user_id、title、audience、output_format、current_selection_id、current_manuscript_id、revision、created_at、updated_at | 用户的创作工作集；revision 用于并发修改检测，不代替 Workflow 状态 |
+| content_project | id、user_id、title、audience、output_format、current_selection_id、current_manuscript_id、revision、created_at、updated_at | 用户的创作工作集；revision 记录内部业务历史，不作为调用方 CAS 入参，也不代替 Workflow 状态 |
 | content_source | id、project_id、user_id、revision、title、source_url、body、digest、created_at | 素材不可变版本；URL 仅记录出处；正文 TEXT 存储 |
 | content_artifact | id、project_id、user_id、kind、revision、body_json、body_markdown、input_refs、origin、created_at | READING_BRIEF / TOPIC_PLAN / MANUSCRIPT；输入引用精确到素材/产物版本；区分模型生成与用户编辑 |
 | content_confirmation | id、project_id、user_id、artifact_id、decision_type、selection_json、created_at | 记录选了哪些观点、哪个选题、哪份稿件已定稿；不靠模型文字判断用户已确认 |
@@ -45,17 +46,17 @@ body_json 用于结构化内容，不塞原始 Provider 响应或全部 Tool 历
 | content.project.create | title、audience、outputFormat | projectId、revision | 创建项目 |
 | content.project.list | page、pageSize | list、total、page、pageSize | 只读自己的项目 |
 | content.project.get | projectId | 项目、素材和当前产物引用 | 只读 |
-| content.source.save | projectId、title、body、sourceUrl、expectedProjectRevision | sourceId、revision、digest | 保存素材版本 |
+| content.source.save | projectId、title、body、sourceUrl | sourceId、revision、digest | 保存素材版本 |
 | content.source.get | sourceId | 正文、标题、出处、版本 | 只读 |
 | content.artifact.save | projectId、kind、内容、inputRefs | artifactId、revision | 保存生成或编辑版本 |
 | content.artifact.get | artifactId | 结构化内容、正文、输入引用 | 只读 |
 | content.confirmation.get | confirmationId | 已保存的观点选择、个人笔记或选题修改 | 只读自己的确认 |
-| content.reading.confirm | projectId、artifactId、selectedPointIds、userNotes、expectedProjectRevision | confirmationId、已选素材 | 保存阅读选择 |
-| content.topic.confirm | projectId、artifactId、topicId、editedTitle、editedAngle、expectedProjectRevision | confirmationId、选题单 | 保存选题 |
-| content.manuscript.confirm | projectId、artifactId、expectedProjectRevision | confirmationId、定稿版本 | 保存定稿事实 |
+| content.reading.confirm | projectId、artifactId、selectedPointIds、userNotes | confirmationId、已选素材 | 保存阅读选择 |
+| content.topic.confirm | projectId、artifactId、topicId、editedTitle、editedAngle | confirmationId、选题单 | 保存选题 |
+| content.manuscript.confirm | projectId、artifactId | confirmationId、定稿版本 | 保存定稿事实 |
 | content.manuscript.export | artifactId、format | filename、mediaType、文本内容 | 只读 |
 
-实际 RPC 使用类型明确的请求/响应 DTO；以上逻辑能力可复用同一个服务，不要求每个 actionCode 一个新服务。业务拒绝、版本冲突、资源不存在、RPC 不可达分别表达，不能统统变成空内容成功。
+实际 RPC 使用类型明确的请求/响应 DTO；以上逻辑能力可复用同一个服务，不要求每个 actionCode 一个新服务。业务拒绝、幂等冲突、资源不存在、RPC 不可达分别表达，不能统统变成空内容成功。
 
 实施细化：RPC 的 `ArtifactBody` 使用 oneof 区分 `ReadingBrief`、`TopicPlan`、`Manuscript`，分别包含观点与依据、候选选题、稿件与引用。模型和 M 端配置面对普通嵌套对象，不需要生成 Base64 或 JSON 字符串。数据库 `body_json` 是经过这些固定 DTO 校验后的 JSONB，不是任意字典入口。确认结果也使用明确字段。项目增加 `current_source_id` 引用当前素材版本，与当前选题/稿件指向一起支持重新打开项目。
 

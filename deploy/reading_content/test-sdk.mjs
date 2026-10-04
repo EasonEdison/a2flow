@@ -83,7 +83,7 @@ topicReplay.model.dispose();
 
 const manuscriptActions = Object.fromEntries(manuscript.actionBindings.map(action => [action.actionCode, action]));
 const manuscriptReplay = replay({
-  projectId: 'project-1', projectRevision: 7, draftTitle: '旧草稿', draftMarkdown: '旧正文',
+  projectId: 'project-1', draftTitle: '旧草稿', draftMarkdown: '旧正文',
   savedTitle: '', savedMarkdown: '', savedArtifactId: '', savedArtifactRevision: 0,
   inputRefs: [{ kind: 'SOURCE', id: 'source-1', revision: 1 }], citations: [],
   status: '', confirmationId: '',
