@@ -192,6 +192,9 @@ function registeredExampleDocument(
 export function resolveA2uiAtomPreviewSource(
   component: A2uiCatalogComponentRecord,
 ): A2uiAtomPreviewSource {
+  const hasRegisteredExample = Boolean(
+    component.validMessageExample && Object.keys(component.validMessageExample).length,
+  );
   const registered = registeredExampleDocument(component.type, component.validMessageExample);
   if (registered) {
     return {
@@ -199,6 +202,13 @@ export function resolveA2uiAtomPreviewSource(
       label: '已注册 Catalog 示例',
       description: '示例直接来自组件注册记录的 validMessageExample。',
       document: registered,
+    };
+  }
+  if (hasRegisteredExample) {
+    return {
+      kind: 'UNAVAILABLE',
+      label: '已注册示例不可用',
+      description: 'validMessageExample 非空但不符合当前组件合同，已停止预览；不会静默改用 Schema 示例。',
     };
   }
   if (component.componentOriginType === 'A2UI_OFFICIAL' && component.officialSchema) {
