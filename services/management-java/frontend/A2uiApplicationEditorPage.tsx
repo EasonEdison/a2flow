@@ -398,7 +398,7 @@ const A2uiApplicationEditorPage: React.FC = () => {
 
   const handleRefreshPreview = async () => {
     const application = await readFormApplication();
-    if (application) message.success('结构/contract preview 已刷新');
+    if (application) message.success('本地预览已刷新（未调用业务接口）');
   };
 
   const handleSaveStage = async (stage: A2uiApplicationEditableStage) => {

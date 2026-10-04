@@ -65,9 +65,9 @@ const A2uiApplicationListPage: React.FC = () => {
       </div>
 
       <Alert
-        type="warning"
-        message="当前只提供 M 端配置、结构/JSON/contract preview"
-        description="B 端 Renderer 尚未接入，不能把结构预览称为最终视觉预览；Catalog PRT/ONLINE 精确版本与服务端扫描 blocker 未闭合时发布必须 fail closed。"
+        type="info"
+        message="支持结构诊断与本地视觉预览"
+        description="本地视觉预览使用 sample params 和已注册 Catalog renderer，不调用 CapabilityAction 或 LoadBinding；涉及 LoadBinding 时需提供显式样例数据，否则预览 fail closed。发布仍以服务端 Catalog 版本和扫描 blocker 为准。"
         style={{ marginBottom: 16 }}
       />
 
