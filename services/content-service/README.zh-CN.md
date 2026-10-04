@@ -33,7 +33,7 @@ service = ContentService(repository)
 
 - `(user_id, operation, request_id)` 的事务级 advisory lock 和回执去重；
 - 同 requestId 不同 canonical payload 返回 `IDEMPOTENCY_CONFLICT`；
-- 素材和确认写入执行项目 revision CAS；
+- 素材和确认写入在项目行锁内串行更新内部 revision，不接收调用方项目版本；
 - 当前指针、业务记录和回执一同提交或回滚；
 - 创建项目回执保存 typed 响应快照，重放不会返回后来改变的项目状态。
 

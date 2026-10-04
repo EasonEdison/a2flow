@@ -267,8 +267,6 @@ class ContentRpcService(rpc.ContentServiceServicer):
 
     def SaveSource(self, request: pb.SaveSourceRequest, context: grpc.ServicerContext) -> pb.Source:
         def operation() -> pb.Source:
-            if not request.HasField("expected_project_revision"):
-                raise ContentError("EXPECTED_PROJECT_REVISION_REQUIRED")
             return source(
                 self.service.save_source(
                     trusted(request.context),
@@ -277,7 +275,6 @@ class ContentRpcService(rpc.ContentServiceServicer):
                         request.title,
                         request.body,
                         request.source_url or None,
-                        request.expected_project_revision,
                     ),
                 )
             )
@@ -353,8 +350,6 @@ class ContentRpcService(rpc.ContentServiceServicer):
         self, request: pb.ConfirmReadingRequest, context: grpc.ServicerContext
     ) -> pb.Confirmation:
         def operation() -> pb.Confirmation:
-            if not request.HasField("expected_project_revision"):
-                raise ContentError("EXPECTED_PROJECT_REVISION_REQUIRED")
             return confirmation(
                 self.service.confirm_reading(
                     trusted(request.context),
@@ -363,7 +358,6 @@ class ContentRpcService(rpc.ContentServiceServicer):
                         m.uuid_value(request.artifact_id, "ARTIFACT_ID"),
                         tuple(request.selected_point_ids),
                         request.user_notes or None,
-                        request.expected_project_revision,
                     ),
                 )
             )
@@ -374,8 +368,6 @@ class ContentRpcService(rpc.ContentServiceServicer):
         self, request: pb.ConfirmTopicRequest, context: grpc.ServicerContext
     ) -> pb.Confirmation:
         def operation() -> pb.Confirmation:
-            if not request.HasField("expected_project_revision"):
-                raise ContentError("EXPECTED_PROJECT_REVISION_REQUIRED")
             return confirmation(
                 self.service.confirm_topic(
                     trusted(request.context),
@@ -385,7 +377,6 @@ class ContentRpcService(rpc.ContentServiceServicer):
                         request.topic_id,
                         request.edited_title,
                         request.edited_angle,
-                        request.expected_project_revision,
                     ),
                 )
             )
@@ -396,15 +387,12 @@ class ContentRpcService(rpc.ContentServiceServicer):
         self, request: pb.ConfirmManuscriptRequest, context: grpc.ServicerContext
     ) -> pb.Confirmation:
         def operation() -> pb.Confirmation:
-            if not request.HasField("expected_project_revision"):
-                raise ContentError("EXPECTED_PROJECT_REVISION_REQUIRED")
             return confirmation(
                 self.service.confirm_manuscript(
                     trusted(request.context),
                     m.ConfirmManuscriptCommand(
                         m.uuid_value(request.project_id, "PROJECT_ID"),
                         m.uuid_value(request.artifact_id, "ARTIFACT_ID"),
-                        request.expected_project_revision,
                     ),
                 )
             )

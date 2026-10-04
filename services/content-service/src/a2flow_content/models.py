@@ -150,14 +150,12 @@ class SaveSourceCommand:
     title: str
     body: str
     source_url: str | None
-    expected_project_revision: int
 
     def __post_init__(self) -> None:
         uuid_value(self.project_id, "PROJECT_ID")
         text(self.title, "SOURCE_TITLE", maximum=500)
         text(self.body, "SOURCE_BODY", maximum=MAX_SOURCE_CHARS)
         text(self.source_url, "SOURCE_URL", maximum=2_048, optional=True)
-        revision(self.expected_project_revision, "EXPECTED_PROJECT_REVISION")
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,7 +330,6 @@ class ConfirmReadingCommand:
     artifact_id: UUID
     selected_point_ids: tuple[str, ...]
     user_notes: str | None
-    expected_project_revision: int
 
     def __post_init__(self) -> None:
         uuid_value(self.project_id, "PROJECT_ID")
@@ -344,7 +341,6 @@ class ConfirmReadingCommand:
         for item in self.selected_point_ids:
             text(item, "POINT_ID", maximum=128)
         text(self.user_notes, "USER_NOTES", maximum=8_000, optional=True)
-        revision(self.expected_project_revision, "EXPECTED_PROJECT_REVISION")
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,7 +350,6 @@ class ConfirmTopicCommand:
     topic_id: str
     edited_title: str
     edited_angle: str
-    expected_project_revision: int
 
     def __post_init__(self) -> None:
         uuid_value(self.project_id, "PROJECT_ID")
@@ -362,19 +357,16 @@ class ConfirmTopicCommand:
         text(self.topic_id, "TOPIC_ID", maximum=128)
         text(self.edited_title, "TOPIC_TITLE", maximum=300)
         text(self.edited_angle, "TOPIC_ANGLE", maximum=2_000)
-        revision(self.expected_project_revision, "EXPECTED_PROJECT_REVISION")
 
 
 @dataclass(frozen=True, slots=True)
 class ConfirmManuscriptCommand:
     project_id: UUID
     artifact_id: UUID
-    expected_project_revision: int
 
     def __post_init__(self) -> None:
         uuid_value(self.project_id, "PROJECT_ID")
         uuid_value(self.artifact_id, "ARTIFACT_ID")
-        revision(self.expected_project_revision, "EXPECTED_PROJECT_REVISION")
 
 
 @dataclass(frozen=True, slots=True)
