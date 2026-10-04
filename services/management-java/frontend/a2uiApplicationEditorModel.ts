@@ -602,16 +602,10 @@ export interface A2uiValidationPreviewViewModel {
     sectionLabels: string[];
   };
   visual: {
-    status: 'WAITING_FRONTEND';
-    message: 'B 端 Renderer 待接入';
+    status: 'LOCAL_RENDERER';
+    message: '真实 A2UI renderer 本地预览';
     rendersMock: false;
   };
-  prtInput: {
-    persistence: 'SESSION_ONLY';
-    storedInDraft: false;
-    storedInBuild: false;
-  };
-  destructiveActionPolicy: 'AUDITED_DEMO_ONLY';
 }
 
 const A2UI_STRUCTURE_PREVIEW_SECTIONS = [
@@ -636,16 +630,10 @@ export function createA2uiValidationPreviewViewModel(
       sectionLabels: [...A2UI_STRUCTURE_PREVIEW_SECTIONS],
     },
     visual: {
-      status: 'WAITING_FRONTEND',
-      message: 'B 端 Renderer 待接入',
+      status: 'LOCAL_RENDERER',
+      message: '真实 A2UI renderer 本地预览',
       rendersMock: false,
     },
-    prtInput: {
-      persistence: 'SESSION_ONLY',
-      storedInDraft: false,
-      storedInBuild: false,
-    },
-    destructiveActionPolicy: 'AUDITED_DEMO_ONLY',
   };
 }
 
