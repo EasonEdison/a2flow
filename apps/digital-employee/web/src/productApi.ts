@@ -27,7 +27,7 @@ export type Notification = { id: string; type: string; title: string; relatedTyp
 export type ApiError = Error & { code: string };
 export type MemoryEntry = { id: string; text: string };
 export type MemorySettings = { revision: number; enabled: boolean; entries: MemoryEntry[] };
-export type ChatCard = { cardId: string; conversationId: string; status: string; revision: number; result?: unknown;
+export type ChatCard = { cardId: string; conversationId: string; status: string; result?: unknown;
   display: { applicationKey: string; applicationVersion?: string | number; protocolProfile: string;
     snapshotMessages: Record<string, unknown>[];
     catalog: { protocolVersion: string; catalogId: string; catalogRevision: string | number; catalogDigest: string };
@@ -159,7 +159,7 @@ export const productApi = {
   chatCards: (id: string, signal?: AbortSignal) => api<{ cards: ChatCard[] }>(`/api/conversations/${encodeURIComponent(id)}/cards`, { signal }),
   chatAction: (id: string, card: ChatCard, requestId: string, actionName: string, inputs: Record<string, unknown>) => api<ChatCard>(
     `/api/conversations/${encodeURIComponent(id)}/cards/${encodeURIComponent(card.cardId)}/actions`,
-    body({ requestId, actionName, inputs, expectedRevision: card.revision })),
+    body({ requestId, actionName, inputs })),
   memory: (signal?: AbortSignal) => api<MemorySettings>('/api/memory', { signal }),
   saveMemory: (settings: MemorySettings) => api<MemorySettings>('/api/memory', {
     method: 'PUT', body: JSON.stringify(settings),

@@ -19,10 +19,8 @@ from ..models import ActionRejected
 from ..rpc_client import (
     ApplicationDescription,
     JsonValue as RpcJsonValue,
-    ReleaseIdentity,
     RpcClient,
     RuntimeResult,
-    RuntimeSession,
     TrustedCard,
 )
 from .assets import ApplicationContract, ChatAssets, _APPLICATION_USAGE
@@ -47,7 +45,8 @@ def plain(value: RpcJsonValue) -> JsonValue:
     return cast(JsonValue, value)
 
 
-def prepare_result(result: RuntimeResult, version: str) -> PreparedApplication:
+def prepare_result(result: RuntimeResult) -> PreparedApplication:
+    version = result.release.app_build_id
     display = {
         "protocolProfile": PROFILE,
         "applicationKey": result.release.app_code,
@@ -98,11 +97,12 @@ def rendered_business_state(result: RuntimeResult) -> JsonObject:
 
 
 def trusted_card(owner: TrustedContext, card: dict[str, Any],
-                 metadata: dict[str, Any], revision: int) -> TrustedCard:
+                 metadata: dict[str, Any]) -> TrustedCard:
     private = metadata["rpc"]
-    return TrustedCard(user_id=owner.user_id, release=ReleaseIdentity(**private["release"]),
-                       session=RuntimeSession(**private["session"]), revision=revision,
-                       params=private["params"], snapshot=card["display"]["snapshotMessages"])
+    return TrustedCard(user_id=owner.user_id,
+                       app_code=card["display"]["applicationKey"],
+                       params=private["params"],
+                       snapshot=card["display"]["snapshotMessages"])
 
 
 class RpcChatAssets(ChatAssets):
@@ -122,9 +122,6 @@ class RpcChatAssets(ChatAssets):
             record = self._record("ABILITY", key)
             description = self.rpc.resolve(self.owner, record["definition"]["assetKey"],
                                            "contract:" + uuid4().hex)
-            if (description.source_id != record["definition"]["sourceId"] or
-                    description.source_digest != record["definition"]["sourceDigest"]):
-                raise ActionRejected("RESET_REQUIRED")
             abilities.append({"abilityKey": key, "description": description.description,
                               "inputSchema": plain(description.input_schema)})
             current = self._action_descriptions.get(description.action_code)
@@ -143,7 +140,6 @@ class RpcChatAssets(ChatAssets):
                 "usage": _APPLICATION_QUERY_USAGE,
             },
         }
-        self.check_versions()
         return value
 
     def action_description(self, action_code: str) -> str | None:
@@ -161,24 +157,19 @@ class RpcChatAssets(ChatAssets):
         return None if value is None else cast(dict[str, Any], plain(value))
 
     def _record(self, kind: str, key: str) -> dict[str, Any]:
-        admitted = self._require_admission()
+        admitted = self.refresh_admission()
         allowed = admitted.ability_keys if kind == "ABILITY" else admitted.application_keys
         if key not in allowed:
             raise ActionRejected(kind + "_NOT_ALLOWED")
         resolved = self._reader.resolve_asset(kind, key, self.owner)
         if not is_java_asset(resolved["definition"]):
             raise ActionRejected("RPC_PUBLICATION_REQUIRED")
-        versions = dict(admitted.recorded_versions)
-        if any(versions.get(identity) != version for identity, version in resolved["recordedVersions"]):
-            raise ActionRejected("RESET_REQUIRED")
         return cast(dict[str, Any], resolved)
 
     def execute_ability(self, ability_key: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        self.check_versions()
         record = self._record("ABILITY", ability_key)
         definition = record["definition"]
         result = self.rpc.execute(self.owner, definition["assetKey"], arguments,
-                                  definition["sourceId"], definition["sourceDigest"],
                                   "ability:" + uuid4().hex)
         if not result.success:
             raise ActionRejected(result.error_code or "ABILITY_RESULT_NOT_SUCCESS")
@@ -188,10 +179,6 @@ class RpcChatAssets(ChatAssets):
     def application_description(self, application_key: str) -> tuple[dict[str, Any], ApplicationDescription]:
         record = self._record("APPLICATION", application_key)
         description = self.rpc.describe(self.owner, application_key, "describe:" + uuid4().hex)
-        definition = record["definition"]
-        if (description.release.source_id != definition["sourceId"] or
-                description.release.digest != definition["sourceDigest"]):
-            raise ActionRejected("RESET_REQUIRED")
         return record, description
 
     def _application_contract(self, application_key: str) -> ApplicationContract:
@@ -225,16 +212,14 @@ class RpcChatAssets(ChatAssets):
         with self._render_lock:
             if self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
-            self.check_versions()
-            record, description = self.application_description(application_key)
-            result = self.rpc.activate(self.owner, application_key, data, description.release,
+            _, description = self.application_description(application_key)
+            result = self.rpc.activate(self.owner, application_key, data,
                                        "render:" + uuid4().hex)
-            prepared = prepare_result(result, record["versionId"])
+            prepared = prepare_result(result)
             metadata = {
                 "owner": {"userId": self.owner.user_id, "environment": self.owner.environment},
                 "conversationId": self.conversation_id, "controlRequestId": self.control_request_id,
                 "toolCallId": tool_call_id, "skillKey": admitted.skill_key,
-                "recordedVersions": [list(item) for item in admitted.recorded_versions],
                 "applicationKey": application_key, "applicationVersion": prepared.application_version,
                 "rpc": runtime_metadata(result),
                 "observation": {"arguments": rendered_business_state(result)},

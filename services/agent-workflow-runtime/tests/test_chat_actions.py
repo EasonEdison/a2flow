@@ -36,25 +36,29 @@ class ActionTests(unittest.TestCase):
     def setUp(self):
         self.store = Store()
         self.calls = []
-        self.checks = []
+        self.bindings = []
         self.policy = {"successPolicyRef": "accepted", "completeInteractionOnSuccess": True}
         self.operation = OperationSpec(lambda inputs, owner: self.calls.append((inputs, owner)) or {"accepted": True},
             lambda inputs: set(inputs) == {"optionId"}, lambda result: isinstance(result, dict), lambda _: True,
             action_allowed=True)
-        self.assets = SimpleNamespace(admit_skill=lambda _: None,
-            check_versions=lambda versions: self.checks.append(versions),
-            action_binding=lambda app, name: ({"resolvedVersion": {"versionId": "v1"}}, self.policy, ability(), self.operation))
+        self.assets = SimpleNamespace(
+            admit_skill=lambda _: None,
+            action_binding=lambda app, name: (
+                self.bindings.append((app, name))
+                or ({"resolvedVersion": {"versionId": "v2"}}, self.policy, ability(), self.operation)
+            ),
+        )
         self.service = ChatActionService(self.store, lambda *args: self.assets)
 
     def execute(self, inputs=None):
         return self.service.execute(TrustedContext(1, "PRT"), "1", "c", request_id="r",
-            action_name="select", inputs=inputs or {"optionId": "a"}, expected_revision=0)
+            action_name="select", inputs=inputs or {"optionId": "a"})
 
     def test_real_result_completes_and_cached_claim_does_not_dispatch_again(self):
         self.assertEqual("COMPLETED", self.execute()["status"])
         self.execute()
         self.assertEqual(1, len(self.calls))
-        self.assertGreaterEqual(len(self.checks), 3)
+        self.assertEqual([("app", "select"), ("app", "select")], self.bindings)
 
     def test_business_false_is_saved_and_does_not_complete(self):
         self.operation = replace(self.operation, execute=lambda *args: {"accepted": False})
@@ -77,11 +81,3 @@ class ActionTests(unittest.TestCase):
         with self.assertRaisesRegex(ActionRejected, "ACTION_OUTCOME_UNKNOWN"):
             self.execute()
         self.assertEqual(["ACTION_OUTCOME_UNKNOWN"], self.store.failures)
-
-    def test_changed_release_never_claims(self):
-        def reject(versions):
-            raise ActionRejected("RESET_REQUIRED")
-        self.assets.check_versions = reject
-        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
-            self.execute()
-        self.assertFalse(self.store.dispatched)

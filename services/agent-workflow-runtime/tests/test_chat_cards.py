@@ -35,8 +35,6 @@ def prepared(*, interactive=True, prompt="Choose"):
 
 def metadata(conversation="conversation-1", *, tool_call="tool-1"):
     return {"skillKey": "assistant/choice",
-            "recordedVersions": [["SKILL:assistant/choice", "version-1"],
-                                 ["APPLICATION:choice-card", "version-1"]],
             "conversationId": conversation, "controlRequestId": "turn-1",
             "toolCallId": tool_call,
             "observation": {"description": "Choose one option",
@@ -161,10 +159,9 @@ class ChatCardContract:
         source = metadata(self.conversation)
         card = self.store.save(self.owner, self.conversation, prepared(), source)
         source["binding"]["secret"] = "changed"
-        self.assertEqual({"cardId", "conversationId", "display", "status", "revision"},
+        self.assertEqual({"cardId", "conversationId", "display", "status"},
                          set(card))
         self.assertEqual("WAITING_ACTION", card["status"])
-        self.assertEqual(0, card["revision"])
         self.assertEqual(card, self.store.save(
             self.owner, self.conversation, prepared(), metadata(self.conversation)))
         self.assertEqual([card], self.store.list(self.owner, self.conversation))
@@ -172,9 +169,6 @@ class ChatCardContract:
                                                card["cardId"]))
         internal = self.store.get_binding(self.owner, self.conversation, card["cardId"])
         self.assertEqual("server-only", internal["metadata"]["binding"]["secret"])
-        internal["metadata"]["recordedVersions"].clear()
-        self.assertEqual(2, len(self.store.get_binding(
-            self.owner, self.conversation, card["cardId"])["metadata"]["recordedVersions"]))
         self.assertEqual([], self.store.list(TrustedContext(1010, "PRT"),
                                              self.conversation))
         self.assertIsNone(self.store.read(self.owner, self.conversation + "-other",
@@ -186,19 +180,16 @@ class ChatCardContract:
     def test_claim_commits_before_dispatch_and_finish_is_idempotent(self):
         card = self.save()
         claim = self.store.claim(self.owner, self.conversation, card["cardId"],
-            "request-1", "confirm", {"optionId": "second", "ignored": "not-patched"}, 0)
+            "request-1", "confirm", {"optionId": "second", "ignored": "not-patched"})
         self.assertTrue(claim["dispatch"])
-        self.assertEqual(("EXECUTING", 1),
-                         (claim["card"]["status"], claim["card"]["revision"]))
-        self.assertIn("recordedVersions", claim["metadata"])
+        self.assertEqual("EXECUTING", claim["card"]["status"])
         self.assert_code("ACTION_REQUEST_BUSY", lambda: self.store.claim(
             self.owner, self.conversation, card["cardId"], "request-1", "confirm",
-            {"optionId": "second", "ignored": "not-patched"}, 0))
+            {"optionId": "second", "ignored": "not-patched"}))
         result = {"accepted": True, "receipt": "business-result"}
         finished = self.store.finish(self.owner, self.conversation, card["cardId"],
                                      "request-1", result, True, True)
-        self.assertEqual(("COMPLETED", 2),
-                         (finished["status"], finished["revision"]))
+        self.assertEqual("COMPLETED", finished["status"])
         self.assertEqual(result, finished["result"])
         self.assertEqual("second", finished["display"]["data"]["optionId"])
         self.assertNotIn("ignored", finished["display"]["data"])
@@ -206,12 +197,12 @@ class ChatCardContract:
             self.owner, self.conversation, card["cardId"], "request-1",
             result, True, True))
         cached = self.store.claim(self.owner, self.conversation, card["cardId"],
-            "request-1", "confirm", {"optionId": "second", "ignored": "not-patched"}, 0)
+            "request-1", "confirm", {"optionId": "second", "ignored": "not-patched"})
         self.assertFalse(cached["dispatch"])
         self.assertEqual(result, cached["result"])
         self.assert_code("ACTION_REQUEST_CONFLICT", lambda: self.store.claim(
             self.owner, self.conversation, card["cardId"], "request-1", "confirm",
-            {"optionId": "first"}, 0))
+            {"optionId": "first"}))
         observations = self.store.list_observations(
             self.owner, self.conversation, after_sequence=0)
         self.assertEqual(["RENDERED", "ACTION"], [item.kind for item in observations])
@@ -220,35 +211,32 @@ class ChatCardContract:
         self.assertIsNone(observations[1].arguments)
         self.assertEqual(result, observations[1].result)
 
-    def test_business_failure_waits_and_new_request_uses_new_revision(self):
+    def test_business_failure_waits_and_accepts_a_new_request(self):
         card = self.save()
         self.store.claim(self.owner, self.conversation, card["cardId"],
-                         "request-1", "confirm", {}, 0)
+                         "request-1", "confirm", {})
         waiting = self.store.finish(self.owner, self.conversation, card["cardId"],
             "request-1", {"accepted": False}, False, True)
-        self.assertEqual(("WAITING_ACTION", 2),
-                         (waiting["status"], waiting["revision"]))
-        self.assert_code("STALE_CARD_REVISION", lambda: self.store.claim(
-            self.owner, self.conversation, card["cardId"], "request-2", "confirm", {}, 0))
+        self.assertEqual("WAITING_ACTION", waiting["status"])
         claim = self.store.claim(self.owner, self.conversation, card["cardId"],
-                                 "request-2", "confirm", {}, 2)
-        self.assertEqual(3, claim["card"]["revision"])
+                                 "request-2", "confirm", {})
+        self.assertEqual("EXECUTING", claim["card"]["status"])
 
     def test_exception_marks_unknown_and_never_redispatches(self):
         card = self.save()
         self.store.claim(self.owner, self.conversation, card["cardId"],
-                         "request-1", "confirm", {}, 0)
+                         "request-1", "confirm", {})
         failed = self.store.fail(self.owner, self.conversation, card["cardId"],
                                  "request-1", "BUSINESS_DISPATCH_EXCEPTION")
-        self.assertEqual(("UNKNOWN", 2), (failed["status"], failed["revision"]))
+        self.assertEqual("UNKNOWN", failed["status"])
         self.assertNotIn("result", failed)
         self.assertEqual(failed, self.store.fail(
             self.owner, self.conversation, card["cardId"], "request-1",
             "BUSINESS_DISPATCH_EXCEPTION"))
         self.assert_code("ACTION_OUTCOME_UNKNOWN", lambda: self.store.claim(
-            self.owner, self.conversation, card["cardId"], "request-1", "confirm", {}, 0))
+            self.owner, self.conversation, card["cardId"], "request-1", "confirm", {}))
         self.assert_code("CARD_TERMINAL", lambda: self.store.claim(
-            self.owner, self.conversation, card["cardId"], "request-2", "confirm", {}, 2))
+            self.owner, self.conversation, card["cardId"], "request-2", "confirm", {}))
         self.assert_code("ACTION_FAILURE_CONFLICT", lambda: self.store.fail(
             self.owner, self.conversation, card["cardId"], "request-1", "OTHER_ERROR"))
         observations = self.store.list_observations(
@@ -260,7 +248,7 @@ class ChatCardContract:
     def test_selection_and_ingress_are_fail_closed(self):
         card = self.save()
         self.store.claim(self.owner, self.conversation, card["cardId"],
-                         "request-1", "confirm", {"optionId": "missing"}, 0)
+                         "request-1", "confirm", {"optionId": "missing"})
         self.assert_code("INVALID_OPTION_ID", lambda: self.store.finish(
             self.owner, self.conversation, card["cardId"], "request-1", {}, True, True))
         self.assertEqual("EXECUTING", self.store.read(
@@ -278,7 +266,7 @@ class ChatCardContract:
         self.assertEqual("DISPLAY_ONLY", card["status"])
         self.assert_code("CARD_NOT_ACTIONABLE", lambda: self.store.claim(
             self.owner, self.conversation, card["cardId"], "request-1",
-            "confirm", {}, 0))
+            "confirm", {}))
 
 
 class OfflineChatCardTests(ChatCardContract, unittest.TestCase):
@@ -294,7 +282,7 @@ class OfflineChatCardTests(ChatCardContract, unittest.TestCase):
                        rpc={"session": {"token": "private-session"}})
         saved = self.store.save(self.owner, self.conversation, value, private)
         inputs = {"surfaceId": "main", "sourceComponentId": "button", "context": {"amount": "9223372036854775807"}}
-        claim = self.store.claim(self.owner, self.conversation, saved["cardId"], "rpc-request", "save", inputs, 0)
+        claim = self.store.claim(self.owner, self.conversation, saved["cardId"], "rpc-request", "save", inputs)
         self.assertTrue(claim["dispatch"])
         display["snapshotMessages"] = [{"surface": "after"}]
         value = PreparedApplication(base.application_key, base.application_version, False, json.dumps(display))
@@ -312,7 +300,7 @@ class OfflineChatCardTests(ChatCardContract, unittest.TestCase):
         self.assertEqual(done["display"]["snapshotMessages"], [{"surface": "after"}])
         self.assertNotIn("private-session", json.dumps(done))
         self.assertEqual(self.store.replay(self.owner, self.conversation, saved["cardId"],
-                                          "rpc-request", "save", inputs, 0), done)
+                                          "rpc-request", "save", inputs), done)
         self.assertEqual(self.store.get_binding(self.owner, self.conversation, saved["cardId"])["metadata"], private)
         observed = self.store.list_observations(
             self.owner, self.conversation, after_sequence=1)[0]
@@ -338,25 +326,24 @@ class PostgresChatCardTests(ChatCardContract, unittest.TestCase):
     def test_claim_survives_new_store_without_redispatch(self):
         card = self.save()
         self.store.claim(self.owner, self.conversation, card["cardId"],
-                         "request-crash", "confirm", {}, 0)
+                         "request-crash", "confirm", {})
         restarted = self.make_store()
         self.assert_code("ACTION_REQUEST_BUSY", lambda: restarted.claim(
             self.owner, self.conversation, card["cardId"], "request-crash",
-            "confirm", {}, 0))
+            "confirm", {}))
         executing = restarted.read(self.owner, self.conversation, card["cardId"])
-        self.assertEqual(("EXECUTING", 1),
-                         (executing["status"], executing["revision"]))
+        self.assertEqual("EXECUTING", executing["status"])
         unknown = restarted.fail(self.owner, self.conversation, card["cardId"],
                                   "request-crash", "PROCESS_TERMINATED")
-        self.assertEqual(("UNKNOWN", 2), (unknown["status"], unknown["revision"]))
+        self.assertEqual("UNKNOWN", unknown["status"])
 
     def test_concurrent_cards_allocate_one_committed_conversation_sequence(self):
         first = self.save(tool_call="tool-concurrent-1")
         second = self.save(tool_call="tool-concurrent-2")
         self.store.claim(self.owner, self.conversation, first["cardId"],
-                         "request-concurrent-1", "confirm", {}, 0)
+                         "request-concurrent-1", "confirm", {})
         self.store.claim(self.owner, self.conversation, second["cardId"],
-                         "request-concurrent-2", "confirm", {}, 0)
+                         "request-concurrent-2", "confirm", {})
 
         def finish(card_id, request_id):
             return self.store.finish(

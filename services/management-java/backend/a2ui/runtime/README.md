@@ -7,14 +7,14 @@
 协议：`proto/a2flow/a2ui/v1/a2ui.proto`，服务 `A2uiExecution`：
 
 - `Describe`：只读当前用户/环境发布指针，返回 `sourceId/digest/appBuildId`、参数 schema、交互模式、Catalog 和完整 Action 声明，不执行业务。
-- `Activate`：先核对 Python 已读取运行态资产的 `expectedSourceId/expectedDigest`，再进行 Show、InputBindings、顺序 LoadBindings、ResultAdapter。任何版本变化均在调用业务前返回 `RESET_REQUIRED`。
+- `Activate`：按可信 `userId/environment` 读取当前有效发布，再进行 Show、InputBindings、顺序 LoadBindings、ResultAdapter。
 - `Act`：Python 从持久化读取可信卡片并传入；Java 核对身份、环境、revision、完整发布身份、session/Catalog 和 Action declaration/context，再执行能力及条件分支、结果适配。
 
 `RuntimeResponse` 返回完整增量消息、可恢复快照、执行摘要、完整 Action 声明、交互完成意图与明确 `businessSuccess`。无 Load 的首屏成功返回 `businessSuccess=true`，不表示曾调用业务。首屏创建随机 session token，Python 私有持久化；它只是卡片关联值，不能代替服务认证，不向浏览器暴露。
 
 任意浏览器提供的 Build、session、身份、snapshot 均不得直接进入此入口。Java 根据服务端发布聚合读冻结 Build，无草稿回退；provider 对同一发布聚合先核对目标环境存在，再调用共享 resolver，且再次核对解析环境，阻止共享旧逻辑的 PRT→ONLINE 回退。
 
-RPC 必须装配统一服务间 mTLS 认证；仅独立本机测试允许严格 loopback 明文。失败使用 gRPC 状态，`FAILED_PRECONDITION` 的 description 为稳定错误码，例如 `RESET_REQUIRED`；未知内部失败不外泄 payload 或异常堆栈。协议 `error_code` 目前为预留字段，不用空响应伪造成功。
+RPC 必须装配统一服务间 mTLS 认证；仅独立本机测试允许严格 loopback 明文。失败使用 gRPC 状态与稳定错误码；未知内部失败不外泄 payload 或异常堆栈。协议 `error_code` 目前为预留字段，不用空响应伪造成功。
 
 ## 执行与持久化边界
 

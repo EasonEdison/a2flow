@@ -93,15 +93,19 @@ class AssetsTest(unittest.TestCase):
         self.assertTrue(config.completes_interaction)
         self.assertEqual([], self.calls)  # Configuration lookup does not execute.
 
-    def test_changed_application_subset_is_not_silently_replaced(self):
+    def test_changed_application_subset_uses_current_release(self):
         self.reader.application_version = "v2"
-        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
-            self.assets.action(self.item, "confirm")
+        self.reader.current = tuple(
+            (key, "v2" if key == "APPLICATION:card" else version)
+            for key, version in VERSIONS
+        )
+        config = self.assets.action(self.item, "confirm")
+        self.assertEqual("v2", dict(config.effective_versions)["APPLICATION:card"])
         self.assertEqual([], self.calls)
 
-    def test_changed_run_closure_rejects_before_resolution_dispatch(self):
+    def test_current_run_closure_still_enforces_ability_permission(self):
         self.reader.current = (("WORKFLOW:w", "v2"),)
-        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
+        with self.assertRaisesRegex(ActionRejected, "ABILITY_NOT_ALLOWED"):
             self.assets.action(self.item, "confirm")
         self.assertEqual([], self.calls)
 

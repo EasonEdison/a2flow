@@ -128,13 +128,9 @@ class ExecuteRequest(google.protobuf.message.Message):
     ASSET_KEY_FIELD_NUMBER: builtins.int
     CONTEXT_FIELD_NUMBER: builtins.int
     ARGUMENTS_JSON_FIELD_NUMBER: builtins.int
-    EXPECTED_SOURCE_ID_FIELD_NUMBER: builtins.int
-    EXPECTED_SOURCE_DIGEST_FIELD_NUMBER: builtins.int
     asset_key: builtins.str
     arguments_json: builtins.bytes
     """Raw UTF-8 JSON, not google.protobuf.Struct: exact integers must not pass through double."""
-    expected_source_id: builtins.str
-    expected_source_digest: builtins.str
     @property
     def context(self) -> Global___ExecutionContext: ...
     def __init__(
@@ -143,11 +139,9 @@ class ExecuteRequest(google.protobuf.message.Message):
         asset_key: builtins.str = ...,
         context: Global___ExecutionContext | None = ...,
         arguments_json: builtins.bytes = ...,
-        expected_source_id: builtins.str = ...,
-        expected_source_digest: builtins.str = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["arguments_json", b"arguments_json", "asset_key", b"asset_key", "context", b"context", "expected_source_digest", b"expected_source_digest", "expected_source_id", b"expected_source_id"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["arguments_json", b"arguments_json", "asset_key", b"asset_key", "context", b"context"]) -> None: ...
 
 Global___ExecuteRequest: typing_extensions.TypeAlias = ExecuteRequest
 

@@ -28,8 +28,8 @@ message ExecuteRequest {
   ExecutionContext context = 2;
   // Raw UTF-8 JSON, not google.protobuf.Struct: exact integers must not pass through double.
   bytes arguments_json = 3;
-  string expected_source_id = 4;
-  string expected_source_digest = 5;
+  reserved 4, 5;
+  reserved "expected_source_id", "expected_source_digest";
 }
 message ExecuteResponse {
   bool success = 1;

@@ -22,18 +22,18 @@ message RuntimeSession {
 // Only the authenticated Python runtime may populate this from persisted card state.
 message TrustedCard {
   optional int64 user_id = 1;
-  ApplicationRelease release = 2;
-  RuntimeSession session = 3;
-  int64 revision = 4;
+  reserved 2, 3, 4;
+  reserved "release", "session", "revision";
   bytes params_json = 5;
   bytes snapshot_json = 6;
+  string app_code = 7;
 }
 message ActivateRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
   string app_code = 2;
   bytes params_json = 3;
-  string expected_source_id = 4;
-  string expected_digest = 5;
+  reserved 4, 5;
+  reserved "expected_source_id", "expected_digest";
 }
 message DescribeRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
@@ -57,9 +57,8 @@ message ActRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
   TrustedCard card = 2;
   string correlation_id = 3;
-  string runtime_session_token = 4;
-  string app_build_id = 5;
-  int64 expected_surface_revision = 6;
+  reserved 4, 5, 6;
+  reserved "runtime_session_token", "app_build_id", "expected_surface_revision";
   string idempotency_key = 7;
   bytes action_message_json = 8;
 }
@@ -95,7 +94,6 @@ message RuntimeResponse {
   repeated ActionDescriptor actions = 6;
   bool complete_interaction = 7;
   string selected_branch_id = 8;
-  // RESET_REQUIRED is emitted before capability invocation when publication changes.
   string error_code = 9;
   CatalogDescriptor catalog = 10;
   RuntimeSession session = 11;

@@ -220,8 +220,6 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
                 self._service.activate(
                     request.app_code,
                     _object(request.params_json),
-                    request.expected_source_id,
-                    request.expected_digest,
                     _context(request.context),
                 )
             ),
@@ -235,16 +233,12 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
             card = request.card
             if (
                 not card.HasField("user_id")
-                or not card.HasField("release")
-                or not card.HasField("session")
+                or not card.app_code
             ):
                 raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
-            release = _release_model(card.release)
             trusted = TrustedCard(
                 card.user_id,
-                release,
-                _session_model(card.session),
-                card.revision,
+                card.app_code,
                 _object(card.params_json),
                 _messages(card.snapshot_json),
             )
@@ -252,9 +246,6 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
                 self._service.act(
                     trusted,
                     request.correlation_id,
-                    request.runtime_session_token,
-                    request.app_build_id,
-                    request.expected_surface_revision,
                     request.idempotency_key,
                     _object(request.action_message_json),
                     _context(request.context),

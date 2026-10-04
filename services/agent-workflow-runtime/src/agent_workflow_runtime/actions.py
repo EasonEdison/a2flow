@@ -43,17 +43,7 @@ class ActionService:
                 ) != interaction:
                     raise ActionRejected("INTERACTION_BINDING_CONFLICT")
                 return
-            self._versions(interaction)
             self.repository.save(interaction)
-
-    def _versions(self, interaction: Interaction) -> None:
-        recorded = interaction.recorded_versions
-        if (
-            not recorded
-            or len(dict(recorded)) != len(recorded)
-            or dict(self.configuration.versions(interaction)) != dict(recorded)
-        ):
-            raise ActionRejected("RESET_REQUIRED")
 
     def _run_active(self, owner, run_id):
         if self.lifecycle is not None:
@@ -80,7 +70,6 @@ class ActionService:
         with self.repository.scope(owner, request.run_id):
             interaction = self._get(request.key, owner)
             self._active(interaction, owner)
-            self._versions(interaction)
             for attempt in interaction.attempts:
                 if attempt.request.control_request_id == request.control_request_id:
                     if attempt.request != request:
@@ -100,13 +89,9 @@ class ActionService:
             config = self.configuration.action(interaction, request.action_name)
             if config.action_name != request.action_name:
                 raise ActionRejected("ACTION_NOT_ALLOWED")
-            if dict(config.effective_versions) != dict(interaction.recorded_versions):
-                raise ActionRejected("RESET_REQUIRED")
             inputs = json.loads(request.inputs_json)
             if config.validate_input(inputs) is not True:
                 raise ActionRejected("INVALID_ACTION_INPUT")
-            # Last current-version check after all configuration/input validation.
-            self._versions(interaction)
             pending = Attempt(request, "EXECUTING")
             gate = (
                 self.lifecycle.admission(owner, request.run_id, request.node_id, "ACTION")
@@ -163,7 +148,6 @@ class ActionService:
             latest = self._get(request.key, owner)
             # Retain late business success even when progression is now prohibited.
             self._active(latest, owner)
-            self._versions(latest)
             self.repository.save(replace(
                 latest, resume_started=True,
                 attempts=tuple(
@@ -174,12 +158,11 @@ class ActionService:
             ))
         # Native Tool execution may use another SDK worker thread. Never hold the
         # admission lock across graph invocation; the replayed Tool rechecks the
-        # saved claim, active state and versions before returning success.
+        # saved claim and active state before returning success.
         with self.repository.continuation_scope(owner, request.run_id):
             try:
                 current = self._get(request.key, owner)
                 self._active(current, owner)
-                self._versions(current)
                 self.repository.check_scope()
                 self._run_active(owner, request.run_id)
                 self.continuation(current, request.control_request_id)

@@ -102,7 +102,6 @@ class ChatCardAction(BaseModel):
     requestId: str = Field(min_length=1, max_length=128)
     actionName: str = Field(min_length=1, max_length=128)
     inputs: dict[str, object]
-    expectedRevision: int = Field(ge=0)
 
 
 class ScheduleCreate(BaseModel):

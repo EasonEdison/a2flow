@@ -58,16 +58,13 @@ class ActionServiceTest(unittest.TestCase):
                 self.service.submit(request(self.item, **{field: "wrong"}), self.owner)
         self.assertEqual([], self.executor.calls)
 
-    def test_full_effective_version_closure_is_checked_before_executor(self):
-        for index in range(len(self.config.current)):
-            current = self.item.recorded_versions
-            self.config.current = tuple(
-                (key, "new-version" if pos == index else version)
-                for pos, (key, version) in enumerate(current)
-            )
-            with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
-                self.service.submit(request(self.item), self.owner)
-        self.assertEqual([], self.executor.calls)
+    def test_changed_effective_versions_do_not_block_current_action(self):
+        self.config.current = tuple(
+            (key, "new-version") for key, _ in self.item.recorded_versions
+        )
+        outcome = self.service.submit(request(self.item), self.owner)
+        self.assertTrue(outcome.business_success)
+        self.assertEqual(1, len(self.executor.calls))
 
     def test_stopped_and_invalidated_wait_rejected_and_history_retained(self):
         self.repo.save(replace(self.item, run_active=False))
@@ -118,14 +115,13 @@ class ActionServiceTest(unittest.TestCase):
         self.assertTrue(self.repo.get(self.item.key).attempts[-1].business_success)
         self.assertEqual([], self.resumes)
 
-    def test_version_change_during_execution_saves_outcome_without_resume(self):
+    def test_version_change_during_execution_does_not_block_resume(self):
         self.executor.hook = lambda: setattr(
             self.config, "current", (("APPLICATION:sample.interactive.route-selection", "new"),),
         )
-        with self.assertRaisesRegex(ActionRejected, "RESET_REQUIRED"):
-            self.service.submit(request(self.item), self.owner)
-        self.assertTrue(self.repo.get(self.item.key).attempts[-1].business_success)
-        self.assertEqual([], self.resumes)
+        outcome = self.service.submit(request(self.item), self.owner)
+        self.assertTrue(outcome.business_success)
+        self.assertEqual(1, len(self.resumes))
 
     def test_executor_exception_is_redacted_and_duplicate_never_reexecutes(self):
         def fail():

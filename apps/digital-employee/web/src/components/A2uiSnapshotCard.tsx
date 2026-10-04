@@ -1,7 +1,7 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { A2uiSurface, MarkdownContext } from '@a2ui/react/v0_9';
 import { renderMarkdown } from '@a2ui/markdown-it';
-import { actionRequest, cardIsOperable, createSnapshotProcessor, persistedSnapshotKey } from '../a2uiSnapshot.mjs';
+import { actionRequest, actionResponsePending, cardIsOperable, createSnapshotProcessor, persistedSnapshotKey } from '../a2uiSnapshot.mjs';
 import { productApi, type ChatCard } from '../productApi';
 import { createUuidV4 } from '../secureUuid.mjs';
 import { registeredCatalogs } from './a2uiCatalogs';
@@ -31,10 +31,17 @@ export function A2uiSnapshotCard({ card, onUpdate }: { card: ChatCard; onUpdate:
   const displayKey = JSON.stringify(card.display);
   const snapshotKey = persistedSnapshotKey(card);
   useEffect(() => {
+    if (!inFlight.current) return;
+    if (!actionResponsePending(card)) {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }, [card.status]);
+  useEffect(() => {
     let disposed = false;
     let next: ReturnType<typeof createSnapshotProcessor> | undefined;
     const subscriptions: Array<{ unsubscribe: () => void }> = [];
-    // A submitted action remains locked until a new persisted revision or display is observed.
+    // A changed persisted display is authoritative and can replace the local processor.
     inFlight.current = false;
     setBusy(false);
     try {
@@ -59,12 +66,16 @@ export function A2uiSnapshotCard({ card, onUpdate }: { card: ChatCard; onUpdate:
           setBusy(true); setError('');
           try {
             const updated = await productApi.chatAction(latest.conversationId, latest, requestId, request.actionName, request.inputs);
-            if (!disposed) current.current.onUpdate(updated);
+            if (!disposed) {
+              current.current.onUpdate(updated);
+              const pending = actionResponsePending(updated);
+              inFlight.current = pending;
+              setBusy(pending);
+            }
           } catch {
             if (!disposed) setError('操作结果未确认，请重新读取卡片状态；不会自动重试。');
           }
-          // Also keep the synchronous guard locked until the fresh persisted snapshot is mounted.
-          // This prevents duplicate POSTs and uncertain-result replay.
+          // Transport failures remain locked because the outcome is unknown.
         }));
       }
       setError(''); setProcessor(next);

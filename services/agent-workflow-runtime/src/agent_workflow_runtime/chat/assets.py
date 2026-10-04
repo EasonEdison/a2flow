@@ -258,24 +258,14 @@ class ChatAssets:
         )
 
     def admit_skill(self, skill_key: str) -> dict[str, Any]:
-        """Load one Skill and atomically replace the active admission."""
+        """Load one Skill and admit its currently effective publication."""
 
-        candidate = self._resolve_skill(skill_key)
         result = use_skill(
             UseSkillRequest(skill_key=skill_key),
             self._registry_context(),
             self._reader,
         ).to_mapping()
-        try:
-            loaded_version = result["artifact"]["resolvedVersion"]["versionId"]
-        except (KeyError, TypeError):
-            raise ActionRejected("INVALID_SKILL_RESOLUTION") from None
-        if loaded_version != candidate.version_id:
-            raise ActionRejected("RESET_REQUIRED")
-        current = self._resolve_skill(skill_key)
-        if current != candidate:
-            raise ActionRejected("RESET_REQUIRED")
-        self._admission = candidate
+        self._admission = self._resolve_skill(skill_key)
         return json_copy(result)
 
     def _require_admission(self) -> _SkillAdmission:
@@ -283,24 +273,16 @@ class ChatAssets:
             raise ActionRejected("SKILL_NOT_ADMITTED")
         return self._admission
 
-    def check_versions(self, expected_versions: Any = None) -> tuple[tuple[str, str], ...]:
-        """Compare the current closure with admitted or persisted versions."""
+    def refresh_admission(self) -> _SkillAdmission:
+        """Replace turn-local admission with the currently effective Skill."""
 
         admitted = self._require_admission()
-        expected = (
-            admitted.recorded_versions
-            if expected_versions is None
-            else _versions(expected_versions)
-        )
-        if expected != admitted.recorded_versions:
-            raise ActionRejected("RESET_REQUIRED")
-        current = self._resolve_skill(admitted.skill_key).recorded_versions
-        if current != expected:
-            raise ActionRejected("RESET_REQUIRED")
+        current = self._resolve_skill(admitted.skill_key)
+        self._admission = current
         return current
 
     def _ability(self, ability_key, *, model_call):
-        admitted = self._require_admission()
+        admitted = self.refresh_admission()
         if model_call and (
             "execute_ability" not in admitted.required_tools
             or ability_key not in admitted.ability_keys
@@ -309,10 +291,6 @@ class ChatAssets:
         ability = self._reader.resolve_ability(ability_key, self._owner)
         if ability.publication_metadata.ability_key != ability_key:
             raise ActionRejected("ABILITY_BINDING_MISMATCH")
-        if dict(admitted.recorded_versions).get(
-            "ABILITY:" + ability.asset_id
-        ) != ability.version_id:
-            raise ActionRejected("ABILITY_NOT_ALLOWED")
         spec = self._operations.get(ability.operation_ref)
         validate_ability_definition(ability, spec)
         return ability, spec
@@ -320,7 +298,6 @@ class ChatAssets:
     def execute_ability(self, ability_key, arguments):
         """Execute one model-callable Ability bound by the active Skill."""
 
-        self.check_versions()
         ability, spec = self._ability(ability_key, model_call=True)
         return execute_resolved_ability(
             ability,
@@ -328,11 +305,10 @@ class ChatAssets:
             arguments,
             self._owner,
             authorization=MODEL_AUTHORIZATION,
-            before_dispatch=self.check_versions,
         )
 
     def _application(self, application_key):
-        admitted = self._require_admission()
+        admitted = self.refresh_admission()
         if (
             "render_application" not in admitted.required_tools
             or application_key not in admitted.application_keys
@@ -345,19 +321,14 @@ class ChatAssets:
             or application.get("asset", {}).get("applicationKey") != application_key
         ):
             raise ActionRejected("APPLICATION_BINDING_MISMATCH")
-        recorded = _versions(resolved.get("recordedVersions"))
-        admitted_versions = dict(admitted.recorded_versions)
-        if any(admitted_versions.get(key) != version for key, version in recorded):
-            raise ActionRejected("RESET_REQUIRED")
         version = resolved.get("resolvedVersion", {}).get("versionId")
         asset_id = resolved.get("resolvedVersion", {}).get("asset", {}).get("assetId")
         if (
             type(version) is not str
             or not version
             or type(asset_id) is not str
-            or admitted_versions.get("APPLICATION:" + asset_id) != version
         ):
-            raise ActionRejected("RESET_REQUIRED")
+            raise ActionRejected("APPLICATION_BINDING_MISMATCH")
         return resolved
 
     def _application_contract(self, application_key: str) -> ApplicationContract:
@@ -398,10 +369,9 @@ class ChatAssets:
             or len(application_codes) != len(set(application_codes))
         ):
             raise ActionRejected("ARGUMENT_INVALID")
-        admitted = self._require_admission()
+        admitted = self.refresh_admission()
         if "render_application" not in admitted.required_tools:
             raise ActionRejected("APPLICATION_NOT_ALLOWED")
-        self.check_versions()
         applications = []
         for app_code in application_codes:
             if app_code not in admitted.application_keys:
@@ -419,13 +389,11 @@ class ChatAssets:
             ):
                 raise ActionRejected("APPLICATION_CONTRACT_INVALID")
             applications.append(json_copy(contract))
-        self.check_versions()
         return {"applications": applications}
 
     def action_binding(self, application_key, action_name):
         """Resolve one server-owned Action policy for Chat Action ingress."""
 
-        self.check_versions()
         resolved = self._application(application_key)
         policies = resolved["application"].get("actionPolicies")
         if type(policies) is not list:
@@ -441,17 +409,11 @@ class ChatAssets:
         release = policy.get("abilityReleaseRef")
         if type(release) is not str:
             raise ActionRejected("INVALID_ABILITY_RELEASE")
-        ability_key, separator, version = release.rpartition("@")
-        if not separator or not ability_key or not version:
+        ability_key, separator, _version = release.rpartition("@")
+        if not separator or not ability_key or not _version:
             raise ActionRejected("INVALID_ABILITY_RELEASE")
         ability, spec = self._ability(ability_key, model_call=False)
-        application_versions = dict(_versions(resolved["recordedVersions"]))
-        if (
-            application_versions.get("ABILITY:" + ability.asset_id)
-            != ability.version_id
-            or ability.version_id != version
-            or not spec.action_allowed
-        ):
+        if not spec.action_allowed:
             raise ActionRejected("ACTION_NOT_ALLOWED")
         return resolved, json_copy(policy), ability, spec
 
@@ -487,8 +449,7 @@ class ChatAssets:
 
         if type(tool_call_id) is not str or not tool_call_id:
             raise ActionRejected("TOOL_CALL_ID_REQUIRED")
-        admitted = self._require_admission()
-        self.check_versions()
+        admitted = self.refresh_admission()
         resolved = self._application(application_key)
         actions, bindings = self._card_actions(application_key, resolved)
         prepared = self._applications.prepare(
@@ -506,7 +467,6 @@ class ChatAssets:
             "controlRequestId": self._control_request_id,
             "toolCallId": tool_call_id,
             "skillKey": admitted.skill_key,
-            "recordedVersions": [list(item) for item in admitted.recorded_versions],
             "applicationKey": application_key,
             "applicationVersion": prepared.application_version,
             "actionBindings": bindings,
@@ -514,9 +474,6 @@ class ChatAssets:
         with self._render_lock:
             if self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
-            # This is the immediate version guard for the external persistence
-            # boundary.  No model-selected identity or destination reaches it.
-            self.check_versions()
             saved = json_copy(self._card_sink(prepared, json_copy(metadata)))
             if (
                 type(saved) is not dict

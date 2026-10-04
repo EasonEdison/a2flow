@@ -20,7 +20,7 @@
 
 协议：`proto/a2flow/capability/v1/capability.proto`。`asset_key` 是能力 draftId，不是 actionCode。Resolve 通过原 `CapabilityActionToolProvider → EnvironmentAwareAssetResolver → AssetReleaseStateRepository` 读取 PostgreSQL 发布指针及不可变快照，不读取最新草稿。
 
-Resolve 返回 sourceId/sourceDigest；Execute 必须带相同 expectedSourceId/expectedSourceDigest，服务端重新解析并比较，漂移返回 FAILED_PRECONDITION，不发起业务调用。PRT 与 ONLINE 严格隔离，即使旧共享 resolver 找到另一环境也拒绝执行。
+Resolve 返回当前 sourceId/sourceDigest；Execute 按可信 userId/environment 重新解析并执行当前有效发布。PRT 与 ONLINE 严格隔离，即使旧共享 resolver 找到另一环境也拒绝执行。
 
 ExecutionContext 的 userId 是有 presence 的 signed int64，允许完整范围，缺失拒绝；environment 仅 PRT/ONLINE；requestId 和 client 显式必填。模型业务 JSON 使用 bytes UTF-8 保留整数精度，不使用 protobuf Struct 的 double。COMMON 仅作者验证允许，运行态第一段只接受 PC/APP。
 

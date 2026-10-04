@@ -149,13 +149,6 @@ class CapabilityRpcService(rpc.CapabilityExecutionServicer):
             arguments = parse_object(request.arguments_json.decode("utf-8"))
             compiled = self._compile(request.asset_key, owner)
             plan = compiled.plan
-            if (
-                not request.expected_source_id
-                or not request.expected_source_digest
-                or request.expected_source_id != plan.source_id
-                or request.expected_source_digest != plan.source_digest
-            ):
-                raise ReleaseError("SOURCE_VERSION_CHANGED")
             if not context.is_active():
                 raise RequestCancelled
             result = self._executor.execute(plan, arguments, owner)

@@ -24,7 +24,6 @@ import {
 const errorText = (error: unknown) => {
   if (error instanceof ApiError) {
     const messages: Record<string, string> = {
-      RESET_REQUIRED: '配置已变化，请显式停止后重新开始。',
       RUN_STOPPED: '此运行已停止，卡片只读。',
       TRUSTED_CONTEXT_REQUIRED: '请通过受认证入口打开页面。',
       CAPACITY_EXHAUSTED: '执行容量已满，请稍后查看请求状态。',

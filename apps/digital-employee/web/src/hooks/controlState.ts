@@ -8,7 +8,6 @@ export type PendingControl = {
 };
 
 const definitivelyRejected = new Set([
-  'RESET_REQUIRED',
   'RUN_STOPPED',
   'TRUSTED_CONTEXT_REQUIRED',
   'CAPACITY_EXHAUSTED',

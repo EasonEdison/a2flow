@@ -23,11 +23,15 @@ class ChatCardsApiTests(unittest.TestCase):
             conversation = response.json()["id"]
             path = f"/api/conversations/{conversation}/cards"
             self.assertEqual({"cards": [{"cardId": "card-1"}]}, (await client.get(path)).json())
-            payload = {"requestId": "r-1", "actionName": "select", "inputs": {"optionId": "a"}, "expectedRevision": 0}
+            payload = {"requestId": "r-1", "actionName": "select", "inputs": {"optionId": "a"}}
             action_path = path + "/card-1/actions"
             self.assertEqual(403, (await client.post(action_path, json=payload)).status_code)
             forged = {**payload, "userId": "999"}
             self.assertEqual(400, (await client.post(action_path, headers=ORIGIN_HEADERS, json=forged)).status_code)
+            stale_contract = {**payload, "expectedRevision": 0}
+            self.assertEqual(400, (await client.post(
+                action_path, headers=ORIGIN_HEADERS, json=stale_contract,
+            )).status_code)
             self.assertEqual(200, (await client.post(action_path, headers=ORIGIN_HEADERS, json=payload)).status_code)
             self.assertEqual(1, calls[0][0])
             self.assertEqual(str(conversation), calls[0][1])

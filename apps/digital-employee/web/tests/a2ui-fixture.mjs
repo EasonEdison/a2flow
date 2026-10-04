@@ -1,7 +1,7 @@
 export const catalogId = 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json';
 export function fixtureCard(status = 'DISPLAY_ONLY') {
   return {
-    cardId: 'rpc-card', conversationId: 'c1', revision: 1, status,
+    cardId: 'rpc-card', conversationId: 'c1', status,
     display: {
       applicationKey: 'rpc-form', applicationVersion: 1, protocolProfile: 'a2flow.java-rpc.v1',
       catalog: { protocolVersion: 'v0.9.1', catalogId, catalogRevision: '1', catalogDigest: 'fixture-only' },
