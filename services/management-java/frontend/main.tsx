@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { Alert, Spin } from 'antd';
 import 'antd/dist/antd.css';
@@ -20,7 +20,10 @@ const CapabilityEditor = lazy(() => import('./CapabilityActionAuthoringPage'));
 const Workflows = lazy(() => import('./workflow/WorkflowListPage'));
 const WorkflowEditor = lazy(() => import('./workflow/WorkflowOrchestrationPage'));
 
-ReactDOM.render(
+const rootElement = document.getElementById('root');
+if (!rootElement) throw new Error('缺少管理台 root 挂载节点');
+
+createRoot(rootElement).render(
   <BrowserRouter>
     <nav className="management-navigation" aria-label="管理台导航">
       <strong>A2Flow</strong><Link to="/management">Skill</Link><Link to="/management/capabilities">能力</Link><Link to="/management/components">A2UI / 组件</Link><Link to="/management/workflows">Workflow</Link>
@@ -50,5 +53,5 @@ ReactDOM.render(
         <Route path="*" element={<Alert type="error" message="页面不存在" />} />
       </Routes>
     </Suspense></main>
-  </BrowserRouter>, document.getElementById('root'),
+  </BrowserRouter>,
 );

@@ -59,7 +59,10 @@ interface Props {
   onError?: (error: Error) => void;
 }
 
-class RenderBoundary extends React.Component<Pick<Props, 'onError' | 'errorFallback'>, { error?: Error }> {
+class RenderBoundary extends React.Component<
+  React.PropsWithChildren<Pick<Props, 'onError' | 'errorFallback'>>,
+  { error?: Error }
+> {
   state: { error?: Error } = {};
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error) { this.props.onError?.(error); }

@@ -26,8 +26,9 @@ import {
 } from '@ant-design/icons';
 import { jsonParse, jsonStringify } from './shared/safeJson';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { assetReleaseApi, componentCenterApi } from './api';
+import { a2uiCatalogComponentApi, assetReleaseApi, componentCenterApi } from './api';
 import AssetReleaseTab from './shared/AssetReleaseTab';
+import A2uiAtomPreview from './A2uiAtomPreview';
 import DynamicCardContainerPreview from './shared/DynamicCardContainerPreview';
 import { useAssetAccess } from './shared/AssetAccessContext';
 import JsonFormatTextArea from './shared/JsonFormatTextArea';
@@ -40,6 +41,12 @@ import type {
   SkillFactoryComponentAsset,
 } from './types';
 import { DSL_TYPE_BUSINESS_DSL, DSL_TYPE_CARD_CONTAINER } from './cardContainerTemplate';
+import type { A2uiCatalogComponentRecord } from './a2uiCatalogContracts';
+import {
+  parseA2uiAtomPreviewDocument,
+  resolveA2uiAtomPreviewSource,
+  type A2uiAtomPreviewSource,
+} from './a2uiAtomPreviewModel';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -219,6 +226,12 @@ const ComponentAssetDetailPage: React.FC = () => {
   const [changeModalOpen, setChangeModalOpen] = useState(false);
   const [changeName, setChangeName] = useState('');
   const [customPreviewJson, setCustomPreviewJson] = useState('');
+  const [renderedAtomJson, setRenderedAtomJson] = useState('');
+  const [atomComponent, setAtomComponent] = useState<A2uiCatalogComponentRecord>();
+  const [atomPreviewSource, setAtomPreviewSource] = useState<A2uiAtomPreviewSource>();
+  const [atomContractLoading, setAtomContractLoading] = useState(false);
+  const [atomContractError, setAtomContractError] = useState('');
+  const [localAtomPreviewError, setLocalAtomPreviewError] = useState('');
   const [previewClientType, setPreviewClientType] = useState<'PC' | 'APP'>('PC');
   const [previewResult, setPreviewResult] = useState<ComponentRenderPreviewResult>();
   const [error, setError] = useState('');
@@ -264,9 +277,18 @@ const ComponentAssetDetailPage: React.FC = () => {
       setAsset(detail);
       setCustomPreviewJson(
         formatJsonText(
-          isCardContainerAsset(detail) ? detail.messageDemoJson : detail.officialDemoJson,
+          isCardContainerAsset(detail)
+            ? detail.messageDemoJson
+            : detail.assetType === 'A2UI_ATOM'
+            ? ''
+            : detail.officialDemoJson,
         ),
       );
+      setRenderedAtomJson('');
+      setAtomComponent(undefined);
+      setAtomPreviewSource(undefined);
+      setAtomContractError('');
+      setLocalAtomPreviewError('');
       setPreviewResult(undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : '组件详情加载失败');
@@ -279,6 +301,60 @@ const ComponentAssetDetailPage: React.FC = () => {
   useEffect(() => {
     loadAsset();
   }, [loadAsset]);
+
+  useEffect(() => {
+    if (!asset || asset.assetType !== 'A2UI_ATOM') return;
+    let disposed = false;
+    setAtomContractLoading(true);
+    setAtomContractError('');
+    setAtomComponent(undefined);
+    setAtomPreviewSource(undefined);
+    setRenderedAtomJson('');
+    setLocalAtomPreviewError('');
+    a2uiCatalogComponentApi.list({ keyword: asset.componentName })
+      .then((components) => {
+        if (disposed) return;
+        const component = components.find(
+          (item) => item.componentCode === asset.componentName || item.type === asset.componentName,
+        );
+        if (!component) {
+          setCustomPreviewJson('');
+          setAtomContractError(`Catalog 中未找到 ${asset.componentName} 的注册记录，已停止预览。`);
+          return;
+        }
+        const source = resolveA2uiAtomPreviewSource(component);
+        setAtomComponent(component);
+        setAtomPreviewSource(source);
+        const nextJson = source.document ? jsonStringify(source.document, null, 2) || '' : '';
+        setCustomPreviewJson(nextJson);
+        setRenderedAtomJson(nextJson);
+      })
+      .catch((reason) => {
+        if (disposed) return;
+        setCustomPreviewJson('');
+        setAtomContractError(
+          reason instanceof Error ? reason.message : 'Catalog 注册记录加载失败，已停止预览。',
+        );
+      })
+      .finally(() => {
+        if (!disposed) setAtomContractLoading(false);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [asset]);
+
+  const handleLocalAtomPreview = () => {
+    try {
+      parseA2uiAtomPreviewDocument(customPreviewJson);
+      setRenderedAtomJson(customPreviewJson);
+      setLocalAtomPreviewError('');
+      message.success('本地 A2UI 预览已更新');
+    } catch (reason) {
+      setRenderedAtomJson('');
+      setLocalAtomPreviewError(reason instanceof Error ? reason.message : '预览 JSON 无效');
+    }
+  };
 
   const openEditDrawer = () => {
     if (!asset) return;
@@ -359,7 +435,11 @@ const ComponentAssetDetailPage: React.FC = () => {
       setAsset(saved);
       setCustomPreviewJson(
         formatJsonText(
-          isCardContainerAsset(saved) ? saved.messageDemoJson : saved.officialDemoJson,
+          isCardContainerAsset(saved)
+            ? saved.messageDemoJson
+            : saved.assetType === 'A2UI_ATOM'
+            ? ''
+            : saved.officialDemoJson,
         ),
       );
       setPreviewResult(undefined);
@@ -720,6 +800,75 @@ const ComponentAssetDetailPage: React.FC = () => {
                     </div>
                   </Card>
                 </div>
+              ) : asset.assetType === 'A2UI_ATOM' ? (
+                <Spin spinning={atomContractLoading}>
+                  {atomContractError ? (
+                    <Alert type="error" showIcon message={atomContractError} style={{ marginBottom: 12 }} />
+                  ) : null}
+                  {asset.officialDemoJson?.trim() ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message="该资产仍保存 legacy officialDemoJson；当前预览以 Catalog 注册合同为准，未将其冒充为 Google 官方示例。"
+                      style={{ marginBottom: 12 }}
+                    />
+                  ) : null}
+                  {atomPreviewSource ? (
+                    <Alert
+                      type={atomPreviewSource.kind === 'UNAVAILABLE' ? 'warning' : 'info'}
+                      showIcon
+                      message={atomPreviewSource.label}
+                      description={atomPreviewSource.description}
+                      style={{ marginBottom: 12 }}
+                    />
+                  ) : null}
+                  <div className="component-center-preview-grid">
+                    <Card title="Catalog 示例数据">
+                      <Text type="secondary">
+                        {atomComponent
+                          ? `${atomComponent.componentCode} · ${atomComponent.componentOriginType}`
+                          : '等待 Catalog 注册记录'}
+                      </Text>
+                      <JsonFormatTextArea
+                        value={customPreviewJson}
+                        onChange={(event) => setCustomPreviewJson(event.target.value)}
+                        onValueChange={setCustomPreviewJson}
+                        autoSize={{ minRows: 12, maxRows: 22 }}
+                        disabled={!atomPreviewSource?.document}
+                      />
+                    </Card>
+                    <Card
+                      title="官方 A2UI Renderer 本地预览"
+                      extra={
+                        <Button
+                          type="primary"
+                          icon={<EyeOutlined />}
+                          disabled={!atomPreviewSource?.document}
+                          onClick={handleLocalAtomPreview}
+                        >
+                          运行预览
+                        </Button>
+                      }
+                    >
+                      {localAtomPreviewError ? (
+                        <Alert
+                          type="error"
+                          showIcon
+                          message={localAtomPreviewError}
+                          style={{ marginBottom: 12 }}
+                        />
+                      ) : null}
+                      {renderedAtomJson && atomComponent ? (
+                        <A2uiAtomPreview
+                          componentType={atomComponent.type}
+                          json={renderedAtomJson}
+                        />
+                      ) : (
+                        <Empty description="没有通过校验的预览数据" />
+                      )}
+                    </Card>
+                  </div>
+                </Spin>
               ) : (
                 <>
                   <div className="component-center-preview-grid">
