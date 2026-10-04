@@ -122,7 +122,8 @@ message SaveSourceRequest {
   string title = 3;
   string body = 4;
   string source_url = 5;
-  optional uint32 expected_project_revision = 6;
+  reserved 6;
+  reserved "expected_project_revision";
 }
 message GetSourceRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
@@ -151,7 +152,8 @@ message ConfirmReadingRequest {
   string artifact_id = 3;
   repeated string selected_point_ids = 4;
   string user_notes = 5;
-  optional uint32 expected_project_revision = 6;
+  reserved 6;
+  reserved "expected_project_revision";
 }
 message ConfirmTopicRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
@@ -160,13 +162,15 @@ message ConfirmTopicRequest {
   string topic_id = 4;
   string edited_title = 5;
   string edited_angle = 6;
-  optional uint32 expected_project_revision = 7;
+  reserved 7;
+  reserved "expected_project_revision";
 }
 message ConfirmManuscriptRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
   string project_id = 2;
   string artifact_id = 3;
-  optional uint32 expected_project_revision = 4;
+  reserved 4;
+  reserved "expected_project_revision";
 }
 message ExportManuscriptRequest {
   a2flow.capability.v1.ExecutionContext context = 1;

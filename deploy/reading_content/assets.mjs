@@ -65,10 +65,10 @@ export const capabilitySpecs = [
   },
   {
     actionCode: 'content.source.save', methodName: 'SaveSource', nameCn: '保存阅读原文', sideEffect: 'WRITE',
-    description: '保存阅读原文并以期望项目修订号做并发保护。',
+    description: '为当前可信用户保存一个新的阅读原文版本。',
     fields: [field('projectId', 'string', '项目 ID'), field('title', 'string', '原文标题'), field('body', 'string', '原文正文'),
-      field('sourceUrl', 'string', '可选原文地址', false), field('expectedProjectRevision', 'integer', '期望项目修订号')],
-    mappings: { projectId: 'projectId', title: 'title', body: 'body', sourceUrl: 'sourceUrl', expectedProjectRevision: 'expectedProjectRevision' },
+      field('sourceUrl', 'string', '可选原文地址', false)],
+    mappings: { projectId: 'projectId', title: 'title', body: 'body', sourceUrl: 'sourceUrl' },
     outputs: [['id', '原文 ID', 'string'], ['revision', '原文修订号', 'integer'], ['digest', '原文摘要', 'string']],
   },
   {
@@ -116,11 +116,11 @@ export const capabilitySpecs = [
   },
   {
     actionCode: 'content.reading.confirm', methodName: 'ConfirmReading', nameCn: '确认阅读要点', sideEffect: 'WRITE',
-    description: '确认至少一个阅读要点；服务端拒绝空选、重复项、未知项和陈旧项目修订号。',
+    description: '确认至少一个阅读要点；服务端拒绝空选、重复项和未知项。',
     fields: [field('projectId', 'string', '项目 ID'), field('artifactId', 'string', '阅读要点产物 ID'),
       field('selectedPointIds', 'array', '用户选中的要点 ID', true, { items: stringItem }),
-      field('userNotes', 'string', '用户补充输入', false), field('expectedProjectRevision', 'integer', '期望项目修订号')],
-    mappings: { projectId: 'projectId', artifactId: 'artifactId', selectedPointIds: 'selectedPointIds', userNotes: 'userNotes', expectedProjectRevision: 'expectedProjectRevision' },
+      field('userNotes', 'string', '用户补充输入', false)],
+    mappings: { projectId: 'projectId', artifactId: 'artifactId', selectedPointIds: 'selectedPointIds', userNotes: 'userNotes' },
     outputs: [['id', '确认记录 ID', 'string'], ['decisionType', '确认类型', 'string'], ['selectedPointIds', '已确认要点 ID', 'array']],
   },
   {
@@ -128,15 +128,15 @@ export const capabilitySpecs = [
     description: '确认一个选题并保存用户编辑后的标题与角度。',
     fields: [field('projectId', 'string', '项目 ID'), field('artifactId', 'string', '选题方案产物 ID'),
       field('topicId', 'string', '选题 ID'), field('editedTitle', 'string', '用户确认后的标题'),
-      field('editedAngle', 'string', '用户确认后的角度'), field('expectedProjectRevision', 'integer', '期望项目修订号')],
-    mappings: { projectId: 'projectId', artifactId: 'artifactId', topicId: 'topicId', editedTitle: 'editedTitle', editedAngle: 'editedAngle', expectedProjectRevision: 'expectedProjectRevision' },
+      field('editedAngle', 'string', '用户确认后的角度')],
+    mappings: { projectId: 'projectId', artifactId: 'artifactId', topicId: 'topicId', editedTitle: 'editedTitle', editedAngle: 'editedAngle' },
     outputs: [['id', '确认记录 ID', 'string'], ['decisionType', '确认类型', 'string'], ['topicId', '已确认选题 ID', 'string']],
   },
   {
     actionCode: 'content.manuscript.confirm', methodName: 'ConfirmManuscript', nameCn: '确认最终稿件', sideEffect: 'WRITE',
-    description: '确认一个已保存稿件；服务端拒绝陈旧项目修订号。',
-    fields: [field('projectId', 'string', '项目 ID'), field('artifactId', 'string', '已保存稿件产物 ID'), field('expectedProjectRevision', 'integer', '期望项目修订号')],
-    mappings: { projectId: 'projectId', artifactId: 'artifactId', expectedProjectRevision: 'expectedProjectRevision' },
+    description: '确认一个属于当前可信用户的已保存稿件。',
+    fields: [field('projectId', 'string', '项目 ID'), field('artifactId', 'string', '已保存稿件产物 ID')],
+    mappings: { projectId: 'projectId', artifactId: 'artifactId' },
     outputs: [['id', '确认记录 ID', 'string'], ['decisionType', '确认类型', 'string'], ['artifactId', '最终稿件产物 ID', 'string']],
   },
   {
@@ -245,12 +245,12 @@ const actionBinding = ({ bindingId, componentId, actionName, capability, schema,
 
 export function buildApplications() {
   const readingProperties = {
-    prompt: stringItem, projectId: stringItem, artifactId: stringItem, projectRevision: integerItem,
+    prompt: stringItem, projectId: stringItem, artifactId: stringItem,
     points: { type: 'array', items: readingPointItem },
     options: { type: 'array', items: { type: 'object', properties: { label: stringItem, value: stringItem }, required: ['label', 'value'] } },
   };
   const readingKeys = Object.keys(readingProperties);
-  const readingContext = contextSchema({ projectId: stringItem, artifactId: stringItem, selectedPointIds: { type: 'array', items: stringItem }, userNotes: stringItem, expectedProjectRevision: integerItem });
+  const readingContext = contextSchema({ projectId: stringItem, artifactId: stringItem, selectedPointIds: { type: 'array', items: stringItem }, userNotes: stringItem });
   const reading = {
     appCode: 'reading-point-selector', nameCn: '阅读要点选择', description: '展示原文证据并由用户多选确认阅读要点。', interactionMode: 'INTERACTIVE', catalogId: CATALOG_ID,
     showTemplate: { templateCode: 'reading_point_selector_show', paramsSchema: appSchema(readingProperties), surfaceDeclarations: [{ surfaceId: 'main', rootComponentId: 'root' }], messageTemplates: [
@@ -267,7 +267,7 @@ export function buildApplications() {
         { id: 'selection', component: 'ChoicePicker', label: '选择要保留的阅读要点', variant: 'multipleSelection', displayStyle: 'checkbox', options: [], value: ref('/selectedPointIds'), checks: [{ condition: fn('length', { value: ref('/selectedPointIds'), min: 1 }), message: '至少选择一个阅读要点' }] },
         { id: 'notes', component: 'TextField', label: '补充你的理解（可选）', value: ref('/userNotes'), variant: 'longText' },
         { id: 'status', component: 'Text', text: ref('/status'), variant: 'caption' },
-        { id: 'confirm', component: 'Button', child: 'confirmText', variant: 'primary', checks: [{ condition: fn('length', { value: ref('/selectedPointIds'), min: 1 }), message: '至少选择一个阅读要点' }], action: { event: { name: 'confirmReading', context: { ...binding('projectId'), ...binding('artifactId'), ...binding('selectedPointIds'), ...binding('userNotes'), expectedProjectRevision: ref('/projectRevision') } } } },
+        { id: 'confirm', component: 'Button', child: 'confirmText', variant: 'primary', checks: [{ condition: fn('length', { value: ref('/selectedPointIds'), min: 1 }), message: '至少选择一个阅读要点' }], action: { event: { name: 'confirmReading', context: { ...binding('projectId'), ...binding('artifactId'), ...binding('selectedPointIds'), ...binding('userNotes') } } } },
         { id: 'confirmText', component: 'Text', text: '确认阅读要点' },
       ] } },
       { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value: {
@@ -278,7 +278,7 @@ export function buildApplications() {
       targetMessageIndex: 1, targetPath: '/updateComponents/components/8/options',
       source: 'APP_PARAMS', sourcePath: '/options', required: true,
     }] }, loadBindings: [],
-    actionBindings: [actionBinding({ bindingId: 'confirm_reading', componentId: 'confirm', actionName: 'confirmReading', capability: 'content.reading.confirm', schema: readingContext, keys: ['projectId', 'artifactId', 'selectedPointIds', 'userNotes', 'expectedProjectRevision'], complete: true, decisionType: 'READING', adapters: adapter('reading_confirmed', {
+    actionBindings: [actionBinding({ bindingId: 'confirm_reading', componentId: 'confirm', actionName: 'confirmReading', capability: 'content.reading.confirm', schema: readingContext, keys: ['projectId', 'artifactId', 'selectedPointIds', 'userNotes'], complete: true, decisionType: 'READING', adapters: adapter('reading_confirmed', {
       confirmationId: '', selectedPointIds: [], userNotes: '', status: '阅读要点已确认',
     }, [
       { targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true },
@@ -288,11 +288,11 @@ export function buildApplications() {
   };
 
   const topicProperties = {
-    prompt: stringItem, projectId: stringItem, artifactId: stringItem, projectRevision: integerItem,
+    prompt: stringItem, projectId: stringItem, artifactId: stringItem,
     topics: { type: 'array', items: topicItem },
   };
   const topicKeys = Object.keys(topicProperties);
-  const topicContext = contextSchema({ projectId: stringItem, artifactId: stringItem, topicId: stringItem, editedTitle: stringItem, editedAngle: stringItem, expectedProjectRevision: integerItem });
+  const topicContext = contextSchema({ projectId: stringItem, artifactId: stringItem, topicId: stringItem, editedTitle: stringItem, editedAngle: stringItem });
   const topic = {
     appCode: 'content-topic-selector', nameCn: '创作选题确认', description: '逐项展示选题，允许编辑标题和角度后确认一个方案。', interactionMode: 'INTERACTIVE', catalogId: CATALOG_ID,
     showTemplate: { templateCode: 'content_topic_selector_show', paramsSchema: appSchema(topicProperties), surfaceDeclarations: [{ surfaceId: 'main', rootComponentId: 'root' }], messageTemplates: [
@@ -307,7 +307,7 @@ export function buildApplications() {
         { id: 'topicAngle', component: 'TextField', label: '角度', value: ref('angle'), variant: 'longText' },
         { id: 'topicAudience', component: 'Text', text: ref('audience'), variant: 'caption' },
         { id: 'topicRationale', component: 'Text', text: ref('rationale') },
-        { id: 'confirmTopic', component: 'Button', child: 'confirmTopicText', variant: 'primary', action: { event: { name: 'confirmTopic', context: { projectId: ref('/projectId'), artifactId: ref('/artifactId'), topicId: ref('id'), editedTitle: ref('title'), editedAngle: ref('angle'), expectedProjectRevision: ref('/projectRevision') } } } },
+        { id: 'confirmTopic', component: 'Button', child: 'confirmTopicText', variant: 'primary', action: { event: { name: 'confirmTopic', context: { projectId: ref('/projectId'), artifactId: ref('/artifactId'), topicId: ref('id'), editedTitle: ref('title'), editedAngle: ref('angle') } } } },
         { id: 'confirmTopicText', component: 'Text', text: '确认这个选题' },
         { id: 'status', component: 'Text', text: ref('/status'), variant: 'caption' },
       ] } },
@@ -316,7 +316,7 @@ export function buildApplications() {
         confirmationId: '', status: '',
       } } },
     ], inputBindings: appInputBindings(topicKeys) }, loadBindings: [],
-    actionBindings: [actionBinding({ bindingId: 'confirm_topic', componentId: 'confirmTopic', actionName: 'confirmTopic', capability: 'content.topic.confirm', schema: topicContext, keys: ['projectId', 'artifactId', 'topicId', 'editedTitle', 'editedAngle', 'expectedProjectRevision'], complete: true, decisionType: 'TOPIC', adapters: adapter('topic_confirmed', {
+    actionBindings: [actionBinding({ bindingId: 'confirm_topic', componentId: 'confirmTopic', actionName: 'confirmTopic', capability: 'content.topic.confirm', schema: topicContext, keys: ['projectId', 'artifactId', 'topicId', 'editedTitle', 'editedAngle'], complete: true, decisionType: 'TOPIC', adapters: adapter('topic_confirmed', {
       confirmationId: '',
       topics: [{ id: '', title: '', angle: '', audience: '', rationale: '', sourcePointIds: [] }],
       status: '创作选题已确认',
@@ -329,13 +329,13 @@ export function buildApplications() {
   };
 
   const manuscriptProperties = {
-    projectId: stringItem, projectRevision: integerItem, draftTitle: stringItem, draftMarkdown: stringItem,
+    projectId: stringItem, draftTitle: stringItem, draftMarkdown: stringItem,
     savedTitle: stringItem, savedMarkdown: stringItem, savedArtifactId: stringItem, savedArtifactRevision: integerItem,
     inputRefs: { type: 'array', items: referenceItem }, citations: { type: 'array', items: citationItem },
   };
   const manuscriptKeys = Object.keys(manuscriptProperties);
   const saveContext = contextSchema({ projectId: stringItem, kind: stringItem, manuscriptTitle: stringItem, manuscriptMarkdown: stringItem, citations: { type: 'array', items: citationItem }, inputRefs: { type: 'array', items: referenceItem }, origin: stringItem });
-  const confirmContext = contextSchema({ projectId: stringItem, artifactId: stringItem, expectedProjectRevision: integerItem });
+  const confirmContext = contextSchema({ projectId: stringItem, artifactId: stringItem });
   const exportContext = contextSchema({ artifactId: stringItem, artifactRevision: integerItem, format: stringItem });
   const downloadChecks = [...savedChecks,
     equalsCheck('/export/artifactId', '/savedArtifactId', '导出内容不是当前已保存稿件'),
@@ -358,12 +358,12 @@ export function buildApplications() {
         { id: 'saveText', component: 'Text', text: '保存稿件' },
         { id: 'exportButton', component: 'Button', child: 'exportText', checks: savedChecks, action: { event: { name: 'exportManuscript', context: { artifactId: ref('/savedArtifactId'), artifactRevision: ref('/savedArtifactRevision'), format: 'MARKDOWN' } } } },
         { id: 'exportText', component: 'Text', text: '生成下载内容' },
-        { id: 'confirm', component: 'Button', child: 'confirmText', checks: savedChecks, action: { event: { name: 'confirmManuscript', context: { projectId: ref('/projectId'), artifactId: ref('/savedArtifactId'), expectedProjectRevision: ref('/projectRevision') } } } },
+        { id: 'confirm', component: 'Button', child: 'confirmText', checks: savedChecks, action: { event: { name: 'confirmManuscript', context: { projectId: ref('/projectId'), artifactId: ref('/savedArtifactId') } } } },
         { id: 'confirmText', component: 'Text', text: '确认最终稿' },
         { id: 'download', component: 'TextDownload', label: '下载当前已保存稿件', filename: ref('/export/filename'), mediaType: ref('/export/mediaType'), content: ref('/export/content'), checks: downloadChecks },
       ] } },
       { version: PROTOCOL_VERSION, updateDataModel: { surfaceId: 'main', path: '/', value: {
-        projectId: '', projectRevision: 0, draftTitle: '', draftMarkdown: '', savedTitle: '', savedMarkdown: '', savedArtifactId: '', savedArtifactRevision: 0,
+        projectId: '', draftTitle: '', draftMarkdown: '', savedTitle: '', savedMarkdown: '', savedArtifactId: '', savedArtifactRevision: 0,
         inputRefs: [], citations: [], status: '', confirmationId: '', export: { artifactId: '', artifactRevision: 0, filename: '', mediaType: '', content: '' },
       } } },
     ], inputBindings: appInputBindings(manuscriptKeys) }, loadBindings: [],
@@ -386,7 +386,7 @@ export function buildApplications() {
         { targetPath: '/updateDataModel/value/export/mediaType', source: 'CAPABILITY_DATA', sourcePath: '/mediaType', required: true },
         { targetPath: '/updateDataModel/value/export/content', source: 'CAPABILITY_DATA', sourcePath: '/content', required: true },
       ]) }),
-      actionBinding({ bindingId: 'confirm_manuscript', componentId: 'confirm', actionName: 'confirmManuscript', capability: 'content.manuscript.confirm', schema: confirmContext, keys: ['projectId', 'artifactId', 'expectedProjectRevision'], complete: true, decisionType: 'MANUSCRIPT', adapters: adapter('manuscript_confirmed', { confirmationId: '', status: '最终稿已确认' }, [{ targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true }]) }),
+      actionBinding({ bindingId: 'confirm_manuscript', componentId: 'confirm', actionName: 'confirmManuscript', capability: 'content.manuscript.confirm', schema: confirmContext, keys: ['projectId', 'artifactId'], complete: true, decisionType: 'MANUSCRIPT', adapters: adapter('manuscript_confirmed', { confirmationId: '', status: '最终稿已确认' }, [{ targetPath: '/updateDataModel/value/confirmationId', source: 'CAPABILITY_DATA', sourcePath: '/id', required: true }]) }),
     ],
   };
   return [reading, topic, manuscript];
@@ -406,7 +406,7 @@ export const skillSpecs = [
   {
     skillCode: 'content-draft-writing', nameCn: '内容稿件创作', applicationCode: 'content-manuscript-editor',
     capabilities: ['content.project.get', 'content.artifact.get', 'content.artifact.save', 'content.confirmation.get', 'content.manuscript.confirm', 'content.manuscript.export'],
-    markdown: `---\nname: content-draft-writing\ndescription: 基于已确认选题创作、编辑、保存、确认和导出稿件\n---\n\n# 内容稿件创作\n\n只基于 decisionType=TOPIC 的确认记录创作稿件。先调用 content.project.get；project.currentSelectionId 是 confirmationId，不是 artifactId。调用 content.confirmation.get({confirmationId: currentSelectionId})；如果 currentSelectionId 为空，或该响应 decisionType 不是 TOPIC，立即停止并请用户先确认选题，不得自行生成确认。从 TOPIC 确认记录的 artifactId、topicId、editedTitle 和 editedAngle 取得用户最终确认结果；稿件标题和角度必须采用 editedTitle 和 editedAngle。该确认记录不含产物 revision，使用该响应的 artifactId 调用 content.artifact.get，确认 kind=TOPIC_PLAN 并取得 artifact revision 和 body.topicPlan.topics；topicId 只用于在候选中定位证据与 sourcePointIds，不得用原候选 title/angle 覆盖用户确认后的 editedTitle/editedAngle。调用 content.artifact.save 时顶层必须填写 projectId、kind=MANUSCRIPT、inputRefs 和 origin，body 分支只填写 manuscriptTitle/manuscriptMarkdown/citations。inputRefs 至少包含已确认的 TOPIC_PLAN：kind=ARTIFACT、id=上述 artifactId、revision=content.artifact.get 返回的 revision。citation 的 referenceKind 只能是 SOURCE 或 ARTIFACT，且每个 citation 的 referenceKind/referenceId/revision 必须在 inputRefs 中存在完全一致的 kind/id/revision。能力响应中的已保存正文路径是 body.manuscript.title 和 body.manuscript.bodyMarkdown。渲染前先调用 query_skill_dependencies({a2uiApplicationCodeList:["content-manuscript-editor"]})，按返回的 paramsSchema 填写 params，再调用 render_application({appCode:"content-manuscript-editor",params})。只填写模型调用参数，不填写布局、Action、status、confirmationId 或 export；未确认、未导出的初始状态由发布模板提供，不得伪造已确认或已导出事实。若 project.currentManuscriptId 非空且用户只要求展示或继续编辑已保存稿件，调用 content.artifact.get 读取该 id 对应的真实 MANUSCRIPT，不得再次调用 content.artifact.save。渲染时使用 project.get 返回的真实 id/revision 作为 projectId/projectRevision，使用 artifact.get 返回的真实 id/revision/body/inputRefs 映射 draftTitle/draftMarkdown、savedTitle/savedMarkdown、savedArtifactId/savedArtifactRevision、citations 和 inputRefs。使用 content-manuscript-editor 编辑和预览；saveManuscriptDraft 返回的新 artifact id/revision 是后续唯一有效保存身份。存在未保存标题或正文时 confirmManuscript、exportManuscript 和下载都会被组件 checks 阻断。导出 format 只能是 MARKDOWN 或 TXT；最终确认必须返回 decisionType=MANUSCRIPT。不得对旧 artifact 执行确认或导出。\n`,
+    markdown: `---\nname: content-draft-writing\ndescription: 基于已确认选题创作、编辑、保存、确认和导出稿件\n---\n\n# 内容稿件创作\n\n只基于 decisionType=TOPIC 的确认记录创作稿件。先调用 content.project.get；project.currentSelectionId 是 confirmationId，不是 artifactId。调用 content.confirmation.get({confirmationId: currentSelectionId})；如果 currentSelectionId 为空，或该响应 decisionType 不是 TOPIC，立即停止并请用户先确认选题，不得自行生成确认。从 TOPIC 确认记录的 artifactId、topicId、editedTitle 和 editedAngle 取得用户最终确认结果；稿件标题和角度必须采用 editedTitle 和 editedAngle。该确认记录不含产物 revision，使用该响应的 artifactId 调用 content.artifact.get，确认 kind=TOPIC_PLAN 并取得 artifact revision 和 body.topicPlan.topics；topicId 只用于在候选中定位证据与 sourcePointIds，不得用原候选 title/angle 覆盖用户确认后的 editedTitle/editedAngle。调用 content.artifact.save 时顶层必须填写 projectId、kind=MANUSCRIPT、inputRefs 和 origin，body 分支只填写 manuscriptTitle/manuscriptMarkdown/citations。inputRefs 至少包含已确认的 TOPIC_PLAN：kind=ARTIFACT、id=上述 artifactId、revision=content.artifact.get 返回的 revision。citation 的 referenceKind 只能是 SOURCE 或 ARTIFACT，且每个 citation 的 referenceKind/referenceId/revision 必须在 inputRefs 中存在完全一致的 kind/id/revision。能力响应中的已保存正文路径是 body.manuscript.title 和 body.manuscript.bodyMarkdown。渲染前先调用 query_skill_dependencies({a2uiApplicationCodeList:["content-manuscript-editor"]})，按返回的 paramsSchema 填写 params，再调用 render_application({appCode:"content-manuscript-editor",params})。只填写模型调用参数，不填写布局、Action、status、confirmationId 或 export；未确认、未导出的初始状态由发布模板提供，不得伪造已确认或已导出事实。若 project.currentManuscriptId 非空且用户只要求展示或继续编辑已保存稿件，调用 content.artifact.get 读取该 id 对应的真实 MANUSCRIPT，不得再次调用 content.artifact.save。渲染时使用 project.get 返回的真实 id 作为 projectId，使用 artifact.get 返回的真实 id/revision/body/inputRefs 映射 draftTitle/draftMarkdown、savedTitle/savedMarkdown、savedArtifactId/savedArtifactRevision、citations 和 inputRefs。使用 content-manuscript-editor 编辑和预览；saveManuscriptDraft 返回的新 artifact id/revision 是后续唯一有效保存身份。存在未保存标题或正文时 confirmManuscript、exportManuscript 和下载都会被组件 checks 阻断。导出 format 只能是 MARKDOWN 或 TXT；最终确认必须返回 decisionType=MANUSCRIPT。不得对旧 artifact 执行确认或导出。\n`,
   },
 ];
 

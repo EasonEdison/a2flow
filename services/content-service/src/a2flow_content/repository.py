@@ -528,16 +528,13 @@ class PostgresContentRepository:
             "title": command.title,
             "body": command.body,
             "sourceUrl": command.source_url,
-            "expectedProjectRevision": command.expected_project_revision,
         }
         digest = payload_digest(payload)
         with self._connection() as connection, connection.transaction():
             replay = self._lock_receipt(connection, context, "content.source.save", digest)
             if replay is not None:
                 return self._source_row(connection, context, replay[0])
-            project = self._owned_project(connection, context, command.project_id)
-            if project.revision != command.expected_project_revision:
-                raise ContentError("PROJECT_REVISION_CONFLICT", 409)
+            self._owned_project(connection, context, command.project_id)
             next_row = connection.execute(
                 "SELECT coalesce(max(revision),0)+1 FROM a2flow_content.content_source "
                 "WHERE project_id=%s",
@@ -704,7 +701,6 @@ class PostgresContentRepository:
         operation: str,
         project_id: UUID,
         artifact_id: UUID,
-        expected_revision: int,
         decision: DecisionType,
         selection: JsonObject,
     ) -> ConfirmationRecord:
@@ -712,7 +708,6 @@ class PostgresContentRepository:
             {
                 "projectId": str(project_id),
                 "artifactId": str(artifact_id),
-                "expectedProjectRevision": expected_revision,
                 "selection": selection,
             }
         )
@@ -720,9 +715,7 @@ class PostgresContentRepository:
             replay = self._lock_receipt(connection, context, operation, digest)
             if replay is not None:
                 return self._confirmation_row(connection, context, replay[0])
-            project = self._owned_project(connection, context, project_id)
-            if project.revision != expected_revision:
-                raise ContentError("PROJECT_REVISION_CONFLICT", 409)
+            self._owned_project(connection, context, project_id)
             artifact = self._artifact_row(connection, context, artifact_id)
             if artifact.project_id != project_id:
                 raise ContentError("CONTENT_NOT_FOUND", 404)
@@ -784,7 +777,6 @@ class PostgresContentRepository:
             operation="content.reading.confirm",
             project_id=command.project_id,
             artifact_id=command.artifact_id,
-            expected_revision=command.expected_project_revision,
             decision=DecisionType.READING,
             selection={
                 "selectedPointIds": list(command.selected_point_ids),
@@ -801,7 +793,6 @@ class PostgresContentRepository:
             operation="content.topic.confirm",
             project_id=command.project_id,
             artifact_id=command.artifact_id,
-            expected_revision=command.expected_project_revision,
             decision=DecisionType.TOPIC,
             selection={
                 "topicId": command.topic_id,
@@ -820,7 +811,6 @@ class PostgresContentRepository:
             operation="content.manuscript.confirm",
             project_id=command.project_id,
             artifact_id=command.artifact_id,
-            expected_revision=command.expected_project_revision,
             decision=DecisionType.MANUSCRIPT,
             selection={"artifactRevision": artifact.revision},
         )

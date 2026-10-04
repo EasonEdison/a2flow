@@ -4,6 +4,7 @@ import unittest
 
 from a2flow.capability.v1 import capability_pb2 as capability
 from a2flow.content.v1 import content_pb2 as content
+from google.protobuf.descriptor_pb2 import DescriptorProto
 from google.protobuf.json_format import MessageToDict
 
 
@@ -36,11 +37,23 @@ class ContentContractTest(unittest.TestCase):
             self.assertEqual(MessageToDict(restored.context)["userId"], str(user_id))
         self.assertFalse(capability.ExecutionContext().HasField("user_id"))
 
-    def test_mutating_confirmation_requires_explicit_revision_presence(self) -> None:
-        request = content.ConfirmManuscriptRequest()
-        self.assertFalse(request.HasField("expected_project_revision"))
-        request.expected_project_revision = 0
-        self.assertTrue(request.HasField("expected_project_revision"))
+    def test_project_revision_is_not_a_business_request_field(self) -> None:
+        for message, field_number in (
+            (content.SaveSourceRequest, 6),
+            (content.ConfirmReadingRequest, 6),
+            (content.ConfirmTopicRequest, 7),
+            (content.ConfirmManuscriptRequest, 4),
+        ):
+            self.assertNotIn("expected_project_revision", message.DESCRIPTOR.fields_by_name)
+            descriptor = DescriptorProto()
+            message.DESCRIPTOR.CopyToProto(descriptor)
+            self.assertIn("expected_project_revision", descriptor.reserved_name)
+            self.assertTrue(
+                any(
+                    item.start == field_number and item.end == field_number + 1
+                    for item in descriptor.reserved_range
+                )
+            )
 
     def test_document_uses_typed_json_not_base64(self) -> None:
         request = content.SaveArtifactRequest(

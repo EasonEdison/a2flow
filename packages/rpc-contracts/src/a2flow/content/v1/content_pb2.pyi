@@ -488,12 +488,10 @@ class SaveSourceRequest(google.protobuf.message.Message):
     TITLE_FIELD_NUMBER: builtins.int
     BODY_FIELD_NUMBER: builtins.int
     SOURCE_URL_FIELD_NUMBER: builtins.int
-    EXPECTED_PROJECT_REVISION_FIELD_NUMBER: builtins.int
     project_id: builtins.str
     title: builtins.str
     body: builtins.str
     source_url: builtins.str
-    expected_project_revision: builtins.int
     @property
     def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
     def __init__(
@@ -504,11 +502,9 @@ class SaveSourceRequest(google.protobuf.message.Message):
         title: builtins.str = ...,
         body: builtins.str = ...,
         source_url: builtins.str = ...,
-        expected_project_revision: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_expected_project_revision", b"_expected_project_revision", "context", b"context", "expected_project_revision", b"expected_project_revision"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_expected_project_revision", b"_expected_project_revision", "body", b"body", "context", b"context", "expected_project_revision", b"expected_project_revision", "project_id", b"project_id", "source_url", b"source_url", "title", b"title"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["_expected_project_revision", b"_expected_project_revision"]) -> typing.Literal["expected_project_revision"] | None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["body", b"body", "context", b"context", "project_id", b"project_id", "source_url", b"source_url", "title", b"title"]) -> None: ...
 
 Global___SaveSourceRequest: typing_extensions.TypeAlias = SaveSourceRequest
 
@@ -615,11 +611,9 @@ class ConfirmReadingRequest(google.protobuf.message.Message):
     ARTIFACT_ID_FIELD_NUMBER: builtins.int
     SELECTED_POINT_IDS_FIELD_NUMBER: builtins.int
     USER_NOTES_FIELD_NUMBER: builtins.int
-    EXPECTED_PROJECT_REVISION_FIELD_NUMBER: builtins.int
     project_id: builtins.str
     artifact_id: builtins.str
     user_notes: builtins.str
-    expected_project_revision: builtins.int
     @property
     def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
     @property
@@ -632,11 +626,9 @@ class ConfirmReadingRequest(google.protobuf.message.Message):
         artifact_id: builtins.str = ...,
         selected_point_ids: collections.abc.Iterable[builtins.str] | None = ...,
         user_notes: builtins.str = ...,
-        expected_project_revision: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_expected_project_revision", b"_expected_project_revision", "context", b"context", "expected_project_revision", b"expected_project_revision"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_expected_project_revision", b"_expected_project_revision", "artifact_id", b"artifact_id", "context", b"context", "expected_project_revision", b"expected_project_revision", "project_id", b"project_id", "selected_point_ids", b"selected_point_ids", "user_notes", b"user_notes"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["_expected_project_revision", b"_expected_project_revision"]) -> typing.Literal["expected_project_revision"] | None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["artifact_id", b"artifact_id", "context", b"context", "project_id", b"project_id", "selected_point_ids", b"selected_point_ids", "user_notes", b"user_notes"]) -> None: ...
 
 Global___ConfirmReadingRequest: typing_extensions.TypeAlias = ConfirmReadingRequest
 
@@ -650,13 +642,11 @@ class ConfirmTopicRequest(google.protobuf.message.Message):
     TOPIC_ID_FIELD_NUMBER: builtins.int
     EDITED_TITLE_FIELD_NUMBER: builtins.int
     EDITED_ANGLE_FIELD_NUMBER: builtins.int
-    EXPECTED_PROJECT_REVISION_FIELD_NUMBER: builtins.int
     project_id: builtins.str
     artifact_id: builtins.str
     topic_id: builtins.str
     edited_title: builtins.str
     edited_angle: builtins.str
-    expected_project_revision: builtins.int
     @property
     def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
     def __init__(
@@ -668,11 +658,9 @@ class ConfirmTopicRequest(google.protobuf.message.Message):
         topic_id: builtins.str = ...,
         edited_title: builtins.str = ...,
         edited_angle: builtins.str = ...,
-        expected_project_revision: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_expected_project_revision", b"_expected_project_revision", "context", b"context", "expected_project_revision", b"expected_project_revision"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_expected_project_revision", b"_expected_project_revision", "artifact_id", b"artifact_id", "context", b"context", "edited_angle", b"edited_angle", "edited_title", b"edited_title", "expected_project_revision", b"expected_project_revision", "project_id", b"project_id", "topic_id", b"topic_id"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["_expected_project_revision", b"_expected_project_revision"]) -> typing.Literal["expected_project_revision"] | None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["artifact_id", b"artifact_id", "context", b"context", "edited_angle", b"edited_angle", "edited_title", b"edited_title", "project_id", b"project_id", "topic_id", b"topic_id"]) -> None: ...
 
 Global___ConfirmTopicRequest: typing_extensions.TypeAlias = ConfirmTopicRequest
 
@@ -683,10 +671,8 @@ class ConfirmManuscriptRequest(google.protobuf.message.Message):
     CONTEXT_FIELD_NUMBER: builtins.int
     PROJECT_ID_FIELD_NUMBER: builtins.int
     ARTIFACT_ID_FIELD_NUMBER: builtins.int
-    EXPECTED_PROJECT_REVISION_FIELD_NUMBER: builtins.int
     project_id: builtins.str
     artifact_id: builtins.str
-    expected_project_revision: builtins.int
     @property
     def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
     def __init__(
@@ -695,11 +681,9 @@ class ConfirmManuscriptRequest(google.protobuf.message.Message):
         context: a2flow.capability.v1.capability_pb2.ExecutionContext | None = ...,
         project_id: builtins.str = ...,
         artifact_id: builtins.str = ...,
-        expected_project_revision: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_expected_project_revision", b"_expected_project_revision", "context", b"context", "expected_project_revision", b"expected_project_revision"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_expected_project_revision", b"_expected_project_revision", "artifact_id", b"artifact_id", "context", b"context", "expected_project_revision", b"expected_project_revision", "project_id", b"project_id"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["_expected_project_revision", b"_expected_project_revision"]) -> typing.Literal["expected_project_revision"] | None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["artifact_id", b"artifact_id", "context", b"context", "project_id", b"project_id"]) -> None: ...
 
 Global___ConfirmManuscriptRequest: typing_extensions.TypeAlias = ConfirmManuscriptRequest
 

@@ -26,7 +26,7 @@ const contract = [
   ['content.project.create', 'CreateProject', { title: 'title', audience: 'audience', outputFormat: 'outputFormat' }, ['id', 'revision']],
   ['content.project.list', 'ListProjects', { page: 'page', pageSize: 'pageSize' }, ['list', 'total']],
   ['content.project.get', 'GetProject', { projectId: 'projectId' }, ['id', 'revision']],
-  ['content.source.save', 'SaveSource', { projectId: 'projectId', title: 'title', body: 'body', sourceUrl: 'sourceUrl', expectedProjectRevision: 'expectedProjectRevision' }, ['id', 'revision', 'digest']],
+  ['content.source.save', 'SaveSource', { projectId: 'projectId', title: 'title', body: 'body', sourceUrl: 'sourceUrl' }, ['id', 'revision', 'digest']],
   ['content.source.get', 'GetSource', { sourceId: 'sourceId' }, ['id', 'body', 'revision']],
   ['content.artifact.save', 'SaveArtifact', {
     projectId: 'projectId', kind: 'kind', readingPoints: 'body.readingBrief.points', questions: 'body.readingBrief.questions',
@@ -35,9 +35,9 @@ const contract = [
   }, ['id', 'kind', 'revision', 'body', 'bodyMarkdown']],
   ['content.artifact.get', 'GetArtifact', { artifactId: 'artifactId' }, ['id', 'kind', 'revision', 'body']],
   ['content.confirmation.get', 'GetConfirmation', { confirmationId: 'confirmationId' }, ['id', 'decisionType', 'artifactId']],
-  ['content.reading.confirm', 'ConfirmReading', { projectId: 'projectId', artifactId: 'artifactId', selectedPointIds: 'selectedPointIds', userNotes: 'userNotes', expectedProjectRevision: 'expectedProjectRevision' }, ['id', 'decisionType', 'selectedPointIds']],
-  ['content.topic.confirm', 'ConfirmTopic', { projectId: 'projectId', artifactId: 'artifactId', topicId: 'topicId', editedTitle: 'editedTitle', editedAngle: 'editedAngle', expectedProjectRevision: 'expectedProjectRevision' }, ['id', 'decisionType', 'topicId']],
-  ['content.manuscript.confirm', 'ConfirmManuscript', { projectId: 'projectId', artifactId: 'artifactId', expectedProjectRevision: 'expectedProjectRevision' }, ['id', 'decisionType', 'artifactId']],
+  ['content.reading.confirm', 'ConfirmReading', { projectId: 'projectId', artifactId: 'artifactId', selectedPointIds: 'selectedPointIds', userNotes: 'userNotes' }, ['id', 'decisionType', 'selectedPointIds']],
+  ['content.topic.confirm', 'ConfirmTopic', { projectId: 'projectId', artifactId: 'artifactId', topicId: 'topicId', editedTitle: 'editedTitle', editedAngle: 'editedAngle' }, ['id', 'decisionType', 'topicId']],
+  ['content.manuscript.confirm', 'ConfirmManuscript', { projectId: 'projectId', artifactId: 'artifactId' }, ['id', 'decisionType', 'artifactId']],
   ['content.manuscript.export', 'ExportManuscript', { artifactId: 'artifactId', format: 'format' }, ['filename', 'mediaType', 'content']],
 ];
 assert.deepEqual(
@@ -45,6 +45,7 @@ assert.deepEqual(
   contract,
   '12 capability specs must match content.proto ProtoJSON request and response paths',
 );
+assert.doesNotMatch(JSON.stringify(capabilitySpecs), /projectRevision|expectedProjectRevision/);
 const createSpec = capabilitySpecs.find(spec => spec.actionCode === 'content.project.create');
 assert.deepEqual(createSpec.fields.find(item => item.toolField === 'outputFormat').allowedValues.map(item => item.value), ['ARTICLE', 'SPOKEN_SCRIPT']);
 const saveArtifactSpec = capabilitySpecs.find(spec => spec.actionCode === 'content.artifact.save');
@@ -122,9 +123,10 @@ for (const skill of skillSpecs) {
 assert.match(draftSkill.markdown, /初始状态由发布模板提供/);
 assert.doesNotMatch(draftSkill.markdown, /export 必须显式传|构造 data|本轮 use_skill 返回/);
 assert.match(draftSkill.markdown, /project\.currentManuscriptId 非空.*只要求展示或继续编辑.*content\.artifact\.get.*真实 MANUSCRIPT.*不得再次调用 content\.artifact\.save/s);
-assert.match(draftSkill.markdown, /project\.get 返回的真实 id\/revision.*projectId\/projectRevision.*artifact\.get 返回的真实 id\/revision\/body\/inputRefs.*savedArtifactId\/savedArtifactRevision/s);
+assert.match(draftSkill.markdown, /project\.get 返回的真实 id.*projectId.*artifact\.get 返回的真实 id\/revision\/body\/inputRefs.*savedArtifactId\/savedArtifactRevision/s);
 
 const [reading, topic, manuscript] = buildApplications();
+assert.doesNotMatch(JSON.stringify([reading, topic, manuscript]), /projectRevision|expectedProjectRevision/);
 for (const application of [reading, topic, manuscript]) {
   const { paramsSchema, inputBindings, messageTemplates } = application.showTemplate;
   const initial = messageTemplates.find(message => message.updateDataModel?.path === '/').updateDataModel.value;
