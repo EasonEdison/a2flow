@@ -587,7 +587,7 @@ test('public A2UI event uses a direct message list and Action HTTP exposes no in
   ].forEach((field) => assertEqual(serialized.includes(field), false, `internal field ${field}`));
 });
 
-test('validation preview switches structure and visual modes without pretending to render B UI', () => {
+test('validation preview switches structure and real local renderer modes without credential input', () => {
   const visual = createA2uiValidationPreviewViewModel('visual');
   assertDeepEqual(visual.visibleModeIds, ['visual'], 'only visual preview is visible');
   assertDeepEqual(
@@ -603,11 +603,9 @@ test('validation preview switches structure and visual modes without pretending 
     ],
     'structure preview sections',
   );
-  assertEqual(visual.visual?.status, 'WAITING_FRONTEND', 'visual renderer status');
-  assertEqual(visual.visual?.message, 'B 端 Renderer 待接入', 'visual renderer placeholder');
+  assertEqual(visual.visual?.status, 'LOCAL_RENDERER', 'visual renderer status');
+  assertEqual(visual.visual?.message, '真实 A2UI renderer 本地预览', 'visual renderer label');
   assertEqual(visual.visual?.rendersMock, false, 'visual preview does not render mock');
-  assertEqual(visual.prtInput?.persistence, 'SESSION_ONLY', 'PRT input persistence');
-  assertEqual(visual.destructiveActionPolicy, 'AUDITED_DEMO_ONLY', 'destructive demo policy');
 });
 
 test('release summary exposes exact environments and only server-owned blockers', () => {

@@ -13,7 +13,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { ArrowLeftOutlined, SaveOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons';
 import { jsonStringify } from './shared/safeJson';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -51,6 +51,13 @@ import {
   type A2uiPublishedCatalogOption,
 } from './a2uiCatalogContracts';
 import { buildDetailedA2uiContractPreview } from './a2uiApplicationPreview';
+import A2uiApplicationRendererPreview from './A2uiApplicationRendererPreview';
+import {
+  buildA2uiApplicationLocalPreview,
+  buildA2uiLocalActionSummary,
+  buildA2uiSampleParams,
+  type A2uiLocalActionSummary,
+} from './a2uiApplicationLocalPreview';
 import {
   extractShowComponents,
   type A2uiExtractedComponent,
@@ -162,10 +169,10 @@ const A2uiApplicationEditorPage: React.FC = () => {
   const [validationIssues, setValidationIssues] = useState<A2uiApplicationValidationIssue[]>([]);
   const [activeStage, setActiveStage] = useState<A2uiApplicationEditorStage>('basic');
   const [validationPreviewMode, setValidationPreviewMode] = useState<'structure' | 'visual'>(
-    'structure',
+    'visual',
   );
   const [sampleParamsJson, setSampleParamsJson] = useState('{}');
-  const [prtSessionInput, setPrtSessionInput] = useState('');
+  const [localActionSummary, setLocalActionSummary] = useState<A2uiLocalActionSummary>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [scanningActions, setScanningActions] = useState(false);
@@ -286,7 +293,9 @@ const A2uiApplicationEditorPage: React.FC = () => {
       );
       setCatalogs(loadedCatalogs);
       setCatalogComponents(components);
-      setSampleParamsJson('{}');
+      setSampleParamsJson(
+        previewJson(buildA2uiSampleParams(application.showTemplate.paramsSchema).params),
+      );
       if (loaded) {
         const canonicalRecord = {
           ...loaded,
@@ -537,6 +546,26 @@ const A2uiApplicationEditorPage: React.FC = () => {
       return { params: {}, error: 'sample params 不是合法 JSON' };
     }
   }, [sampleParamsJson]);
+  const localVisualPreview = useMemo(
+    () =>
+      sampleParamsPreview.error
+        ? { messages: [], errors: [sampleParamsPreview.error], requiredLoadFixtureIds: [] }
+        : buildA2uiApplicationLocalPreview(draft, sampleParamsPreview.params),
+    [draft, sampleParamsPreview.error, sampleParamsPreview.params],
+  );
+  const sampleParamDefaults = useMemo(
+    () => buildA2uiSampleParams(draft.showTemplate.paramsSchema),
+    [draft.showTemplate.paramsSchema],
+  );
+  const handleLocalAction = useCallback(
+    (event: Parameters<typeof buildA2uiLocalActionSummary>[2]) => {
+      setLocalActionSummary(buildA2uiLocalActionSummary(draft, sampleParamsPreview.params, event));
+    },
+    [draft, sampleParamsPreview.params],
+  );
+  useEffect(() => {
+    setLocalActionSummary(undefined);
+  }, [draft, sampleParamsJson]);
   const toolInvocation = buildA2uiApplicationToolInvocation(
     draft.appCode || '<appCode>',
     sampleParamsPreview.params,
@@ -984,23 +1013,11 @@ const A2uiApplicationEditorPage: React.FC = () => {
     return (
       <Card title="联调验证">
         <Alert
-          type="warning"
-          message="只运行结构/contract preview，不执行真实 CapabilityAction"
-          description="PRT cookie/curl 只能作为脱敏、会话级联调输入，不进入草稿、发布内容、日志或持久化；WRITE/DESTRUCTIVE 仅允许审核 demo case。"
+          type="info"
+          message="本页只验证 Application 的本地编排与真实 renderer，不调用 CapabilityAction"
+          description="输入仅使用 sample params；不需要 Cookie、curl 或真实用户凭据。本版不执行 LoadBinding；业务按钮只展示事件与映射参数，不代表业务成功。"
           style={{ marginBottom: 16 }}
         />
-        <Card size="small" title="PRT 会话级联调输入（不持久化）" style={{ marginBottom: 16 }}>
-          <Input.TextArea
-            value={prtSessionInput}
-            onChange={(event) => setPrtSessionInput(event.target.value)}
-            autoSize={{ minRows: 2, maxRows: 6 }}
-            placeholder="仅输入已脱敏的本次会话 cookie/curl；离开编辑器即丢弃"
-          />
-          <Text type="secondary">
-            persistence={validationPreview.prtInput?.persistence}；不写入草稿 /
-            发布内容；副作用只允许 {validationPreview.destructiveActionPolicy}。
-          </Text>
-        </Card>
         <div role="tablist" aria-label="联调验证预览类型" style={{ marginBottom: 16 }}>
           <Button
             type={validationPreviewMode === 'structure' ? 'primary' : 'default'}
@@ -1066,18 +1083,66 @@ const A2uiApplicationEditorPage: React.FC = () => {
             </Space>
           </>
         ) : (
-          <Card size="small" title="真实视觉预览">
-            <Alert
-              type="info"
-              icon={<ThunderboltOutlined />}
-              message={validationPreview.visual?.message}
-              description={
-                validationPreview.visual?.rendersMock
-                  ? '不可用的视觉渲染状态'
-                  : '当前不渲染 mock React/Antd 效果；B 端 Renderer 接入后再提供真实视觉预览。该运行态证据不再阻塞 Catalog/Application 发布。'
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Card
+              size="small"
+              title="本地 sample params"
+              extra={
+                <Button
+                  size="small"
+                  onClick={() => setSampleParamsJson(previewJson(sampleParamDefaults.params))}
+                >
+                  重置本地契约样例
+                </Button>
               }
-            />
-          </Card>
+            >
+              <JsonFormatTextArea
+                value={sampleParamsJson}
+                onChange={(event) => setSampleParamsJson(event.target.value)}
+                onValueChange={setSampleParamsJson}
+                autoSize={{ minRows: 5, maxRows: 14 }}
+              />
+              {sampleParamDefaults.missingRequired.length ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={`以下必填参数没有 Schema examples/default，请补充样例：${sampleParamDefaults.missingRequired.join(', ')}`}
+                  style={{ marginTop: 12 }}
+                />
+              ) : null}
+              {sampleParamDefaults.generatedFields.length ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  message={`以下字段由前端生成本地契约样例，不代表真实业务数据：${sampleParamDefaults.generatedFields.join(', ')}`}
+                  style={{ marginTop: 12 }}
+                />
+              ) : null}
+            </Card>
+            {localVisualPreview.errors.length ? (
+              <Alert
+                type="error"
+                showIcon
+                message="本地 Application 预览未生成"
+                description={localVisualPreview.errors.join('；')}
+              />
+            ) : (
+              <Card size="small" title="真实 A2UI Application 视觉预览">
+                <A2uiApplicationRendererPreview
+                  catalogId={draft.catalog.catalogId}
+                  messages={localVisualPreview.messages}
+                  onAction={handleLocalAction}
+                />
+              </Card>
+            )}
+            {localActionSummary ? (
+              <Card size="small" title="本地 Action 事件（未调用业务 API）">
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {previewJson(localActionSummary)}
+                </pre>
+              </Card>
+            ) : null}
+          </Space>
         )}
       </Card>
     );
