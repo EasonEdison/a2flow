@@ -66,7 +66,10 @@ function ToolProcess({ tool, index }: { tool: ChatToolCall; index: number }) {
     className={`tool-process ${tool.lifecycleStatus}`}
     open={open}
   >
-    <summary onClick={() => setManualOpen(!open)}>
+    <summary onClick={(event) => {
+      event.preventDefault();
+      setManualOpen(!open);
+    }}>
       <span className="tool-process-index">{index}</span>
       <strong>{tool.name}</strong>
       <span className="tool-process-id">{tool.toolCallId}</span>
@@ -117,7 +120,10 @@ function ExecutionPanel({ message }: { message: Message }) {
     className="execution-panel"
     open={manualOpen ?? running}
   >
-    <summary onClick={() => setManualOpen(!(manualOpen ?? running))}>
+    <summary onClick={(event) => {
+      event.preventDefault();
+      setManualOpen(!(manualOpen ?? running));
+    }}>
       <span>{running ? '执行中' : '执行过程'}</span>
       <span>{execution?.toolCalls.length ?? message.tools?.length ?? 0} 次工具调用</span>
     </summary>
@@ -160,9 +166,21 @@ function AssistantMessage({
   renderMessageExtras: AssistantThreadProps['renderMessageExtras'];
 }) {
   const turnId = message.execution?.turnId;
+  const deliveryLabel = message.delivery === 'waiting_action'
+    ? '等待你确认'
+    : message.delivery === 'completed'
+      ? '已完成'
+      : message.delivery === 'failed'
+        ? '执行失败 · 未自动重试'
+        : message.delivery === 'running'
+          ? '执行中'
+          : message.delivery === 'unconfirmed'
+            ? '结果待确认 · 不会自动重试'
+            : '';
   return <MessagePrimitive.Root className="aui-message aui-assistant-message">
     <div className="aui-assistant-avatar" aria-hidden="true">AI</div>
     <div className="aui-assistant-content">
+      {deliveryLabel ? <p className={`assistant-delivery ${message.delivery ?? ''}`}>{deliveryLabel}</p> : null}
       <ExecutionPanel message={message} />
       {message.text ? <section className="assistant-answer"><MarkdownContent markdown={message.text} /></section> : null}
       {renderMessageExtras(message)}
@@ -210,6 +228,9 @@ function ThreadBody({
   }, [aui, onComposerError]);
 
   const messagesById = useMemo(() => new Map(messages.map(message => [message.id, message])), [messages]);
+  const knownTurnIds = useMemo(() => new Set(messages.flatMap(message => (
+    message.execution?.turnId ? [message.execution.turnId] : []
+  ))), [messages]);
   return <ChatApplicationsProvider
     conversationId={conversationId}
     refreshKey={refreshKey}
@@ -235,7 +256,7 @@ function ThreadBody({
           }}
         </ThreadPrimitive.Messages>
         {threadTail}
-        <ChatApplicationsStatus />
+        <ChatApplicationsStatus knownTurnIds={knownTurnIds} />
         <ThreadPrimitive.ViewportFooter className="aui-thread-footer">
           {error ? <p className="chat-error" role="alert">{error}</p> : null}
           <div className="aui-thread-actions">

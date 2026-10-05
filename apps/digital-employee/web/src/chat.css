@@ -68,6 +68,21 @@
   color: #172033;
 }
 
+.assistant-delivery {
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.assistant-delivery.failed,
+.assistant-delivery.unconfirmed {
+  color: #b42318;
+}
+
+.assistant-delivery.waiting_action {
+  color: #9a6700;
+}
+
 .assistant-answer + .turn-applications,
 .execution-panel + .assistant-answer,
 .workflow-confirm + .turn-applications {
@@ -256,6 +271,16 @@
 
 .chat-applications-status .secondary {
   margin-top: 8px;
+}
+
+.historical-applications h3 {
+  margin: 0 0 4px;
+  color: #5f4714;
+  font-size: 14px;
+}
+
+.historical-applications > p {
+  margin-bottom: 10px;
 }
 
 .aui-thread-footer {

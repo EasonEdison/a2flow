@@ -101,12 +101,19 @@ export function ChatApplicationsProvider({
 }
 
 export function TurnApplications({ turnId }: { turnId: string }) {
-  const { cards, manualReloadKey, updateCard, onComposerDraft } = useChatApplications();
+  const { cards } = useChatApplications();
   const turnCards = cards.filter(card => card.turnId === turnId);
   if (!turnCards.length) return null;
   return <section className="turn-applications" aria-label="本轮交互卡片">
+    <ApplicationCards cards={turnCards} />
+  </section>;
+}
+
+function ApplicationCards({ cards }: { cards: ChatCard[] }) {
+  const { manualReloadKey, updateCard, onComposerDraft } = useChatApplications();
+  return <>
     <Suspense fallback={<p role="status">正在加载卡片组件…</p>}>
-      {turnCards.map(card => (
+      {cards.map(card => (
         <A2uiSnapshotCard
           key={`${card.cardId}:${manualReloadKey}`}
           card={card}
@@ -115,16 +122,20 @@ export function TurnApplications({ turnId }: { turnId: string }) {
         />
       ))}
     </Suspense>
-  </section>;
+  </>;
 }
 
-export function ChatApplicationsStatus() {
+export function ChatApplicationsStatus({ knownTurnIds }: { knownTurnIds: ReadonlySet<string> }) {
   const { cards, error, reload } = useChatApplications();
-  const unassigned = cards.filter(card => !card.turnId).length;
+  const unassigned = cards.filter(card => !knownTurnIds.has(card.turnId));
   if (!cards.length && !error) return null;
   return <section className="chat-applications-status" aria-live="polite">
     {error ? <p role="alert">{error}</p> : null}
-    {unassigned ? <p>{unassigned} 张历史卡片缺少轮次归属，未猜测展示位置。</p> : null}
+    {unassigned.length ? <section className="historical-applications" aria-label="历史交互卡片">
+      <h3>历史交互卡片</h3>
+      <p>{unassigned.length} 张卡片无法与当前消息的轮次标识匹配，已独立保留。</p>
+      <ApplicationCards cards={unassigned} />
+    </section> : null}
     <button className="secondary" type="button" onClick={reload}>重新读取卡片</button>
   </section>;
 }
