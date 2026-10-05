@@ -283,6 +283,35 @@ test('ResultAdapter Catalog and CapabilityAction use server-projected searchable
   assertEqual(capabilitySource.includes('<Input'), false, 'CapabilityAction is not free text');
 });
 
+test('Action form exposes deterministic option projection and composer append effect', () => {
+  const actionEditorSource = readFileSync(
+    new URL('./A2uiActionAuthoringEditor.tsx', import.meta.url),
+    'utf8',
+  );
+  assertEqual(
+    actionEditorSource.includes('数组选项使用 ARRAY_OBJECT_TO_OPTIONS'),
+    true,
+    'result transform is visible and editable in structured Action form',
+  );
+  assertEqual(
+    actionEditorSource.includes('聊天输入框回填（成功响应级）'),
+    true,
+    'composer effect has a structured editor',
+  );
+  assertEqual(
+    actionEditorSource.includes("type: 'COMPOSER_DRAFT'") &&
+      actionEditorSource.includes("mode: 'APPEND'") &&
+      actionEditorSource.includes("source: 'CAPABILITY_DATA'"),
+    true,
+    'composer effect editor keeps the closed contract',
+  );
+  assertEqual(
+    actionEditorSource.includes('不发送消息'),
+    true,
+    'composer effect copy states the no-send boundary',
+  );
+});
+
 if (failures.length) {
   throw new Error(`A2UI editor UX contract failures:\n${failures.join('\n')}`);
 }

@@ -1,5 +1,9 @@
 import { serverMessageKey } from './a2uiApplicationShowAst';
-import type { A2uiResultAdapter, A2uiResultOutcome } from './a2uiApplicationContracts';
+import type {
+  A2uiResultAdapter,
+  A2uiResultOutcome,
+  A2uiResultTransform,
+} from './a2uiApplicationContracts';
 
 function hasText(value: string | undefined): boolean {
   return Boolean(value?.trim());
@@ -14,6 +18,56 @@ function readsBusinessDataThroughMetadata(
     source === 'CAPABILITY_META' &&
     (normalized === '/data' || normalized?.startsWith('/data/') === true)
   );
+}
+
+function validJsonPointer(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.startsWith('/')) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '~' && !['0', '1'].includes(value[index + 1])) return false;
+  }
+  return true;
+}
+
+function validateResultTransform(transform: A2uiResultTransform | undefined, errors: string[]): void {
+  if (!transform) return;
+  const raw = transform as unknown as Record<string, unknown>;
+  const allowed = new Set([
+    'type',
+    'scale',
+    'componentIds',
+    'pageSize',
+    'pageNumber',
+    'actionPagePath',
+    'valuePath',
+    'labelColumns',
+    'labelSeparator',
+  ]);
+  if (Object.keys(raw).some((key) => !allowed.has(key))) {
+    errors.push('A2UI_RESULT_TRANSFORM_INVALID');
+    return;
+  }
+  if (transform.type !== 'ARRAY_OBJECT_TO_OPTIONS') return;
+  const columns = transform.labelColumns || [];
+  const legacyFields = [
+    transform.scale,
+    transform.componentIds,
+    transform.pageSize,
+    transform.pageNumber,
+    transform.actionPagePath,
+  ];
+  if (
+    legacyFields.some((value) => value !== undefined) ||
+    !validJsonPointer(transform.valuePath) ||
+    !hasText(transform.labelSeparator) ||
+    transform.labelSeparator!.length > 8 ||
+    columns.length < 1 ||
+    columns.length > 20 ||
+    columns.some(
+      (column) => !hasText(column?.label) || !validJsonPointer(column?.sourcePath),
+    )
+  ) {
+    errors.push('A2UI_RESULT_TRANSFORM_INVALID');
+  }
 }
 
 function validateAdapters(adapters: A2uiResultAdapter[], errors: string[]): void {
@@ -47,7 +101,13 @@ function validateAdapters(adapters: A2uiResultAdapter[], errors: string[]): void
       (adapter.bindings || []).forEach((binding) => {
         if (
           !hasText(binding.targetPath) ||
-          !['CAPABILITY_DATA', 'CAPABILITY_META', 'TRUSTED_CONTEXT', 'CONSTANT'].includes(
+          ![
+            'CAPABILITY_DATA',
+            'CAPABILITY_META',
+            'TRUSTED_CONTEXT',
+            'ACTION_CONTEXT',
+            'CONSTANT',
+          ].includes(
             binding.source,
           ) ||
           (binding.source !== 'CONSTANT' && !hasText(binding.sourcePath)) ||
@@ -55,6 +115,7 @@ function validateAdapters(adapters: A2uiResultAdapter[], errors: string[]): void
         ) {
           errors.push('A2UI_MESSAGE_TEMPLATE_BINDING_INVALID');
         }
+        validateResultTransform(binding.transform, errors);
       });
     }
     if (adapter.type === 'A2UI_PASSTHROUGH') {

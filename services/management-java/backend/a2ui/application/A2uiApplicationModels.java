@@ -98,9 +98,25 @@ public final class A2uiApplicationModels {
     public enum A2uiResultTransformType {
         MINOR_UNIT_TO_DECIMAL_STRING,
         ARRAY_TO_CHILDREN_PREFIX,
+        ARRAY_OBJECT_TO_OPTIONS,
         BOOLEAN_ARRAY_TRUE_COUNT,
         PAGINATION_STATE,
         NUMBER_TO_STRING
+    }
+
+    /** 数组对象投影为展示选项时的一列；路径始终相对当前数组元素。 */
+    @Data
+    @Accessors(chain = true)
+    public static class A2uiOptionLabelColumn {
+        private String label;
+        private String sourcePath;
+    }
+
+    /** Build 冻结的选项展示列。 */
+    @Value
+    public static class A2uiCompiledOptionLabelColumn {
+        private String label;
+        private String sourcePath;
     }
 
     /** 作者态结果值转换；compiler 负责校验参数并冻结为不可变 Build 配置。 */
@@ -118,6 +134,12 @@ public final class A2uiApplicationModels {
         private Number pageNumber;
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private String actionPagePath;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String valuePath;
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        private List<A2uiOptionLabelColumn> labelColumns;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String labelSeparator;
 
         /** 作者态 JSON 出现未声明字段时直接失败，避免发布后产生不同解释。 */
         @JsonAnySetter
@@ -128,6 +150,7 @@ public final class A2uiApplicationModels {
 
     /** Build 冻结的结果值转换；仅描述确定性转换，不执行运行时计算。 */
     @Value
+    @AllArgsConstructor
     public static class A2uiCompiledResultTransform {
         private A2uiResultTransformType type;
         @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -140,6 +163,66 @@ public final class A2uiApplicationModels {
         private Number pageNumber;
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private String actionPagePath;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String valuePath;
+        @JsonInclude(JsonInclude.Include.NON_EMPTY)
+        private List<A2uiCompiledOptionLabelColumn> labelColumns;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String labelSeparator;
+
+        /** 兼容既有 Build fixture；未配置数组对象投影时保持旧构造入口。 */
+        public A2uiCompiledResultTransform(A2uiResultTransformType type, Integer scale,
+                List<String> componentIds, Number pageSize, Number pageNumber,
+                String actionPagePath) {
+            this(type, scale, componentIds, pageSize, pageNumber, actionPagePath,
+                    null, null, null);
+        }
+    }
+
+    public enum A2uiComposerDraftEffectType {
+        COMPOSER_DRAFT
+    }
+
+    public enum A2uiComposerDraftEffectMode {
+        APPEND
+    }
+
+    public enum A2uiComposerDraftEffectSource {
+        CAPABILITY_DATA
+    }
+
+    /** Composer 文本中的一列；路径相对 itemsPath 指向的每个响应元素。 */
+    @Data
+    @Accessors(chain = true)
+    public static class A2uiComposerDraftColumn {
+        private String label;
+        private String sourcePath;
+    }
+
+    @Value
+    public static class A2uiCompiledComposerDraftColumn {
+        private String label;
+        private String sourcePath;
+    }
+
+    /** 成功响应级客户端效果声明；不会进入持久 snapshot，也不代表业务写入成功。 */
+    @Data
+    @Accessors(chain = true)
+    public static class A2uiComposerDraftEffect {
+        private A2uiComposerDraftEffectType type;
+        private A2uiComposerDraftEffectMode mode;
+        private A2uiComposerDraftEffectSource source;
+        private String itemsPath;
+        private List<A2uiComposerDraftColumn> columns = new ArrayList<>();
+    }
+
+    @Value
+    public static class A2uiCompiledComposerDraftEffect {
+        private A2uiComposerDraftEffectType type;
+        private A2uiComposerDraftEffectMode mode;
+        private A2uiComposerDraftEffectSource source;
+        private String itemsPath;
+        private List<A2uiCompiledComposerDraftColumn> columns;
     }
 
     public enum A2uiActionDeclarationSourceType {
@@ -400,6 +483,8 @@ public final class A2uiApplicationModels {
         private List<A2uiResultAdapter> failureResultAdapters = new ArrayList<>();
         private A2uiBusinessSuccessPredicate businessSuccessPredicate;
         private boolean completeWorkflowInteractionOnSuccess;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private A2uiComposerDraftEffect composerDraftEffect;
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         private List<A2uiSuccessBranch> successBranches = new ArrayList<>();
     }
@@ -550,6 +635,7 @@ public final class A2uiApplicationModels {
 
     /** 不可变 Action 绑定；成功分支保持作者顺序，空分支不改变既有 Build 序列化形态。 */
     @Value
+    @AllArgsConstructor
     public static class A2uiCompiledActionBinding {
         private String bindingId;
         private String surfaceId;
@@ -566,8 +652,29 @@ public final class A2uiApplicationModels {
         private List<A2uiCompiledResultAdapter> failureResultAdapters;
         private A2uiCompiledBusinessSuccessPredicate businessSuccessPredicate;
         private boolean completeWorkflowInteractionOnSuccess;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private A2uiCompiledComposerDraftEffect composerDraftEffect;
         @JsonInclude(JsonInclude.Include.NON_EMPTY)
         private List<A2uiCompiledSuccessBranch> successBranches;
+
+        /** 兼容既有 Runtime fixture；旧 Binding 没有 Composer effect。 */
+        public A2uiCompiledActionBinding(String bindingId, String surfaceId,
+                String sourceComponentId, String actionCode, String declarationDigest,
+                List<String> allowedSourceComponentIds, Map<String, Object> contextSchema,
+                A2uiCompiledCapabilityActionRef capability,
+                List<A2uiCompiledRequestMapping> requestMappings,
+                A2uiResultOutcome successOutcome, A2uiResultOutcome failureOutcome,
+                List<A2uiCompiledResultAdapter> resultAdapters,
+                List<A2uiCompiledResultAdapter> failureResultAdapters,
+                A2uiCompiledBusinessSuccessPredicate businessSuccessPredicate,
+                boolean completeWorkflowInteractionOnSuccess,
+                List<A2uiCompiledSuccessBranch> successBranches) {
+            this(bindingId, surfaceId, sourceComponentId, actionCode, declarationDigest,
+                    allowedSourceComponentIds, contextSchema, capability, requestMappings,
+                    successOutcome, failureOutcome, resultAdapters, failureResultAdapters,
+                    businessSuccessPredicate, completeWorkflowInteractionOnSuccess,
+                    null, successBranches);
+        }
     }
 
     @Value

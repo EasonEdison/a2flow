@@ -766,6 +766,67 @@ async function main() {
     assertIncludes(errors, 'A2UI_PASSTHROUGH_CARDINALITY_REQUIRED', 'passthrough cardinality');
   });
 
+  await test('validates array option projection and response-scoped composer draft effects', () => {
+    const application = applicationFixture();
+    const binding = application.actionBindings?.[0];
+    const template = binding?.resultAdapters?.find?.(
+      (adapter) => adapter.type === 'MESSAGE_TEMPLATE',
+    );
+    const resultBinding = template?.bindings?.[0];
+    if (!binding || !resultBinding) throw new Error('missing action adapter fixture');
+    resultBinding.sourcePath = '/items';
+    resultBinding.transform = {
+      type: 'ARRAY_OBJECT_TO_OPTIONS',
+      valuePath: '/personId',
+      labelColumns: [
+        { label: '姓名', sourcePath: '/name' },
+        { label: '爱好', sourcePath: '/hobbies' },
+      ],
+      labelSeparator: '｜',
+    };
+    binding.composerDraftEffect = {
+      type: 'COMPOSER_DRAFT',
+      mode: 'APPEND',
+      source: 'CAPABILITY_DATA',
+      itemsPath: '/items',
+      columns: [
+        { label: '姓名', sourcePath: '/name' },
+        { label: '电话', sourcePath: '/phone' },
+      ],
+    };
+    const validErrors = validateA2uiApplicationBuild(application, [
+      componentRecord('Column'),
+      componentRecord('Button'),
+    ]);
+    assertEqual(
+      validErrors.includes('A2UI_RESULT_TRANSFORM_INVALID'),
+      false,
+      'array option transform accepted',
+    );
+    assertEqual(
+      validErrors.includes('A2UI_COMPOSER_DRAFT_EFFECT_INVALID'),
+      false,
+      'composer effect accepted',
+    );
+
+    resultBinding.transform.labelColumns = [];
+    binding.composerDraftEffect.columns = [];
+    const invalidErrors = validateA2uiApplicationBuild(application, [
+      componentRecord('Column'),
+      componentRecord('Button'),
+    ]);
+    assertIncludes(
+      invalidErrors,
+      'A2UI_RESULT_TRANSFORM_INVALID',
+      'empty option label columns rejected',
+    );
+    assertIncludes(
+      invalidErrors,
+      'A2UI_COMPOSER_DRAFT_EFFECT_INVALID',
+      'empty composer columns rejected',
+    );
+  });
+
   await test('rejects unknown top-level fields in a server message', () => {
     const application = applicationFixture();
     const message = application.showTemplate?.messageTemplates?.[1] as Record<string, unknown>;

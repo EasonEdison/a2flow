@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>人员选择 · PRT 资产导入</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #17211d; background: #f5f7f6; }
+    body { margin: 0; padding: 32px 16px; } main { max-width: 860px; margin: auto; background: white; border: 1px solid #d8dfdb; border-radius: 14px; padding: 28px; }
+    h1 { margin-top: 0; } .notice { background: #f0f6f3; border-left: 4px solid #256f52; padding: 12px 16px; }
+    form { display: grid; gap: 16px; margin: 24px 0; } label { display: grid; gap: 6px; font-weight: 650; }
+    input, textarea, button { font: inherit; padding: 10px 12px; border: 1px solid #aebbb4; border-radius: 8px; }
+    button { border-color: #145c43; background: #145c43; color: white; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: not-allowed; } progress { width: 100%; }
+    #log { max-height: 300px; overflow: auto; background: #101713; color: #cce9db; padding: 14px; border-radius: 8px; white-space: pre-wrap; }
+    .error { color: #9f1d20; font-weight: 700; }
+  </style>
+</head>
+<body><main>
+  <h1>人员选择 · PRT 资产导入</h1>
+  <p class="notice">仅复用已发布的数字员工 Catalog，通过 M 正式接口创建并发布 2 个只读能力、1 个 Application 和 1 个 Skill。不会更新阅读创作资产、写发布数据库或发布 ONLINE。</p>
+  <form id="authoring-form">
+    <label>Content RPC descriptor set
+      <button id="load-project-descriptor" type="button">加载本项目 Content RPC 契约</button>
+      <span id="descriptor-status" role="status"></span>
+      <textarea id="descriptor-text" rows="8" spellcheck="false" placeholder="base64 FileDescriptorSet"></textarea>
+      <input id="descriptor-file" type="file" accept="text/plain,.txt">
+    </label>
+    <label>RPC targetKey<input id="target-key" value="content" pattern="[A-Za-z][A-Za-z0-9_-]{0,63}" required></label>
+    <label>专员 ID<input id="specialist-ids" placeholder="例如：101" required></label>
+    <label><span><input id="reviewed" type="checkbox" required> 我已审核 2 个能力、people-selector Application 和 people-selection Skill，仅发布到 PRT</span></label>
+    <button id="run" type="submit">创建并发布人员选择示例到 PRT</button>
+  </form>
+  <section aria-live="polite"><h2>进度</h2><progress id="progress" max="100" value="0"></progress><pre id="log">等待用户点击按钮。</pre></section>
+  <section id="result" hidden><h2>PRT 资产</h2><pre id="manifest"></pre><button id="download-manifest" type="button">下载无凭据 manifest</button></section>
+  <p id="error" class="error" role="alert"></p>
+</main><script type="module" src="./import.js"></script></body>
+</html>
