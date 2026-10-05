@@ -15,15 +15,16 @@
     "test:browser": "node tests/browser-regression.mjs"
   },
   "dependencies": {
+    "@a2ui/markdown-it": "0.1.2",
     "@a2ui/react": "0.11.1",
     "@a2ui/web_core": "0.11.0",
-    "@a2ui/markdown-it": "0.1.2",
+    "@assistant-ui/react": "0.15.23",
     "@fontsource/material-symbols-outlined": "5.3.7",
-    "zod": "3.25.76",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-markdown": "10.1.0",
-    "remark-gfm": "4.0.1"
+    "remark-gfm": "4.0.1",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/react": "19.3.0",

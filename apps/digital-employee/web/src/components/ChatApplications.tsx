@@ -1,12 +1,50 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { productApi, type ChatCard, type ComposerDraftEffect } from '../productApi';
-const A2uiSnapshotCard = lazy(() => import('./A2uiSnapshotCard').then(module => ({ default: module.A2uiSnapshotCard })));
+import {
+  createContext,
+  lazy,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
-export function ChatApplications({ conversationId, refreshKey, active, onComposerDraft }: {
+import { productApi, type ChatCard, type ComposerDraftEffect } from '../productApi';
+
+const A2uiSnapshotCard = lazy(() => import('./A2uiSnapshotCard').then(module => ({
+  default: module.A2uiSnapshotCard,
+})));
+
+type ChatApplicationsContextValue = {
+  cards: ChatCard[];
+  error: string;
+  manualReloadKey: number;
+  reload: () => void;
+  updateCard: (card: ChatCard) => void;
+  onComposerDraft: (effect: ComposerDraftEffect) => void;
+};
+
+const ChatApplicationsContext = createContext<ChatApplicationsContextValue | null>(null);
+
+const useChatApplications = () => {
+  const value = useContext(ChatApplicationsContext);
+  if (!value) throw new Error('ChatApplicationsProvider is required');
+  return value;
+};
+
+export function ChatApplicationsProvider({
+  conversationId,
+  refreshKey,
+  active,
+  onComposerDraft,
+  children,
+}: {
   conversationId: string;
   refreshKey: number;
   active: boolean;
   onComposerDraft: (effect: ComposerDraftEffect) => void;
+  children: React.ReactNode;
 }) {
   const [cards, setCards] = useState<ChatCard[]>([]);
   const [error, setError] = useState('');
@@ -16,33 +54,77 @@ export function ChatApplications({ conversationId, refreshKey, active, onCompose
   const generation = useRef(0);
   const reload = useCallback(() => setReloadKey(value => value + 1), []);
   const updateCard = useCallback((updated: ChatCard) => {
-    // An Action response is newer than every GET that started before it.
     generation.current++;
     setCards(items => items.map(item => item.cardId === updated.cardId ? updated : item));
   }, []);
+
   useEffect(() => {
     const abort = new AbortController();
     const current = ++generation.current;
-    productApi.chatCards(conversationId, abort.signal).then(result => {
-      if (current === generation.current) {
-        setCards(result.cards);
-        setError('');
-        if (manualReload.current) { manualReload.current = false; setManualReloadKey(value => value + 1); }
+    void productApi.chatCards(conversationId, abort.signal).then(result => {
+      if (current !== generation.current) return;
+      setCards(result.cards);
+      setError('');
+      if (manualReload.current) {
+        manualReload.current = false;
+        setManualReloadKey(value => value + 1);
       }
-    }).catch(() => { if (!abort.signal.aborted) setError('卡片读取失败，请重新读取。'); });
-    return () => { generation.current++; abort.abort(); };
+    }).catch(() => {
+      if (!abort.signal.aborted) setError('卡片读取失败，请重新读取。');
+    });
+    return () => {
+      generation.current++;
+      abort.abort();
+    };
   }, [conversationId, refreshKey, reloadKey]);
+
   const waiting = cards.some(card => card.status === 'EXECUTING' || card.status === 'WAITING_ACTION');
   useEffect(() => {
     if (!active && !waiting) return;
-    const timer = setInterval(reload, 5000);
-    return () => clearInterval(timer);
+    const timer = window.setInterval(reload, 5000);
+    return () => window.clearInterval(timer);
   }, [active, waiting, reload]);
-  return <section aria-label="对话中的 Skill 卡片">
-    {cards.length || error ? <button className="secondary" onClick={() => { manualReload.current = true; reload(); }}>重新读取卡片</button> : null}
-    {error ? <p role="alert">{error}</p> : null}
+
+  const value = useMemo<ChatApplicationsContextValue>(() => ({
+    cards,
+    error,
+    manualReloadKey,
+    reload: () => {
+      manualReload.current = true;
+      reload();
+    },
+    updateCard,
+    onComposerDraft,
+  }), [cards, error, manualReloadKey, onComposerDraft, reload, updateCard]);
+
+  return <ChatApplicationsContext.Provider value={value}>{children}</ChatApplicationsContext.Provider>;
+}
+
+export function TurnApplications({ turnId }: { turnId: string }) {
+  const { cards, manualReloadKey, updateCard, onComposerDraft } = useChatApplications();
+  const turnCards = cards.filter(card => card.turnId === turnId);
+  if (!turnCards.length) return null;
+  return <section className="turn-applications" aria-label="本轮交互卡片">
     <Suspense fallback={<p role="status">正在加载卡片组件…</p>}>
-      {cards.map(card => <A2uiSnapshotCard key={`${card.cardId}:${manualReloadKey}`} card={card} onUpdate={updateCard} onComposerDraft={onComposerDraft} />)}
+      {turnCards.map(card => (
+        <A2uiSnapshotCard
+          key={`${card.cardId}:${manualReloadKey}`}
+          card={card}
+          onUpdate={updateCard}
+          onComposerDraft={onComposerDraft}
+        />
+      ))}
     </Suspense>
+  </section>;
+}
+
+export function ChatApplicationsStatus() {
+  const { cards, error, reload } = useChatApplications();
+  const unassigned = cards.filter(card => !card.turnId).length;
+  if (!cards.length && !error) return null;
+  return <section className="chat-applications-status" aria-live="polite">
+    {error ? <p role="alert">{error}</p> : null}
+    {unassigned ? <p>{unassigned} 张历史卡片缺少轮次归属，未猜测展示位置。</p> : null}
+    <button className="secondary" type="button" onClick={reload}>重新读取卡片</button>
   </section>;
 }

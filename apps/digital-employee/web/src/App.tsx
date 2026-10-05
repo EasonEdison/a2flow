@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { NodeCard } from './components/NodeCard';
-import { MarkdownContent } from './components/MarkdownContent';
 import { MemorySettingsPage } from './components/MemorySettingsPage';
-import { ChatApplications } from './components/ChatApplications';
+import { AssistantThread } from './components/AssistantThread';
 import './chat.css';
 import { FixturePreview } from './FixturePreview';
-import { chatErrorPresentation } from './errorPresentation';
-import { appendComposerDraft } from './composerDraft.mjs';
-import { apiErrorMessage, productApi, type ComposerDraftEffect, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
+import { applyChatStreamEvent } from './assistantChat';
+import { apiErrorMessage, messageFromContent, productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
@@ -109,32 +107,13 @@ function ChatPage() {
 
 function ChatConversation({ conversationId }: { conversationId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const inputRef = useRef('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const controller = useRef<AbortController | null>(null);
   const sending = useRef(false);
   const epoch = useRef(0);
-  const consumedComposerEffects = useRef(new Set<string>());
-  const flowRef = useRef<HTMLDivElement>(null);
   const [runId, setRunId] = useState('');
-  useEffect(() => { consumedComposerEffects.current.clear(); }, [conversationId]);
-  const applyComposerDraft = useCallback((effect: ComposerDraftEffect) => {
-    if (
-      effect.type !== 'COMPOSER_DRAFT' || effect.mode !== 'APPEND'
-      || !effect.requestId || !effect.text || consumedComposerEffects.current.has(effect.requestId)
-    ) return;
-    const next = appendComposerDraft(inputRef.current, effect.text);
-    if (next === null) {
-      setError('回填内容与当前输入合并后超过 4000 字，未覆盖已有输入。');
-      return;
-    }
-    inputRef.current = next;
-    setInput(next);
-    consumedComposerEffects.current.add(effect.requestId);
-  }, []);
   const load = useCallback(async () => {
     if (sending.current) return;
     const current = ++epoch.current;
@@ -150,15 +129,14 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
     const timer = setInterval(() => { void load(); }, 5000);
     return () => clearInterval(timer);
   }, [busy, pending, load]);
-  useEffect(() => { const flow = flowRef.current; if (flow) flow.scrollTop = flow.scrollHeight; }, [messages]);
-  const send = async () => {
-    const text = input.trim();
+  const send = useCallback(async (rawText: string) => {
+    const text = rawText.trim();
     if (!text || sending.current || pending || !loaded) return;
     sending.current = true;
     epoch.current++; // In-flight history reads cannot overwrite live deltas.
     const abort = new AbortController();
     controller.current = abort;
-    setBusy(true); setError(''); inputRef.current = ''; setInput('');
+    setBusy(true); setError('');
     try {
       await productApi.sendMessage(conversationId, text, event => {
         if (abort.signal.aborted) return;
@@ -168,22 +146,18 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
             const createdAt = new Date().toISOString();
             next = items.filter(item => item.id !== event.inputMessageId && item.id !== event.messageId).concat([
               { id: event.inputMessageId, role: 'user', text, createdAt },
-              { id: event.messageId, role: 'assistant', text: '', reasoning: '', tools: [], delivery: 'running', createdAt },
+              applyChatStreamEvent(
+                { id: event.messageId, role: 'assistant', text: '', delivery: 'running', createdAt },
+                event,
+              ),
             ]);
           }
           return next.map(item => {
             if (item.id !== event.messageId) return item;
-            if (event.type === 'text_delta') return { ...item, text: item.text + (event.text ?? '') };
-            if (event.type === 'reasoning_delta') return { ...item, reasoning: (item.reasoning ?? '') + (event.text ?? '') };
-            if (event.type === 'tool_call') return { ...item, tools: [...(item.tools ?? []), event.tool ?? '工具'] };
-            if (event.type === 'done') return { ...item, delivery: 'completed' };
-            if (event.type === 'error') return {
-              ...item,
-              delivery: 'unconfirmed',
-              errorCode: event.code,
-            };
-            // Confirmations become actionable only through the saved history.
-            return item;
+            if (event.type === 'done') {
+              return messageFromContent(item.id, 'assistant', event.content, item.createdAt);
+            }
+            return applyChatStreamEvent(item, event);
           });
         });
         if (event.type === 'error') setError('本轮未成功完成，请查看保存的状态；不会自动重试。');
@@ -193,23 +167,28 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
       sending.current = false;
       if (!abort.signal.aborted) { await load(); setBusy(false); }
     }
-  };
-  return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述目标，数字员工会调用已发布能力并展示交互卡片</p></div>
-    <button className="secondary" disabled={busy} onClick={() => { setError(''); void load(); }}>重新读取历史</button>
-    {error ? <p className="chat-error" role="alert">{error}</p> : null}</header>
-    <div className="message-flow" ref={flowRef}>{messages.map(message => <article className={`message ${message.role}`} key={message.id}><span>{message.role === 'user' ? '你' : 'AI'}</span><div>
-      {message.delivery ? <small>{message.delivery === 'waiting_action' ? '已交给卡片交互 · 以卡片状态为准' : message.delivery === 'completed' ? '已完成' : message.delivery === 'failed' ? '执行失败 · 未自动重试' : message.delivery === 'running' ? (busy ? '执行中' : '执行中或状态待确认 · 正在读取保存的进度') : message.delivery === 'unconfirmed' ? '结果待确认' : ''}</small> : null}
-      {message.reasoning || message.tools?.length || message.delivery === 'failed' ? <details key={`${message.id}-${message.delivery === 'running'}`} open={message.delivery === 'running'}><summary>执行详情 · {message.tools?.length ?? 0} 次工具调用</summary>{message.delivery === 'failed' ? <p>失败原因：{chatErrorPresentation(message.errorCode)}</p> : null}{message.reasoning ? <MarkdownContent markdown={message.reasoning} /> : null}{message.tools?.map((tool, index) => <p key={index}>调用工具：{tool}</p>)}</details> : null}
-      <MarkdownContent markdown={message.text} />
-      {message.event?.type === 'workflow_confirm' && (!message.delivery || message.delivery === 'completed') ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><button className="primary" onClick={async () => {
-        try { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', '来自对话的工作请求'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }
-        catch { setError('工作流启动状态未确认，请查看工作流列表。'); }
-      }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
-      {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
-    </div></article>)}{runId ? <RunDetail runId={runId} /> : null}
-    <ChatApplications key={conversationId} conversationId={conversationId} refreshKey={messages.length + Number(busy)} active={busy || pending} onComposerDraft={applyComposerDraft} />
-    </div>
-    <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}><textarea aria-label="消息" placeholder="输入消息，描述你想完成的工作" value={input} onChange={event => { inputRef.current = event.target.value; setInput(event.target.value); }} /><button className="primary" disabled={busy || pending || !loaded || !input.trim()}>{busy ? '执行中…' : '发送'}</button></form>
+  }, [conversationId, load, loaded, pending]);
+  const renderMessageExtras = useCallback((message: Message) => <>
+    {message.event?.type === 'workflow_confirm' && (!message.delivery || message.delivery === 'completed') ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><button className="primary" onClick={async () => {
+      try { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', '来自对话的工作请求'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }
+      catch { setError('工作流启动状态未确认，请查看工作流列表。'); }
+    }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
+    {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
+  </>, [conversationId]);
+  return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述目标，数字员工会调用已发布能力并展示交互卡片</p></div></header>
+    <AssistantThread
+      conversationId={conversationId}
+      messages={messages}
+      isRunning={busy || pending}
+      isSendDisabled={!loaded || pending}
+      refreshKey={messages.length + Number(busy)}
+      error={error}
+      onReload={() => { setError(''); void load(); }}
+      onSend={send}
+      onComposerError={setError}
+      renderMessageExtras={renderMessageExtras}
+      threadTail={runId ? <RunDetail runId={runId} /> : null}
+    />
   </section>;
 }
 
