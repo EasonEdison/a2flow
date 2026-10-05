@@ -179,6 +179,15 @@ def _response(value: RuntimeResult) -> a2ui_pb2.RuntimeResponse:
         session=_session(value.session),
         interaction_mode=value.interaction_mode.value,
         business_success=value.business_success,
+        composer_draft_effects=[
+            a2ui_pb2.ComposerDraftEffect(
+                type=item.type.value,
+                mode=item.mode.value,
+                request_id=item.request_id,
+                text=item.text,
+            )
+            for item in value.composer_draft_effects
+        ],
     )
     if value.action_observation is not None:
         observed = value.action_observation

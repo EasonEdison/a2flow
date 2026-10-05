@@ -33,3 +33,48 @@ M-side editing, compiling and publication stay in Java. This package executes an
 already published immutable Build and does not expose browser authentication.
 The inbound caller must be the authenticated workflow runtime that constructs
 the trusted card and `ExecutionContext`.
+
+## Generic list projection and composer effects
+
+`ARRAY_OBJECT_TO_OPTIONS` projects a capability result array to official A2UI
+ChoicePicker options. `valuePath` must resolve to a unique, non-empty string.
+Each `labelColumns` entry reads a scalar or an array of scalars; arrays are
+joined with `、`, columns are joined with `labelSeparator`, and object values,
+missing paths, duplicate values, more than 100 rows, or more than 20 columns
+fail the presentation. The transform never supplies business identity or data.
+
+```json
+{
+  "type": "ARRAY_OBJECT_TO_OPTIONS",
+  "valuePath": "/personId",
+  "labelColumns": [
+    {"label": "姓名", "sourcePath": "/name"},
+    {"label": "电话", "sourcePath": "/phone"},
+    {"label": "爱好", "sourcePath": "/hobbies"}
+  ],
+  "labelSeparator": "｜"
+}
+```
+
+An ActionBinding may declare one `composerDraftEffect` with type
+`COMPOSER_DRAFT`, mode `APPEND`, source `CAPABILITY_DATA`, an `itemsPath`, and
+ordered scalar `columns`. It is emitted only for a successful business outcome
+and contains text derived from the capability response. The effect is scoped to
+the Action HTTP response and its request ID: it is not stored in the card,
+returned by card GET, sent as a chat message, or interpreted as workflow
+completion. Missing or non-scalar column values, an empty or oversized result,
+or text longer than 4000 characters fail the presentation instead of emitting
+partial text.
+
+```json
+{
+  "type": "COMPOSER_DRAFT",
+  "mode": "APPEND",
+  "source": "CAPABILITY_DATA",
+  "itemsPath": "/items",
+  "columns": [
+    {"label": "姓名", "sourcePath": "/name"},
+    {"label": "电话", "sourcePath": "/phone"}
+  ]
+}
+```

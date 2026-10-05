@@ -6,10 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from agent_workflow_runtime.chat.cards import ActionObservation
-from agent_workflow_runtime.chat.rpc_actions import RpcChatActionService
+from agent_workflow_runtime.chat.rpc_actions import RpcChatActionService, _response
 from agent_workflow_runtime.models import ActionRejected
 from agent_workflow_runtime.rpc_client import (
     ActionExecutionObservation,
+    ComposerDraftEffect,
     ReleaseIdentity,
     RpcFailure,
     RuntimeSession,
@@ -18,6 +19,30 @@ from skillweave_contracts import TrustedContext
 
 
 class RpcChatActionObservationTests(unittest.TestCase):
+    def test_composer_effect_is_response_only_and_request_scoped(self) -> None:
+        card = {"cardId": "card-1", "status": "WAITING_ACTION"}
+        actual = _response(
+            card,
+            "request-1",
+            (ComposerDraftEffect(
+                "COMPOSER_DRAFT", "APPEND", "request-1",
+                "姓名\N{FULLWIDTH COLON}张三\N{FULLWIDTH COMMA}"
+                "电话\N{FULLWIDTH COLON}138****0001",
+            ),),
+        )
+
+        self.assertEqual(card, actual["card"])
+        self.assertEqual("request-1", actual["effects"][0]["requestId"])
+        self.assertNotIn("effects", card)
+        with self.assertRaisesRegex(RpcFailure, "RPC_RESPONSE_INVALID"):
+            _response(
+                card,
+                "request-2",
+                (ComposerDraftEffect(
+                    "COMPOSER_DRAFT", "APPEND", "request-1", "text"
+                ),),
+            )
+
     def test_presentation_failure_keeps_actual_arguments_result_and_business_status(self) -> None:
         owner = TrustedContext(1009, "PRT")
         release = ReleaseIdentity("app", "source", "sha256:source", "build-1", "PRT")
@@ -81,7 +106,8 @@ class RpcChatActionObservationTests(unittest.TestCase):
             inputs={"surfaceId": "main", "sourceComponentId": "save", "context": {}},
         )
 
-        self.assertEqual("UNKNOWN", actual["status"])
+        self.assertEqual("UNKNOWN", actual["card"]["status"])
+        self.assertEqual([], actual["effects"])
         store.finish.assert_not_called()
         observation = store.fail.call_args.kwargs["observation"]
         self.assertIsInstance(observation, ActionObservation)

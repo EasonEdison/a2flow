@@ -66,6 +66,7 @@ class ResultTransformType(StrEnum):
     BOOLEAN_ARRAY_TRUE_COUNT = "BOOLEAN_ARRAY_TRUE_COUNT"
     PAGINATION_STATE = "PAGINATION_STATE"
     NUMBER_TO_STRING = "NUMBER_TO_STRING"
+    ARRAY_OBJECT_TO_OPTIONS = "ARRAY_OBJECT_TO_OPTIONS"
 
 
 class ResultOutcome(StrEnum):
@@ -130,6 +131,36 @@ class ResultTransform(_PublishedModel):
     page_size: int | float | None = Field(default=None, alias="pageSize")
     page_number: int | float | None = Field(default=None, alias="pageNumber")
     action_page_path: str | None = Field(default=None, alias="actionPagePath")
+    value_path: str | None = Field(default=None, alias="valuePath")
+    label_columns: tuple[TextColumn, ...] | None = Field(
+        default=None, alias="labelColumns"
+    )
+    label_separator: str | None = Field(default=None, alias="labelSeparator")
+
+
+class TextColumn(_PublishedModel):
+    label: str = Field(min_length=1, max_length=64)
+    source_path: str = Field(alias="sourcePath", min_length=1)
+
+
+class ComposerDraftEffectType(StrEnum):
+    COMPOSER_DRAFT = "COMPOSER_DRAFT"
+
+
+class ComposerDraftMode(StrEnum):
+    APPEND = "APPEND"
+
+
+class ComposerDraftEffectSource(StrEnum):
+    CAPABILITY_DATA = "CAPABILITY_DATA"
+
+
+class ComposerDraftEffectSpec(_PublishedModel):
+    type: ComposerDraftEffectType
+    mode: ComposerDraftMode
+    source: ComposerDraftEffectSource
+    items_path: str = Field(alias="itemsPath", min_length=1)
+    columns: tuple[TextColumn, ...] = Field(min_length=1, max_length=20)
 
 
 class MessageTemplateBinding(_PublishedModel):
@@ -223,6 +254,9 @@ class ActionBinding(_PublishedModel):
         alias="completeWorkflowInteractionOnSuccess"
     )
     success_branches: tuple[SuccessBranch, ...] = Field(default=(), alias="successBranches")
+    composer_draft_effect: ComposerDraftEffectSpec | None = Field(
+        default=None, alias="composerDraftEffect"
+    )
 
 
 class LoadBinding(_PublishedModel):
@@ -346,6 +380,14 @@ class ActionExecutionObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class ComposerDraftEffect:
+    type: ComposerDraftEffectType
+    mode: ComposerDraftMode
+    request_id: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeResult:
     release: ApplicationRelease
     params: JsonObject
@@ -359,6 +401,7 @@ class RuntimeResult:
     interaction_mode: InteractionMode
     business_success: bool
     action_observation: ActionExecutionObservation | None = None
+    composer_draft_effects: tuple[ComposerDraftEffect, ...] = ()
 
 
 class PublishedApplicationReader(Protocol):

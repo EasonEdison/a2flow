@@ -1,8 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { productApi, type ChatCard } from '../productApi';
+import { productApi, type ChatCard, type ComposerDraftEffect } from '../productApi';
 const A2uiSnapshotCard = lazy(() => import('./A2uiSnapshotCard').then(module => ({ default: module.A2uiSnapshotCard })));
 
-export function ChatApplications({ conversationId, refreshKey, active }: { conversationId: string; refreshKey: number; active: boolean }) {
+export function ChatApplications({ conversationId, refreshKey, active, onComposerDraft }: {
+  conversationId: string;
+  refreshKey: number;
+  active: boolean;
+  onComposerDraft: (effect: ComposerDraftEffect) => void;
+}) {
   const [cards, setCards] = useState<ChatCard[]>([]);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -37,7 +42,7 @@ export function ChatApplications({ conversationId, refreshKey, active }: { conve
     {cards.length || error ? <button className="secondary" onClick={() => { manualReload.current = true; reload(); }}>重新读取卡片</button> : null}
     {error ? <p role="alert">{error}</p> : null}
     <Suspense fallback={<p role="status">正在加载卡片组件…</p>}>
-      {cards.map(card => <A2uiSnapshotCard key={`${card.cardId}:${manualReloadKey}`} card={card} onUpdate={updateCard} />)}
+      {cards.map(card => <A2uiSnapshotCard key={`${card.cardId}:${manualReloadKey}`} card={card} onUpdate={updateCard} onComposerDraft={onComposerDraft} />)}
     </Suspense>
   </section>;
 }

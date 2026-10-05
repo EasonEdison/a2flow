@@ -167,6 +167,14 @@ class ActionExecutionObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class ComposerDraftEffect:
+    type: str
+    mode: str
+    request_id: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeResult:
     release: ReleaseIdentity
     params: JsonObject
@@ -181,6 +189,7 @@ class RuntimeResult:
     interaction_mode: str
     business_success: bool
     action_observation: ActionExecutionObservation | None = None
+    composer_draft_effects: tuple[ComposerDraftEffect, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -394,6 +403,23 @@ class RpcClient:
                 item.business_success if item.HasField("business_success") else None,
                 item.capability_error_code or None, item.presentation_error_code or None,
             )
-        return RuntimeResult(release, _object(value.params_json), _messages(value.messages_json), _messages(value.snapshot_json),
-                             executions, _actions(value.actions), value.complete_interaction, value.selected_branch_id,
-                             catalog, session, _mode(value.interaction_mode), value.business_success, observation)
+        effects = tuple(
+            ComposerDraftEffect(item.type, item.mode, item.request_id, item.text)
+            for item in value.composer_draft_effects
+        )
+        return RuntimeResult(
+            release,
+            _object(value.params_json),
+            _messages(value.messages_json),
+            _messages(value.snapshot_json),
+            executions,
+            _actions(value.actions),
+            value.complete_interaction,
+            value.selected_branch_id,
+            catalog,
+            session,
+            _mode(value.interaction_mode),
+            value.business_success,
+            observation,
+            effects,
+        )

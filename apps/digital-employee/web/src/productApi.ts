@@ -33,6 +33,8 @@ export type ChatCard = { cardId: string; conversationId: string; status: string;
     catalog: { protocolVersion: string; catalogId: string; catalogRevision: string | number; catalogDigest: string };
     rootId?: string; components?: Record<string, unknown>[]; data?: Record<string, unknown>;
     actions: { actionName: string; surfaceId: string; componentId: string; inputSchema: Record<string, unknown> }[] } };
+export type ComposerDraftEffect = { type: 'COMPOSER_DRAFT'; mode: 'APPEND'; requestId: string; text: string };
+export type ChatActionResponse = { card: ChatCard; effects: ComposerDraftEffect[] };
 
 const friendlyMessages: Record<string, string> = {
   INVALID_USERNAME: '用户名需为 3–32 位字母、数字、下划线或连字符',
@@ -157,7 +159,7 @@ const readSurfaceStream = async (response: Response, onSurface: (view: RunView) 
 
 export const productApi = {
   chatCards: (id: string, signal?: AbortSignal) => api<{ cards: ChatCard[] }>(`/api/conversations/${encodeURIComponent(id)}/cards`, { signal }),
-  chatAction: (id: string, card: ChatCard, requestId: string, actionName: string, inputs: Record<string, unknown>) => api<ChatCard>(
+  chatAction: (id: string, card: ChatCard, requestId: string, actionName: string, inputs: Record<string, unknown>) => api<ChatActionResponse>(
     `/api/conversations/${encodeURIComponent(id)}/cards/${encodeURIComponent(card.cardId)}/actions`,
     body({ requestId, actionName, inputs })),
   memory: (signal?: AbortSignal) => api<MemorySettings>('/api/memory', { signal }),

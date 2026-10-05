@@ -13,7 +13,14 @@ class ChatCardsApiTests(unittest.TestCase):
         harness = Harness(
             chat_cards=lambda user, conversation: [{"cardId": "card-1"}],
             chat_action=lambda user, conversation, card, body: (
-                calls.append((user, conversation, card, body)) or {"status": "COMPLETED"}),
+                calls.append((user, conversation, card, body)) or {
+                    "card": {"status": "COMPLETED"},
+                    "effects": [{
+                        "type": "COMPOSER_DRAFT", "mode": "APPEND",
+                        "requestId": body["requestId"],
+                        "text": "姓名\N{FULLWIDTH COLON}张三",
+                    }],
+                }),
         )
         async with await harness.client() as client:
             response = await client.post("/api/auth/register", headers=ORIGIN_HEADERS,
@@ -32,7 +39,11 @@ class ChatCardsApiTests(unittest.TestCase):
             self.assertEqual(400, (await client.post(
                 action_path, headers=ORIGIN_HEADERS, json=stale_contract,
             )).status_code)
-            self.assertEqual(200, (await client.post(action_path, headers=ORIGIN_HEADERS, json=payload)).status_code)
+            action_response = await client.post(
+                action_path, headers=ORIGIN_HEADERS, json=payload,
+            )
+            self.assertEqual(200, action_response.status_code)
+            self.assertEqual("r-1", action_response.json()["effects"][0]["requestId"])
             self.assertEqual(1, calls[0][0])
             self.assertEqual(str(conversation), calls[0][1])
             await client.post("/api/auth/logout", headers=ORIGIN_HEADERS, json={})
