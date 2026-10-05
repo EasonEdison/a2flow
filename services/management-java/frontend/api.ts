@@ -4,7 +4,7 @@ import { managementFetch } from './shared/managementSession';
 import type { ComponentAssetQuery, ComponentPreviewResult, ComponentRenderPreviewParams, ComponentRenderPreviewResult, AssetReleaseEnvironmentFacts, AssetAccessResult, AssetReleaseOperationResult, AssetReleaseOverview, ReleaseDiffDocument, ReleaseDiffQuery, ReleaseAssetType, ReleaseEnvironment, SkillFactoryComponentAsset, } from './types';
 import type { A2uiCatalogAuthoringJson, A2uiCatalogComponentContract, A2uiCatalogComponentQuery, A2uiCatalogComponentRecord, A2uiManagedCatalogImportResult, A2uiCatalogQuery, A2uiCatalogRecord, } from './a2uiCatalogContracts';
 import { parseA2uiCatalogAuthoringJson } from './a2uiCatalogContracts';
-import type { A2uiApplicationBlueprintCode, A2uiApplicationBlueprintWireSource, A2uiApplicationDraft, A2uiApplicationQuery, A2uiApplicationRecord, } from './a2uiApplicationContracts';
+import type { A2uiApplicationBlueprintCode, A2uiApplicationBlueprintWireSource, A2uiApplicationDraft, A2uiApplicationQuery, A2uiApplicationRecord, A2uiMessage, } from './a2uiApplicationContracts';
 import { projectA2uiApplicationBlueprintOptions, projectA2uiApplicationActionScanResult, projectA2uiApplicationBlueprintWireSource, normalizeA2uiApplicationDraft, toA2uiApplicationAuthoringPayload, } from './a2uiApplicationContracts';
 import type { CapabilityClient } from './capabilityClientVariantLayout';
 import { buildSpecialistPrtBindingRequest } from './specialistPrtDebug';
@@ -84,6 +84,9 @@ export const SkillFactoryMethod = {
     A2UI_APPLICATION_BLUEPRINT_LIST: 'A2UI_APPLICATION_BLUEPRINT_LIST',
     A2UI_APPLICATION_BLUEPRINT_IMPORT: 'A2UI_APPLICATION_BLUEPRINT_IMPORT',
     A2UI_APPLICATION_ACTION_SCAN: 'A2UI_APPLICATION_ACTION_SCAN',
+    A2UI_APPLICATION_PRT_PREVIEW_START: 'A2UI_APPLICATION_PRT_PREVIEW_START',
+    A2UI_APPLICATION_PRT_PREVIEW_ACTION: 'A2UI_APPLICATION_PRT_PREVIEW_ACTION',
+    A2UI_APPLICATION_PRT_PREVIEW_CLOSE: 'A2UI_APPLICATION_PRT_PREVIEW_CLOSE',
     CAPABILITY_LIST: 'CAPABILITY_LIST',
     CAPABILITY_PUBLISHED_LIST: 'CAPABILITY_PUBLISHED_LIST',
     CAPABILITY_DRAFT_CREATE: 'CAPABILITY_DRAFT_CREATE',
@@ -2041,6 +2044,59 @@ export function a2uiApplicationWriteParams(application: A2uiApplicationDraft): R
         applicationJson: jsonStringify(toA2uiApplicationAuthoringPayload(application)) || '{}',
     };
 }
+export interface A2uiPrtPreviewRelease {
+    appCode: string;
+    sourceId: string;
+    digest: string;
+    appBuildId: string;
+    environment: 'PRT';
+}
+export interface A2uiPrtPreviewCatalog {
+    protocolVersion: string;
+    catalogId: string;
+    catalogRevision: string;
+    catalogDigest: string;
+}
+export interface A2uiPrtComposerDraftEffect {
+    type: 'COMPOSER_DRAFT';
+    mode: 'APPEND';
+    requestId: string;
+    text: string;
+}
+export interface A2uiPrtPreviewResult {
+    sessionId: string;
+    previewCardId: string;
+    targetUserId: string;
+    environment: 'PRT';
+    client: 'PC';
+    appCode: string;
+    requestId: string;
+    expiresAt: string;
+    release: A2uiPrtPreviewRelease;
+    catalog: A2uiPrtPreviewCatalog;
+    messages: A2uiMessage[];
+    actions: Array<{ name: string; surfaceId: string; sourceComponentId: string }>;
+    executions: Array<{
+        bindingId: string;
+        actionCode: string;
+        success: boolean;
+        capabilityVersion: number;
+        errorCode: string;
+    }>;
+    composerDraftEffects: A2uiPrtComposerDraftEffect[];
+    businessSuccess: boolean;
+    completeInteraction: boolean;
+    selectedBranchId: string;
+}
+export interface A2uiPrtPreviewActionInput {
+    sessionId: string;
+    actionName: string;
+    surfaceId: string;
+    sourceComponentId: string;
+    context: Record<string, unknown>;
+    requestId: string;
+    confirmed: true;
+}
 export const a2uiApplicationApi = {
     list: async (query: A2uiApplicationQuery = {}) => {
         const applications = await callSkillFactory<A2uiApplicationRecord[]>(SkillFactoryMethod.A2UI_APPLICATION_LIST, compact(query));
@@ -2066,6 +2122,22 @@ export const a2uiApplicationApi = {
         const source = await callSkillFactory<unknown>(SkillFactoryMethod.A2UI_APPLICATION_ACTION_SCAN, a2uiApplicationWriteParams(application));
         return projectA2uiApplicationActionScanResult(source);
     },
+    startPrtPreview: (id: string, targetUserId: string, params: Record<string, unknown>, requestId: string) => callSkillFactory<A2uiPrtPreviewResult>(SkillFactoryMethod.A2UI_APPLICATION_PRT_PREVIEW_START, {
+        id,
+        targetUserId,
+        paramsJson: jsonStringify(params) || '{}',
+        requestId,
+    }),
+    executePrtPreviewAction: (input: A2uiPrtPreviewActionInput) => callSkillFactory<A2uiPrtPreviewResult>(SkillFactoryMethod.A2UI_APPLICATION_PRT_PREVIEW_ACTION, {
+        sessionId: input.sessionId,
+        actionName: input.actionName,
+        surfaceId: input.surfaceId,
+        sourceComponentId: input.sourceComponentId,
+        contextJson: jsonStringify(input.context) || '{}',
+        requestId: input.requestId,
+        confirmed: input.confirmed,
+    }),
+    closePrtPreview: (sessionId: string) => callSkillFactory<{ sessionId: string; closed: boolean }>(SkillFactoryMethod.A2UI_APPLICATION_PRT_PREVIEW_CLOSE, { sessionId }),
 };
 export const skillBindingCandidateApi = {
     componentList: (query: ComponentAssetQuery = {}) => callSkillFactory<SkillFactoryComponentAsset[]>(SkillFactoryMethod.SKILL_COMPONENT_CANDIDATE_LIST, compact(query)),

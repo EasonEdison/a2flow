@@ -29,6 +29,8 @@ import dev.a2flow.management.a2ui.registry.A2uiAtomAuthoringProjection;
 import dev.a2flow.management.a2ui.registry.A2uiAtomRegistryService;
 import dev.a2flow.management.a2ui.registry.A2uiRegistryValidationException;
 import dev.a2flow.management.a2ui.release.A2uiReleaseProjectionService;
+import dev.a2flow.management.a2ui.preview.A2uiPrtPreviewException;
+import dev.a2flow.management.a2ui.preview.A2uiPrtPreviewService;
 import dev.a2flow.management.access.AssetAuthorizationService;
 import dev.a2flow.management.access.AssetMethodAuthorizationService;
 import dev.a2flow.management.access.AssetNotFoundException;
@@ -188,6 +190,9 @@ public class SkillFactoryMethodDispatcher {
 
     @Resource
     private A2uiReleaseProjectionService a2uiReleaseProjectionService;
+
+    @Resource
+    private A2uiPrtPreviewService a2uiPrtPreviewService;
 
     /**
      * 执行 SkillFactory 非流式方法，并把异常转成统一执行结果。
@@ -602,6 +607,10 @@ public class SkillFactoryMethodDispatcher {
             return SkillFactoryExecutionResult.fail(gateway.getMessage(), errorData(
                     gateway.getErrorCode(), null, gateway.getSafePointer()));
         }
+        if (exception instanceof A2uiPrtPreviewException preview) {
+            return SkillFactoryExecutionResult.fail(preview.getMessage(), errorData(
+                    preview.getErrorCode(), null, null));
+        }
         if (exception instanceof AssetDependencyResolutionException dependency) {
             Map<String, Object> data = errorData(
                     dependency.getErrorCode().name(), null, dependency.getFieldPath());
@@ -756,6 +765,15 @@ public class SkillFactoryMethodDispatcher {
         if (method == SkillFactoryMethodEnum.A2UI_APPLICATION_ACTION_SCAN) {
             return success(a2uiApplicationActionScanService.scan(
                     jsonObject(params, PARAM_APPLICATION_JSON)), false);
+        }
+        if (method == SkillFactoryMethodEnum.A2UI_APPLICATION_PRT_PREVIEW_START) {
+            return success(a2uiPrtPreviewService.start(userName, params), false);
+        }
+        if (method == SkillFactoryMethodEnum.A2UI_APPLICATION_PRT_PREVIEW_ACTION) {
+            return success(a2uiPrtPreviewService.action(userName, params), false);
+        }
+        if (method == SkillFactoryMethodEnum.A2UI_APPLICATION_PRT_PREVIEW_CLOSE) {
+            return success(a2uiPrtPreviewService.close(userName, params), false);
         }
         return null;
     }

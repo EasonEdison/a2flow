@@ -94,6 +94,7 @@ interface Props {
   catalogId: string;
   messages: A2uiMessage[];
   onAction: (event: A2uiLocalActionEvent) => void;
+  footerText?: string;
 }
 
 function createProcessor(catalog: ReturnType<typeof catalogFor>) {
@@ -102,7 +103,7 @@ function createProcessor(catalog: ReturnType<typeof catalogFor>) {
 
 type PreviewProcessor = ReturnType<typeof createProcessor>;
 
-const A2uiApplicationRendererPreview: React.FC<Props> = ({ catalogId, messages, onAction }) => {
+const A2uiApplicationRendererPreview: React.FC<Props> = ({ catalogId, messages, onAction, footerText = '本地预览：不会调用 CapabilityAction' }) => {
   const [processor, setProcessor] = useState<PreviewProcessor>();
   const [error, setError] = useState('');
   const messageKey = useMemo(() => JSON.stringify(messages), [messages]);
@@ -164,7 +165,7 @@ const A2uiApplicationRendererPreview: React.FC<Props> = ({ catalogId, messages, 
           ))}
         </div>
       </MarkdownContext.Provider>
-      <Tag style={{ marginTop: 12 }}>本地预览：不会调用 CapabilityAction</Tag>
+      <Tag style={{ marginTop: 12 }}>{footerText}</Tag>
     </PreviewBoundary>
   );
 };

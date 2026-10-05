@@ -4,7 +4,7 @@ services:
   management:
     environment:
       A2FLOW_CAPABILITY_GRPC_TARGETS_JSON: >-
-        {"content":{"PRT":{"host":"127.0.0.1","port":8795,"trustCertFile":"/run/a2flow/rpc/ca.pem","clientCertFile":"/run/a2flow/rpc/content-client.pem","clientKeyFile":"/run/a2flow/rpc/content-client-key.pem"}}}
+        {"content":{"PRT":{"host":"127.0.0.1","port":8795,"trustCertFile":"/run/a2flow/rpc/ca.pem","clientCertFile":"/run/a2flow/rpc/content-client.pem","clientKeyFile":"/run/a2flow/rpc/content-client-key.pem"}},"a2ui-execution":{"PRT":{"host":"127.0.0.1","port":8794,"trustCertFile":"/run/a2flow/rpc/ca.pem","clientCertFile":"/run/a2flow/rpc/content-client.pem","clientKeyFile":"/run/a2flow/rpc/content-client-key.pem"}}}
     volumes:
       - ${A2FLOW_EXECUTION_PRIVATE:?set private Python execution directory}/rpc/client.pem:/run/a2flow/rpc/content-client.pem:ro
       - ${A2FLOW_EXECUTION_PRIVATE}/rpc/client-key.pem:/run/a2flow/rpc/content-client-key.pem:ro
