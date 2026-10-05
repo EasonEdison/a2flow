@@ -24,6 +24,7 @@ from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 from . import auth
 from .chat_runner import ChatRunner
 from .chat_delivery import ChatDelivery, ChatStreamingResponse
+from .chat_history import has_card_references, hydrate_history
 from .errors import BsideError, RemoteRuntimeError
 from .identity import (
     SESSION_COOKIE,
@@ -369,11 +370,25 @@ def create_app(
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
             raise BsideError("NOT_FOUND", 404)
+        rows = messages.list_for(conversation_id)
+        cards = []
+        if chat_cards is not None:
+            try:
+                cards = await asyncio.to_thread(
+                    chat_cards, identity.userId, str(conversation_id),
+                )
+                if not isinstance(cards, list):
+                    raise TypeError("CHAT_CARDS_RESULT_INVALID")
+            except Exception as error:
+                raise BsideError("CHAT_HISTORY_CARDS_UNAVAILABLE", 503) from error
+        elif has_card_references(rows):
+            raise BsideError("CHAT_HISTORY_CARDS_UNAVAILABLE", 503)
+        hydrated, unassigned_cards = hydrate_history(rows, cards)
         return {"messages": [
             {"id": str(row["id"]), "role": row["role"],
              "content": row["content"], "refKind": row["ref_kind"],
              "refId": row["ref_id"], "createdAt": _iso(row["created_at"])}
-            for row in messages.list_for(conversation_id)]}
+            for row in hydrated], "unassignedCards": unassigned_cards}
 
     @app.post("/api/conversations/{conversation_id}/messages")
     async def send_message(
@@ -388,7 +403,7 @@ def create_app(
 
         assistant_message = messages.append(
             conversation_id=conversation_id, role="assistant",
-            content={"text": "", "delivery": "running"})
+            content={"text": "", "delivery": "running", "parts": []})
         delivery = ChatDelivery(
             messages=messages, runner=chat_runner, user_id=identity.userId,
             conversation_id=conversation_id, text=body.text,

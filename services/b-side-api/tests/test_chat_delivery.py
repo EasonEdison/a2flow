@@ -34,6 +34,104 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('waiting_action', turn.messages.saved[-1]['content']['delivery'])
         self.assertEqual('done', events[-1]['type'])
         self.assertEqual('waiting_action', events[-1]['content']['delivery'])
+        waiting = next(event for event in events if event['type'] == 'waiting_action')
+        self.assertEqual('application:card-1', waiting['partId'])
+
+    async def test_persists_text_and_cards_in_actual_event_order(self):
+        class Runner:
+            async def iterate(self, **kwargs):
+                yield {'type': 'text_delta', 'text': '文字A',
+                       'modelMessageId': 'model-one'}
+                yield {'type': 'application_rendered',
+                       'card': {'cardId': 'card-1', 'status': 'WAITING_ACTION'}}
+                yield {'type': 'text_delta', 'text': '文字B',
+                       'modelMessageId': 'model-one'}
+                yield {'type': 'application_rendered',
+                       'card': {'cardId': 'card-2', 'status': 'DISPLAY_ONLY'}}
+                yield {'type': 'text_delta', 'text': '文字C',
+                       'modelMessageId': 'model-one'}
+                yield {'type': 'done', 'content': '文字A文字B文字C',
+                       'finalModelMessageId': 'model-one'}
+
+        turn = delivery(Runner())
+        task = asyncio.create_task(turn.produce())
+        events = [json.loads(item[6:]) async for item in turn.stream()]
+        await task
+
+        persisted = turn.messages.saved[-1]['content']
+        self.assertEqual([
+            {'type': 'text', 'id': 'text:12:1', 'text': '文字A',
+             'modelMessageId': 'model-one'},
+            {'type': 'application', 'id': 'application:card-1',
+             'cardId': 'card-1'},
+            {'type': 'text', 'id': 'text:12:2', 'text': '文字B',
+             'modelMessageId': 'model-one'},
+            {'type': 'application', 'id': 'application:card-2',
+             'cardId': 'card-2'},
+            {'type': 'text', 'id': 'text:12:3', 'text': '文字C',
+             'modelMessageId': 'model-one'},
+        ], persisted['parts'])
+        self.assertNotIn('card', persisted['parts'][1])
+        self.assertNotIn('card', persisted['events'][0])
+
+        text_events = [event for event in events if event['type'] == 'text_delta']
+        self.assertEqual(
+            ['text:12:1', 'text:12:2', 'text:12:3'],
+            [event['partId'] for event in text_events],
+        )
+        application_events = [
+            event for event in events if event['type'] == 'application_rendered'
+        ]
+        self.assertEqual(
+            ['application:card-1', 'application:card-2'],
+            [event['partId'] for event in application_events],
+        )
+        done = events[-1]
+        self.assertEqual(5, len(done['content']['parts']))
+        self.assertEqual('card-1', done['content']['parts'][1]['card']['cardId'])
+        self.assertEqual('card-2', done['content']['parts'][3]['card']['cardId'])
+
+    async def test_done_only_final_text_is_added_once_after_card(self):
+        class Runner:
+            async def iterate(self, **kwargs):
+                yield {'type': 'application_rendered',
+                       'card': {'cardId': 'card-1', 'status': 'DISPLAY_ONLY'}}
+                yield {'type': 'done', 'content': '最终文字',
+                       'finalModelMessageId': 'model-final'}
+
+        turn = delivery(Runner())
+        task = asyncio.create_task(turn.produce())
+        events = [json.loads(item[6:]) async for item in turn.stream()]
+        await task
+
+        self.assertEqual([
+            ('application', 'application:card-1'),
+            ('text', 'text:12:1'),
+        ], [
+            (part['type'], part['id'])
+            for part in turn.messages.saved[-1]['content']['parts']
+        ])
+        self.assertEqual(
+            '最终文字', turn.messages.saved[-1]['content']['parts'][1]['text'],
+        )
+        self.assertEqual(2, len(events[-1]['content']['parts']))
+
+    async def test_done_without_model_id_does_not_duplicate_streamed_text(self):
+        class Runner:
+            async def iterate(self, **kwargs):
+                yield {'type': 'text_delta', 'text': '最终文字'}
+                yield {'type': 'application_rendered',
+                       'card': {'cardId': 'card-1', 'status': 'DISPLAY_ONLY'}}
+                yield {'type': 'done', 'content': '最终文字'}
+
+        turn = delivery(Runner())
+        task = asyncio.create_task(turn.produce())
+        events = [json.loads(item[6:]) async for item in turn.stream()]
+        await task
+
+        parts = events[-1]['content']['parts']
+        self.assertEqual(['text', 'application'], [part['type'] for part in parts])
+        self.assertEqual('最终文字', parts[0]['text'])
 
     async def test_disconnect_before_response_body_starts(self):
         class Runner:
@@ -192,7 +290,10 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('12', saved['events'][0]['assistantMessageId'])
         self.assertEqual('11', events[0]['turnId'])
         self.assertEqual('model-final', events[-1]['finalModelMessageId'])
-        self.assertEqual(saved, events[-1]['content'])
+        terminal = copy.deepcopy(events[-1]['content'])
+        for part in terminal['parts']:
+            part.pop('card', None)
+        self.assertEqual(saved, terminal)
 
     async def test_done_waits_for_native_iterator_exit_and_saved_projection(self):
         gate = asyncio.Event()
