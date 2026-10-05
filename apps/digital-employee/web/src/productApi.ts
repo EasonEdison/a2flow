@@ -7,6 +7,36 @@ import { persistedChatErrorCode } from './errorPresentation';
 export type Session = { userId: string; username: string; role: string };
 export type Conversation = { id: string; title: string; updatedAt: string };
 export type ChatEvent = { type: 'workflow_confirm'; workflowKey: string; title: string } | { type: 'interaction_required'; runId: string };
+export type ChatJson = null | boolean | number | string | ChatJson[] | { [key: string]: ChatJson };
+export type ChatModelMessage = {
+  sequence: number;
+  messageId: string;
+  text: string;
+  reasoning: string;
+  phase: 'process' | 'final';
+};
+export type ChatToolCall = {
+  sequence: number;
+  toolCallId: string;
+  name: string;
+  arguments: Record<string, ChatJson>;
+  lifecycleStatus: 'running' | 'returned' | 'raised';
+  toolMessageStatus?: 'success' | 'error' | null;
+  businessSuccess?: boolean | null;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  result?: ChatJson;
+  errorCode?: string;
+};
+export type ChatExecution = {
+  schemaVersion: 'v1';
+  turnId: string;
+  inputMessageId: string;
+  assistantMessageId: string;
+  modelMessages: ChatModelMessage[];
+  toolCalls: ChatToolCall[];
+};
 export type Message = {
   id: string;
   role: 'user' | 'assistant';
@@ -17,8 +47,18 @@ export type Message = {
   errorCode?: string;
   reasoning?: string;
   tools?: string[];
+  execution?: ChatExecution;
 };
-export type ChatStreamEvent = { type: string; sequence: number; messageId: string; inputMessageId: string; text?: string; tool?: string; code?: string; workflowKey?: string; title?: string; runId?: string };
+type ChatStreamBase = { sequence: number; messageId: string; inputMessageId: string };
+export type ChatStreamEvent = ChatStreamBase & (
+  | { type: 'turn_started'; turnId: string }
+  | { type: 'text_delta' | 'reasoning_delta'; modelMessageId?: string | null; text: string }
+  | { type: 'tool_call_started'; toolCallId: string; name: string; arguments: Record<string, ChatJson>; startedAt: string }
+  | { type: 'tool_call_finished'; toolCallId: string; name: string; lifecycleStatus: 'returned' | 'raised'; toolMessageStatus: 'success' | 'error' | null; businessSuccess?: boolean | null; startedAt?: string; finishedAt: string; durationMs: number; result?: ChatJson; errorCode?: string }
+  | { type: 'application_rendered' | 'waiting_action'; turnId: string; assistantMessageId: string }
+  | { type: 'done'; finalModelMessageId?: string | null; content: unknown }
+  | { type: 'error'; code?: string }
+);
 export type Workflow = { key: string; name: string; description: string; inputHint: string };
 export type RunItem = { id: string; workflowKey: string; title: string; status: string; input: string; createdAt: string };
 export type Schedule = { id: string; workflowKey: string; workflowName: string; input: string; cadence: string; enabled: boolean; nextRunAt: string };
@@ -27,7 +67,7 @@ export type Notification = { id: string; type: string; title: string; relatedTyp
 export type ApiError = Error & { code: string };
 export type MemoryEntry = { id: string; text: string };
 export type MemorySettings = { revision: number; enabled: boolean; entries: MemoryEntry[] };
-export type ChatCard = { cardId: string; conversationId: string; status: string; result?: unknown;
+export type ChatCard = { cardId: string; conversationId: string; turnId: string; status: string; result?: unknown;
   display: { applicationKey: string; applicationVersion?: string | number; protocolProfile: string;
     snapshotMessages: Record<string, unknown>[];
     catalog: { protocolVersion: string; catalogId: string; catalogRevision: string | number; catalogDigest: string };
@@ -101,6 +141,107 @@ const contentText = (content: unknown): string => {
   return '';
 };
 
+const recordOf = (value: unknown): Row => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('CHAT_CONTRACT_INVALID');
+  }
+  return value as Row;
+};
+
+const optionalString = (value: unknown): string | undefined => (
+  typeof value === 'string' && value ? value : undefined
+);
+
+const finiteDuration = (value: unknown): number | undefined => (
+  Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined
+);
+
+const executionOf = (content: unknown): ChatExecution | undefined => {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return undefined;
+  const raw = (content as Row).execution;
+  if (raw === undefined) return undefined;
+  const execution = recordOf(raw);
+  if (execution.schemaVersion !== 'v1') throw new Error('CHAT_EXECUTION_VERSION_UNSUPPORTED');
+  const modelMessages = Array.isArray(execution.modelMessages) ? execution.modelMessages.map((value) => {
+    const item = recordOf(value);
+    if (!Number.isSafeInteger(item.sequence) || Number(item.sequence) < 1
+      || (item.phase !== 'process' && item.phase !== 'final')) {
+      throw new Error('CHAT_CONTRACT_INVALID');
+    }
+    return {
+      sequence: Number(item.sequence),
+      messageId: textOf(item.messageId),
+      text: textOf(item.text),
+      reasoning: textOf(item.reasoning),
+      phase: item.phase,
+    } satisfies ChatModelMessage;
+  }) : [];
+  const toolCalls = Array.isArray(execution.toolCalls) ? execution.toolCalls.map((value) => {
+    const item = recordOf(value);
+    if (!Number.isSafeInteger(item.sequence) || Number(item.sequence) < 1
+      || !['running', 'returned', 'raised'].includes(textOf(item.lifecycleStatus))) {
+      throw new Error('CHAT_CONTRACT_INVALID');
+    }
+    const toolMessageStatus = item.toolMessageStatus === null
+      ? null
+      : optionalString(item.toolMessageStatus);
+    if (toolMessageStatus !== undefined && toolMessageStatus !== null
+      && !['success', 'error'].includes(toolMessageStatus)) {
+      throw new Error('CHAT_CONTRACT_INVALID');
+    }
+    const durationMs = finiteDuration(item.durationMs);
+    return {
+      sequence: Number(item.sequence),
+      toolCallId: textOf(item.toolCallId),
+      name: textOf(item.name),
+      arguments: recordOf(item.arguments) as Record<string, ChatJson>,
+      lifecycleStatus: textOf(item.lifecycleStatus) as ChatToolCall['lifecycleStatus'],
+      ...(toolMessageStatus !== undefined ? { toolMessageStatus: toolMessageStatus as ChatToolCall['toolMessageStatus'] } : {}),
+      ...(typeof item.businessSuccess === 'boolean' || item.businessSuccess === null
+        ? { businessSuccess: item.businessSuccess as boolean | null } : {}),
+      startedAt: textOf(item.startedAt),
+      ...(optionalString(item.finishedAt) ? { finishedAt: textOf(item.finishedAt) } : {}),
+      ...(durationMs !== undefined ? { durationMs } : {}),
+      ...(item.result !== undefined ? { result: item.result as ChatJson } : {}),
+      ...(optionalString(item.errorCode) ? { errorCode: textOf(item.errorCode) } : {}),
+    } satisfies ChatToolCall;
+  }) : [];
+  return {
+    schemaVersion: 'v1',
+    turnId: textOf(execution.turnId),
+    inputMessageId: textOf(execution.inputMessageId),
+    assistantMessageId: textOf(execution.assistantMessageId),
+    modelMessages,
+    toolCalls,
+  };
+};
+
+export const messageFromContent = (
+  id: string,
+  role: 'user' | 'assistant',
+  content: unknown,
+  createdAt: string,
+): Message => {
+  const event = contentEvent(content);
+  const errorCode = persistedChatErrorCode(content);
+  const execution = executionOf(content);
+  return {
+    id,
+    role,
+    text: contentText(content),
+    delivery: textOf((content as Row)?.delivery),
+    // Legacy fields remain read-compatible for one release. New UI process rendering uses execution only.
+    reasoning: textOf((content as Row)?.reasoning),
+    tools: Array.isArray((content as Row)?.tools)
+      ? ((content as Row).tools as unknown[]).filter((value): value is string => typeof value === 'string')
+      : [],
+    createdAt,
+    ...(execution ? { execution } : {}),
+    ...(event ? { event } : {}),
+    ...(errorCode ? { errorCode } : {}),
+  };
+};
+
 const refEvent = (row: Row): ChatEvent | undefined => (
   row.refKind === 'run' && row.refId
     ? { type: 'interaction_required', runId: textOf(row.refId) }
@@ -158,7 +299,12 @@ const readSurfaceStream = async (response: Response, onSurface: (view: RunView) 
 };
 
 export const productApi = {
-  chatCards: (id: string, signal?: AbortSignal) => api<{ cards: ChatCard[] }>(`/api/conversations/${encodeURIComponent(id)}/cards`, { signal }),
+  chatCards: async (id: string, signal?: AbortSignal): Promise<{ cards: ChatCard[] }> => {
+    const payload = await api<{ cards?: ChatCard[] }>(`/api/conversations/${encodeURIComponent(id)}/cards`, { signal });
+    return {
+      cards: (payload.cards ?? []).map((card) => ({ ...card, turnId: textOf(card.turnId) })),
+    };
+  },
   chatAction: (id: string, card: ChatCard, requestId: string, actionName: string, inputs: Record<string, unknown>) => api<ChatActionResponse>(
     `/api/conversations/${encodeURIComponent(id)}/cards/${encodeURIComponent(card.cardId)}/actions`,
     body({ requestId, actionName, inputs })),
@@ -188,19 +334,13 @@ export const productApi = {
     const payload = await api<{ messages?: Row[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`);
     return {
       items: (payload.messages ?? []).map((row) => {
-        const event = contentEvent(row.content) ?? refEvent(row);
-        const errorCode = persistedChatErrorCode(row.content);
-        return {
-          id: idOf(row.id),
-          role: row.role === 'user' ? 'user' as const : 'assistant' as const,
-          text: contentText(row.content),
-          delivery: textOf((row.content as Row)?.delivery),
-          reasoning: textOf((row.content as Row)?.reasoning),
-          tools: Array.isArray((row.content as Row)?.tools) ? ((row.content as Row).tools as unknown[]).filter((value): value is string => typeof value === 'string') : [],
-          createdAt: textOf(row.createdAt),
-          ...(event ? { event } : {}),
-          ...(errorCode ? { errorCode } : {}),
-        };
+        const parsed = messageFromContent(
+          idOf(row.id),
+          row.role === 'user' ? 'user' : 'assistant',
+          row.content,
+          textOf(row.createdAt),
+        );
+        return parsed.event ? parsed : { ...parsed, event: refEvent(row) };
       }),
     };
   },
