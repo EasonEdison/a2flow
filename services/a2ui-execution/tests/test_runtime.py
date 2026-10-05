@@ -18,10 +18,17 @@ from a2flow_a2ui.models import (
     ApplicationBuild,
     ApplicationRelease,
     PublishedApplication,
+    ResultTransform,
     TrustedCard,
 )
-from a2flow_a2ui.rpc import A2uiRpcService
-from a2flow_a2ui.runtime import A2uiRuntimeService, _execution_map, _predicate, map_request
+from a2flow_a2ui.rpc import A2uiRpcService, _response as rpc_response
+from a2flow_a2ui.runtime import (
+    A2uiRuntimeService,
+    _execution_map,
+    _predicate,
+    _transform,
+    map_request,
+)
 
 
 def test_rpc_internal_failure_logs_only_safe_stage_type_and_code(
@@ -222,6 +229,41 @@ def test_catalog_function_contract_is_optional_and_preserved() -> None:
     assert parsed.model_dump(by_alias=True)["catalog"]["functionContract"] == function_contract
 
 
+def test_array_object_to_options_formats_scalar_and_array_columns() -> None:
+    transform = ResultTransform.model_validate({
+        "type": "ARRAY_OBJECT_TO_OPTIONS",
+        "valuePath": "/personId",
+        "labelColumns": [
+            {"label": "姓名", "sourcePath": "/name"},
+            {"label": "年龄", "sourcePath": "/age"},
+            {"label": "爱好", "sourcePath": "/hobbies"},
+        ],
+        "labelSeparator": "\N{FULLWIDTH VERTICAL LINE}",
+    })
+
+    assert _transform(
+        transform,
+        [{"personId": "p1", "name": "张三", "age": 28, "hobbies": ["阅读", "徒步"]}],
+        "/updateDataModel/value/options",
+        {},
+    ) == [{
+        "label": (
+            "姓名\N{FULLWIDTH COLON}张三\N{FULLWIDTH VERTICAL LINE}"
+            "年龄\N{FULLWIDTH COLON}28\N{FULLWIDTH VERTICAL LINE}"
+            "爱好\N{FULLWIDTH COLON}阅读\N{IDEOGRAPHIC COMMA}徒步"
+        ),
+        "value": "p1",
+    }]
+
+    with pytest.raises(A2uiError, match="A2UI_ADAPTER_RESULT_INVALID"):
+        _transform(
+            transform,
+            [{"personId": "p1", "name": {"unsafe": "object"}, "age": 28, "hobbies": []}],
+            "/updateDataModel/value/options",
+            {},
+        )
+
+
 class Releases:
     def __init__(self, published: PublishedApplication) -> None:
         self.published = published
@@ -267,6 +309,112 @@ def service() -> tuple[A2uiRuntimeService, Capabilities, PublishedApplication]:
 
 def context(request_id: str = "request-1") -> TrustedContext:
     return TrustedContext(0, Environment.PRT, request_id, "PC")
+
+
+def test_successful_action_emits_response_scoped_composer_draft_effect() -> None:
+    raw = build_json()
+    binding = cast(dict[str, Any], cast(list[Any], raw["actionBindings"])[0])
+    binding["composerDraftEffect"] = {
+        "type": "COMPOSER_DRAFT",
+        "mode": "APPEND",
+        "source": "CAPABILITY_DATA",
+        "itemsPath": "/items",
+        "columns": [
+            {"label": "姓名", "sourcePath": "/name"},
+            {"label": "电话", "sourcePath": "/phone"},
+        ],
+    }
+    build = ApplicationBuild.model_validate(raw)
+    release = ApplicationRelease(
+        "demo.app", "app-build", "sha256:app", "build-1", Environment.PRT
+    )
+
+    class ResolveCapabilities(Capabilities):
+        def __init__(self, decision_type: str = "READING") -> None:
+            super().__init__()
+            self.decision_type = decision_type
+
+        def execute_action_code(
+            self, action_code: str, arguments: JsonObject, child: TrustedContext
+        ) -> ExecutionResult:
+            self.calls.append((action_code, arguments, child))
+            return ExecutionResult(
+                True, action_code, "cap-build", "sha256:cap", 3, child.client,
+                child.environment, child.environment, child.request_id,
+                {
+                    "decisionType": self.decision_type,
+                    "greeting": "resolved",
+                    "items": [
+                        {"name": "张三", "phone": "138****0001"},
+                        {"name": "李四", "phone": "139****0002"},
+                    ],
+                },
+            )
+
+    capabilities = ResolveCapabilities()
+    runtime = A2uiRuntimeService(
+        Releases(PublishedApplication(release, build)), capabilities
+    )
+    activated = runtime.activate("demo.app", {"title": "提交"}, context())
+    result = runtime.act(
+        TrustedCard(0, "demo.app", activated.params, activated.snapshot),
+        "correlation",
+        "request-2",
+        {
+            "version": "v0.9.1",
+            "action": {
+                "name": "demo.submit",
+                "surfaceId": "main",
+                "sourceComponentId": "submit",
+                "timestamp": "2026-10-05T00:00:00Z",
+                "context": {"name": "A2Flow"},
+            },
+        },
+        context("request-2"),
+    )
+
+    assert len(result.composer_draft_effects) == 1
+    effect = result.composer_draft_effects[0]
+    assert effect.request_id == "request-2"
+    assert effect.text == (
+        "姓名\N{FULLWIDTH COLON}张三\N{FULLWIDTH COMMA}"
+        "电话\N{FULLWIDTH COLON}138****0001\n"
+        "姓名\N{FULLWIDTH COLON}李四\N{FULLWIDTH COMMA}"
+        "电话\N{FULLWIDTH COLON}139****0002"
+    )
+    assert result.action_observation is not None
+    assert result.action_observation.business_success is True
+    wire = rpc_response(result)
+    assert len(wire.composer_draft_effects) == 1
+    assert wire.composer_draft_effects[0].request_id == "request-2"
+
+    rejected_capabilities = ResolveCapabilities("OTHER")
+    rejected_runtime = A2uiRuntimeService(
+        Releases(PublishedApplication(release, build)), rejected_capabilities
+    )
+    rejected_activated = rejected_runtime.activate(
+        "demo.app", {"title": "提交"}, context()
+    )
+    rejected = rejected_runtime.act(
+        TrustedCard(
+            0, "demo.app", rejected_activated.params, rejected_activated.snapshot
+        ),
+        "correlation",
+        "request-3",
+        {
+            "version": "v0.9.1",
+            "action": {
+                "name": "demo.submit",
+                "surfaceId": "main",
+                "sourceComponentId": "submit",
+                "timestamp": "2026-10-05T00:00:00Z",
+                "context": {"name": "A2Flow"},
+            },
+        },
+        context("request-3"),
+    )
+    assert rejected.business_success is False
+    assert rejected.composer_draft_effects == ()
 
 
 def test_activate_and_action_use_current_release_and_trusted_child_request() -> None:

@@ -2,7 +2,7 @@ import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { A2uiSurface, MarkdownContext } from '@a2ui/react/v0_9';
 import { renderMarkdown } from '@a2ui/markdown-it';
 import { actionRequest, actionResponsePending, cardIsOperable, createSnapshotProcessor, persistedSnapshotKey } from '../a2uiSnapshot.mjs';
-import { productApi, type ChatCard } from '../productApi';
+import { productApi, type ChatCard, type ComposerDraftEffect } from '../productApi';
 import { createUuidV4 } from '../secureUuid.mjs';
 import { registeredCatalogs } from './a2uiCatalogs';
 import '../../node_modules/@a2ui/react/v0_9/index.css';
@@ -20,13 +20,17 @@ class RendererBoundary extends Component<{ children: ReactNode }, { failed: bool
   render() { return this.state.failed ? <p role="alert">组件渲染失败，已禁止操作。请核对 Catalog 实现。</p> : this.props.children; }
 }
 
-export function A2uiSnapshotCard({ card, onUpdate }: { card: ChatCard; onUpdate: (card: ChatCard) => void }) {
+export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft }: {
+  card: ChatCard;
+  onUpdate: (card: ChatCard) => void;
+  onComposerDraft: (effect: ComposerDraftEffect) => void;
+}) {
   const [processor, setProcessor] = useState<ReturnType<typeof createSnapshotProcessor>>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const current = useRef({ card, onUpdate });
-  current.current = { card, onUpdate };
+  const current = useRef({ card, onUpdate, onComposerDraft });
+  current.current = { card, onUpdate, onComposerDraft };
   // Polling unchanged snapshots must not erase unsent user edits.
   const displayKey = JSON.stringify(card.display);
   const snapshotKey = persistedSnapshotKey(card);
@@ -65,10 +69,12 @@ export function A2uiSnapshotCard({ card, onUpdate }: { card: ChatCard; onUpdate:
           inFlight.current = true;
           setBusy(true); setError('');
           try {
-            const updated = await productApi.chatAction(latest.conversationId, latest, requestId, request.actionName, request.inputs);
+            const response = await productApi.chatAction(latest.conversationId, latest, requestId, request.actionName, request.inputs);
             if (!disposed) {
-              current.current.onUpdate(updated);
-              const pending = actionResponsePending(updated);
+              current.current.onUpdate(response.card);
+              response.effects.filter(effect => effect.requestId === requestId)
+                .forEach(effect => current.current.onComposerDraft(effect));
+              const pending = actionResponsePending(response.card);
               inFlight.current = pending;
               setBusy(pending);
             }

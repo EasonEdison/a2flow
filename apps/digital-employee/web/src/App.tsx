@@ -7,7 +7,8 @@ import { ChatApplications } from './components/ChatApplications';
 import './chat.css';
 import { FixturePreview } from './FixturePreview';
 import { chatErrorPresentation } from './errorPresentation';
-import { apiErrorMessage, productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
+import { appendComposerDraft } from './composerDraft.mjs';
+import { apiErrorMessage, productApi, type ComposerDraftEffect, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
@@ -109,14 +110,31 @@ function ChatPage() {
 function ChatConversation({ conversationId }: { conversationId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const inputRef = useRef('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const controller = useRef<AbortController | null>(null);
   const sending = useRef(false);
   const epoch = useRef(0);
+  const consumedComposerEffects = useRef(new Set<string>());
   const flowRef = useRef<HTMLDivElement>(null);
   const [runId, setRunId] = useState('');
+  useEffect(() => { consumedComposerEffects.current.clear(); }, [conversationId]);
+  const applyComposerDraft = useCallback((effect: ComposerDraftEffect) => {
+    if (
+      effect.type !== 'COMPOSER_DRAFT' || effect.mode !== 'APPEND'
+      || !effect.requestId || !effect.text || consumedComposerEffects.current.has(effect.requestId)
+    ) return;
+    const next = appendComposerDraft(inputRef.current, effect.text);
+    if (next === null) {
+      setError('回填内容与当前输入合并后超过 4000 字，未覆盖已有输入。');
+      return;
+    }
+    inputRef.current = next;
+    setInput(next);
+    consumedComposerEffects.current.add(effect.requestId);
+  }, []);
   const load = useCallback(async () => {
     if (sending.current) return;
     const current = ++epoch.current;
@@ -140,7 +158,7 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
     epoch.current++; // In-flight history reads cannot overwrite live deltas.
     const abort = new AbortController();
     controller.current = abort;
-    setBusy(true); setError(''); setInput('');
+    setBusy(true); setError(''); inputRef.current = ''; setInput('');
     try {
       await productApi.sendMessage(conversationId, text, event => {
         if (abort.signal.aborted) return;
@@ -189,9 +207,9 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
       }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
       {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
     </div></article>)}{runId ? <RunDetail runId={runId} /> : null}
-    <ChatApplications key={conversationId} conversationId={conversationId} refreshKey={messages.length + Number(busy)} active={busy || pending} />
+    <ChatApplications key={conversationId} conversationId={conversationId} refreshKey={messages.length + Number(busy)} active={busy || pending} onComposerDraft={applyComposerDraft} />
     </div>
-    <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}><textarea aria-label="消息" placeholder="输入消息，描述你想完成的工作" value={input} onChange={event => setInput(event.target.value)} /><button className="primary" disabled={busy || pending || !loaded || !input.trim()}>{busy ? '执行中…' : '发送'}</button></form>
+    <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}><textarea aria-label="消息" placeholder="输入消息，描述你想完成的工作" value={input} onChange={event => { inputRef.current = event.target.value; setInput(event.target.value); }} /><button className="primary" disabled={busy || pending || !loaded || !input.trim()}>{busy ? '执行中…' : '发送'}</button></form>
   </section>;
 }
 

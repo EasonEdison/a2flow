@@ -35,6 +35,8 @@ from .models import (
     BusinessPredicateSource,
     BusinessPredicateVersion,
     CapabilityInvoker,
+    ComposerDraftEffect,
+    ComposerDraftEffectSpec,
     EmittedActionDeclaration,
     ExecutionSummary,
     MappingSource,
@@ -58,6 +60,9 @@ _OBSERVATION_PRIVATE_KEYS = frozenset({
     "authorization", "cookie", "credential", "credentials",
     "credentialhandle", "runtimesessiontoken", "transportauthority", "targetendpoint",
 })
+_KEY_VALUE_SEPARATOR = "\N{FULLWIDTH COLON}"
+_COLUMN_SEPARATOR = "\N{FULLWIDTH COMMA}"
+_ARRAY_ITEM_SEPARATOR = "\N{IDEOGRAPHIC COMMA}"
 
 
 def _trusted(context: TrustedContext, now: datetime | None = None) -> JsonObject:
@@ -293,6 +298,44 @@ def _transform(
         ):
             raise A2uiError("A2UI_ADAPTER_INVALID")
         return list(ids[: len(value)])
+    if transform.type is ResultTransformType.ARRAY_OBJECT_TO_OPTIONS:
+        if (
+            not isinstance(value, list)
+            or len(value) > 100
+            or transform.value_path is None
+            or not transform.label_columns
+            or len(transform.label_columns) > 20
+            or transform.label_separator is None
+            or not transform.label_separator
+            or len(transform.label_separator) > 8
+        ):
+            raise A2uiError("A2UI_ADAPTER_INVALID")
+        options: list[JsonValue] = []
+        seen: set[str] = set()
+        for raw_item in value:
+            item = require_object(raw_item, "A2UI_ADAPTER_RESULT_INVALID")
+            value_lookup = read(item, transform.value_path)
+            if (
+                not value_lookup.found
+                or type(value_lookup.value) is not str
+                or not value_lookup.value
+                or value_lookup.value in seen
+            ):
+                raise A2uiError("A2UI_ADAPTER_RESULT_INVALID")
+            seen.add(value_lookup.value)
+            labels: list[str] = []
+            for column in transform.label_columns:
+                lookup = read(item, column.source_path)
+                if not lookup.found:
+                    raise A2uiError("A2UI_ADAPTER_RESULT_INVALID")
+                labels.append(
+                    f"{column.label}{_KEY_VALUE_SEPARATOR}{_label_value(lookup.value)}"
+                )
+            options.append({
+                "label": transform.label_separator.join(labels),
+                "value": value_lookup.value,
+            })
+        return options
     total = _integer(value, "A2UI_ADAPTER_RESULT_INVALID")
     raw_page: JsonValue = transform.page_number
     if transform.action_page_path is not None:
@@ -317,6 +360,57 @@ def _transform(
         "nextDisabled": total == 0 or page >= pages,
         "display": {"pageNum": str(shown_page), "totalPages": str(pages), "total": str(total)},
     }
+
+
+def _scalar_text(value: JsonValue) -> str:
+    if type(value) is str:
+        return value
+    if type(value) is bool:
+        return "true" if value else "false"
+    if type(value) in {int, float}:
+        return format(Decimal(str(value)).normalize(), "f")
+    raise A2uiError("A2UI_ADAPTER_RESULT_INVALID")
+
+
+def _label_value(value: JsonValue) -> str:
+    if isinstance(value, list):
+        return _ARRAY_ITEM_SEPARATOR.join(_scalar_text(item) for item in value)
+    return _scalar_text(value)
+
+
+def _composer_draft_effect(
+    spec: ComposerDraftEffectSpec | None,
+    result: ExecutionResult,
+    request_id: str,
+) -> tuple[ComposerDraftEffect, ...]:
+    if spec is None:
+        return ()
+    items_lookup = read(result.data, spec.items_path)
+    if (
+        not items_lookup.found
+        or not isinstance(items_lookup.value, list)
+        or not items_lookup.value
+        or len(items_lookup.value) > 100
+    ):
+        raise A2uiError("A2UI_COMPOSER_EFFECT_INVALID")
+    lines: list[str] = []
+    for raw_item in items_lookup.value:
+        item = require_object(raw_item, "A2UI_COMPOSER_EFFECT_INVALID")
+        values: list[str] = []
+        for column in spec.columns:
+            lookup = read(item, column.source_path)
+            if not lookup.found or isinstance(lookup.value, list):
+                raise A2uiError("A2UI_COMPOSER_EFFECT_INVALID")
+            try:
+                text = _scalar_text(lookup.value)
+            except A2uiError:
+                raise A2uiError("A2UI_COMPOSER_EFFECT_INVALID") from None
+            values.append(f"{column.label}{_KEY_VALUE_SEPARATOR}{text}")
+        lines.append(_COLUMN_SEPARATOR.join(values))
+    text = "\n".join(lines)
+    if not text or len(text) > 4000:
+        raise A2uiError("A2UI_COMPOSER_EFFECT_INVALID")
+    return (ComposerDraftEffect(spec.type, spec.mode, request_id, text),)
 
 
 def adapt(
@@ -619,6 +713,13 @@ class A2uiRuntimeService:
             messages, next_ledger = adapt(
                 ledger, selected.outcome, selected.adapters, result, trusted, action_context
             )
+            composer_draft_effects = (
+                _composer_draft_effect(
+                    binding.composer_draft_effect, result, idempotency_key
+                )
+                if selected.succeeded
+                else ()
+            )
         except A2uiError as error:
             observation = ActionExecutionObservation(
                 binding.binding_id, result.action_code, observable_arguments,
@@ -658,6 +759,7 @@ class A2uiRuntimeService:
             selected.branch_id,
             _session(build),
             action_observation=observation,
+            composer_draft_effects=composer_draft_effects,
         )
 
     def _resolve_action(
@@ -733,6 +835,7 @@ class A2uiRuntimeService:
         session: RuntimeSession,
         *,
         action_observation: ActionExecutionObservation | None = None,
+        composer_draft_effects: tuple[ComposerDraftEffect, ...] = (),
     ) -> RuntimeResult:
         actions = tuple(
             EmittedActionDeclaration(
@@ -761,6 +864,7 @@ class A2uiRuntimeService:
                 else all(item.success for item in executions)
             ),
             action_observation,
+            composer_draft_effects,
         )
 
     def _check_context(self, context: TrustedContext) -> None:

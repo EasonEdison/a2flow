@@ -2,18 +2,54 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from skillweave_contracts import TrustedContext
 
 from ..models import ActionRejected
-from ..rpc_client import RpcFailure
+from ..rpc_client import ComposerDraftEffect, RpcFailure
 from .cards import ActionObservation, ChatCardStore, JsonObject, JsonValue
 from .rpc_assets import RpcChatAssets, plain, prepare_result, runtime_metadata, trusted_card
 
 LOG = logging.getLogger(__name__)
+
+
+class ComposerDraftEffectPayload(TypedDict):
+    type: str
+    mode: str
+    requestId: str
+    text: str
+
+
+class ChatActionResponse(TypedDict):
+    card: dict[str, Any]
+    effects: list[ComposerDraftEffectPayload]
+
+
+def _response(
+    card: dict[str, Any],
+    request_id: str,
+    effects: Iterable[ComposerDraftEffect] = (),
+) -> ChatActionResponse:
+    projected: list[ComposerDraftEffectPayload] = []
+    for effect in effects:
+        if (
+            effect.type != "COMPOSER_DRAFT"
+            or effect.mode != "APPEND"
+            or effect.request_id != request_id
+            or not effect.text
+            or len(effect.text) > 4000
+        ):
+            raise RpcFailure("RPC_RESPONSE_INVALID")
+        projected.append({
+            "type": effect.type,
+            "mode": effect.mode,
+            "requestId": effect.request_id,
+            "text": effect.text,
+        })
+    return {"card": card, "effects": projected}
 
 
 class RpcChatActionService:
@@ -24,7 +60,7 @@ class RpcChatActionService:
 
     def execute(self, owner: TrustedContext, conversation_id: str, card_id: str, *,
                 request_id: str, action_name: str, inputs: dict[str, Any],
-                ) -> dict[str, Any]:
+                ) -> ChatActionResponse:
         saved = self.store.get_binding(owner, conversation_id, card_id)
         card, metadata = saved["card"], saved["metadata"]
         if card["display"].get("protocolProfile") != "a2flow.java-rpc.v1":
@@ -35,7 +71,7 @@ class RpcChatActionService:
         prior = self.store.replay(owner, conversation_id, card_id, request_id,
                                   action_name, inputs)
         if prior is not None:
-            return prior
+            return _response(prior, request_id)
         assets = self.assets_factory(owner, conversation_id)
         assets.admit_skill(metadata["skillKey"])
         action_descriptions = assets.action_descriptions()
@@ -50,7 +86,7 @@ class RpcChatActionService:
         claim = self.store.claim(owner, conversation_id, card_id, request_id,
                                  action_name, inputs)
         if not claim["dispatch"]:
-            return cast(dict[str, Any], claim["card"])
+            return _response(cast(dict[str, Any], claim["card"]), request_id)
         # The DB claim is committed before RPC. No lock or transaction spans
         # network execution, and a timeout never triggers a business retry.
         observation: ActionObservation | None = None
@@ -64,8 +100,9 @@ class RpcChatActionService:
             stage = "response_projection"
             observed = result.action_observation
             if observed is None:
-                return self.store.fail(owner, conversation_id, card_id, request_id,
-                                       "ACTION_OUTCOME_UNKNOWN")
+                failed = self.store.fail(owner, conversation_id, card_id, request_id,
+                                         "ACTION_OUTCOME_UNKNOWN")
+                return _response(failed, request_id)
             observation = ActionObservation(
                 description=action_descriptions.get(observed.action_code),
                 arguments=cast(JsonObject, plain(observed.arguments)),
@@ -78,18 +115,21 @@ class RpcChatActionService:
                 capability_error_code=observed.capability_error_code,
             )
             if observed.presentation_error_code:
-                return self.store.fail(owner, conversation_id, card_id, request_id,
-                                       "ACTION_PRESENTATION_FAILED",
-                                       observation=observation)
+                failed = self.store.fail(owner, conversation_id, card_id, request_id,
+                                         "ACTION_PRESENTATION_FAILED",
+                                         observation=observation)
+                return _response(failed, request_id)
             updated_metadata = {**metadata, "rpc": runtime_metadata(result)}
             prepared = prepare_result(result)
             updated_metadata["applicationVersion"] = prepared.application_version
             stage = "card_finish"
-            return self.store.finish(owner, conversation_id, card_id, request_id,
-                                     plain(observed.result),
-                                     result.business_success, result.complete_interaction,
-                                     prepared=prepared, binding_metadata=updated_metadata,
-                                     observation=observation)
+            finished = self.store.finish(
+                owner, conversation_id, card_id, request_id,
+                plain(observed.result), result.business_success,
+                result.complete_interaction, prepared=prepared,
+                binding_metadata=updated_metadata, observation=observation,
+            )
+            return _response(finished, request_id, result.composer_draft_effects)
         except RpcFailure as error:
             LOG.error(
                 "rpc_chat_action_failed stage=%s exception_type=%s error_code=%s "

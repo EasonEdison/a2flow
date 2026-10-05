@@ -77,11 +77,18 @@ def verify(path: Path) -> None:
                    "context": config["actionContext"]}
         arguments = dict(request_id="action-1", action_name=config["actionName"],
                          inputs=payload)
-        final = action.execute(owner, conversation, card["cardId"], **arguments)
+        action_response = action.execute(
+            owner, conversation, card["cardId"], **arguments
+        )
+        final = action_response["card"]
         assert final["status"] == "COMPLETED", final
         assert final["result"]["businessSuccess"] is True, final["result"]
         assert_surface_data(final, config["surfaceId"], expected)
-        assert action.execute(owner, conversation, card["cardId"], **arguments) == final
+        assert action_response["effects"] == []
+        assert action.execute(owner, conversation, card["cardId"], **arguments) == {
+            "card": final,
+            "effects": [],
+        }
         reopened = ChatCardStore(dsn, environment="PRT")
         assert reopened.read(owner, conversation, card["cardId"]) == final
         try:

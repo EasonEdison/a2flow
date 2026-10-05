@@ -325,6 +325,30 @@ class ActionExecutionObservation(google.protobuf.message.Message):
 Global___ActionExecutionObservation: typing_extensions.TypeAlias = ActionExecutionObservation
 
 @typing.final
+class ComposerDraftEffect(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TYPE_FIELD_NUMBER: builtins.int
+    MODE_FIELD_NUMBER: builtins.int
+    REQUEST_ID_FIELD_NUMBER: builtins.int
+    TEXT_FIELD_NUMBER: builtins.int
+    type: builtins.str
+    mode: builtins.str
+    request_id: builtins.str
+    text: builtins.str
+    def __init__(
+        self,
+        *,
+        type: builtins.str = ...,
+        mode: builtins.str = ...,
+        request_id: builtins.str = ...,
+        text: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["mode", b"mode", "request_id", b"request_id", "text", b"text", "type", b"type"]) -> None: ...
+
+Global___ComposerDraftEffect: typing_extensions.TypeAlias = ComposerDraftEffect
+
+@typing.final
 class RuntimeResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -342,6 +366,7 @@ class RuntimeResponse(google.protobuf.message.Message):
     INTERACTION_MODE_FIELD_NUMBER: builtins.int
     BUSINESS_SUCCESS_FIELD_NUMBER: builtins.int
     ACTION_OBSERVATION_FIELD_NUMBER: builtins.int
+    COMPOSER_DRAFT_EFFECTS_FIELD_NUMBER: builtins.int
     params_json: builtins.bytes
     messages_json: builtins.bytes
     snapshot_json: builtins.bytes
@@ -362,6 +387,8 @@ class RuntimeResponse(google.protobuf.message.Message):
     def session(self) -> Global___RuntimeSession: ...
     @property
     def action_observation(self) -> Global___ActionExecutionObservation: ...
+    @property
+    def composer_draft_effects(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___ComposerDraftEffect]: ...
     def __init__(
         self,
         *,
@@ -379,8 +406,9 @@ class RuntimeResponse(google.protobuf.message.Message):
         interaction_mode: builtins.str = ...,
         business_success: builtins.bool = ...,
         action_observation: Global___ActionExecutionObservation | None = ...,
+        composer_draft_effects: collections.abc.Iterable[Global___ComposerDraftEffect] | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["action_observation", b"action_observation", "catalog", b"catalog", "release", b"release", "session", b"session"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["action_observation", b"action_observation", "actions", b"actions", "business_success", b"business_success", "catalog", b"catalog", "complete_interaction", b"complete_interaction", "error_code", b"error_code", "executions", b"executions", "interaction_mode", b"interaction_mode", "messages_json", b"messages_json", "params_json", b"params_json", "release", b"release", "selected_branch_id", b"selected_branch_id", "session", b"session", "snapshot_json", b"snapshot_json"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["action_observation", b"action_observation", "actions", b"actions", "business_success", b"business_success", "catalog", b"catalog", "complete_interaction", b"complete_interaction", "composer_draft_effects", b"composer_draft_effects", "error_code", b"error_code", "executions", b"executions", "interaction_mode", b"interaction_mode", "messages_json", b"messages_json", "params_json", b"params_json", "release", b"release", "selected_branch_id", b"selected_branch_id", "session", b"session", "snapshot_json", b"snapshot_json"]) -> None: ...
 
 Global___RuntimeResponse: typing_extensions.TypeAlias = RuntimeResponse
