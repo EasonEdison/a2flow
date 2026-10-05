@@ -95,6 +95,14 @@ message Confirmation {
   string edited_title = 9;
   string edited_angle = 10;
 }
+message Person {
+  string person_id = 1;
+  string name = 2;
+  string phone = 3;
+  string gender = 4;
+  uint32 age = 5;
+  repeated string hobbies = 6;
+}
 message CreateProjectRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
   string title = 2;
@@ -111,6 +119,24 @@ message ListProjectsResponse {
   uint64 total = 2;
   uint32 page = 3;
   uint32 page_size = 4;
+}
+message ListPeopleRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  uint32 page = 2;
+  uint32 page_size = 3;
+}
+message ListPeopleResponse {
+  repeated Person items = 1;
+  uint64 total = 2;
+  uint32 page = 3;
+  uint32 page_size = 4;
+}
+message ResolvePeopleRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  repeated string person_ids = 2;
+}
+message ResolvePeopleResponse {
+  repeated Person items = 1;
 }
 message GetProjectRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
@@ -185,6 +211,8 @@ message ExportManuscriptResponse {
 service ContentService {
   rpc CreateProject(CreateProjectRequest) returns (Project);
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc ListPeople(ListPeopleRequest) returns (ListPeopleResponse);
+  rpc ResolvePeople(ResolvePeopleRequest) returns (ResolvePeopleResponse);
   rpc GetProject(GetProjectRequest) returns (Project);
   rpc SaveSource(SaveSourceRequest) returns (Source);
   rpc GetSource(GetSourceRequest) returns (Source);

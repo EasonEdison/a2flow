@@ -44,6 +44,16 @@ class ContentServiceStub(object):
                 request_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.ListProjectsRequest.SerializeToString,
                 response_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.ListProjectsResponse.FromString,
                 _registered_method=True)
+        self.ListPeople = channel.unary_unary(
+                '/a2flow.content.v1.ContentService/ListPeople',
+                request_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.ListPeopleRequest.SerializeToString,
+                response_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.ListPeopleResponse.FromString,
+                _registered_method=True)
+        self.ResolvePeople = channel.unary_unary(
+                '/a2flow.content.v1.ContentService/ResolvePeople',
+                request_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.ResolvePeopleRequest.SerializeToString,
+                response_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.ResolvePeopleResponse.FromString,
+                _registered_method=True)
         self.GetProject = channel.unary_unary(
                 '/a2flow.content.v1.ContentService/GetProject',
                 request_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.GetProjectRequest.SerializeToString,
@@ -106,6 +116,18 @@ class ContentServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def ListProjects(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListPeople(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResolvePeople(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -183,6 +205,16 @@ def add_ContentServiceServicer_to_server(servicer, server):
                     servicer.ListProjects,
                     request_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.ListProjectsRequest.FromString,
                     response_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.ListProjectsResponse.SerializeToString,
+            ),
+            'ListPeople': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListPeople,
+                    request_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.ListPeopleRequest.FromString,
+                    response_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.ListPeopleResponse.SerializeToString,
+            ),
+            'ResolvePeople': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResolvePeople,
+                    request_deserializer=a2flow_dot_content_dot_v1_dot_content__pb2.ResolvePeopleRequest.FromString,
+                    response_serializer=a2flow_dot_content_dot_v1_dot_content__pb2.ResolvePeopleResponse.SerializeToString,
             ),
             'GetProject': grpc.unary_unary_rpc_method_handler(
                     servicer.GetProject,
@@ -289,6 +321,60 @@ class ContentService(object):
             '/a2flow.content.v1.ContentService/ListProjects',
             a2flow_dot_content_dot_v1_dot_content__pb2.ListProjectsRequest.SerializeToString,
             a2flow_dot_content_dot_v1_dot_content__pb2.ListProjectsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListPeople(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/a2flow.content.v1.ContentService/ListPeople',
+            a2flow_dot_content_dot_v1_dot_content__pb2.ListPeopleRequest.SerializeToString,
+            a2flow_dot_content_dot_v1_dot_content__pb2.ListPeopleResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResolvePeople(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/a2flow.content.v1.ContentService/ResolvePeople',
+            a2flow_dot_content_dot_v1_dot_content__pb2.ResolvePeopleRequest.SerializeToString,
+            a2flow_dot_content_dot_v1_dot_content__pb2.ResolvePeopleResponse.FromString,
             options,
             channel_credentials,
             insecure,

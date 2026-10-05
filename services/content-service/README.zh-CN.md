@@ -4,7 +4,11 @@
 
 ## Typed 接口
 
-`ContentService(repository)` 提供 11 个同步方法：项目 create/list/get、素材 save/get、产物 save/get、阅读/选题/稿件确认和稿件导出。
+`ContentService(repository)` 提供 14 个同步方法：项目 create/list/get、素材 save/get、产物 save/get、确认 get、阅读/选题/稿件确认、稿件导出、演示人员分页列表和按 ID 回查。
+
+演示人员列表通过 `a2flow.content.v1.ContentService/ListPeople` 暴露，仍要求可信 `ExecutionContext`。业务入参为 `page` / `pageSize`，省略或传 `0` 时分别使用 `1` / `5`；响应包含 `items`、动态计算的 `total`、`page` 和 `pageSize`。内置 15 条数据全部使用 `demo-person-*` 稳定示例 ID 和 `138****0001` 这类明显不可拨号的掩码号码，仅用于界面联调，不来自用户数据库。
+
+最终回填使用 `a2flow.content.v1.ContentService/ResolvePeople`：业务入参 `personIds` 必须包含 1 到 15 个不重复 ID，响应按请求顺序返回 `items`。任一 ID 不存在时整次返回 `PERSON_NOT_FOUND`，不返回部分结果；调用方不能信任前端或模型提交的姓名、电话。
 
 Markdown 原文可直接导出；TXT 使用 CommonMark 解析器按 token 提取文本，保留普通下划线、行内代码和代码块内容，不使用全局正则删除正文字符。
 

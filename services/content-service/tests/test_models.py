@@ -6,7 +6,9 @@ from a2flow_content.errors import ContentError
 from a2flow_content.models import (
     MAX_REVISION,
     Environment,
+    ListPeopleQuery,
     ReadingPoint,
+    ResolvePeopleQuery,
     SaveSourceCommand,
     TrustedContext,
     revision,
@@ -33,3 +35,20 @@ def test_revision_matches_wire_uint32() -> None:
     assert revision(MAX_REVISION, "REVISION") == MAX_REVISION
     with pytest.raises(ContentError, match="INVALID_REVISION"):
         revision(MAX_REVISION + 1, "REVISION")
+
+
+def test_people_pagination_defaults_and_limits() -> None:
+    assert ListPeopleQuery() == ListPeopleQuery(page=1, page_size=5)
+    with pytest.raises(ContentError, match="INVALID_PAGE"):
+        ListPeopleQuery(page=0)
+    with pytest.raises(ContentError, match="INVALID_PAGE_SIZE"):
+        ListPeopleQuery(page_size=101)
+
+
+def test_resolve_people_query_requires_unique_bounded_ids() -> None:
+    query = ResolvePeopleQuery(("demo-person-003", "demo-person-001"))
+    assert query.person_ids == ("demo-person-003", "demo-person-001")
+    with pytest.raises(ContentError, match="INVALID_PERSON_IDS"):
+        ResolvePeopleQuery(())
+    with pytest.raises(ContentError, match="DUPLICATE_PERSON_ID"):
+        ResolvePeopleQuery(("demo-person-001", "demo-person-001"))

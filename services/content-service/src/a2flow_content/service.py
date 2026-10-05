@@ -8,6 +8,7 @@ from uuid import UUID
 
 from markdown_it import MarkdownIt
 
+from .errors import ContentError
 from .models import (
     ArtifactRecord,
     ConfirmationRecord,
@@ -22,14 +23,36 @@ from .models import (
     GetConfirmationQuery,
     GetProjectQuery,
     GetSourceQuery,
+    ListPeopleQuery,
     ListProjectsQuery,
     Manuscript,
+    PeoplePage,
+    PersonRecord,
     ProjectPage,
     ProjectRecord,
+    ResolvePeopleQuery,
     SaveArtifactCommand,
     SaveSourceCommand,
     SourceRecord,
     TrustedContext,
+)
+
+_DEMO_PEOPLE: tuple[PersonRecord, ...] = (
+    PersonRecord("demo-person-001", "林知夏", "138****0001", "女", 26, ("阅读", "徒步")),
+    PersonRecord("demo-person-002", "周远舟", "138****0002", "男", 31, ("摄影", "咖啡")),
+    PersonRecord("demo-person-003", "苏晚晴", "138****0003", "女", 24, ("绘画", "音乐")),
+    PersonRecord("demo-person-004", "陈星野", "138****0004", "男", 29, ("跑步", "电影")),
+    PersonRecord("demo-person-005", "赵清禾", "138****0005", "女", 35, ("园艺", "烘焙")),
+    PersonRecord("demo-person-006", "陆时安", "138****0006", "男", 28, ("骑行", "旅行")),
+    PersonRecord("demo-person-007", "唐予宁", "138****0007", "女", 32, ("瑜伽", "阅读")),
+    PersonRecord("demo-person-008", "江砚", "138****0008", "男", 27, ("书法", "桌游")),
+    PersonRecord("demo-person-009", "沈听澜", "138****0009", "女", 30, ("游泳", "摄影")),
+    PersonRecord("demo-person-010", "顾南乔", "138****0010", "女", 25, ("舞蹈", "旅行")),
+    PersonRecord("demo-person-011", "宋屿", "138****0011", "男", 34, ("钓鱼", "烹饪")),
+    PersonRecord("demo-person-012", "白芷", "138****0012", "女", 23, ("手工", "动漫")),
+    PersonRecord("demo-person-013", "许观澜", "138****0013", "男", 36, ("登山", "历史")),
+    PersonRecord("demo-person-014", "温言", "138****0014", "男", 33, ("音乐", "健身")),
+    PersonRecord("demo-person-015", "夏木", "138****0015", "女", 27, ("露营", "写作")),
 )
 
 
@@ -84,6 +107,33 @@ class ContentService:
 
     def list_projects(self, context: TrustedContext, query: ListProjectsQuery) -> ProjectPage:
         return self._repository.list_projects(context, query)
+
+    def list_people(self, context: TrustedContext, query: ListPeopleQuery) -> PeoplePage:
+        # Identity remains part of this read boundary even though every trusted user sees the
+        # same explicitly fictional demo dataset.
+        if not isinstance(context, TrustedContext):
+            raise TypeError("trusted context required")
+        start = (query.page - 1) * query.page_size
+        return PeoplePage(
+            items=_DEMO_PEOPLE[start : start + query.page_size],
+            total=len(_DEMO_PEOPLE),
+            page=query.page,
+            page_size=query.page_size,
+        )
+
+    def resolve_people(
+        self, context: TrustedContext, query: ResolvePeopleQuery
+    ) -> tuple[PersonRecord, ...]:
+        if not isinstance(context, TrustedContext):
+            raise TypeError("trusted context required")
+        people_by_id = {person.person_id: person for person in _DEMO_PEOPLE}
+        items: list[PersonRecord] = []
+        for person_id in query.person_ids:
+            person = people_by_id.get(person_id)
+            if person is None:
+                raise ContentError("PERSON_NOT_FOUND", 404)
+            items.append(person)
+        return tuple(items)
 
     def get_project(self, context: TrustedContext, query: GetProjectQuery) -> ProjectRecord:
         return self._repository.get_project(context, query.project_id)

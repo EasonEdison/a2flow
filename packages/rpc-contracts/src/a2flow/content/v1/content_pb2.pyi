@@ -386,6 +386,37 @@ class Confirmation(google.protobuf.message.Message):
 Global___Confirmation: typing_extensions.TypeAlias = Confirmation
 
 @typing.final
+class Person(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PERSON_ID_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    PHONE_FIELD_NUMBER: builtins.int
+    GENDER_FIELD_NUMBER: builtins.int
+    AGE_FIELD_NUMBER: builtins.int
+    HOBBIES_FIELD_NUMBER: builtins.int
+    person_id: builtins.str
+    name: builtins.str
+    phone: builtins.str
+    gender: builtins.str
+    age: builtins.int
+    @property
+    def hobbies(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        person_id: builtins.str = ...,
+        name: builtins.str = ...,
+        phone: builtins.str = ...,
+        gender: builtins.str = ...,
+        age: builtins.int = ...,
+        hobbies: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["age", b"age", "gender", b"gender", "hobbies", b"hobbies", "name", b"name", "person_id", b"person_id", "phone", b"phone"]) -> None: ...
+
+Global___Person: typing_extensions.TypeAlias = Person
+
+@typing.final
 class CreateProjectRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -458,6 +489,91 @@ class ListProjectsResponse(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal["list", b"list", "page", b"page", "page_size", b"page_size", "total", b"total"]) -> None: ...
 
 Global___ListProjectsResponse: typing_extensions.TypeAlias = ListProjectsResponse
+
+@typing.final
+class ListPeopleRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTEXT_FIELD_NUMBER: builtins.int
+    PAGE_FIELD_NUMBER: builtins.int
+    PAGE_SIZE_FIELD_NUMBER: builtins.int
+    page: builtins.int
+    page_size: builtins.int
+    @property
+    def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
+    def __init__(
+        self,
+        *,
+        context: a2flow.capability.v1.capability_pb2.ExecutionContext | None = ...,
+        page: builtins.int = ...,
+        page_size: builtins.int = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["context", b"context", "page", b"page", "page_size", b"page_size"]) -> None: ...
+
+Global___ListPeopleRequest: typing_extensions.TypeAlias = ListPeopleRequest
+
+@typing.final
+class ListPeopleResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ITEMS_FIELD_NUMBER: builtins.int
+    TOTAL_FIELD_NUMBER: builtins.int
+    PAGE_FIELD_NUMBER: builtins.int
+    PAGE_SIZE_FIELD_NUMBER: builtins.int
+    total: builtins.int
+    page: builtins.int
+    page_size: builtins.int
+    @property
+    def items(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___Person]: ...
+    def __init__(
+        self,
+        *,
+        items: collections.abc.Iterable[Global___Person] | None = ...,
+        total: builtins.int = ...,
+        page: builtins.int = ...,
+        page_size: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["items", b"items", "page", b"page", "page_size", b"page_size", "total", b"total"]) -> None: ...
+
+Global___ListPeopleResponse: typing_extensions.TypeAlias = ListPeopleResponse
+
+@typing.final
+class ResolvePeopleRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTEXT_FIELD_NUMBER: builtins.int
+    PERSON_IDS_FIELD_NUMBER: builtins.int
+    @property
+    def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
+    @property
+    def person_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        context: a2flow.capability.v1.capability_pb2.ExecutionContext | None = ...,
+        person_ids: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["context", b"context", "person_ids", b"person_ids"]) -> None: ...
+
+Global___ResolvePeopleRequest: typing_extensions.TypeAlias = ResolvePeopleRequest
+
+@typing.final
+class ResolvePeopleResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ITEMS_FIELD_NUMBER: builtins.int
+    @property
+    def items(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___Person]: ...
+    def __init__(
+        self,
+        *,
+        items: collections.abc.Iterable[Global___Person] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["items", b"items"]) -> None: ...
+
+Global___ResolvePeopleResponse: typing_extensions.TypeAlias = ResolvePeopleResponse
 
 @typing.final
 class GetProjectRequest(google.protobuf.message.Message):
