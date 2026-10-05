@@ -157,8 +157,7 @@ class ResolvePeopleQuery:
             raise ContentError("INVALID_PERSON_IDS")
         for person_id in self.person_ids:
             text(person_id, "PERSON_ID", maximum=64)
-        if len(self.person_ids) != len(set(self.person_ids)):
-            raise ContentError("DUPLICATE_PERSON_ID")
+        object.__setattr__(self, "person_ids", tuple(dict.fromkeys(self.person_ids)))
 
 
 @dataclass(frozen=True, slots=True)

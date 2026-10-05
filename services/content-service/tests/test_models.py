@@ -45,10 +45,8 @@ def test_people_pagination_defaults_and_limits() -> None:
         ListPeopleQuery(page_size=101)
 
 
-def test_resolve_people_query_requires_unique_bounded_ids() -> None:
-    query = ResolvePeopleQuery(("demo-person-003", "demo-person-001"))
+def test_resolve_people_query_deduplicates_in_request_order() -> None:
+    query = ResolvePeopleQuery(("demo-person-003", "demo-person-001", "demo-person-003"))
     assert query.person_ids == ("demo-person-003", "demo-person-001")
     with pytest.raises(ContentError, match="INVALID_PERSON_IDS"):
         ResolvePeopleQuery(())
-    with pytest.raises(ContentError, match="DUPLICATE_PERSON_ID"):
-        ResolvePeopleQuery(("demo-person-001", "demo-person-001"))

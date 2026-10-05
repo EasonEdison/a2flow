@@ -60,7 +60,7 @@ def test_people_list_last_and_out_of_range_pages() -> None:
 def test_resolve_people_preserves_id_order() -> None:
     result = people_service().resolve_people(
         TrustedContext(7, Environment.PRT, "resolve-people"),
-        ResolvePeopleQuery(("demo-person-003", "demo-person-001")),
+        ResolvePeopleQuery(("demo-person-003", "demo-person-001", "demo-person-003")),
     )
 
     assert [item.person_id for item in result] == ["demo-person-003", "demo-person-001"]

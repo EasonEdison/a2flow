@@ -60,7 +60,7 @@ def test_resolve_people_real_grpc_preserves_order(
     result = people_stub.ResolvePeople(
         pb.ResolvePeopleRequest(
             context=trusted_context("resolve-people-rpc"),
-            person_ids=["demo-person-003", "demo-person-001"],
+            person_ids=["demo-person-003", "demo-person-001", "demo-person-003"],
         )
     )
 
