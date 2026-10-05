@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { buildApplication, capabilitySpecs, skillSpec, validateAssets } from './assets.mjs';
-import { createRequestId, publishPrt } from './authoring-core.mjs';
+import { createRequestId, publishCapabilityPrt, publishPrt } from './authoring-core.mjs';
 
 assert.deepEqual(validateAssets(), { capabilities: 2, applications: 1, skills: 1 });
 assert.deepEqual(capabilitySpecs.map(item => [item.actionCode, item.methodName]), [
@@ -97,6 +97,19 @@ await publishPrt({ call: async method => {
   } };
   assert.equal(method, 'RELEASE_PREPROD_DEPLOY'); published = true; return { data: { status: 'SUCCEEDED' } };
 } }, 'A2UI_APPLICATION', 'people-selector');
+
+const capabilityReleaseCalls = [];
+await publishCapabilityPrt({ call: async (method, params) => {
+  capabilityReleaseCalls.push([method, params]);
+  return { data: {
+    currentSnapshot: { digest: 'capability-digest' },
+    environments: { PRT: { digest: 'capability-digest', sourceId: 'capability-build-1' } },
+  } };
+} }, 'capability-draft-1');
+assert.deepEqual(capabilityReleaseCalls, [[
+  'RELEASE_OVERVIEW',
+  { assetType: 'CAPABILITY_ACTION', assetKey: 'capability-draft-1' },
+]]);
 
 const descriptorText = (await readFile(new URL('./content-descriptor.txt', import.meta.url), 'utf8')).trim();
 assert.match(descriptorText, /^[A-Za-z0-9+/]+={0,2}$/);
