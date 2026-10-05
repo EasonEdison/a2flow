@@ -186,7 +186,7 @@ const chatCardOf = (value: unknown): ChatCard => {
       inputSchema: recordOf(action.inputSchema),
     };
   }) : [];
-  if (!card.cardId || !card.conversationId || !card.turnId || !card.status
+  if (!card.cardId || !card.conversationId || !card.status
     || !display.applicationKey || !display.protocolProfile
     || !catalog.protocolVersion || !catalog.catalogId || !catalog.catalogDigest
     || !Array.isArray(display.snapshotMessages)) {
@@ -224,7 +224,7 @@ const contentPartsOf = (content: unknown): ChatContentPart[] | undefined => {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return undefined;
   const raw = (content as Row).parts;
   if (raw === undefined) return undefined;
-  if (!Array.isArray(raw) || raw.length > 200) throw new Error('CHAT_CONTRACT_INVALID');
+  if (!Array.isArray(raw)) throw new Error('CHAT_CONTRACT_INVALID');
   const ids = new Set<string>();
   const cardIds = new Set<string>();
   return raw.map((value) => {

@@ -11,6 +11,14 @@ const compiled = ts.transpileModule(source, {
 const { applyChatStreamEvent, preserveUpdatedCards, toAssistantMessage } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 );
+const productApiSource = `${await readFile(new URL('../src/productApi.ts', import.meta.url), 'utf8')}
+export { chatCardOf };`;
+const productApiCompiled = ts.transpileModule(productApiSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText.replace(/^import .*;\n/gm, '');
+const { chatCardOf } = await import(
+  `data:text/javascript;base64,${Buffer.from(productApiCompiled).toString('base64')}`
+);
 
 const base = {
   id: 'assistant-1',
@@ -154,4 +162,10 @@ test('done projection keeps only snapshots updated by a completed Action', () =>
   ]));
   assert.equal(merged.parts[0].card.status, 'COMPLETED');
   assert.equal(merged.parts[1].card.status, 'WAITING_ACTION');
+});
+
+test('an unassigned historical card may omit turnId without failing history parsing', () => {
+  const orphan = { ...card('orphan-card') };
+  delete orphan.turnId;
+  assert.equal(chatCardOf(orphan).turnId, '');
 });
