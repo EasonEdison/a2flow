@@ -2,6 +2,24 @@
   padding: 20px 24px 24px;
   min-height: calc(100vh - 64px);
 }
+.component-center-a2ui-preview label:has(> input[type='checkbox'] + span) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-block: 8px;
+  cursor: pointer;
+}
+.component-center-a2ui-preview label:has(> input[type='checkbox'] + span) > input[type='checkbox'] {
+  flex: 0 0 auto;
+  margin-top: 0.25em;
+}
+.component-center-a2ui-preview label:has(> input[type='checkbox'] + span) > span {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .page-header {
   display: flex;
   justify-content: space-between;

@@ -52,6 +52,7 @@ import {
 } from './a2uiCatalogContracts';
 import { buildDetailedA2uiContractPreview } from './a2uiApplicationPreview';
 import A2uiApplicationRendererPreview from './A2uiApplicationRendererPreview';
+import A2uiApplicationPrtPreview from './A2uiApplicationPrtPreview';
 import {
   buildA2uiApplicationLocalPreview,
   buildA2uiLocalActionSummary,
@@ -168,7 +169,7 @@ const A2uiApplicationEditorPage: React.FC = () => {
   const [capabilityActionError, setCapabilityActionError] = useState('');
   const [validationIssues, setValidationIssues] = useState<A2uiApplicationValidationIssue[]>([]);
   const [activeStage, setActiveStage] = useState<A2uiApplicationEditorStage>('basic');
-  const [validationPreviewMode, setValidationPreviewMode] = useState<'structure' | 'visual'>(
+  const [validationPreviewMode, setValidationPreviewMode] = useState<'structure' | 'visual' | 'prt'>(
     'visual',
   );
   const [sampleParamsJson, setSampleParamsJson] = useState('{}');
@@ -593,7 +594,9 @@ const A2uiApplicationEditorPage: React.FC = () => {
         context: { '<field>': '<resolved component value>' },
       })
     : undefined;
-  const validationPreview = createA2uiValidationPreviewViewModel(validationPreviewMode);
+  const validationPreview = createA2uiValidationPreviewViewModel(
+    validationPreviewMode === 'prt' ? 'visual' : validationPreviewMode,
+  );
   const authoringAdapter = useMemo(
     () =>
       createA2uiApplicationAuthoringAdapter<A2uiApplicationDraft>({
@@ -1013,9 +1016,13 @@ const A2uiApplicationEditorPage: React.FC = () => {
     return (
       <Card title="联调验证">
         <Alert
-          type="info"
-          message="本页只验证 Application 的本地编排与真实 renderer，不调用 CapabilityAction"
-          description="输入仅使用 sample params；不需要 Cookie、curl 或真实用户凭据。本版不执行 LoadBinding；业务按钮只展示事件与映射参数，不代表业务成功。"
+          type={validationPreviewMode === 'prt' ? 'warning' : 'info'}
+          message={validationPreviewMode === 'prt'
+            ? 'PRT 真实联调使用已发布 Application，不执行当前未发布草稿'
+            : '本页只验证 Application 的本地编排与真实 renderer，不调用 CapabilityAction'}
+          description={validationPreviewMode === 'prt'
+            ? '启动后 LoadBinding 会真实调用 PRT；每个 Action 执行前都会展示 target userId 与提交 context 并要求确认。'
+            : '输入仅使用 sample params；不需要 Cookie、curl 或真实用户凭据。本地模式不执行 LoadBinding；业务按钮只展示事件与映射参数。'}
           style={{ marginBottom: 16 }}
         />
         <div role="tablist" aria-label="联调验证预览类型" style={{ marginBottom: 16 }}>
@@ -1035,6 +1042,15 @@ const A2uiApplicationEditorPage: React.FC = () => {
             style={{ marginLeft: 8 }}
           >
             真实视觉预览
+          </Button>
+          <Button
+            type={validationPreviewMode === 'prt' ? 'primary' : 'default'}
+            role="tab"
+            aria-selected={validationPreviewMode === 'prt'}
+            onClick={() => setValidationPreviewMode('prt')}
+            style={{ marginLeft: 8 }}
+          >
+            PRT 真实联调
           </Button>
         </div>
         {validationPreview.activeMode === 'structure' ? (
@@ -1082,7 +1098,7 @@ const A2uiApplicationEditorPage: React.FC = () => {
               <Text type="secondary">整批原子校验失败时不暴露部分消息。</Text>
             </Space>
           </>
-        ) : (
+        ) : validationPreviewMode === 'visual' ? (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             <Card
               size="small"
@@ -1143,6 +1159,11 @@ const A2uiApplicationEditorPage: React.FC = () => {
               </Card>
             ) : null}
           </Space>
+        ) : (
+          <A2uiApplicationPrtPreview
+            applicationId={record ? String(record.id) : undefined}
+            defaultParamsJson={previewJson(sampleParamDefaults.params)}
+          />
         )}
       </Card>
     );

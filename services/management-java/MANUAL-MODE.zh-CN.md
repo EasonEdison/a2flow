@@ -63,6 +63,12 @@ java -cp "target/classes:$(cat target/runtime-classpath.txt)" dev.a2flow.managem
 
 重复HTTP检查使用 `JAVA_HOME=/path/to/jdk17 PG_BIN=/path/to/postgresql/bin bash tests/host/run-local.sh`。脚本只新建临时数据库集群及Java进程，端口冲突时拒绝执行，结束停止进程并保留证据。测试的登录上游为协议夹具，不能作为真实密码登录验收。
 
+### Application PRT 真实联调
+
+Application 编辑页的“PRT 真实联调”只执行当前 PRT 已发布版本，不执行编辑中的草稿。管理员必须手动填写目标 `userId`；该值严格校验为正 int64，绝不从登录账号回填。点击启动后，已发布 LoadBinding 会真实调用 PRT；所有 Action 在页面逐次确认后才执行，回填只进入页面内的 M 测试输入框，不发送聊天消息。
+
+管理服务通过 `A2FLOW_CAPABILITY_GRPC_TARGETS_JSON` 中精确的 `a2ui-execution.PRT` 目标调用 Python executor，客户端固定为 `PC`。正式部署使用 `deploy/python-execution/management.override.yaml` 的 8794 mTLS 配置；缺少该精确目标或证书时直接失败，不向 ONLINE、明文通道或其他 target 降级。联调会话只保存在当前管理进程内并有 TTL/容量限制，服务重启或点击“结束联调”后失效。
+
 ## 已验证与未验证
 
 已通过独立临时 PostgreSQL 检查：
