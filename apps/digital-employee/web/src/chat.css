@@ -242,6 +242,52 @@
   overflow-wrap: anywhere;
 }
 
+.tool-result header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tool-result header h4 {
+  margin: 0;
+}
+
+.tool-result header button {
+  flex: none;
+  padding: 4px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+}
+
+.tool-result pre {
+  height: 240px;
+  max-height: none;
+  padding: 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.copy-feedback {
+  display: block;
+  min-height: 20px;
+  padding-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.copy-feedback.copied {
+  color: #15803d;
+}
+
+.copy-feedback.failed {
+  color: #b42318;
+}
+
 .business-success {
   color: #15803d;
 }
