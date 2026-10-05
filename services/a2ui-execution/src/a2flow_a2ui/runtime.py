@@ -260,6 +260,21 @@ def _integer(value: JsonValue, code: str) -> int:
     return int(decimal)
 
 
+def _pagination_total(value: JsonValue) -> int:
+    """Accept a numeric total or the canonical decimal string emitted for protobuf uint64."""
+
+    if type(value) is str:
+        if (
+            not value
+            or not value.isascii()
+            or not value.isdigit()
+            or (len(value) > 1 and value.startswith("0"))
+        ):
+            raise A2uiError("A2UI_ADAPTER_RESULT_INVALID")
+        return int(value)
+    return _integer(value, "A2UI_ADAPTER_RESULT_INVALID")
+
+
 def _transform(
     transform: ResultTransform, value: JsonValue, target_path: str, action: JsonObject
 ) -> JsonValue:
@@ -336,7 +351,7 @@ def _transform(
                 "value": value_lookup.value,
             })
         return options
-    total = _integer(value, "A2UI_ADAPTER_RESULT_INVALID")
+    total = _pagination_total(value)
     raw_page: JsonValue = transform.page_number
     if transform.action_page_path is not None:
         page_lookup = read(action, transform.action_page_path)

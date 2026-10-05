@@ -264,6 +264,35 @@ def test_array_object_to_options_formats_scalar_and_array_columns() -> None:
         )
 
 
+def test_pagination_accepts_canonical_protojson_uint64_total_only() -> None:
+    transform = ResultTransform.model_validate({
+        "type": "PAGINATION_STATE",
+        "pageSize": 5,
+        "pageNumber": 1,
+    })
+
+    expected = {
+        "total": 15,
+        "pageSize": 5,
+        "pageNum": 1,
+        "totalPages": 3,
+        "prevPage": 1,
+        "nextPage": 2,
+        "prevDisabled": True,
+        "nextDisabled": False,
+        "display": {"pageNum": "1", "totalPages": "3", "total": "15"},
+    }
+    assert _transform(transform, "15", "/updateDataModel/value", {}) == expected
+    assert _transform(transform, 15, "/updateDataModel/value", {}) == expected
+
+    for invalid in ("", "-1", "1.0", "1e2", "+1", " 1", "01", True):
+        with pytest.raises(A2uiError, match="A2UI_ADAPTER_RESULT_INVALID"):
+            _transform(transform, invalid, "/updateDataModel/value", {})
+
+    with pytest.raises(A2uiError, match="A2UI_ADAPTER_RESULT_INVALID"):
+        _transform(transform, "9007199254740992", "/updateDataModel/value", {})
+
+
 class Releases:
     def __init__(self, published: PublishedApplication) -> None:
         self.published = published

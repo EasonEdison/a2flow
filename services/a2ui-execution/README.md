@@ -43,6 +43,11 @@ joined with `、`, columns are joined with `labelSeparator`, and object values,
 missing paths, duplicate values, more than 100 rows, or more than 20 columns
 fail the presentation. The transform never supplies business identity or data.
 
+`PAGINATION_STATE` accepts `total` as a JSON number or as the canonical
+non-negative decimal string emitted by ProtoJSON for `uint64`. It rejects signs,
+fractions, exponents, whitespace, leading zeroes, booleans, and values above the
+existing JavaScript-safe integer bound. Page number and page size remain numeric.
+
 ```json
 {
   "type": "ARRAY_OBJECT_TO_OPTIONS",
