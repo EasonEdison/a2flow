@@ -39,8 +39,10 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         class Runner:
             async def iterate(self, **kwargs):
                 for _ in range(200):
-                    yield {'type': 'text_delta', 'text': 'x'}
-                yield {'type': 'done'}
+                    yield {'type': 'text_delta', 'text': 'x',
+                           'modelMessageId': 'model-final'}
+                yield {'type': 'done', 'content': 'x' * 200,
+                       'finalModelMessageId': 'model-final'}
         turn = delivery(Runner())
         task = asyncio.create_task(turn.produce())
         async def broken_send(event):
@@ -59,10 +61,13 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             calls = 0
             async def iterate(self, **kwargs):
                 self.calls += 1
-                yield {'type': 'text_delta', 'text': 'first'}
+                yield {'type': 'text_delta', 'text': 'first',
+                       'modelMessageId': 'model-final'}
                 await proceed.wait()
-                yield {'type': 'text_delta', 'text': ' last'}
-                yield {'type': 'done'}
+                yield {'type': 'text_delta', 'text': ' last',
+                       'modelMessageId': 'model-final'}
+                yield {'type': 'done', 'content': 'first last',
+                       'finalModelMessageId': 'model-final'}
         runner = Runner()
         turn = delivery(runner)
         task = asyncio.create_task(turn.produce())
@@ -112,8 +117,10 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
                 for index in range(200):
                     if index == 63:
                         reached.set()
-                    yield {'type': 'text_delta', 'text': 'x'}
-                yield {'type': 'done'}
+                    yield {'type': 'text_delta', 'text': 'x',
+                           'modelMessageId': 'model-final'}
+                yield {'type': 'done', 'content': 'x' * 200,
+                       'finalModelMessageId': 'model-final'}
         turn = delivery(Runner())
         task = asyncio.create_task(turn.produce())
         stream = turn.stream()
@@ -123,6 +130,59 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(task, 2)
         self.assertEqual('x' * 200, turn.messages.saved[-1]['content']['text'])
         self.assertLessEqual(turn.pending.qsize(), 64)
+
+    async def test_persists_ordered_model_tool_and_card_execution(self):
+        class Runner:
+            async def iterate(self, **kwargs):
+                yield {'type': 'reasoning_delta', 'text': '先查数据',
+                       'modelMessageId': 'model-process'}
+                yield {'type': 'text_delta', 'text': '正在处理',
+                       'modelMessageId': 'model-process'}
+                yield {
+                    'type': 'tool_call_started', 'toolCallId': 'call-1',
+                    'name': 'execute_ability', 'arguments': {'query': 'public'},
+                    'startedAt': '2026-10-05T12:00:00+00:00',
+                }
+                yield {
+                    'type': 'tool_call_finished', 'toolCallId': 'call-1',
+                    'name': 'execute_ability', 'lifecycleStatus': 'returned',
+                    'toolMessageStatus': 'success',
+                    'startedAt': '2026-10-05T12:00:00+00:00',
+                    'finishedAt': '2026-10-05T12:00:00.025000+00:00',
+                    'durationMs': 25, 'result': {'businessSuccess': False},
+                    'businessSuccess': False,
+                }
+                yield {'type': 'text_delta', 'text': '最终回答',
+                       'modelMessageId': 'model-final'}
+                yield {'type': 'application_rendered',
+                       'card': {'cardId': 'card-1', 'turnId': '11'}}
+                yield {'type': 'done', 'content': '最终回答',
+                       'finalModelMessageId': 'model-final'}
+
+        turn = delivery(Runner())
+        task = asyncio.create_task(turn.produce())
+        events = [json.loads(item[6:]) async for item in turn.stream()]
+        await task
+
+        saved = turn.messages.saved[-1]['content']
+        self.assertEqual('最终回答', saved['text'])
+        self.assertEqual('', saved['reasoning'])
+        self.assertEqual('11', saved['execution']['turnId'])
+        self.assertEqual(
+            [('model-process', 2, 'process'), ('model-final', 6, 'final')],
+            [(item['messageId'], item['sequence'], item['phase'])
+             for item in saved['execution']['modelMessages']],
+        )
+        tool = saved['execution']['toolCalls'][0]
+        self.assertEqual(('call-1', 4, 'returned', False), (
+            tool['toolCallId'], tool['sequence'], tool['lifecycleStatus'],
+            tool['businessSuccess'],
+        ))
+        self.assertEqual('11', saved['events'][0]['turnId'])
+        self.assertEqual('12', saved['events'][0]['assistantMessageId'])
+        self.assertEqual('11', events[0]['turnId'])
+        self.assertEqual('model-final', events[-1]['finalModelMessageId'])
+        self.assertEqual(saved, events[-1]['content'])
 
     async def test_done_waits_for_native_iterator_exit_and_saved_projection(self):
         gate = asyncio.Event()

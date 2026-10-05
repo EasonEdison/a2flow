@@ -11,7 +11,8 @@ from __future__ import annotations
 import asyncio
 import queue
 import threading
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 
 class ChatLoopRunner:
@@ -46,24 +47,31 @@ class ChatLoopRunner:
         self, *, user_id: int, conversation_id: int, text: str,
         turn_id: str,
     ) -> AsyncIterator[dict[str, Any]]:
-        from skillweave_contracts import TrustedContext
-
         from agent_workflow_runtime.chat.events import (
-            DONE, ERROR, TEXT_DELTA, TOOL_CALL, WORKFLOW_CONFIRM,
+            DONE,
+            ERROR,
+            TEXT_DELTA,
+            TOOL_CALL,
+            TOOL_CALL_FINISHED,
+            TOOL_CALL_STARTED,
+            WORKFLOW_CONFIRM,
         )
         from agent_workflow_runtime.chat.loop import ChatLoop
         from agent_workflow_runtime.chat.persistence import ConversationAdmissionError
+        from skillweave_contracts import TrustedContext
 
         owner = TrustedContext.from_mapping({
             "userId": user_id, "environment": self._environment,
         })
         pending = queue.Queue(maxsize=64)
         closed = threading.Event()
+        completion: dict[str, dict[str, Any] | None] = {"payload": None}
 
         class Emitter:
             def emit(self, kind, payload):
                 # A closed transport must not cancel/replay a model/tool turn.
                 if kind == DONE:
+                    completion["payload"] = dict(payload)
                     return  # Completion is published after the saver session exits.
                 while not closed.is_set():
                     try:
@@ -103,6 +111,9 @@ class ChatLoopRunner:
         def worker():
             try:
                 run()
+                emitter.emit("native_completed", completion["payload"] or {
+                    "content": "", "finalModelMessageId": None,
+                })
             except ConversationAdmissionError as exc:
                 emitter.emit(ERROR, {"code": str(exc)})
             except Exception:
@@ -126,13 +137,20 @@ class ChatLoopRunner:
                     continue
                 kind, payload = event
                 if kind == "worker_finished":
-                    if not failed:
-                        yield {"type": "done"}
                     return
+                if kind == "native_completed":
+                    yield {"type": "done", **payload}
+                    continue
                 if kind in (TEXT_DELTA, "reasoning_delta"):
-                    yield {"type": kind, "text": payload.get("text", "")}
+                    yield {
+                        "type": kind,
+                        "text": payload.get("text", ""),
+                        "modelMessageId": payload.get("modelMessageId"),
+                    }
                 elif kind == TOOL_CALL:
                     yield {"type": "tool_call", "tool": payload.get("tool", "")}
+                elif kind in (TOOL_CALL_STARTED, TOOL_CALL_FINISHED):
+                    yield {"type": kind, **payload}
                 elif kind == WORKFLOW_CONFIRM:
                     yield {"type": kind, "workflowKey": payload.get("workflowKey"),
                            "title": payload.get("title")}

@@ -3,23 +3,52 @@
 from __future__ import unicode_literals
 
 import asyncio
-from contextlib import contextmanager
 import hashlib
 import json
 import unittest
+from contextlib import contextmanager
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from agent_workflow_runtime.assembly import build_agent
+from agent_workflow_runtime.chat import (
+    DONE,
+    ERROR,
+    TEXT_DELTA,
+    TOOL_CALL,
+    WORKFLOW_CONFIRM,
+    ChatLoop,
+    ChatLoopError,
+    ListEmitter,
+    build_chat_tools,
+)
+from agent_workflow_runtime.chat.events import (
+    TOOL_CALL_FINISHED,
+    TOOL_CALL_STARTED,
+    public_event_value,
+    public_result_summary,
+)
+from agent_workflow_runtime.chat.loop import (
+    _ACTION_OBSERVATION_MARKER,
+    _OBSERVATION_CURSOR,
+    _action_observation_message,
+    _ChatObservationStateMiddleware,
+    _read_observations,
+    _tool_result,
+)
+from agent_workflow_runtime.deepseek_model import DeepSeekProtocolError
+from agent_workflow_runtime.models import ActionRejected
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessageChunk,
     HumanMessage,
     RemoveMessage,
+    ToolMessage,
 )
-from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatGenerationChunk
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.types import Command
 from pydantic import Field
-
 from skill_registry.ports import MaterialPort, SkillMaterial
 from skill_registry.resources import (
     PackageEntry,
@@ -27,28 +56,6 @@ from skill_registry.resources import (
 )
 from skill_registry.use_skill import TrustedResolutionEvidence
 from skillweave_contracts.models import TrustedContext
-
-from agent_workflow_runtime.chat import (
-    ChatLoop,
-    ChatLoopError,
-    ListEmitter,
-    build_chat_tools,
-    DONE,
-    ERROR,
-    TEXT_DELTA,
-    TOOL_CALL,
-    WORKFLOW_CONFIRM,
-)
-from agent_workflow_runtime.deepseek_model import DeepSeekProtocolError
-from agent_workflow_runtime.models import ActionRejected
-from agent_workflow_runtime.chat.loop import (
-    _ACTION_OBSERVATION_MARKER,
-    _ChatObservationStateMiddleware,
-    _OBSERVATION_CURSOR,
-    _action_observation_message,
-    _read_observations,
-)
-from agent_workflow_runtime.assembly import build_agent
 
 OWNER = TrustedContext(user_id=1009, environment="PRT")
 
@@ -201,8 +208,8 @@ def tool_call_chunk(index, call_id, name, args_text):
 
 class PlainTextTurnTests(unittest.TestCase):
     def test_checkpoint_rebuild_imports_legacy_only_once(self):
+        from langchain_core.messages import AIMessage, HumanMessage
         from langgraph.checkpoint.memory import InMemorySaver
-        from langchain_core.messages import HumanMessage, AIMessage
         saver = InMemorySaver()
         imports = []
         def legacy():
@@ -228,7 +235,10 @@ class PlainTextTurnTests(unittest.TestCase):
     def test_plain_reply_streams_deltas_and_done(self):
         emitter = ListEmitter()
         factory = FakeFactory(
-            [FakeModel([AIMessageChunk(content="你好"), AIMessageChunk(content="，世界")])]
+            [FakeModel([
+                AIMessageChunk(content="你好", id="model-final-1"),
+                AIMessageChunk(content="，世界", id="model-final-1"),
+            ])]
         )
         loop = ChatLoop(
             model_factory=factory, model_reference="deepseek-v4-flash",
@@ -239,21 +249,81 @@ class PlainTextTurnTests(unittest.TestCase):
         self.assertEqual("你好，世界", reply)
         kinds = [kind for kind, _ in emitter.events]
         self.assertEqual([TEXT_DELTA, TEXT_DELTA, DONE], kinds)
-        self.assertEqual("你好", emitter.events[0][1]["text"])
+        self.assertEqual(
+            {"text": "你好", "modelMessageId": "model-final-1"},
+            emitter.events[0][1],
+        )
+        self.assertEqual("model-final-1", emitter.events[-1][1][
+            "finalModelMessageId"
+        ])
         self.assertEqual(2, len(loop.history))
         self.assertEqual("human", loop.history[0].type)
 
     def test_provider_reasoning_is_visible_without_forwarding_opaque_fields(self):
         emitter = ListEmitter()
-        chunk = AIMessageChunk(content="answer", additional_kwargs={
+        chunk = AIMessageChunk(content="answer", id="model-answer-1", additional_kwargs={
             "reasoning_content": "provider explanation", "secret": "never forwarded"})
         loop = ChatLoop(model_factory=FakeFactory([FakeModel([chunk])]),
             model_reference="deepseek-v4-flash", owner=OWNER,
             conversation_id="conv1", reader=FakeMaterialPort(skill_material()),
             control_request_id="chatctrl1", emitter=emitter)
         loop.turn("hello")
-        self.assertIn(("reasoning_delta", {"text": "provider explanation"}), emitter.events)
+        self.assertIn(("reasoning_delta", {
+            "text": "provider explanation", "modelMessageId": "model-answer-1",
+        }), emitter.events)
         self.assertNotIn("never forwarded", str(emitter.events))
+
+    def test_public_event_value_bounds_nested_frozen_values_and_secrets(self):
+        from types import MappingProxyType
+
+        value = MappingProxyType({
+            "items": tuple({"name": f"item-{index}"} for index in range(30)),
+            "nested": {"authorization": "Bearer private", "visible": "ok"},
+        })
+
+        projected = public_event_value(value)
+
+        self.assertEqual("[REDACTED]", projected["nested"]["authorization"])
+        self.assertEqual("ok", projected["nested"]["visible"])
+        self.assertEqual(21, len(projected["items"]))
+        self.assertNotIn("Bearer private", str(projected))
+        self.assertEqual(
+            {"type": "nonFiniteNumber"}, public_event_value(float("nan")),
+        )
+
+        _, oversized, _ = _tool_result(ToolMessage(
+            content="private-value" * 6_000,
+            tool_call_id="oversized",
+        ), "oversized")
+        self.assertEqual({"type": "oversizedText"}, oversized)
+        self.assertNotIn("private-value", str(oversized))
+        summary = public_result_summary({
+            "businessSuccess": False,
+            "content": "full skill resource" * 100,
+            "protocol": {"components": ["not copied"]},
+        })
+        self.assertEqual(
+            ["businessSuccess", "content", "protocol"], summary["keys"],
+        )
+        self.assertEqual(False, summary["values"]["businessSuccess"])
+        self.assertNotIn("full skill resource", str(summary))
+        self.assertNotIn("components", str(summary))
+
+    def test_command_result_projects_only_matching_tool_message(self):
+        command = Command(update={"messages": [
+            ToolMessage(content='{"ignored":true}', tool_call_id="other"),
+            ToolMessage(
+                content='{"businessSuccess":false,"receipt":"public"}',
+                tool_call_id="call-1", status="success",
+            ),
+        ], "privateState": {"secret": "not projected"}})
+
+        status, raw, business_success = _tool_result(command, "call-1")
+
+        self.assertEqual("success", status)
+        self.assertEqual({"businessSuccess": False, "receipt": "public"}, raw)
+        self.assertFalse(business_success)
+        self.assertNotIn("privateState", str(raw))
 
 
 class WorkflowConfirmTests(unittest.TestCase):
@@ -290,6 +360,13 @@ class WorkflowConfirmTests(unittest.TestCase):
         # tool_call events expose the tool name only, never arguments.
         tool_events = [p for k, p in emitter.events if k == TOOL_CALL]
         self.assertEqual([{"tool": "propose_workflow_run"}], tool_events)
+        started = next(p for k, p in emitter.events if k == TOOL_CALL_STARTED)
+        finished = next(p for k, p in emitter.events if k == TOOL_CALL_FINISHED)
+        self.assertEqual("call-1", started["toolCallId"])
+        self.assertEqual("propose_workflow_run", started["name"])
+        self.assertEqual("returned", finished["lifecycleStatus"])
+        self.assertEqual("success", finished["toolMessageStatus"])
+        self.assertGreaterEqual(finished["durationMs"], 0)
         # no transport-visible payload leaks tool arguments beyond the whitelist.
         for kind, payload in emitter.events:
             self.assertNotIn("args", payload)
@@ -978,12 +1055,11 @@ class ChatObservationTests(unittest.TestCase):
         self.assertEqual([0, 100], calls)
 
     def test_real_card_store_observations_flow_into_native_history(self):
-        from langgraph.checkpoint.memory import InMemorySaver
-
         from agent_workflow_runtime.chat.cards import (
             ActionObservation,
             ChatCardStore,
         )
+        from langgraph.checkpoint.memory import InMemorySaver
         from test_chat_cards import MemoryStorage, metadata, prepared
 
         conversation = "store-observation-conversation"
