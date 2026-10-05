@@ -26,7 +26,36 @@ export type A2uiResultAdapterType = 'MESSAGE_TEMPLATE' | 'A2UI_PASSTHROUGH';
 export type A2uiResultOutcome = 'ADAPTER_PIPELINE' | 'NO_UI_MESSAGES';
 export type A2uiCapabilityResultSource = 'CAPABILITY_DATA' | 'CAPABILITY_META';
 export type A2uiBusinessPredicateOperator = 'EQUALS' | 'GREATER_THAN';
-export type A2uiAdapterBindingSource = A2uiCapabilityResultSource | 'TRUSTED_CONTEXT' | 'CONSTANT';
+export type A2uiAdapterBindingSource =
+  | A2uiCapabilityResultSource
+  | 'TRUSTED_CONTEXT'
+  | 'ACTION_CONTEXT'
+  | 'CONSTANT';
+
+export type A2uiResultTransformType =
+  | 'MINOR_UNIT_TO_DECIMAL_STRING'
+  | 'ARRAY_TO_CHILDREN_PREFIX'
+  | 'ARRAY_OBJECT_TO_OPTIONS'
+  | 'BOOLEAN_ARRAY_TRUE_COUNT'
+  | 'PAGINATION_STATE'
+  | 'NUMBER_TO_STRING';
+
+export interface A2uiOptionLabelColumn {
+  label: string;
+  sourcePath: string;
+}
+
+export interface A2uiResultTransform {
+  type: A2uiResultTransformType;
+  scale?: number;
+  componentIds?: string[];
+  pageSize?: number;
+  pageNumber?: number;
+  actionPagePath?: string;
+  valuePath?: string;
+  labelColumns?: A2uiOptionLabelColumn[];
+  labelSeparator?: string;
+}
 
 export interface A2uiApplicationCatalogRef {
   catalogId: string;
@@ -104,6 +133,20 @@ export interface A2uiMessageTemplateBinding {
   sourcePath: string;
   required: boolean;
   constantValue?: unknown;
+  transform?: A2uiResultTransform;
+}
+
+export interface A2uiComposerDraftColumn {
+  label: string;
+  sourcePath: string;
+}
+
+export interface A2uiComposerDraftEffect {
+  type: 'COMPOSER_DRAFT';
+  mode: 'APPEND';
+  source: 'CAPABILITY_DATA';
+  itemsPath: string;
+  columns: A2uiComposerDraftColumn[];
 }
 
 export interface A2uiResultAdapter {
@@ -149,6 +192,7 @@ export interface A2uiActionBinding {
   failureResultAdapters: A2uiResultAdapter[];
   businessSuccessPredicate?: A2uiBusinessSuccessPredicate;
   completeWorkflowInteractionOnSuccess: boolean;
+  composerDraftEffect?: A2uiComposerDraftEffect;
 }
 
 export interface A2uiLoadBinding {
@@ -338,6 +382,12 @@ function toAuthoringActionBinding(binding: A2uiActionBinding): A2uiActionBinding
     failureResultAdapters: normalizeResultAdapters(binding.failureResultAdapters),
     businessSuccessPredicate: normalizeBusinessSuccessPredicate(binding.businessSuccessPredicate),
     completeWorkflowInteractionOnSuccess: binding.completeWorkflowInteractionOnSuccess === true,
+    composerDraftEffect: binding.composerDraftEffect
+      ? {
+          ...binding.composerDraftEffect,
+          columns: binding.composerDraftEffect.columns?.map?.((column) => ({ ...column })) || [],
+        }
+      : undefined,
   };
 }
 
@@ -539,7 +589,18 @@ export function normalizeResultAdapters(adapters: A2uiResultAdapter[]): A2uiResu
     ?.map?.(({ adapter }) => ({
       ...adapter,
       messageTemplate: adapter.messageTemplate ? { ...adapter.messageTemplate } : undefined,
-      bindings: adapter.bindings?.map((binding) => ({ ...binding })),
+      bindings: adapter.bindings?.map((binding) => ({
+        ...binding,
+        transform: binding.transform
+          ? {
+              ...binding.transform,
+              componentIds: binding.transform.componentIds
+                ? [...binding.transform.componentIds]
+                : undefined,
+              labelColumns: binding.transform.labelColumns?.map?.((column) => ({ ...column })),
+            }
+          : undefined,
+      })),
       emittedActionDeclarations: adapter.emittedActionDeclarations?.map((declaration) => ({
         ...declaration,
         contextSchema: { ...declaration.contextSchema },
@@ -599,6 +660,32 @@ function validateBusinessSuccessPredicate(binding: A2uiActionBinding, errors: st
         (clause.operator === 'GREATER_THAN' && !finiteNumber(clause.expectedValue)),
     );
   if (invalid) errors.push('A2UI_BUSINESS_SUCCESS_PREDICATE_INVALID');
+}
+
+function validateComposerDraftEffect(binding: A2uiActionBinding, errors: string[]): void {
+  const effect = binding.composerDraftEffect;
+  if (!effect) return;
+  const raw = effect as unknown as Record<string, unknown>;
+  const columns = effect.columns || [];
+  const invalid =
+    Object.keys(raw).some(
+      (key) => !['type', 'mode', 'source', 'itemsPath', 'columns'].includes(key),
+    ) ||
+    effect.type !== 'COMPOSER_DRAFT' ||
+    effect.mode !== 'APPEND' ||
+    effect.source !== 'CAPABILITY_DATA' ||
+    !hasText(effect.itemsPath) ||
+    !validJsonPointer(effect.itemsPath) ||
+    columns.length < 1 ||
+    columns.length > 20 ||
+    columns.some(
+      (column) =>
+        !column ||
+        !hasText(column.label) ||
+        !hasText(column.sourcePath) ||
+        !validJsonPointer(column.sourcePath),
+    );
+  if (invalid) errors.push('A2UI_COMPOSER_DRAFT_EFFECT_INVALID');
 }
 
 function unique(errors: string[]): string[] {
@@ -710,6 +797,7 @@ function validateActionBindings(application: A2uiApplicationDraft, errors: strin
     validateAdapterOutcome(binding.successOutcome, binding.resultAdapters, errors);
     validateAdapterOutcome(binding.failureOutcome, binding.failureResultAdapters, errors);
     validateBusinessSuccessPredicate(binding, errors);
+    validateComposerDraftEffect(binding, errors);
   });
 }
 

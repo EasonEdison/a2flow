@@ -48,9 +48,12 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiled
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledBusinessSuccessPredicate;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledCapabilityActionRef;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledCatalogRef;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledComposerDraftColumn;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledComposerDraftEffect;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledEmittedActionDeclaration;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledLoadBinding;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledMessageTemplateBinding;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledOptionLabelColumn;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledRequestMapping;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledRequestTransform;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledResultAdapter;
@@ -60,10 +63,16 @@ import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiled
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCompiledSurfaceDeclaration;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityContract;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiCurrentCapabilityVariantContract;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiComposerDraftColumn;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiComposerDraftEffect;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiComposerDraftEffectMode;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiComposerDraftEffectSource;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiComposerDraftEffectType;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiInteractionMode;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiLoadBinding;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiMappingSource;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiMessageTemplateBinding;
+import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiOptionLabelColumn;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiRequestMapping;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiRequestTransform;
 import dev.a2flow.management.a2ui.application.A2uiApplicationModels.A2uiRequestTransformType;
@@ -123,6 +132,9 @@ public class A2uiApplicationBuildCompiler {
     private static final String TYPE_STRING = "string";
     private static final String TYPE_ARRAY = "array";
     private static final String TYPE_BOOLEAN = "boolean";
+    private static final int MAX_OPTION_LABEL_COLUMNS = 20;
+    private static final int MAX_OPTION_LABEL_SEPARATOR_LENGTH = 8;
+    private static final int MAX_COMPOSER_DRAFT_COLUMNS = 20;
     private static final String BUSINESS_PREDICATE_VERSION = "JSON_POINTER_V1";
     private static final String BUSINESS_PREDICATE_SOURCE = "CAPABILITY_DATA";
     private static final String BUSINESS_PREDICATE_EQUALS = "EQUALS";
@@ -536,6 +548,7 @@ public class A2uiApplicationBuildCompiler {
                     failure,
                     businessSuccessPredicate,
                     binding.isCompleteWorkflowInteractionOnSuccess(),
+                    compileComposerDraftEffect(binding.getComposerDraftEffect()),
                     compileSuccessBranches(binding.getSuccessBranches(), binding.getContextSchema())));
         }
         compiled.sort(Comparator.comparing(A2uiCompiledActionBinding::getSurfaceId)
@@ -1352,6 +1365,7 @@ public class A2uiApplicationBuildCompiler {
         }
         if (transform.getType() == A2uiResultTransformType.PAGINATION_STATE) {
             if (transform.getScale() != null || transform.getComponentIds() != null
+                    || hasOptionProjectionFields(transform)
                     || !positivePagingInteger(transform.getPageSize())
                     || (transform.getPageNumber() == null) == (transform.getActionPagePath() == null)) {
                 throw failure(RESULT_ADAPTER_INVALID);
@@ -1370,6 +1384,26 @@ public class A2uiApplicationBuildCompiler {
         }
         if (transform.getPageSize() != null || transform.getPageNumber() != null
                 || transform.getActionPagePath() != null) {
+            throw failure(RESULT_ADAPTER_INVALID);
+        }
+        if (transform.getType() == A2uiResultTransformType.ARRAY_OBJECT_TO_OPTIONS) {
+            if (transform.getScale() != null || transform.getComponentIds() != null
+                    || isBlank(transform.getValuePath())
+                    || !validJsonPointer(transform.getValuePath())
+                    || isBlank(transform.getLabelSeparator())
+                    || transform.getLabelSeparator().length() > MAX_OPTION_LABEL_SEPARATOR_LENGTH
+                    || !validOptionLabelColumns(transform.getLabelColumns())) {
+                throw failure(RESULT_ADAPTER_INVALID);
+            }
+            List<A2uiCompiledOptionLabelColumn> columns = transform.getLabelColumns().stream()
+                    .map(column -> new A2uiCompiledOptionLabelColumn(
+                            column.getLabel(), column.getSourcePath()))
+                    .collect(Collectors.toUnmodifiableList());
+            return new A2uiCompiledResultTransform(transform.getType(), null, null,
+                    null, null, null, transform.getValuePath(), columns,
+                    transform.getLabelSeparator());
+        }
+        if (hasOptionProjectionFields(transform)) {
             throw failure(RESULT_ADAPTER_INVALID);
         }
         if (transform.getType() == A2uiResultTransformType.MINOR_UNIT_TO_DECIMAL_STRING) {
@@ -1395,6 +1429,47 @@ public class A2uiApplicationBuildCompiler {
             return new A2uiCompiledResultTransform(transform.getType(), null, null, null, null, null);
         }
         throw failure(RESULT_ADAPTER_INVALID);
+    }
+
+    private boolean hasOptionProjectionFields(A2uiResultTransform transform) {
+        return transform.getValuePath() != null || transform.getLabelColumns() != null
+                || transform.getLabelSeparator() != null;
+    }
+
+    private boolean validOptionLabelColumns(List<A2uiOptionLabelColumn> columns) {
+        return columns != null && !columns.isEmpty() && columns.size() <= MAX_OPTION_LABEL_COLUMNS
+                && columns.stream().allMatch(column -> column != null
+                        && !isBlank(column.getLabel())
+                        && !isBlank(column.getSourcePath())
+                        && validJsonPointer(column.getSourcePath()));
+    }
+
+    /**
+     * 编译成功响应级 Composer 草稿效果。该声明只允许读取业务 data，
+     * 不允许脚本、客户端自报展示字段或持久化重放；业务副作用仍由 Capability 自身治理。
+     */
+    private A2uiCompiledComposerDraftEffect compileComposerDraftEffect(
+            A2uiComposerDraftEffect effect) {
+        if (effect == null) {
+            return null;
+        }
+        if (effect.getType() != A2uiComposerDraftEffectType.COMPOSER_DRAFT
+                || effect.getMode() != A2uiComposerDraftEffectMode.APPEND
+                || effect.getSource() != A2uiComposerDraftEffectSource.CAPABILITY_DATA
+                || isBlank(effect.getItemsPath()) || !validJsonPointer(effect.getItemsPath())
+                || effect.getColumns() == null || effect.getColumns().isEmpty()
+                || effect.getColumns().size() > MAX_COMPOSER_DRAFT_COLUMNS
+                || effect.getColumns().stream().anyMatch(column -> column == null
+                        || isBlank(column.getLabel()) || isBlank(column.getSourcePath())
+                        || !validJsonPointer(column.getSourcePath()))) {
+            throw failure(RESULT_ADAPTER_INVALID);
+        }
+        List<A2uiCompiledComposerDraftColumn> columns = effect.getColumns().stream()
+                .map(column -> new A2uiCompiledComposerDraftColumn(
+                        column.getLabel(), column.getSourcePath()))
+                .collect(Collectors.toUnmodifiableList());
+        return new A2uiCompiledComposerDraftEffect(effect.getType(), effect.getMode(),
+                effect.getSource(), effect.getItemsPath(), columns);
     }
 
     /** 动作分页只读取 context schema 已声明的数值字段，禁止 Load 隐式读取。 */

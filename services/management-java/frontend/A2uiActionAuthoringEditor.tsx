@@ -16,11 +16,13 @@ import type {
   A2uiActionBinding,
   A2uiBusinessPredicateClause,
   A2uiBusinessSuccessPredicate,
+  A2uiComposerDraftColumn,
   A2uiMessage,
   A2uiMessageTemplateBinding,
   A2uiRequestMapping,
   A2uiResultAdapter,
   A2uiResultOutcome,
+  A2uiResultTransform,
 } from './a2uiApplicationContracts';
 import {
   createA2uiActionBindingFromDeclaration,
@@ -44,6 +46,7 @@ const RESULT_SOURCE_OPTIONS: Array<{
   { value: 'CAPABILITY_DATA', label: '业务响应 data' },
   { value: 'CAPABILITY_META', label: 'Tool 元数据' },
   { value: 'TRUSTED_CONTEXT', label: '可信上下文' },
+  { value: 'ACTION_CONTEXT', label: '当前动作上下文' },
   { value: 'CONSTANT', label: '常量' },
 ];
 
@@ -455,6 +458,35 @@ const AdapterPipelineEditor: React.FC<AdapterPipelineEditorProps> = ({
                                   }
                                 />
                               ),
+                          },
+                          {
+                            title: '确定性转换',
+                            render: (_value, item, bindingIndex) => (
+                              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                <A2uiJsonValueEditor
+                                  value={item.transform || null}
+                                  onApply={(value) =>
+                                    updateTemplateBindings(
+                                      index,
+                                      (adapter.bindings || []).map((candidate, itemIndex) =>
+                                        itemIndex === bindingIndex
+                                          ? {
+                                              ...candidate,
+                                              transform:
+                                                value === null
+                                                  ? undefined
+                                                  : (value as A2uiResultTransform),
+                                            }
+                                          : candidate,
+                                      ),
+                                    )
+                                  }
+                                />
+                                <Text type="secondary">
+                                  null 表示不转换；数组选项使用 ARRAY_OBJECT_TO_OPTIONS。
+                                </Text>
+                              </Space>
+                            ),
                           },
                           {
                             title: '必填',
@@ -1046,6 +1078,164 @@ const A2uiActionAuthoringEditor: React.FC<A2uiActionAuthoringEditorProps> = ({
                 新增请求映射
               </Button>
             </Space>
+          </Card>
+
+          <Card
+            size="small"
+            title="聊天输入框回填（成功响应级）"
+            extra={
+              binding.composerDraftEffect ? (
+                <Button
+                  size="small"
+                  danger
+                  onClick={() => updateBinding({ ...binding, composerDraftEffect: undefined })}
+                >
+                  移除回填
+                </Button>
+              ) : (
+                <Button
+                  size="small"
+                  onClick={() =>
+                    updateBinding({
+                      ...binding,
+                      composerDraftEffect: {
+                        type: 'COMPOSER_DRAFT',
+                        mode: 'APPEND',
+                        source: 'CAPABILITY_DATA',
+                        itemsPath: '/items',
+                        columns: [],
+                      },
+                    })
+                  }
+                >
+                  启用回填
+                </Button>
+              )
+            }
+          >
+            {binding.composerDraftEffect ? (
+              <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                <Alert
+                  type="info"
+                  message="COMPOSER_DRAFT · APPEND · CAPABILITY_DATA"
+                  description="仅在本次 Action 业务成功响应中生成一次性回填效果；追加到用户现有原稿，不发送消息，也不从客户端提交姓名电话。"
+                />
+                <Input
+                  addonBefore="items JSON Pointer"
+                  value={binding.composerDraftEffect.itemsPath}
+                  placeholder="例如 /items"
+                  onChange={(event) =>
+                    updateBinding({
+                      ...binding,
+                      composerDraftEffect: {
+                        ...binding.composerDraftEffect!,
+                        itemsPath: event.target.value,
+                      },
+                    })
+                  }
+                />
+                <Table<A2uiComposerDraftColumn>
+                  rowKey={(_item, index) => String(index)}
+                  dataSource={binding.composerDraftEffect.columns}
+                  pagination={false}
+                  columns={[
+                    {
+                      title: '展示名',
+                      render: (_value, item, index) => (
+                        <Input
+                          value={item.label}
+                          placeholder="例如 姓名"
+                          onChange={(event) =>
+                            updateBinding({
+                              ...binding,
+                              composerDraftEffect: {
+                                ...binding.composerDraftEffect!,
+                                columns: binding.composerDraftEffect!.columns.map(
+                                  (candidate, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...candidate, label: event.target.value }
+                                      : candidate,
+                                ),
+                              },
+                            })
+                          }
+                        />
+                      ),
+                    },
+                    {
+                      title: '元素内 JSON Pointer',
+                      render: (_value, item, index) => (
+                        <Input
+                          value={item.sourcePath}
+                          placeholder="例如 /name"
+                          onChange={(event) =>
+                            updateBinding({
+                              ...binding,
+                              composerDraftEffect: {
+                                ...binding.composerDraftEffect!,
+                                columns: binding.composerDraftEffect!.columns.map(
+                                  (candidate, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...candidate, sourcePath: event.target.value }
+                                      : candidate,
+                                ),
+                              },
+                            })
+                          }
+                        />
+                      ),
+                    },
+                    {
+                      title: '操作',
+                      width: 80,
+                      render: (_value, _item, index) => (
+                        <Button
+                          size="small"
+                          danger
+                          onClick={() =>
+                            updateBinding({
+                              ...binding,
+                              composerDraftEffect: {
+                                ...binding.composerDraftEffect!,
+                                columns: binding.composerDraftEffect!.columns.filter(
+                                  (_candidate, itemIndex) => itemIndex !== index,
+                                ),
+                              },
+                            })
+                          }
+                        >
+                          删除
+                        </Button>
+                      ),
+                    },
+                  ]}
+                />
+                <Button
+                  size="small"
+                  disabled={binding.composerDraftEffect.columns.length >= 20}
+                  onClick={() =>
+                    updateBinding({
+                      ...binding,
+                      composerDraftEffect: {
+                        ...binding.composerDraftEffect!,
+                        columns: [
+                          ...binding.composerDraftEffect!.columns,
+                          { label: '', sourcePath: '' },
+                        ],
+                      },
+                    })
+                  }
+                >
+                  新增回填列
+                </Button>
+              </Space>
+            ) : (
+              <Alert
+                type="info"
+                message="未配置聊天输入框回填"
+                description="普通 Action 保持现有行为；启用后必须配置至少一列，最多 20 列。"
+              />
+            )}
           </Card>
 
           <Card size="small" title="显式结果根 Demo（仅当前会话）">
