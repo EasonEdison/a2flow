@@ -10,6 +10,7 @@ import {
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { toAssistantMessage } from '../assistantChat';
+import { copyText } from '../clipboard.mjs';
 import { appendComposerDraft } from '../composerDraft.mjs';
 import { chatErrorPresentation } from '../errorPresentation';
 import type {
@@ -60,15 +61,14 @@ const toolStateLabel = (tool: ChatToolCall) => {
 };
 
 function ToolProcess({ tool, index }: { tool: ChatToolCall; index: number }) {
-  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const open = manualOpen ?? tool.lifecycleStatus === 'running';
+  const [open, setOpen] = useState(false);
   return <details
     className={`tool-process ${tool.lifecycleStatus}`}
     open={open}
   >
     <summary onClick={(event) => {
       event.preventDefault();
-      setManualOpen(!open);
+      setOpen(value => !value);
     }}>
       <span className="tool-process-index">{index}</span>
       <strong>{tool.name}</strong>
@@ -76,18 +76,66 @@ function ToolProcess({ tool, index }: { tool: ChatToolCall; index: number }) {
       <span className="tool-process-state">{toolStateLabel(tool)}</span>
       {tool.durationMs !== undefined ? <span>{(tool.durationMs / 1000).toFixed(1)}s</span> : null}
     </summary>
-    <div className="tool-process-grid">
-      <section><h4>输入参数</h4><pre>{prettyJson(tool.arguments)}</pre></section>
-      <section><h4>结果摘要</h4><pre>{prettyJson(tool.result)}</pre>
-        {tool.businessSuccess !== undefined && tool.businessSuccess !== null
-          ? <p className={tool.businessSuccess ? 'business-success' : 'business-failure'}>
-            {tool.businessSuccess ? '业务确认成功' : '业务确认未成功'}
-          </p>
-          : null}
-        {tool.errorCode ? <p className="tool-error-code">错误码：{tool.errorCode}</p> : null}
-      </section>
-    </div>
+    {open ? <ToolProcessBody tool={tool} /> : null}
   </details>;
+}
+
+function ToolProcessBody({ tool }: { tool: ChatToolCall }) {
+  const [copyState, setCopyState] = useState<{
+    resultText: string;
+    status: 'copied' | 'failed';
+  } | null>(null);
+  const formattedResult = useMemo(() => {
+    if (tool.result === undefined) return { text: '暂无返回结果', copyable: false };
+    if (typeof tool.result === 'string') return { text: tool.result, copyable: true };
+    try {
+      const text = JSON.stringify(tool.result, null, 2);
+      return typeof text === 'string'
+        ? { text, copyable: true }
+        : { text: '返回结果无法格式化', copyable: false };
+    } catch {
+      return { text: '返回结果无法格式化', copyable: false };
+    }
+  }, [tool.result]);
+  const handleCopy = useCallback(async () => {
+    if (!formattedResult.copyable) return;
+    const copied = await copyText(formattedResult.text);
+    setCopyState({
+      resultText: formattedResult.text,
+      status: copied ? 'copied' : 'failed',
+    });
+  }, [formattedResult]);
+  const copyStatus = copyState?.resultText === formattedResult.text
+    ? copyState.status
+    : 'idle';
+
+  return <div className="tool-process-grid">
+    <section><h4>输入参数</h4><pre>{prettyJson(tool.arguments)}</pre></section>
+    <section className="tool-result">
+      <header>
+        <h4>返回结果</h4>
+        {tool.result !== undefined
+          ? <button type="button" disabled={!formattedResult.copyable} onClick={() => void handleCopy()}>
+            复制完整结果
+          </button>
+          : null}
+      </header>
+      <pre>{formattedResult.text}</pre>
+      <span className={`copy-feedback ${copyStatus}`} aria-live="polite">
+        {copyStatus === 'copied'
+          ? '已复制'
+          : copyStatus === 'failed'
+            ? '复制失败，请手动选择结果内容'
+            : ''}
+      </span>
+      {tool.businessSuccess !== undefined && tool.businessSuccess !== null
+        ? <p className={tool.businessSuccess ? 'business-success' : 'business-failure'}>
+          {tool.businessSuccess ? '业务确认成功' : '业务确认未成功'}
+        </p>
+        : null}
+      {tool.errorCode ? <p className="tool-error-code">错误码：{tool.errorCode}</p> : null}
+    </section>
+  </div>;
 }
 
 function ModelProcess({ message }: { message: ChatModelMessage }) {
