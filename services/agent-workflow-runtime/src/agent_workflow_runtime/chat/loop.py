@@ -6,9 +6,11 @@ Durable conversation migration is a separate assembly concern.
 
 import asyncio
 import json
+import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, Final, Protocol
+from datetime import UTC, datetime
+from typing import Annotated, Any, Final, NotRequired, Protocol
 from uuid import uuid4
 
 from langchain.agents.middleware import (
@@ -24,9 +26,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.tools import BaseTool
 from langgraph.types import Command
 from skillweave_contracts.models import (
-    ConversationInvocationScope, TrustedInvocationContext,
+    ConversationInvocationScope,
+    TrustedInvocationContext,
 )
-from typing_extensions import NotRequired
 
 from ..assembly import build_agent
 from ..deepseek_model import DeepSeekProtocolError
@@ -34,7 +36,17 @@ from ..models import ActionRejected
 from ..mvp_tools import AbilityModelArgs
 from ..service import require_owner
 from .cards import ChatObservation
-from .events import DONE, ERROR, ListEmitter, TEXT_DELTA, TOOL_CALL
+from .events import (
+    DONE,
+    ERROR,
+    TOOL_CALL,
+    TOOL_CALL_FINISHED,
+    TOOL_CALL_STARTED,
+    ChatEmitter,
+    ListEmitter,
+    public_event_value,
+    public_result_summary,
+)
 from .tools import (
     _EMITTER,
     ProposeModelArgs,
@@ -43,7 +55,6 @@ from .tools import (
     UseSkillModelArgs,
     build_chat_tools,
 )
-
 
 _GENERIC_TURN_ERROR: Final[str] = "MODEL_STREAM_FAILED"
 _SAFE_ACTION_REJECTION_CODES: Final[frozenset[str]] = frozenset({
@@ -453,6 +464,151 @@ class _InteractiveCardStop(AgentMiddleware):
         return None
 
 
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _message_id(message: object) -> str | None:
+    value = getattr(message, "id", None)
+    return value if type(value) is str and value else None
+
+
+def _command_tool_message(
+    result: Command[Any], tool_call_id: str,
+) -> ToolMessage | None:
+    update = result.update
+    if not isinstance(update, Mapping):
+        return None
+    messages = update.get("messages", ())
+    values: Sequence[Any]
+    if isinstance(messages, ToolMessage):
+        values = (messages,)
+    elif isinstance(messages, Sequence) and not isinstance(
+        messages, (str, bytes, bytearray)
+    ):
+        values = messages
+    else:
+        return None
+    return next((
+        message for message in reversed(values)
+        if isinstance(message, ToolMessage)
+        and message.tool_call_id == tool_call_id
+    ), None)
+
+
+def _tool_result(
+    result: ToolMessage | Command[Any], tool_call_id: str,
+) -> tuple[
+    str | None, object, bool | None,
+]:
+    if isinstance(result, Command):
+        message = _command_tool_message(result, tool_call_id)
+        if message is None:
+            return None, {"type": "command"}, None
+        result = message
+    raw: object = result.content
+    if isinstance(raw, str):
+        raw_text = raw
+        if len(raw_text.encode("utf-8")) > 65_536:
+            raw = {"type": "oversizedText"}
+        else:
+            try:
+                raw = json.loads(raw_text)
+            except (TypeError, ValueError):
+                raw = {"type": "text", "length": len(raw_text)}
+    status = getattr(result, "status", None)
+    tool_status = status if status in {"success", "error"} else None
+    business_success = (
+        raw.get("businessSuccess")
+        if isinstance(raw, Mapping)
+        and type(raw.get("businessSuccess")) is bool
+        else None
+    )
+    return tool_status, raw, business_success
+
+
+class _ToolExecutionEvents(AgentMiddleware):
+    """Observe the SDK's actual tool handler boundary without changing it."""
+
+    def __init__(self, emitter: ChatEmitter) -> None:
+        self._emitter = emitter
+
+    def _started(self, request: ToolCallRequest) -> tuple[str, float, str, str]:
+        call = request.tool_call
+        tool_call_id = call["id"] or ""
+        name = call["name"]
+        started_at = _utc_now()
+        arguments = public_event_value(call.get("args", {}))
+        if not isinstance(arguments, dict):
+            arguments = {"value": arguments}
+        self._emitter.emit(TOOL_CALL_STARTED, {
+            "toolCallId": tool_call_id,
+            "name": name,
+            "arguments": arguments,
+            "startedAt": started_at,
+        })
+        return tool_call_id, time.monotonic(), started_at, name
+
+    def _finished(
+        self,
+        started: tuple[str, float, str, str],
+        result: ToolMessage | Command[Any] | None,
+        *,
+        raised: bool,
+    ) -> None:
+        tool_call_id, started_clock, started_at, name = started
+        payload: dict[str, Any] = {
+            "toolCallId": tool_call_id,
+            "name": name,
+            "lifecycleStatus": "raised" if raised else "returned",
+            "toolMessageStatus": None,
+            "startedAt": started_at,
+            "finishedAt": _utc_now(),
+            "durationMs": max(0, int((time.monotonic() - started_clock) * 1000)),
+        }
+        if raised:
+            payload["errorCode"] = "TOOL_EXECUTION_FAILED"
+        elif result is not None:
+            tool_status, raw, business_success = _tool_result(
+                result, tool_call_id,
+            )
+            payload["toolMessageStatus"] = tool_status
+            payload["result"] = public_result_summary(raw)
+            if business_success is not None:
+                payload["businessSuccess"] = business_success
+        self._emitter.emit(TOOL_CALL_FINISHED, payload)
+
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+    ) -> ToolMessage | Command[Any]:
+        started = self._started(request)
+        try:
+            result = handler(request)
+        except BaseException:
+            self._finished(started, None, raised=True)
+            raise
+        self._finished(started, result, raised=False)
+        return result
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[
+            [ToolCallRequest], Awaitable[ToolMessage | Command[Any]]
+        ],
+    ) -> ToolMessage | Command[Any]:
+        started = self._started(request)
+        try:
+            result = await handler(request)
+        except BaseException:
+            self._finished(started, None, raised=True)
+            raise
+        self._finished(started, result, raised=False)
+        return result
+
+
 def _close_model(model):
     client = getattr(model, "client", None)
     if callable(getattr(client, "close", None)):
@@ -523,7 +679,7 @@ class ChatLoop:
                 chat_assets=self._chat_assets,
             )
             from ..personal_memory import PersonalMemoryMiddleware
-            middleware = []
+            middleware = [_ToolExecutionEvents(self._emitter)]
             if self._observation_loader is not None:
                 middleware.append(_ChatObservationStateMiddleware(
                     self._observation_loader,
@@ -600,7 +756,10 @@ class ChatLoop:
                     if metadata.get("langgraph_node") != "model":
                         continue
                     for text in self._text_deltas(message):
-                        self._emitter.emit(TEXT_DELTA, {"text": text})
+                        self._emitter.emit(
+                            "text_delta",
+                            {"text": text, "modelMessageId": _message_id(message)},
+                        )
                     reasoning = [block["reasoning"] for block in message.content_blocks
                                  if block.get("type") == "reasoning"
                                  and isinstance(block.get("reasoning"), str)]
@@ -611,7 +770,11 @@ class ChatLoop:
                         reasoning = [native_reasoning]
                     for text in reasoning:
                         if text:
-                            self._emitter.emit("reasoning_delta", {"text": text})
+                            self._emitter.emit(
+                                "reasoning_delta",
+                                {"text": text,
+                                 "modelMessageId": _message_id(message)},
+                            )
                 else:
                     messages = event.get("messages", messages)
                     for message in messages:
@@ -635,7 +798,10 @@ class ChatLoop:
                 raise ChatLoopError("INCOMPLETE_AGENT_TURN")
             self._history = list(messages)
             final = "".join(self._text_deltas(last))
-            self._emitter.emit(DONE, {"content": final})
+            self._emitter.emit(DONE, {
+                "content": final,
+                "finalModelMessageId": _message_id(last),
+            })
             return final
         except Exception as exc:
             failure = _classify_turn_failure(exc)

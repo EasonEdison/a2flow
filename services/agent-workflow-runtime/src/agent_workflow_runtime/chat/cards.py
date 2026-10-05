@@ -164,6 +164,17 @@ def _public(card):
              "conversationId": card["conversation_id"],
              "display": deepcopy(card["display"]), "status": card["status"],
              }
+    metadata = card.get("binding_metadata")
+    control_request_id = (
+        metadata.get("controlRequestId") if isinstance(metadata, dict) else None
+    )
+    if (isinstance(control_request_id, str)
+            and control_request_id.startswith("chat-")
+            and control_request_id[5:]):
+        # The composition root creates Chat control ids from the durable input
+        # message id. Publish the relation explicitly so clients never infer it
+        # from card or message position.
+        value["turnId"] = control_request_id[5:]
     if card["has_result"]:
         value["result"] = deepcopy(card["result"])
     return value

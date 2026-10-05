@@ -177,6 +177,20 @@ class ChatCardContract:
             self.owner, self.conversation, prepared(prompt="Changed"),
             metadata(self.conversation)))
 
+    def test_chat_card_exposes_durable_turn_relation_without_internal_metadata(self):
+        values = metadata(self.conversation)
+        values["controlRequestId"] = "chat-42"
+
+        card = self.store.save(
+            self.owner, self.conversation, prepared(), values,
+        )
+
+        self.assertEqual("42", card["turnId"])
+        self.assertNotIn("controlRequestId", card)
+        self.assertEqual("42", self.store.read(
+            self.owner, self.conversation, card["cardId"],
+        )["turnId"])
+
     def test_claim_commits_before_dispatch_and_finish_is_idempotent(self):
         card = self.save()
         claim = self.store.claim(self.owner, self.conversation, card["cardId"],
