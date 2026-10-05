@@ -37,6 +37,19 @@ export type ChatExecution = {
   modelMessages: ChatModelMessage[];
   toolCalls: ChatToolCall[];
 };
+export type ChatTextPart = {
+  type: 'text';
+  id: string;
+  text: string;
+  modelMessageId?: string;
+};
+export type ChatApplicationPart = {
+  type: 'application';
+  id: string;
+  cardId: string;
+  card: ChatCard | null;
+};
+export type ChatContentPart = ChatTextPart | ChatApplicationPart;
 export type Message = {
   id: string;
   role: 'user' | 'assistant';
@@ -48,14 +61,18 @@ export type Message = {
   reasoning?: string;
   tools?: string[];
   execution?: ChatExecution;
+  parts?: ChatContentPart[];
+  legacyCards?: ChatCard[];
 };
 type ChatStreamBase = { sequence: number; messageId: string; inputMessageId: string };
 export type ChatStreamEvent = ChatStreamBase & (
   | { type: 'turn_started'; turnId: string }
-  | { type: 'text_delta' | 'reasoning_delta'; modelMessageId?: string | null; text: string }
+  | { type: 'text_delta'; partId: string; modelMessageId?: string | null; text: string }
+  | { type: 'reasoning_delta'; modelMessageId?: string | null; text: string }
   | { type: 'tool_call_started'; toolCallId: string; name: string; arguments: Record<string, ChatJson>; startedAt: string }
   | { type: 'tool_call_finished'; toolCallId: string; name: string; lifecycleStatus: 'returned' | 'raised'; toolMessageStatus: 'success' | 'error' | null; businessSuccess?: boolean | null; startedAt?: string; finishedAt: string; durationMs: number; result?: ChatJson; errorCode?: string }
-  | { type: 'application_rendered' | 'waiting_action'; turnId: string; assistantMessageId: string }
+  | { type: 'application_rendered'; turnId: string; assistantMessageId: string; partId: string; card: ChatCard }
+  | { type: 'waiting_action'; turnId: string; assistantMessageId: string; partId: string; cardId: string }
   | { type: 'done'; finalModelMessageId?: string | null; content: unknown }
   | { type: 'error'; code?: string }
 );
@@ -156,6 +173,88 @@ const finiteDuration = (value: unknown): number | undefined => (
   Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined
 );
 
+const chatCardOf = (value: unknown): ChatCard => {
+  const card = recordOf(value);
+  const display = recordOf(card.display);
+  const catalog = recordOf(display.catalog);
+  const actions = Array.isArray(display.actions) ? display.actions.map((value) => {
+    const action = recordOf(value);
+    return {
+      actionName: textOf(action.actionName),
+      surfaceId: textOf(action.surfaceId),
+      componentId: textOf(action.componentId),
+      inputSchema: recordOf(action.inputSchema),
+    };
+  }) : [];
+  if (!card.cardId || !card.conversationId || !card.turnId || !card.status
+    || !display.applicationKey || !display.protocolProfile
+    || !catalog.protocolVersion || !catalog.catalogId || !catalog.catalogDigest
+    || !Array.isArray(display.snapshotMessages)) {
+    throw new Error('CHAT_CONTRACT_INVALID');
+  }
+  return {
+    cardId: textOf(card.cardId),
+    conversationId: textOf(card.conversationId),
+    turnId: textOf(card.turnId),
+    status: textOf(card.status),
+    ...(card.result !== undefined ? { result: card.result } : {}),
+    display: {
+      applicationKey: textOf(display.applicationKey),
+      ...(typeof display.applicationVersion === 'string' || typeof display.applicationVersion === 'number'
+        ? { applicationVersion: display.applicationVersion } : {}),
+      protocolProfile: textOf(display.protocolProfile),
+      snapshotMessages: display.snapshotMessages.map(recordOf),
+      catalog: {
+        protocolVersion: textOf(catalog.protocolVersion),
+        catalogId: textOf(catalog.catalogId),
+        catalogRevision: typeof catalog.catalogRevision === 'number'
+          ? catalog.catalogRevision : textOf(catalog.catalogRevision),
+        catalogDigest: textOf(catalog.catalogDigest),
+      },
+      ...(optionalString(display.rootId) ? { rootId: textOf(display.rootId) } : {}),
+      ...(Array.isArray(display.components) ? { components: display.components.map(recordOf) } : {}),
+      ...(display.data && typeof display.data === 'object' && !Array.isArray(display.data)
+        ? { data: recordOf(display.data) } : {}),
+      actions,
+    },
+  };
+};
+
+const contentPartsOf = (content: unknown): ChatContentPart[] | undefined => {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return undefined;
+  const raw = (content as Row).parts;
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length > 200) throw new Error('CHAT_CONTRACT_INVALID');
+  const ids = new Set<string>();
+  const cardIds = new Set<string>();
+  return raw.map((value) => {
+    const part = recordOf(value);
+    const id = textOf(part.id);
+    if (!id || ids.has(id)) throw new Error('CHAT_CONTRACT_INVALID');
+    ids.add(id);
+    if (part.type === 'text') {
+      return {
+        type: 'text',
+        id,
+        text: textOf(part.text),
+        ...(optionalString(part.modelMessageId) ? { modelMessageId: textOf(part.modelMessageId) } : {}),
+      } satisfies ChatTextPart;
+    }
+    if (part.type === 'application') {
+      const cardId = textOf(part.cardId);
+      if (!cardId || (part.card !== null && part.card === undefined)) {
+        throw new Error('CHAT_CONTRACT_INVALID');
+      }
+      if (cardIds.has(cardId)) throw new Error('CHAT_CONTRACT_INVALID');
+      cardIds.add(cardId);
+      const card = part.card === null ? null : chatCardOf(part.card);
+      if (card && card.cardId !== cardId) throw new Error('CHAT_CONTRACT_INVALID');
+      return { type: 'application', id, cardId, card } satisfies ChatApplicationPart;
+    }
+    throw new Error('CHAT_CONTRACT_INVALID');
+  });
+};
+
 const executionOf = (content: unknown): ChatExecution | undefined => {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return undefined;
   const raw = (content as Row).execution;
@@ -225,6 +324,10 @@ export const messageFromContent = (
   const event = contentEvent(content);
   const errorCode = persistedChatErrorCode(content);
   const execution = executionOf(content);
+  const parts = contentPartsOf(content);
+  const legacyCards = parts === undefined && Array.isArray((content as Row)?.legacyCards)
+    ? ((content as Row).legacyCards as unknown[]).map(chatCardOf)
+    : undefined;
   return {
     id,
     role,
@@ -237,6 +340,8 @@ export const messageFromContent = (
       : [],
     createdAt,
     ...(execution ? { execution } : {}),
+    ...(parts !== undefined ? { parts } : {}),
+    ...(legacyCards?.length ? { legacyCards } : {}),
     ...(event ? { event } : {}),
     ...(errorCode ? { errorCode } : {}),
   };
@@ -299,12 +404,6 @@ const readSurfaceStream = async (response: Response, onSurface: (view: RunView) 
 };
 
 export const productApi = {
-  chatCards: async (id: string, signal?: AbortSignal): Promise<{ cards: ChatCard[] }> => {
-    const payload = await api<{ cards?: ChatCard[] }>(`/api/conversations/${encodeURIComponent(id)}/cards`, { signal });
-    return {
-      cards: (payload.cards ?? []).map((card) => ({ ...card, turnId: textOf(card.turnId) })),
-    };
-  },
   chatAction: (id: string, card: ChatCard, requestId: string, actionName: string, inputs: Record<string, unknown>) => api<ChatActionResponse>(
     `/api/conversations/${encodeURIComponent(id)}/cards/${encodeURIComponent(card.cardId)}/actions`,
     body({ requestId, actionName, inputs })),
@@ -330,8 +429,8 @@ export const productApi = {
     const row = await api<Row>('/api/conversations', body({}));
     return { id: idOf(row.id), title: textOf(row.title) || '新会话', updatedAt: textOf(row.createdAt) };
   },
-  messages: async (id: string): Promise<{ items: Message[] }> => {
-    const payload = await api<{ messages?: Row[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`);
+  messages: async (id: string): Promise<{ items: Message[]; unassignedCards: ChatCard[] }> => {
+    const payload = await api<{ messages?: Row[]; unassignedCards?: unknown[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`);
     return {
       items: (payload.messages ?? []).map((row) => {
         const parsed = messageFromContent(
@@ -342,6 +441,7 @@ export const productApi = {
         );
         return parsed.event ? parsed : { ...parsed, event: refEvent(row) };
       }),
+      unassignedCards: (payload.unassignedCards ?? []).map(chatCardOf),
     };
   },
   sendMessage: async (id: string, text: string, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal) => {

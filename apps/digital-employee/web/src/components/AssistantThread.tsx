@@ -14,27 +14,28 @@ import { copyText } from '../clipboard.mjs';
 import { appendComposerDraft } from '../composerDraft.mjs';
 import { chatErrorPresentation } from '../errorPresentation';
 import type {
+  ChatCard,
   ChatModelMessage,
   ChatToolCall,
   ComposerDraftEffect,
   Message,
 } from '../productApi';
 import {
-  ChatApplicationsProvider,
-  ChatApplicationsStatus,
-  TurnApplications,
+  LegacyApplications,
+  OrderedApplication,
+  UnassignedApplications,
 } from './ChatApplications';
 import { MarkdownContent } from './MarkdownContent';
 
 type AssistantThreadProps = {
-  conversationId: string;
   messages: Message[];
   isRunning: boolean;
   isSendDisabled: boolean;
-  refreshKey: number;
   error: string;
-  onReload: () => void;
+  unassignedCards: ChatCard[];
   onSend: (text: string) => Promise<void>;
+  onCardUpdate: (card: ChatCard) => void;
+  onCardActionStateChange: (cardId: string, active: boolean) => void;
   renderMessageExtras: (message: Message) => React.ReactNode;
   threadTail?: React.ReactNode;
   onComposerError: (message: string) => void;
@@ -138,10 +139,13 @@ function ToolProcessBody({ tool }: { tool: ChatToolCall }) {
   </div>;
 }
 
-function ModelProcess({ message }: { message: ChatModelMessage }) {
+function ModelProcess({ message, showProcessText = true }: {
+  message: ChatModelMessage;
+  showProcessText?: boolean;
+}) {
   return <section className="model-process">
     {message.reasoning ? <div><h4>思考过程</h4><MarkdownContent markdown={message.reasoning} /></div> : null}
-    {message.phase === 'process' && message.text
+    {showProcessText && message.phase === 'process' && message.text
       ? <div><h4>过程输出</h4><MarkdownContent markdown={message.text} /></div>
       : null}
   </section>;
@@ -149,16 +153,17 @@ function ModelProcess({ message }: { message: ChatModelMessage }) {
 
 function ExecutionPanel({ message }: { message: Message }) {
   const execution = message.execution;
+  const hasOrderedText = Boolean(message.parts?.some(part => part.type === 'text'));
   const legacyReasoning = !execution ? message.reasoning : '';
   const items = useMemo<ProcessItem[]>(() => {
     if (!execution) return [];
     return [
       ...execution.modelMessages
-        .filter(value => Boolean(value.reasoning || (value.phase === 'process' && value.text)))
+        .filter(value => Boolean(value.reasoning || (!hasOrderedText && value.phase === 'process' && value.text)))
         .map(value => ({ kind: 'model' as const, sequence: value.sequence, value })),
       ...execution.toolCalls.map(value => ({ kind: 'tool' as const, sequence: value.sequence, value })),
     ].sort((left, right) => left.sequence - right.sequence);
-  }, [execution]);
+  }, [execution, hasOrderedText]);
   const legacyTools = !execution ? message.tools ?? [] : [];
   const hasProcess = Boolean(items.length || legacyReasoning || legacyTools.length || message.delivery === 'failed');
   const running = message.delivery === 'running';
@@ -190,7 +195,11 @@ function ExecutionPanel({ message }: { message: Message }) {
         调用工具：{tool}
       </p>)}
       {items.map((item, index) => item.kind === 'model'
-        ? <ModelProcess key={`model:${item.value.messageId}:${item.sequence}`} message={item.value} />
+        ? <ModelProcess
+          key={`model:${item.value.messageId}:${item.sequence}`}
+          message={item.value}
+          showProcessText={!hasOrderedText}
+        />
         : <ToolProcess
           key={`tool:${item.value.toolCallId}`}
           tool={item.value}
@@ -209,11 +218,16 @@ function UserMessage({ message }: { message: Message }) {
 function AssistantMessage({
   message,
   renderMessageExtras,
+  onCardUpdate,
+  onCardActionStateChange,
+  onComposerDraft,
 }: {
   message: Message;
   renderMessageExtras: AssistantThreadProps['renderMessageExtras'];
+  onCardUpdate: AssistantThreadProps['onCardUpdate'];
+  onCardActionStateChange: AssistantThreadProps['onCardActionStateChange'];
+  onComposerDraft: (effect: ComposerDraftEffect) => void;
 }) {
-  const turnId = message.execution?.turnId;
   const deliveryLabel = message.delivery === 'waiting_action'
     ? '等待你确认'
     : message.delivery === 'completed'
@@ -230,9 +244,26 @@ function AssistantMessage({
     <div className="aui-assistant-content">
       {deliveryLabel ? <p className={`assistant-delivery ${message.delivery ?? ''}`}>{deliveryLabel}</p> : null}
       <ExecutionPanel message={message} />
-      {message.text ? <section className="assistant-answer"><MarkdownContent markdown={message.text} /></section> : null}
+      {message.parts?.length
+        ? message.parts.map(part => part.type === 'text'
+          ? <section className="assistant-answer" key={part.id}><MarkdownContent markdown={part.text} /></section>
+          : <OrderedApplication
+            key={part.id}
+            part={part}
+            onCardUpdate={onCardUpdate}
+            onCardActionStateChange={onCardActionStateChange}
+            onComposerDraft={onComposerDraft}
+          />)
+        : message.text
+          ? <section className="assistant-answer"><MarkdownContent markdown={message.text} /></section>
+          : null}
       {renderMessageExtras(message)}
-      {turnId ? <TurnApplications turnId={turnId} /> : null}
+      {message.legacyCards?.length ? <LegacyApplications
+        cards={message.legacyCards}
+        onCardUpdate={onCardUpdate}
+        onCardActionStateChange={onCardActionStateChange}
+        onComposerDraft={onComposerDraft}
+      /> : null}
     </div>
   </MessagePrimitive.Root>;
 }
@@ -250,15 +281,14 @@ function ChatComposer() {
 }
 
 function ThreadBody({
-  conversationId,
   messages,
-  isRunning,
-  refreshKey,
   error,
-  onReload,
   renderMessageExtras,
   onComposerError,
   threadTail,
+  unassignedCards,
+  onCardUpdate,
+  onCardActionStateChange,
 }: Omit<AssistantThreadProps, 'onSend' | 'isSendDisabled'>) {
   const aui = useAui();
   const consumedEffects = useRef(new Set<string>());
@@ -276,16 +306,7 @@ function ThreadBody({
   }, [aui, onComposerError]);
 
   const messagesById = useMemo(() => new Map(messages.map(message => [message.id, message])), [messages]);
-  const knownTurnIds = useMemo(() => new Set(messages.flatMap(message => (
-    message.execution?.turnId ? [message.execution.turnId] : []
-  ))), [messages]);
-  return <ChatApplicationsProvider
-    conversationId={conversationId}
-    refreshKey={refreshKey}
-    active={isRunning}
-    onComposerDraft={applyComposerDraft}
-  >
-    <ThreadPrimitive.Root className="aui-thread">
+  return <ThreadPrimitive.Root className="aui-thread">
       <ThreadPrimitive.Viewport
         className="aui-thread-viewport"
         autoScroll
@@ -300,23 +321,28 @@ function ThreadBody({
             if (!source) return null;
             return source.role === 'user'
               ? <UserMessage message={source} />
-              : <AssistantMessage message={source} renderMessageExtras={renderMessageExtras} />;
+              : <AssistantMessage
+                message={source}
+                renderMessageExtras={renderMessageExtras}
+                onCardUpdate={onCardUpdate}
+                onCardActionStateChange={onCardActionStateChange}
+                onComposerDraft={applyComposerDraft}
+              />;
           }}
         </ThreadPrimitive.Messages>
         {threadTail}
-        <ChatApplicationsStatus knownTurnIds={knownTurnIds} />
+        <UnassignedApplications
+          cards={unassignedCards}
+          onCardUpdate={onCardUpdate}
+          onCardActionStateChange={onCardActionStateChange}
+          onComposerDraft={applyComposerDraft}
+        />
         <ThreadPrimitive.ViewportFooter className="aui-thread-footer">
           {error ? <p className="chat-error" role="alert">{error}</p> : null}
-          <div className="aui-thread-actions">
-            <button type="button" className="secondary" disabled={isRunning} onClick={onReload}>
-              重新读取历史
-            </button>
-          </div>
           <ChatComposer />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
-    </ThreadPrimitive.Root>
-  </ChatApplicationsProvider>;
+    </ThreadPrimitive.Root>;
 }
 
 export function AssistantThread(props: AssistantThreadProps) {
