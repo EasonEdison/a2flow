@@ -11,6 +11,7 @@
 
 ## 交互合同
 
+- Application 使用 `DISPLAY_ONLY`：它是不阻塞 Skill/Workflow 完成的展示卡，仍允许用户显式翻页、选择和回填；回填不代表完成 Workflow，也不自动发送消息。
 - 首屏 LoadBinding 固定请求 `page=1,pageSize=5`；上一页和下一页 ActionBinding 调用相同真实 RPC。
 - `PAGINATION_STATE` 根据响应 `total` 动态计算页数。`total` 是 protobuf `uint64`，ProtoJSON 中为十进制字符串。
 - `ARRAY_OBJECT_TO_OPTIONS` 将当前页人员投影为官方 ChoicePicker options。每项 checkbox 的同一个 label 展示姓名、脱敏电话、性别、年龄和爱好；爱好数组用 `、` 连接。
