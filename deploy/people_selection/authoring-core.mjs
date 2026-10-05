@@ -126,6 +126,10 @@ export async function publishPrt(client, assetType, assetKey, extra = {}) {
   return overview;
 }
 
+export async function publishCapabilityPrt(client, draftId) {
+  return publishPrt(client, 'CAPABILITY_ACTION', draftId);
+}
+
 async function requirePublishedCatalog(client) {
   const rows = list((await client.call('A2UI_CATALOG_LIST', { keyword: CATALOG_ID })).data);
   const matches = rows.filter(item => (item?.catalogId || item?.componentCode) === CATALOG_ID);
@@ -181,7 +185,7 @@ export async function runPrtAuthoring(client, options) {
   for (const spec of capabilitySpecs) {
     const current = await ensureCapability(client, spec, normalized);
     capabilities.set(spec.actionCode, current.draftId);
-    await publishPrt(client, 'CAPABILITY', current.draftId);
+    await publishCapabilityPrt(client, current.draftId);
   }
   await requirePublishedCatalog(client);
   const applicationId = await ensureApplication(client);
