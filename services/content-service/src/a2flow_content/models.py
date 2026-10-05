@@ -137,6 +137,30 @@ class ListProjectsQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class ListPeopleQuery:
+    page: int = 1
+    page_size: int = 5
+
+    def __post_init__(self) -> None:
+        if type(self.page) is not int or self.page < 1:
+            raise ContentError("INVALID_PAGE")
+        if type(self.page_size) is not int or not 1 <= self.page_size <= 100:
+            raise ContentError("INVALID_PAGE_SIZE")
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvePeopleQuery:
+    person_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.person_ids) is not tuple or not 1 <= len(self.person_ids) <= 15:
+            raise ContentError("INVALID_PERSON_IDS")
+        for person_id in self.person_ids:
+            text(person_id, "PERSON_ID", maximum=64)
+        object.__setattr__(self, "person_ids", tuple(dict.fromkeys(self.person_ids)))
+
+
+@dataclass(frozen=True, slots=True)
 class GetProjectQuery:
     project_id: UUID
 
@@ -397,6 +421,36 @@ class ProjectRecord:
 @dataclass(frozen=True, slots=True)
 class ProjectPage:
     items: tuple[ProjectRecord, ...]
+    total: int
+    page: int
+    page_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class PersonRecord:
+    person_id: str
+    name: str
+    phone: str
+    gender: str
+    age: int
+    hobbies: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        text(self.person_id, "PERSON_ID", maximum=64)
+        text(self.name, "PERSON_NAME", maximum=100)
+        text(self.phone, "PERSON_PHONE", maximum=32)
+        text(self.gender, "PERSON_GENDER", maximum=32)
+        if type(self.age) is not int or not 0 <= self.age <= 150:
+            raise ContentError("INVALID_PERSON_AGE")
+        if type(self.hobbies) is not tuple:
+            raise ContentError("INVALID_PERSON_HOBBIES")
+        for hobby in self.hobbies:
+            text(hobby, "PERSON_HOBBY", maximum=100)
+
+
+@dataclass(frozen=True, slots=True)
+class PeoplePage:
+    items: tuple[PersonRecord, ...]
     total: int
     page: int
     page_size: int

@@ -193,6 +193,17 @@ def confirmation(record: m.ConfirmationRecord) -> pb.Confirmation:
     return result
 
 
+def person(record: m.PersonRecord) -> pb.Person:
+    return pb.Person(
+        person_id=record.person_id,
+        name=record.name,
+        phone=record.phone,
+        gender=record.gender,
+        age=record.age,
+        hobbies=record.hobbies,
+    )
+
+
 def invoke(context: grpc.ServicerContext, operation: Callable[[], T]) -> T:
     if not context.is_active():
         context.abort(grpc.StatusCode.CANCELLED, "REQUEST_CANCELLED")
@@ -251,6 +262,41 @@ class ContentRpcService(rpc.ContentServiceServicer):
             )
 
         return invoke(context, operation)
+
+    def ListPeople(
+        self, request: pb.ListPeopleRequest, context: grpc.ServicerContext
+    ) -> pb.ListPeopleResponse:
+        def operation() -> pb.ListPeopleResponse:
+            result = self.service.list_people(
+                trusted(request.context),
+                m.ListPeopleQuery(
+                    page=request.page or 1,
+                    page_size=request.page_size or 5,
+                ),
+            )
+            return pb.ListPeopleResponse(
+                items=[person(item) for item in result.items],
+                total=result.total,
+                page=result.page,
+                page_size=result.page_size,
+            )
+
+        return invoke(context, operation)
+
+    def ResolvePeople(
+        self, request: pb.ResolvePeopleRequest, context: grpc.ServicerContext
+    ) -> pb.ResolvePeopleResponse:
+        return invoke(
+            context,
+            lambda: pb.ResolvePeopleResponse(
+                items=[
+                    person(item)
+                    for item in self.service.resolve_people(
+                        trusted(request.context), m.ResolvePeopleQuery(tuple(request.person_ids))
+                    )
+                ]
+            ),
+        )
 
     def GetProject(
         self, request: pb.GetProjectRequest, context: grpc.ServicerContext

@@ -57,6 +57,38 @@ _ContentServiceListProjectsType = typing_extensions.TypeVar(
     ],
 )
 
+_ContentServiceListPeopleType = typing_extensions.TypeVar(
+    '_ContentServiceListPeopleType',
+    grpc.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.ListPeopleRequest,
+        a2flow.content.v1.content_pb2.ListPeopleResponse,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.ListPeopleRequest,
+        a2flow.content.v1.content_pb2.ListPeopleResponse,
+    ],
+    default=grpc.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.ListPeopleRequest,
+        a2flow.content.v1.content_pb2.ListPeopleResponse,
+    ],
+)
+
+_ContentServiceResolvePeopleType = typing_extensions.TypeVar(
+    '_ContentServiceResolvePeopleType',
+    grpc.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.ResolvePeopleRequest,
+        a2flow.content.v1.content_pb2.ResolvePeopleResponse,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.ResolvePeopleRequest,
+        a2flow.content.v1.content_pb2.ResolvePeopleResponse,
+    ],
+    default=grpc.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.ResolvePeopleRequest,
+        a2flow.content.v1.content_pb2.ResolvePeopleResponse,
+    ],
+)
+
 _ContentServiceGetProjectType = typing_extensions.TypeVar(
     '_ContentServiceGetProjectType',
     grpc.UnaryUnaryMultiCallable[
@@ -217,7 +249,7 @@ _ContentServiceExportManuscriptType = typing_extensions.TypeVar(
     ],
 )
 
-class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _ContentServiceListProjectsType, _ContentServiceGetProjectType, _ContentServiceSaveSourceType, _ContentServiceGetSourceType, _ContentServiceSaveArtifactType, _ContentServiceGetArtifactType, _ContentServiceGetConfirmationType, _ContentServiceConfirmReadingType, _ContentServiceConfirmTopicType, _ContentServiceConfirmManuscriptType, _ContentServiceExportManuscriptType]):
+class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _ContentServiceListProjectsType, _ContentServiceListPeopleType, _ContentServiceResolvePeopleType, _ContentServiceGetProjectType, _ContentServiceSaveSourceType, _ContentServiceGetSourceType, _ContentServiceSaveArtifactType, _ContentServiceGetArtifactType, _ContentServiceGetConfirmationType, _ContentServiceConfirmReadingType, _ContentServiceConfirmTopicType, _ContentServiceConfirmManuscriptType, _ContentServiceExportManuscriptType]):
     @typing.overload
     def __init__(self: ContentServiceStub[
         grpc.UnaryUnaryMultiCallable[
@@ -227,6 +259,14 @@ class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _Conte
         grpc.UnaryUnaryMultiCallable[
             a2flow.content.v1.content_pb2.ListProjectsRequest,
             a2flow.content.v1.content_pb2.ListProjectsResponse,
+        ],
+        grpc.UnaryUnaryMultiCallable[
+            a2flow.content.v1.content_pb2.ListPeopleRequest,
+            a2flow.content.v1.content_pb2.ListPeopleResponse,
+        ],
+        grpc.UnaryUnaryMultiCallable[
+            a2flow.content.v1.content_pb2.ResolvePeopleRequest,
+            a2flow.content.v1.content_pb2.ResolvePeopleResponse,
         ],
         grpc.UnaryUnaryMultiCallable[
             a2flow.content.v1.content_pb2.GetProjectRequest,
@@ -281,6 +321,14 @@ class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _Conte
             a2flow.content.v1.content_pb2.ListProjectsResponse,
         ],
         grpc.aio.UnaryUnaryMultiCallable[
+            a2flow.content.v1.content_pb2.ListPeopleRequest,
+            a2flow.content.v1.content_pb2.ListPeopleResponse,
+        ],
+        grpc.aio.UnaryUnaryMultiCallable[
+            a2flow.content.v1.content_pb2.ResolvePeopleRequest,
+            a2flow.content.v1.content_pb2.ResolvePeopleResponse,
+        ],
+        grpc.aio.UnaryUnaryMultiCallable[
             a2flow.content.v1.content_pb2.GetProjectRequest,
             a2flow.content.v1.content_pb2.Project,
         ],
@@ -326,6 +374,10 @@ class ContentServiceStub(typing.Generic[_ContentServiceCreateProjectType, _Conte
 
     ListProjects: _ContentServiceListProjectsType
 
+    ListPeople: _ContentServiceListPeopleType
+
+    ResolvePeople: _ContentServiceResolvePeopleType
+
     GetProject: _ContentServiceGetProjectType
 
     SaveSource: _ContentServiceSaveSourceType
@@ -354,6 +406,14 @@ ContentServiceAsyncStub: typing_extensions.TypeAlias = ContentServiceStub[
     grpc.aio.UnaryUnaryMultiCallable[
         a2flow.content.v1.content_pb2.ListProjectsRequest,
         a2flow.content.v1.content_pb2.ListProjectsResponse,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.ListPeopleRequest,
+        a2flow.content.v1.content_pb2.ListPeopleResponse,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        a2flow.content.v1.content_pb2.ResolvePeopleRequest,
+        a2flow.content.v1.content_pb2.ResolvePeopleResponse,
     ],
     grpc.aio.UnaryUnaryMultiCallable[
         a2flow.content.v1.content_pb2.GetProjectRequest,
@@ -411,6 +471,20 @@ class ContentServiceServicer(metaclass=abc.ABCMeta):
         request: a2flow.content.v1.content_pb2.ListProjectsRequest,
         context: _ServicerContext,
     ) -> typing.Union[a2flow.content.v1.content_pb2.ListProjectsResponse, collections.abc.Awaitable[a2flow.content.v1.content_pb2.ListProjectsResponse]]: ...
+
+    @abc.abstractmethod
+    def ListPeople(
+        self,
+        request: a2flow.content.v1.content_pb2.ListPeopleRequest,
+        context: _ServicerContext,
+    ) -> typing.Union[a2flow.content.v1.content_pb2.ListPeopleResponse, collections.abc.Awaitable[a2flow.content.v1.content_pb2.ListPeopleResponse]]: ...
+
+    @abc.abstractmethod
+    def ResolvePeople(
+        self,
+        request: a2flow.content.v1.content_pb2.ResolvePeopleRequest,
+        context: _ServicerContext,
+    ) -> typing.Union[a2flow.content.v1.content_pb2.ResolvePeopleResponse, collections.abc.Awaitable[a2flow.content.v1.content_pb2.ResolvePeopleResponse]]: ...
 
     @abc.abstractmethod
     def GetProject(

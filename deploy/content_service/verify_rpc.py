@@ -13,6 +13,25 @@ from a2flow.capability.v1 import capability_pb2 as cap
 from a2flow.content.v1 import content_pb2 as pb
 from a2flow.content.v1 import content_pb2_grpc as rpc
 
+EXPECTED_METHODS = frozenset(
+    {
+        "CreateProject",
+        "ListProjects",
+        "ListPeople",
+        "ResolvePeople",
+        "GetProject",
+        "SaveSource",
+        "GetSource",
+        "SaveArtifact",
+        "GetArtifact",
+        "GetConfirmation",
+        "ConfirmReading",
+        "ConfirmTopic",
+        "ConfirmManuscript",
+        "ExportManuscript",
+    }
+)
+
 
 def rejected(call: Callable[[], object], codes: tuple[grpc.StatusCode, ...]) -> None:
     try:
@@ -28,6 +47,10 @@ def verify(target: str) -> None:
     if not ipaddress.ip_address(host).is_loopback or not 1 <= int(port) <= 65535:
         raise ValueError("this probe only accepts a literal loopback address")
     prefix = uuid4().hex
+
+    service = pb.DESCRIPTOR.services_by_name["ContentService"]
+    methods = frozenset(method.name for method in service.methods)
+    assert methods == EXPECTED_METHODS, methods
 
     def context(operation: str, user_id: int = 2**63 - 1) -> cap.ExecutionContext:
         return cap.ExecutionContext(
@@ -61,6 +84,32 @@ def verify(target: str) -> None:
         )
         assert any(item.id == project.id for item in page.list)
         assert page.total >= 1 and page.page == 1 and page.page_size == 20
+
+        people = stub.ListPeople(
+            pb.ListPeopleRequest(context=context("people-list")), timeout=10
+        )
+        assert people.total == 15 and people.page == 1 and people.page_size == 5
+        assert len(people.items) == 5 and people.items[0].person_id == "demo-person-001"
+        resolved = stub.ResolvePeople(
+            pb.ResolvePeopleRequest(
+                context=context("people-resolve"),
+                person_ids=["demo-person-003", "demo-person-001", "demo-person-003"],
+            ),
+            timeout=10,
+        )
+        assert [item.person_id for item in resolved.items] == [
+            "demo-person-003",
+            "demo-person-001",
+        ]
+        rejected(
+            lambda: stub.ResolvePeople(
+                pb.ResolvePeopleRequest(
+                    context=context("people-missing"), person_ids=["demo-person-999"]
+                ),
+                timeout=10,
+            ),
+            (grpc.StatusCode.NOT_FOUND,),
+        )
 
         source = stub.SaveSource(
             pb.SaveSourceRequest(
@@ -257,7 +306,7 @@ def verify(target: str) -> None:
             (grpc.StatusCode.PERMISSION_DENIED, grpc.StatusCode.FAILED_PRECONDITION),
         )
     print(
-        "CONTENT_RPC_PASS: 12 methods, confirmations, replay, owner isolation, "
+        f"CONTENT_RPC_PASS: {len(methods)} methods, confirmations, replay, owner isolation, "
         "revision-free business inputs, environment, export"
     )
 

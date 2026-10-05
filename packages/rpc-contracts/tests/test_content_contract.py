@@ -11,7 +11,7 @@ from google.protobuf.json_format import MessageToDict
 class ContentContractTest(unittest.TestCase):
     def test_all_operations_use_exact_common_context(self) -> None:
         service = content.DESCRIPTOR.services_by_name["ContentService"]
-        self.assertEqual(len(service.methods), 12)
+        self.assertEqual(len(service.methods), 14)
         for method in service.methods:
             context = method.input_type.fields_by_name["context"]
             self.assertEqual(context.message_type, capability.ExecutionContext.DESCRIPTOR)
@@ -75,6 +75,39 @@ class ContentContractTest(unittest.TestCase):
         page = content.ListProjectsResponse(page=1, page_size=20, total=0)
         self.assertEqual(list(page.list), [])
         self.assertEqual(page.page_size, 20)
+
+    def test_people_list_uses_typed_items_and_protojson_names(self) -> None:
+        response = content.ListPeopleResponse(
+            items=[
+                content.Person(
+                    person_id="demo-person-001",
+                    name="林知夏",
+                    phone="138****0001",
+                    gender="女",
+                    age=26,
+                    hobbies=["阅读", "徒步"],
+                )
+            ],
+            total=15,
+            page=1,
+            page_size=5,
+        )
+        value = MessageToDict(response)
+        self.assertEqual(value["items"][0]["personId"], "demo-person-001")
+        self.assertEqual(value["pageSize"], 5)
+        self.assertEqual(value["total"], "15")
+
+    def test_resolve_people_uses_ids_and_typed_items(self) -> None:
+        request = content.ResolvePeopleRequest(person_ids=["demo-person-003", "demo-person-001"])
+        self.assertEqual(
+            MessageToDict(request),
+            {"personIds": ["demo-person-003", "demo-person-001"]},
+        )
+        response = content.ResolvePeopleResponse(
+            items=[content.Person(person_id="demo-person-003", name="苏晚晴")]
+        )
+        self.assertEqual(MessageToDict(response)["items"][0]["personId"], "demo-person-003")
+
 
 
 if __name__ == "__main__":
