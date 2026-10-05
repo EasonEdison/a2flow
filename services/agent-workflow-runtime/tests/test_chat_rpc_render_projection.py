@@ -4,7 +4,8 @@ import hashlib
 import json
 import unittest
 from threading import Lock
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
+from typing import cast
 
 from a2flow_asset_store.java_runtime import PROFILE
 from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
@@ -15,6 +16,10 @@ from agent_workflow_runtime.rpc_client import (
     ReleaseIdentity,
     RuntimeResult,
     RuntimeSession,
+    freeze,
+)
+from agent_workflow_runtime.rpc_client import (
+    JsonObject as RpcJsonObject,
 )
 from langchain.tools import ToolRuntime
 from skillweave_contracts import TrustedContext
@@ -137,11 +142,13 @@ class RpcChatRenderProjectionTests(unittest.TestCase):
                 },
             }},
         )
+        frozen_snapshot = cast(tuple[RpcJsonObject, ...], freeze(snapshot))
+        self.assertIsInstance(frozen_snapshot[0], MappingProxyType)
         result = RuntimeResult(
             release=release,
             params={"modelInput": "not-rendered-state"},
-            messages=snapshot,
-            snapshot=snapshot,
+            messages=frozen_snapshot,
+            snapshot=frozen_snapshot,
             executions=(),
             actions=(),
             complete_interaction=False,
