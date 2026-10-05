@@ -18,18 +18,17 @@ from ..application_runtime import PreparedApplication
 from ..models import ActionRejected
 from ..rpc_client import (
     ApplicationDescription,
-    JsonValue as RpcJsonValue,
     RpcClient,
     RuntimeResult,
     TrustedCard,
 )
-from .assets import ApplicationContract, ChatAssets, _APPLICATION_USAGE
+from ..rpc_client import (
+    JsonValue as RpcJsonValue,
+)
+from .assets import _APPLICATION_USAGE, ApplicationContract, ChatAssets
 from .cards import JsonObject, JsonValue
+from .render_projection import project_business_state, project_rendered_content
 
-_PRIVATE_OBSERVATION_KEYS = frozenset({
-    "authorization", "cookie", "credential", "credentials", "credentialhandle",
-    "runtimesessiontoken", "transportauthority", "targetendpoint",
-})
 _APPLICATION_QUERY_USAGE = (
     "Call query_skill_dependencies with a2uiApplicationCodeList before "
     "render_application."
@@ -74,26 +73,7 @@ def runtime_metadata(result: RuntimeResult) -> dict[str, Any]:
 
 def rendered_business_state(result: RuntimeResult) -> JsonObject:
     """Project canonical surface DataModels without components or protocol messages."""
-
-    surfaces = []
-    for message in result.snapshot:
-        update = message.get("updateDataModel")
-        if (not isinstance(update, Mapping) or update.get("path") != "/"
-                or type(update.get("surfaceId")) is not str):
-            continue
-        surfaces.append({"surfaceId": update["surfaceId"],
-                         "data": plain(update.get("value"))})
-
-    def sanitize(value: JsonValue) -> JsonValue:
-        if isinstance(value, Mapping):
-            return {key: sanitize(item) for key, item in value.items()
-                    if key.replace("_", "").replace("-", "").lower()
-                    not in _PRIVATE_OBSERVATION_KEYS}
-        if isinstance(value, list):
-            return [sanitize(item) for item in value]
-        return value
-
-    return {"surfaces": sanitize(surfaces)}
+    return project_business_state(result.snapshot)
 
 
 def trusted_card(owner: TrustedContext, card: dict[str, Any],
@@ -228,6 +208,7 @@ class RpcChatAssets(ChatAssets):
             self._render_observations[saved["cardId"]] = {
                 "cardId": saved["cardId"], "applicationKey": application_key,
                 "arguments": rendered_business_state(result),
+                "preparedContent": project_rendered_content(result.snapshot),
             }
             if prepared.interactive:
                 self._waiting_action = saved
