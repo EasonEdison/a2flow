@@ -45,7 +45,7 @@ from .events import (
     ChatEmitter,
     ListEmitter,
     public_event_value,
-    public_result_summary,
+    public_tool_result,
 )
 from .tools import (
     _EMITTER,
@@ -509,13 +509,10 @@ def _tool_result(
     raw: object = result.content
     if isinstance(raw, str):
         raw_text = raw
-        if len(raw_text.encode("utf-8")) > 65_536:
-            raw = {"type": "oversizedText"}
-        else:
-            try:
-                raw = json.loads(raw_text)
-            except (TypeError, ValueError):
-                raw = {"type": "text", "length": len(raw_text)}
+        try:
+            raw = json.loads(raw_text)
+        except (TypeError, ValueError):
+            raw = raw_text
     status = getattr(result, "status", None)
     tool_status = status if status in {"success", "error"} else None
     business_success = (
@@ -573,7 +570,7 @@ class _ToolExecutionEvents(AgentMiddleware):
                 result, tool_call_id,
             )
             payload["toolMessageStatus"] = tool_status
-            payload["result"] = public_result_summary(raw)
+            payload["result"] = public_tool_result(raw)
             if business_success is not None:
                 payload["businessSuccess"] = business_success
         self._emitter.emit(TOOL_CALL_FINISHED, payload)

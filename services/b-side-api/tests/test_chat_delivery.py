@@ -132,6 +132,15 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(turn.pending.qsize(), 64)
 
     async def test_persists_ordered_model_tool_and_card_execution(self):
+        full_result = {
+            'businessSuccess': False,
+            'items': [
+                {'index': index, 'text': 'visible-' * 100}
+                for index in range(30)
+            ],
+            'nested': {'one': {'two': {'three': {'four': 'kept'}}}},
+        }
+
         class Runner:
             async def iterate(self, **kwargs):
                 yield {'type': 'reasoning_delta', 'text': '先查数据',
@@ -149,7 +158,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
                     'toolMessageStatus': 'success',
                     'startedAt': '2026-10-05T12:00:00+00:00',
                     'finishedAt': '2026-10-05T12:00:00.025000+00:00',
-                    'durationMs': 25, 'result': {'businessSuccess': False},
+                    'durationMs': 25, 'result': full_result,
                     'businessSuccess': False,
                 }
                 yield {'type': 'text_delta', 'text': '最终回答',
@@ -178,6 +187,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             tool['toolCallId'], tool['sequence'], tool['lifecycleStatus'],
             tool['businessSuccess'],
         ))
+        self.assertEqual(full_result, tool['result'])
         self.assertEqual('11', saved['events'][0]['turnId'])
         self.assertEqual('12', saved['events'][0]['assistantMessageId'])
         self.assertEqual('11', events[0]['turnId'])
