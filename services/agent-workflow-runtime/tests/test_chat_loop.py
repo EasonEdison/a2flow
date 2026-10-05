@@ -26,7 +26,7 @@ from agent_workflow_runtime.chat.events import (
     TOOL_CALL_FINISHED,
     TOOL_CALL_STARTED,
     public_event_value,
-    public_result_summary,
+    public_tool_result,
 )
 from agent_workflow_runtime.chat.loop import (
     _ACTION_OBSERVATION_MARKER,
@@ -291,23 +291,66 @@ class PlainTextTurnTests(unittest.TestCase):
             {"type": "nonFiniteNumber"}, public_event_value(float("nan")),
         )
 
-        _, oversized, _ = _tool_result(ToolMessage(
-            content="private-value" * 6_000,
-            tool_call_id="oversized",
-        ), "oversized")
-        self.assertEqual({"type": "oversizedText"}, oversized)
-        self.assertNotIn("private-value", str(oversized))
-        summary = public_result_summary({
-            "businessSuccess": False,
-            "content": "full skill resource" * 100,
-            "protocol": {"components": ["not copied"]},
-        })
+    def test_tool_result_preserves_full_json_and_plain_text(self):
+        text = "visible result " * 6_000
+        _, raw_text, _ = _tool_result(ToolMessage(
+            content=text,
+            tool_call_id="long-text",
+        ), "long-text")
+        self.assertEqual(text, public_tool_result(raw_text))
+
+        result = {
+            "items": [
+                {"index": index, "content": "x" * 600}
+                for index in range(30)
+            ],
+            "nested": {"one": {"two": {"three": {"four": "kept"}}}},
+        }
+        _, raw_json, _ = _tool_result(ToolMessage(
+            content=json.dumps(result),
+            tool_call_id="long-json",
+        ), "long-json")
+        self.assertEqual(result, public_tool_result(raw_json))
+
+    def test_tool_result_redacts_nested_and_text_credentials_only(self):
+        result = {
+            "authorization": "Bearer json-secret",
+            "nested": {
+                "clientSecret": "json-client-secret",
+                "access_token": "json-access-token",
+                "apiKey": "json-api-key",
+                "token": "json-token",
+                "tokenCount": 7,
+                "visible": ["kept", {"password": "json-password"}],
+            },
+        }
+        projected = public_tool_result(result)
+        self.assertEqual("[REDACTED]", projected["authorization"])
+        self.assertEqual("[REDACTED]", projected["nested"]["clientSecret"])
+        self.assertEqual("[REDACTED]", projected["nested"]["access_token"])
+        self.assertEqual("[REDACTED]", projected["nested"]["apiKey"])
+        self.assertEqual("[REDACTED]", projected["nested"]["token"])
+        self.assertEqual(7, projected["nested"]["tokenCount"])
+        self.assertEqual("kept", projected["nested"]["visible"][0])
         self.assertEqual(
-            ["businessSuccess", "content", "protocol"], summary["keys"],
+            "[REDACTED]", projected["nested"]["visible"][1]["password"],
         )
-        self.assertEqual(False, summary["values"]["businessSuccess"])
-        self.assertNotIn("full skill resource", str(summary))
-        self.assertNotIn("components", str(summary))
+
+        text = (
+            "visible line\nAuthorization: Bearer header-secret\n"
+            "password=assignment-secret access_token=query-secret&next=kept\n"
+            'embedded={"token":"embedded-secret","tokenCount":7}\n'
+            "raw Bearer raw-secret and sk-1234567890abcdefghijkl"
+        )
+        redacted = public_tool_result(text)
+        self.assertIn("visible line", redacted)
+        self.assertIn("next=kept", redacted)
+        for secret in (
+            "header-secret", "assignment-secret", "query-secret",
+            "embedded-secret", "raw-secret", "sk-1234567890abcdefghijkl",
+        ):
+            self.assertNotIn(secret, redacted)
+        self.assertIn('"tokenCount":7', redacted)
 
     def test_command_result_projects_only_matching_tool_message(self):
         command = Command(update={"messages": [
@@ -315,6 +358,7 @@ class PlainTextTurnTests(unittest.TestCase):
             ToolMessage(
                 content='{"businessSuccess":false,"receipt":"public"}',
                 tool_call_id="call-1", status="success",
+                artifact={"secret": "artifact-not-projected"},
             ),
         ], "privateState": {"secret": "not projected"}})
 
@@ -324,6 +368,7 @@ class PlainTextTurnTests(unittest.TestCase):
         self.assertEqual({"businessSuccess": False, "receipt": "public"}, raw)
         self.assertFalse(business_success)
         self.assertNotIn("privateState", str(raw))
+        self.assertNotIn("artifact-not-projected", str(raw))
 
 
 class WorkflowConfirmTests(unittest.TestCase):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Mapping, Sequence
 from typing import Literal, Protocol, TypeAlias, TypedDict, cast
 
@@ -28,6 +29,31 @@ _PRIVATE_KEY_PARTS = (
     "authorization", "cookie", "credential", "password", "passwd",
     "secret", "token", "api_key", "apikey",
 )
+_TOOL_PRIVATE_KEYS = frozenset({
+    "api_key", "apikey", "authorization", "client_secret", "cookie",
+    "credential", "credentials", "id_token", "password", "passwd",
+    "proxy_authorization", "refresh_token", "secret", "set_cookie",
+    "access_token", "token",
+})
+_PRIVATE_KEY_SUFFIXES = (
+    "_api_key", "_authorization", "_cookie", "_credential", "_password",
+    "_secret", "_token",
+)
+_PRIVATE_HEADER = re.compile(
+    r"(?im)^(\s*(?:authorization|proxy-authorization|cookie|set-cookie)"
+    r"\s*:\s*)[^\r\n]*"
+)
+_PRIVATE_ASSIGNMENT = re.compile(
+    r"(?i)(?P<prefix>(?:\"|')?(?:password|passwd|secret|token|"
+    r"client[_-]?secret|access[_-]?token|refresh[_-]?token|id[_-]?token|"
+    r"api[_-]?key|credential)(?:\"|')?\s*[:=]\s*)"
+    r"(?:\"[^\"]*\"|'[^']*'|[^&,\s;}\]\r\n]+)"
+)
+_BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
+_JWT = re.compile(
+    r"\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"
+)
+_API_TOKEN = re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b")
 
 
 class ModelDeltaPayload(TypedDict):
@@ -63,6 +89,24 @@ class DonePayload(TypedDict):
 def _private_key(key: str) -> bool:
     normalized = key.casefold().replace("-", "_")
     return any(part in normalized for part in _PRIVATE_KEY_PARTS)
+
+
+def _tool_private_key(key: str) -> bool:
+    snake_key = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key)
+    normalized = re.sub(
+        r"[^a-z0-9]+", "_", snake_key.casefold(),
+    ).strip("_")
+    return normalized in _TOOL_PRIVATE_KEYS or normalized.endswith(
+        _PRIVATE_KEY_SUFFIXES
+    )
+
+
+def _redact_text(value: str) -> str:
+    value = _PRIVATE_HEADER.sub(r"\1[REDACTED]", value)
+    value = _PRIVATE_ASSIGNMENT.sub(r"\g<prefix>[REDACTED]", value)
+    value = _BEARER.sub("Bearer [REDACTED]", value)
+    value = _JWT.sub("[REDACTED_JWT]", value)
+    return _API_TOKEN.sub("[REDACTED_TOKEN]", value)
 
 
 def _bounded_value(value: object, *, depth: int) -> JsonValue:
@@ -117,27 +161,50 @@ def public_event_value(value: object) -> JsonValue:
     return {"truncated": True}
 
 
-def public_result_summary(value: object) -> JsonValue:
-    """Describe a tool result without copying its resource or UI payload."""
+def public_tool_result(
+    value: object,
+    *,
+    _stack: set[int] | None = None,
+) -> JsonValue:
+    """Preserve one ToolMessage result, redacting only credential material."""
 
-    bounded = public_event_value(value)
-    if isinstance(bounded, dict):
-        scalar_values: JsonObject = {}
-        for key, item in bounded.items():
-            if item is None or type(item) in {bool, int, float}:
-                scalar_values[key] = cast(bool | int | float | None, item)
-            elif isinstance(item, str) and len(item) <= 128:
-                scalar_values[key] = item
-        keys = [cast(JsonValue, key) for key in list(bounded)[:_MAX_ITEMS]]
-        result: JsonObject = {"keys": keys}
-        if scalar_values:
-            result["values"] = scalar_values
-        return result
-    if isinstance(bounded, list):
-        return {"type": "array", "count": len(bounded)}
-    if isinstance(bounded, str):
-        return {"type": "text", "length": len(bounded)}
-    return bounded
+    if value is None or type(value) in {bool, int}:
+        return cast(bool | int | None, value)
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value
+        return {"type": "nonFiniteNumber"}
+    if isinstance(value, str):
+        return _redact_text(value)
+    stack = set() if _stack is None else _stack
+    if isinstance(value, Mapping):
+        identity = id(value)
+        if identity in stack:
+            return {"type": "recursiveReference"}
+        stack.add(identity)
+        try:
+            result: JsonObject = {}
+            for raw_key, item in value.items():
+                key = str(raw_key)
+                result[key] = (
+                    "[REDACTED]" if _tool_private_key(key)
+                    else public_tool_result(item, _stack=stack)
+                )
+            return result
+        finally:
+            stack.remove(identity)
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    ):
+        identity = id(value)
+        if identity in stack:
+            return {"type": "recursiveReference"}
+        stack.add(identity)
+        try:
+            return [public_tool_result(item, _stack=stack) for item in value]
+        finally:
+            stack.remove(identity)
+    return {"type": type(value).__name__}
 
 
 class ChatEmitter(Protocol):
