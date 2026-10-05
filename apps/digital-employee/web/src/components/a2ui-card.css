@@ -3,6 +3,9 @@
 .a2ui-surface input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 .a2ui-surface textarea, .a2ui-surface select { max-width: 100%; box-sizing: border-box; border: 1px solid #d8deea; border-radius: 6px; padding: 7px 9px; font: inherit; }
 .a2ui-surface button { border: 1px solid #d8deea; border-radius: 6px; padding: 8px 12px; font: inherit; }
+.a2ui-surface label:has(> input[type="checkbox"] + span) { display: flex; align-items: flex-start; gap: 8px; width: 100%; box-sizing: border-box; margin-block: 8px; cursor: pointer; }
+.a2ui-surface label:has(> input[type="checkbox"] + span) > input[type="checkbox"] { flex: 0 0 auto; margin-top: .25em; }
+.a2ui-surface label:has(> input[type="checkbox"] + span) > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .a2ui-surface img, .a2ui-surface video { max-width: 100%; }
 .a2ui-card-content:disabled { opacity: .8; }
 .a2ui-text-download { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
