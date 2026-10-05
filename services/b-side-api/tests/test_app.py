@@ -650,12 +650,15 @@ class RunProxyTests(unittest.TestCase):
 class ChatSseTests(unittest.TestCase):
     async def _flow(self):
         runner = FakeChatRunner([
-            {"type": "text_delta", "text": "好的，"},
-            {"type": "text_delta", "text": "我帮你跑。"},
+            {"type": "text_delta", "text": "好的，",
+             "modelMessageId": "model-final"},
+            {"type": "text_delta", "text": "我帮你跑。",
+             "modelMessageId": "model-final"},
             {"type": "workflow_confirm",
              "workflowKey": "activity-package-demo",
              "title": "活动策划"},
-            {"type": "done"},
+            {"type": "done", "content": "好的，我帮你跑。",
+             "finalModelMessageId": "model-final"},
         ])
         harness = Harness(chat_runner=runner)
         async with await harness.client() as client:
