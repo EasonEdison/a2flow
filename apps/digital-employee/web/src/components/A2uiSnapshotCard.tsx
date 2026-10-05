@@ -20,17 +20,18 @@ class RendererBoundary extends Component<{ children: ReactNode }, { failed: bool
   render() { return this.state.failed ? <p role="alert">组件渲染失败，已禁止操作。请核对 Catalog 实现。</p> : this.props.children; }
 }
 
-export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft }: {
+export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStateChange }: {
   card: ChatCard;
   onUpdate: (card: ChatCard) => void;
   onComposerDraft: (effect: ComposerDraftEffect) => void;
+  onActionStateChange?: (active: boolean) => void;
 }) {
   const [processor, setProcessor] = useState<ReturnType<typeof createSnapshotProcessor>>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const current = useRef({ card, onUpdate, onComposerDraft });
-  current.current = { card, onUpdate, onComposerDraft };
+  const current = useRef({ card, onUpdate, onComposerDraft, onActionStateChange });
+  current.current = { card, onUpdate, onComposerDraft, onActionStateChange };
   // Polling unchanged snapshots must not erase unsent user edits.
   const displayKey = JSON.stringify(card.display);
   const snapshotKey = persistedSnapshotKey(card);
@@ -67,6 +68,8 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft }: {
             return;
           }
           inFlight.current = true;
+          const actionStateCallback = current.current.onActionStateChange;
+          actionStateCallback?.(true);
           setBusy(true); setError('');
           try {
             const response = await productApi.chatAction(latest.conversationId, latest, requestId, request.actionName, request.inputs);
@@ -79,7 +82,9 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft }: {
               setBusy(pending);
             }
           } catch {
-            if (!disposed) setError('操作结果未确认，请重新读取卡片状态；不会自动重试。');
+            if (!disposed) setError('操作结果未确认，请等待状态自动同步；不会自动重试。');
+          } finally {
+            actionStateCallback?.(false);
           }
           // Transport failures remain locked because the outcome is unknown.
         }));
@@ -100,7 +105,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft }: {
           <section className="a2ui-surface" key={surface.id} aria-label={surface.id}><A2uiSurface surface={surface} /></section>)}
       </fieldset></MarkdownContext.Provider> : null}
     </RendererBoundary>
-    {busy ? <p role="status">等待重新读取已保存的卡片状态</p> : null}
+    {busy ? <p role="status">等待自动同步已保存的卡片状态</p> : null}
     {card.result !== undefined ? <details><summary>操作结果</summary><pre>{JSON.stringify(card.result, null, 2)}</pre></details> : null}
     {error ? <p role="alert">{error}</p> : null}
   </details>;

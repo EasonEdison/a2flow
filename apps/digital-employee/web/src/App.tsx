@@ -5,8 +5,8 @@ import { MemorySettingsPage } from './components/MemorySettingsPage';
 import { AssistantThread } from './components/AssistantThread';
 import './chat.css';
 import { FixturePreview } from './FixturePreview';
-import { applyChatStreamEvent } from './assistantChat';
-import { apiErrorMessage, messageFromContent, productApi, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
+import { applyChatStreamEvent, preserveUpdatedCards } from './assistantChat';
+import { apiErrorMessage, messageFromContent, productApi, type ChatCard, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
@@ -107,28 +107,74 @@ function ChatPage() {
 
 function ChatConversation({ conversationId }: { conversationId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [unassignedCards, setUnassignedCards] = useState<ChatCard[]>([]);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
+  const [historyError, setHistoryError] = useState('');
   const controller = useRef<AbortController | null>(null);
   const sending = useRef(false);
   const epoch = useRef(0);
+  const operationGeneration = useRef(0);
+  const actionUpdatedCards = useRef(new Map<string, ChatCard>());
+  const activeCardActions = useRef(new Set<string>());
+  const [activeCardActionCount, setActiveCardActionCount] = useState(0);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [runId, setRunId] = useState('');
   const load = useCallback(async () => {
-    if (sending.current) return;
+    if (sending.current || activeCardActions.current.size) return;
     const current = ++epoch.current;
+    const operation = operationGeneration.current;
     try {
       const result = await productApi.messages(conversationId);
-      if (current === epoch.current) { setMessages(result.items); setLoaded(true); }
-    } catch { if (current === epoch.current) { setLoaded(false); setError('历史读取失败，请重新读取；不要重复发送原消息。'); } }
+      if (current === epoch.current && operation === operationGeneration.current
+        && !activeCardActions.current.size) {
+        setMessages(result.items);
+        setUnassignedCards(result.unassignedCards);
+        setLoaded(true);
+        setHistoryError('');
+      }
+    } catch { if (current === epoch.current) { setLoaded(false); setHistoryError('历史读取失败，请刷新页面查看已保存状态；不要重复发送原消息。'); } }
   }, [conversationId]);
-  useEffect(() => { void load(); return () => { epoch.current++; controller.current?.abort(); }; }, [load]);
+  useEffect(() => { void load(); }, [historyRefreshKey, load]);
+  useEffect(() => () => { epoch.current++; controller.current?.abort(); }, []);
   const pending = messages.some(message => message.delivery === 'running' || message.delivery === 'unconfirmed');
+  const cardNeedsRefresh = messages.some(message => [
+    ...(message.parts ?? []).flatMap(part => part.type === 'application' && part.card ? [part.card] : []),
+    ...(message.legacyCards ?? []),
+  ].some(card => card.status === 'EXECUTING' || card.status === 'WAITING_ACTION'))
+    || unassignedCards.some(card => card.status === 'EXECUTING' || card.status === 'WAITING_ACTION');
   useEffect(() => {
-    if (busy || !pending) return;
+    if (busy || activeCardActionCount || (!pending && !cardNeedsRefresh)) return;
     const timer = setInterval(() => { void load(); }, 5000);
     return () => clearInterval(timer);
-  }, [busy, pending, load]);
+  }, [activeCardActionCount, busy, cardNeedsRefresh, pending, load]);
+  const updateCard = useCallback((updated: ChatCard) => {
+    operationGeneration.current++;
+    epoch.current++;
+    actionUpdatedCards.current.set(updated.cardId, updated);
+    const replace = (card: ChatCard) => card.cardId === updated.cardId ? updated : card;
+    setMessages(items => items.map(message => ({
+      ...message,
+      ...(message.parts ? {
+        parts: message.parts.map(part => part.type === 'application' && part.cardId === updated.cardId
+          ? { ...part, card: updated }
+          : part),
+      } : {}),
+      ...(message.legacyCards ? { legacyCards: message.legacyCards.map(replace) } : {}),
+    })));
+    setUnassignedCards(cards => cards.map(replace));
+  }, []);
+  const setCardActionState = useCallback((cardId: string, active: boolean) => {
+    const actions = activeCardActions.current;
+    const changed = active ? !actions.has(cardId) : actions.has(cardId);
+    if (!changed) return;
+    if (active) actions.add(cardId); else actions.delete(cardId);
+    operationGeneration.current++;
+    epoch.current++;
+    setActiveCardActionCount(actions.size);
+    if (!active) setHistoryRefreshKey(value => value + 1);
+  }, []);
   const send = useCallback(async (rawText: string) => {
     const text = rawText.trim();
     if (!text || sending.current || pending || !loaded) return;
@@ -155,14 +201,17 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
           return next.map(item => {
             if (item.id !== event.messageId) return item;
             if (event.type === 'done') {
-              return messageFromContent(item.id, 'assistant', event.content, item.createdAt);
+              return preserveUpdatedCards(
+                messageFromContent(item.id, 'assistant', event.content, item.createdAt),
+                actionUpdatedCards.current,
+              );
             }
-            return applyChatStreamEvent(item, event);
+            return preserveUpdatedCards(applyChatStreamEvent(item, event), actionUpdatedCards.current);
           });
         });
         if (event.type === 'error') setError('本轮未成功完成，请查看保存的状态；不会自动重试。');
       }, abort.signal);
-    } catch { if (!abort.signal.aborted) { setLoaded(false); setError('连接中断或发送状态未确认。请重新读取历史，不要重复发送原消息。'); } }
+    } catch { if (!abort.signal.aborted) { setLoaded(false); setError('连接中断或发送状态未确认。请刷新页面查看已保存状态，不要重复发送原消息。'); } }
     finally {
       sending.current = false;
       if (!abort.signal.aborted) { await load(); setBusy(false); }
@@ -177,14 +226,14 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
   </>, [conversationId]);
   return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述目标，数字员工会调用已发布能力并展示交互卡片</p></div></header>
     <AssistantThread
-      conversationId={conversationId}
       messages={messages}
+      unassignedCards={unassignedCards}
       isRunning={busy || pending}
       isSendDisabled={!loaded || pending}
-      refreshKey={messages.length + Number(busy)}
-      error={error}
-      onReload={() => { setError(''); void load(); }}
+      error={historyError || error}
       onSend={send}
+      onCardUpdate={updateCard}
+      onCardActionStateChange={setCardActionState}
       onComposerError={setError}
       renderMessageExtras={renderMessageExtras}
       threadTail={runId ? <RunDetail runId={runId} /> : null}

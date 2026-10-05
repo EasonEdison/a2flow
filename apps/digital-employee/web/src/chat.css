@@ -83,9 +83,12 @@
   color: #9a6700;
 }
 
-.assistant-answer + .turn-applications,
+.assistant-answer + .ordered-application,
+.ordered-application + .assistant-answer,
+.ordered-application + .ordered-application,
 .execution-panel + .assistant-answer,
-.workflow-confirm + .turn-applications {
+.workflow-confirm + .legacy-applications,
+.assistant-answer + .legacy-applications {
   margin-top: 14px;
 }
 
@@ -301,27 +304,37 @@
   font-size: 13px;
 }
 
-.turn-applications {
+.ordered-application,
+.legacy-applications {
   padding-top: 2px;
 }
 
-.chat-applications-status {
+.legacy-applications > .display-card + .display-card,
+.historical-applications > .display-card + .display-card {
+  margin-top: 10px;
+}
+
+.missing-application,
+.historical-applications {
   margin: 12px 46px 20px;
   padding: 12px;
-  border: 1px solid #f0d7a2;
+  border: 1px solid #dce4ef;
   border-radius: 8px;
-  background: #fffaf0;
-  color: #7c5a14;
+  background: #fbfcfe;
+  color: #475569;
   font-size: 13px;
 }
 
-.chat-applications-status .secondary {
-  margin-top: 8px;
+.missing-application {
+  margin: 12px 0;
+  border-color: #f1c9c5;
+  background: #fff7f6;
+  color: #b42318;
 }
 
 .historical-applications h3 {
   margin: 0 0 4px;
-  color: #5f4714;
+  color: #334155;
   font-size: 14px;
 }
 
@@ -336,17 +349,6 @@
   margin: 0 -24px;
   padding: 10px 24px 16px;
   background: linear-gradient(to bottom, rgba(255,255,255,0), #fff 18px);
-}
-
-.aui-thread-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.aui-thread-actions .secondary {
-  padding: 6px 10px;
-  font-size: 12px;
 }
 
 .aui-composer {

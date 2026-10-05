@@ -2,6 +2,8 @@ import type { ThreadMessageLike } from '@assistant-ui/react';
 
 import type {
   ChatExecution,
+  ChatContentPart,
+  ChatCard,
   ChatModelMessage,
   ChatStreamEvent,
   ChatToolCall,
@@ -22,6 +24,21 @@ const assistantStatus = (message: Message): ThreadMessageLike['status'] => {
   }
   return { type: 'complete', reason: 'stop' };
 };
+
+export const preserveUpdatedCards = (
+  message: Message,
+  updatedCards: ReadonlyMap<string, ChatCard>,
+): Message => ({
+  ...message,
+  ...(message.parts ? {
+    parts: message.parts.map(part => part.type === 'application' && updatedCards.has(part.cardId)
+      ? { ...part, card: updatedCards.get(part.cardId)! }
+      : part),
+  } : {}),
+  ...(message.legacyCards ? {
+    legacyCards: message.legacyCards.map(card => updatedCards.get(card.cardId) ?? card),
+  } : {}),
+});
 
 export const toAssistantMessage = (message: Message): ThreadMessageLike => {
   const createdAt = messageDate(message.createdAt);
@@ -53,7 +70,11 @@ export const toAssistantMessage = (message: Message): ThreadMessageLike => {
         : {}),
     });
   });
-  if (message.text) content.push({ type: 'text', text: message.text });
+  if (message.parts?.length) {
+    message.parts.forEach((part) => {
+      if (part.type === 'text' && part.text) content.push({ type: 'text', text: part.text });
+    });
+  } else if (message.text) content.push({ type: 'text', text: message.text });
 
   return {
     id: message.id,
@@ -63,6 +84,48 @@ export const toAssistantMessage = (message: Message): ThreadMessageLike => {
     ...(createdAt ? { createdAt } : {}),
     metadata: { custom: { turnId: execution?.turnId ?? '' } },
   };
+};
+
+const appendTextPart = (
+  parts: ChatContentPart[] | undefined,
+  event: Extract<ChatStreamEvent, { type: 'text_delta' }>,
+): ChatContentPart[] => {
+  const current = parts ?? [];
+  const last = current[current.length - 1];
+  if (last?.id === event.partId) {
+    if (last.type !== 'text') throw new Error('CHAT_PART_ORDER_INVALID');
+    return current.map((part, index) => index === current.length - 1
+      ? { ...last, text: last.text + event.text }
+      : part);
+  }
+  if (current.some(part => part.id === event.partId)) throw new Error('CHAT_PART_ORDER_INVALID');
+  return [...current, {
+    type: 'text',
+    id: event.partId,
+    text: event.text,
+    ...(event.modelMessageId ? { modelMessageId: event.modelMessageId } : {}),
+  }];
+};
+
+const upsertApplicationPart = (
+  parts: ChatContentPart[] | undefined,
+  event: Extract<ChatStreamEvent, { type: 'application_rendered' }>,
+): ChatContentPart[] => {
+  const current = parts ?? [];
+  const existing = current.findIndex(part => part.id === event.partId
+    || (part.type === 'application' && part.cardId === event.card.cardId));
+  const next = {
+    type: 'application' as const,
+    id: event.partId,
+    cardId: event.card.cardId,
+    card: event.card,
+  };
+  if (existing < 0) return [...current, next];
+  const existingPart = current[existing];
+  if (existingPart.type !== 'application') throw new Error('CHAT_PART_ORDER_INVALID');
+  return current.map((part, index) => index === existing
+    ? { ...next, id: existingPart.id }
+    : part);
 };
 
 const emptyExecution = (
@@ -147,12 +210,17 @@ export const applyChatStreamEvent = (
     };
   }
   if (event.type === 'text_delta' || event.type === 'reasoning_delta') {
-    if (!event.modelMessageId || !message.execution) {
+    if (!message.execution) {
       return event.type === 'text_delta'
-        ? { ...message, text: message.text + event.text }
+        ? { ...message, text: message.text + event.text, parts: appendTextPart(message.parts, event) }
         : { ...message, reasoning: (message.reasoning ?? '') + event.text };
     }
-    return {
+    if (!event.modelMessageId) {
+      return event.type === 'text_delta'
+        ? { ...message, text: message.text + event.text, parts: appendTextPart(message.parts, event) }
+        : { ...message, reasoning: (message.reasoning ?? '') + event.text };
+    }
+    const next = {
       ...message,
       execution: {
         ...message.execution,
@@ -165,6 +233,9 @@ export const applyChatStreamEvent = (
         ),
       },
     };
+    return event.type === 'text_delta'
+      ? { ...next, parts: appendTextPart(message.parts, event) }
+      : next;
   }
   if (event.type === 'tool_call_started' && message.execution) {
     return {
@@ -184,10 +255,17 @@ export const applyChatStreamEvent = (
       },
     };
   }
-  if ((event.type === 'application_rendered' || event.type === 'waiting_action') && message.execution) {
+  if (event.type === 'application_rendered' && message.execution) {
     return {
       ...message,
-      delivery: event.type === 'waiting_action' ? 'waiting_action' : message.delivery,
+      parts: upsertApplicationPart(message.parts, event),
+      execution: { ...message.execution, turnId: event.turnId },
+    };
+  }
+  if (event.type === 'waiting_action' && message.execution) {
+    return {
+      ...message,
+      delivery: 'waiting_action',
       execution: { ...message.execution, turnId: event.turnId },
     };
   }
