@@ -55,17 +55,24 @@ const A2uiApplicationPrtPreview: React.FC<Props> = ({ applicationId, defaultPara
   const inFlightRef = useRef(false);
   const confirmOpenRef = useRef(false);
   const mountedRef = useRef(true);
+  const activeModalRef = useRef<{ destroy: () => void }>();
 
   useEffect(() => {
     sessionIdRef.current = result?.sessionId;
   }, [result?.sessionId]);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    generationRef.current += 1;
-    const sessionId = sessionIdRef.current;
-    sessionIdRef.current = undefined;
-    if (sessionId) void a2uiApplicationApi.closePrtPreview(sessionId).catch(() => undefined);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      generationRef.current += 1;
+      activeModalRef.current?.destroy();
+      activeModalRef.current = undefined;
+      confirmOpenRef.current = false;
+      const sessionId = sessionIdRef.current;
+      sessionIdRef.current = undefined;
+      if (sessionId) void a2uiApplicationApi.closePrtPreview(sessionId).catch(() => undefined);
+    };
   }, []);
 
   const validTargetUserId = useMemo(() => {
@@ -138,6 +145,8 @@ const A2uiApplicationPrtPreview: React.FC<Props> = ({ applicationId, defaultPara
   const close = useCallback(() => {
     if (inFlightRef.current) return;
     generationRef.current += 1;
+    activeModalRef.current?.destroy();
+    activeModalRef.current = undefined;
     const sessionId = sessionIdRef.current;
     sessionIdRef.current = undefined;
     confirmOpenRef.current = false;
@@ -193,8 +202,10 @@ const A2uiApplicationPrtPreview: React.FC<Props> = ({ applicationId, defaultPara
       return;
     }
     const actionRequestId = requestId();
+    const modalGeneration = generationRef.current;
+    const modalSessionId = result.sessionId;
     confirmOpenRef.current = true;
-    Modal.confirm({
+    const modal = Modal.confirm({
       title: '确认执行真实 PRT Action',
       okText: '确认执行',
       cancelText: '取消',
@@ -210,10 +221,17 @@ const A2uiApplicationPrtPreview: React.FC<Props> = ({ applicationId, defaultPara
       ),
       onOk: () => {
         confirmOpenRef.current = false;
+        activeModalRef.current = undefined;
+        if (!mountedRef.current || generationRef.current !== modalGeneration
+            || sessionIdRef.current !== modalSessionId) return undefined;
         return executeConfirmedAction(event, actionRequestId);
       },
-      onCancel: () => { confirmOpenRef.current = false; },
+      onCancel: () => {
+        confirmOpenRef.current = false;
+        activeModalRef.current = undefined;
+      },
     });
+    activeModalRef.current = modal;
   }, [executeConfirmedAction, outcomeUnknown, result]);
 
   return (
