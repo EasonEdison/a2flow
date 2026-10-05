@@ -105,6 +105,9 @@ for (const method of ['ListPeople', 'ResolvePeople']) assert.ok(descriptor.inclu
 const authoring = await readFile(new URL('./authoring-core.mjs', import.meta.url), 'utf8');
 assert.doesNotMatch(authoring, /reading-point-selector|content-topic-selector|content-manuscript-editor/);
 assert.doesNotMatch(authoring, /A2UI_CATALOG_(CREATE|UPDATE)|RELEASE_ONLINE|forcePublish/);
+assert.match(authoring,
+  /CAPABILITY_VALIDATE[\s\S]+CAPABILITY_DRAFT_DETAIL[\s\S]+CAPABILITY_DRY_RUN[\s\S]+revision: validated\.revision/,
+  'dry-run must use the authoritative revision read after validation');
 const html = await readFile(new URL('./import.html', import.meta.url), 'utf8');
 assert.match(html, /创建并发布人员选择示例到 PRT/);
 assert.doesNotMatch(html, /token|cookie|password/i);

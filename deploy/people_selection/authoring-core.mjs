@@ -101,12 +101,12 @@ async function ensureCapability(client, spec, options) {
     draftJson: JSON.stringify(capabilityDraft(spec, options.descriptorSetBase64, options.targetKey)),
     businessDomain: 'general', capabilityDomain: 'general', specialistIds: options.specialistIds,
   });
-  const saved = (await client.call('CAPABILITY_DRAFT_DETAIL', { draftId })).data;
   const validation = (await client.call('CAPABILITY_VALIDATE', { draftId })).data;
   if (validation?.valid !== true) throw new Error(`${spec.actionCode}: ${JSON.stringify(validation?.errors || validation)}`);
-  const dryRun = (await client.call('CAPABILITY_DRY_RUN', { draftId, revision: saved.revision, environment: 'PRT', clientType: 'PC' })).data;
+  const validated = (await client.call('CAPABILITY_DRAFT_DETAIL', { draftId })).data;
+  const dryRun = (await client.call('CAPABILITY_DRY_RUN', { draftId, revision: validated.revision, environment: 'PRT', clientType: 'PC' })).data;
   if (dryRun?.toolResult?.success !== true) throw new Error(`${spec.actionCode}: dry-run failed (${dryRun?.toolResult?.errorCode || 'UNKNOWN'})`);
-  return { draftId, detail: saved };
+  return { draftId, detail: validated };
 }
 
 export async function publishPrt(client, assetType, assetKey, extra = {}) {
