@@ -73,7 +73,14 @@ def runtime_metadata(result: RuntimeResult) -> dict[str, Any]:
 
 def rendered_business_state(result: RuntimeResult) -> JsonObject:
     """Project canonical surface DataModels without components or protocol messages."""
-    return project_business_state(result.snapshot)
+    return project_business_state(_plain_snapshot(result))
+
+
+def _plain_snapshot(result: RuntimeResult) -> list[JsonObject]:
+    value = plain(result.snapshot)
+    if not isinstance(value, list) or any(not isinstance(message, dict) for message in value):
+        raise ActionRejected("RENDER_OBSERVATION_INVALID")
+    return cast(list[JsonObject], value)
 
 
 def trusted_card(owner: TrustedContext, card: dict[str, Any],
@@ -196,19 +203,21 @@ class RpcChatAssets(ChatAssets):
             result = self.rpc.activate(self.owner, application_key, data,
                                        "render:" + uuid4().hex)
             prepared = prepare_result(result)
+            snapshot = _plain_snapshot(result)
+            business_state = project_business_state(snapshot)
             metadata = {
                 "owner": {"userId": self.owner.user_id, "environment": self.owner.environment},
                 "conversationId": self.conversation_id, "controlRequestId": self.control_request_id,
                 "toolCallId": tool_call_id, "skillKey": admitted.skill_key,
                 "applicationKey": application_key, "applicationVersion": prepared.application_version,
                 "rpc": runtime_metadata(result),
-                "observation": {"arguments": rendered_business_state(result)},
+                "observation": {"arguments": business_state},
             }
             saved = self._card_sink(prepared, metadata)
             self._render_observations[saved["cardId"]] = {
                 "cardId": saved["cardId"], "applicationKey": application_key,
-                "arguments": rendered_business_state(result),
-                "preparedContent": project_rendered_content(result.snapshot),
+                "arguments": business_state,
+                "preparedContent": project_rendered_content(snapshot),
             }
             if prepared.interactive:
                 self._waiting_action = saved
