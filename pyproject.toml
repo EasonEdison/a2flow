@@ -5,18 +5,10 @@ pretty = true
 show_error_codes = true
 show_error_context = true
 warn_unreachable = true
-mypy_path = "packages/contracts/src:packages/asset-store/src:services/management-api/src"
+mypy_path = "packages/contracts/src:packages/asset-store/src"
 files = [
   "packages/contracts/src/skillweave_contracts/asset_types.py",
   "packages/asset-store/src/a2flow_asset_store/records.py",
-  "services/management-api/src/a2flow_management/contracts.py",
-  "services/management-api/src/a2flow_management/db_types.py",
-  "services/management-api/src/a2flow_management/draft_models.py",
-  "services/management-api/src/a2flow_management/http_models.py",
-  "services/management-api/src/a2flow_management/relations.py",
-  "services/management-api/src/a2flow_management/repositories.py",
-  "services/management-api/src/a2flow_management/publication.py",
-  "services/management-api/src/a2flow_management/releases.py",
 ]
 
 [tool.ruff]

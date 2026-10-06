@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_INDEX_URL=${PIP_INDEX_URL} \
-    PYTHONPATH=/opt/a2flow/packages/contracts/src:/opt/a2flow/packages/asset-store/src:/opt/a2flow/services/skill-registry/src:/opt/a2flow/services/capability-registry/src:/opt/a2flow/services/a2ui-composer/src:/opt/a2flow/services/workflow-composer/src:/opt/a2flow/services/management-api/src:/opt/a2flow/services/b-side-api/src:/opt/a2flow/services/scheduler-mq/src:/opt/a2flow/services/agent-workflow-runtime/src:/opt/a2flow/examples/activity-planning
+    PYTHONPATH=/opt/a2flow/packages/contracts/src:/opt/a2flow/packages/asset-store/src:/opt/a2flow/services/skill-registry/src:/opt/a2flow/services/capability-registry/src:/opt/a2flow/services/a2ui-composer/src:/opt/a2flow/services/b-side-api/src:/opt/a2flow/services/scheduler-mq/src:/opt/a2flow/services/agent-workflow-runtime/src:/opt/a2flow/examples/activity-planning
 
 WORKDIR /opt/a2flow
 
@@ -17,14 +17,11 @@ COPY experiments/runtime-phase1/requirements.lock /tmp/runtime-requirements.lock
 COPY deploy/mvp/model-requirements.lock /tmp/model-requirements.lock
 COPY deploy/mvp/listener-requirements.lock /tmp/listener-requirements.lock
 COPY services/agent-workflow-runtime/requirements-http.txt /tmp/runtime-http.txt
-COPY services/management-api/requirements-http.txt /tmp/management-http.txt
 COPY services/b-side-api/requirements-http.txt /tmp/bside-http.txt
 RUN python -m pip install --no-cache-dir -r /tmp/runtime-requirements.lock \
     && python -m pip install --no-cache-dir -r /tmp/model-requirements.lock \
     && python -m pip install --no-cache-dir --no-deps --require-hashes \
         -r /tmp/runtime-http.txt \
-    && python -m pip install --no-cache-dir --no-deps --require-hashes \
-        -r /tmp/management-http.txt \
     && python -m pip install --no-cache-dir --no-deps --require-hashes \
         -r /tmp/bside-http.txt \
     && python -m pip install --no-cache-dir -r /tmp/listener-requirements.lock \
@@ -41,8 +38,6 @@ RUN python -m pip install --no-cache-dir /opt/a2flow/packages/rpc-contracts
 COPY services/skill-registry services/skill-registry
 COPY services/capability-registry services/capability-registry
 COPY services/a2ui-composer services/a2ui-composer
-COPY services/workflow-composer services/workflow-composer
-COPY services/management-api services/management-api
 COPY services/b-side-api services/b-side-api
 COPY services/scheduler-mq services/scheduler-mq
 COPY services/agent-workflow-runtime services/agent-workflow-runtime

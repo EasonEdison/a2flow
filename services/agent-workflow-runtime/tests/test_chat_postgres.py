@@ -70,10 +70,9 @@ class PostgresConversationTests(unittest.TestCase):
         import psycopg
         from importlib.resources import files
         from agent_workflow_runtime import postgres, postgres_lifecycle, postgres_progress
-        from a2flow_management.repositories import _DDL
         with psycopg.connect(os.environ["A2FLOW_TEST_CHAT_DSN"], autocommit=True) as connection:
             connection.execute(files("a2flow_bside").joinpath("schema.sql").read_text())
-            for group in (postgres.DDL, postgres_lifecycle.DDL, postgres_progress.DDL, _DDL):
+            for group in (postgres.DDL, postgres_lifecycle.DDL, postgres_progress.DDL):
                 for statement in group:
                     connection.execute(statement)
             rows = connection.execute(
@@ -81,7 +80,7 @@ class PostgresConversationTests(unittest.TestCase):
                 "WHERE table_schema=%s AND column_name IN (%s,%s)",
                 ("public", "user_id", "updated_by"),
             ).fetchall()
-        self.assertGreaterEqual(len(rows), 15)
+        self.assertGreaterEqual(len(rows), 14)
         for table, column, kind in rows:
             with self.subTest(table=table, column=column):
                 self.assertEqual("bigint", kind)

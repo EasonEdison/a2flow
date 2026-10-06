@@ -27,21 +27,7 @@ Successful validation returns immutable `AbilityPublicationMetadata`. Invalid
 definitions return stable `ValidationIssue` values and no publication
 metadata.
 
-## Management feature
-
-`capability_registry.management.create_ability_feature(reader, drafts,
-namespace, validator)` adapts this validator to the shared
-`ManagementService`. The Host injects an
-environment-bound published Ability reader and shared `DraftRepository`;
-there is no implicit persistence fallback. Ordinary users can browse
-published Abilities, while the shared service restricts draft operations and
-publication preparation to trusted administrators.
-
-Draft saves accept ordinary contract errors so an administrator can iterate,
-but reject unknown operation references, credential material, and extra fields
-that could smuggle executable code or URLs. Publication preparation validates
-one immutable draft snapshot and returns a `PublicationPlan`; it does not write
-a published version, execute an operation, resolve credentials, or proxy HTTP.
+Asset authoring and publication are provided by Java management. This Python package retains shared validation for Runtime readers.
 
 ## Test
 
@@ -51,8 +37,6 @@ PYTHONPATH=packages/contracts/src:services/capability-registry/src \
 /bin/python3.11 -m unittest discover \
   -s services/capability-registry/tests -v
 ```
-
-Add `services/management-api/src` to `PYTHONPATH` for the management tests.
 
 ## Boundary
 

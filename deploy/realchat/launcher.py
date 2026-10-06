@@ -11,7 +11,7 @@ from psycopg.conninfo import make_conninfo
 
 
 def configure():
-    from deploy.management.runtime import _secret, _required
+    from deploy.common.config import _secret, _required
     dsn = make_conninfo(
         host="/run/postgresql", dbname=_required("A2FLOW_DATABASE_NAME"),
         user=_required("A2FLOW_DATABASE_USER"),
@@ -20,7 +20,7 @@ def configure():
     if _required("A2FLOW_ENVIRONMENT") != "PRT":
         raise RuntimeError("REALCHAT_COMPOSE_PRT_ONLY")
     for name in ("A2FLOW_DATABASE_URL", "A2FLOW_ATTENDED_DATABASE_URL",
-                 "A2FLOW_BSIDE_DATABASE_URL", "A2FLOW_MANAGEMENT_DATABASE_URL"):
+                 "A2FLOW_BSIDE_DATABASE_URL"):
         os.environ[name] = dsn
     os.environ["DEEPSEEK_API_KEY"] = _secret("A2FLOW_DEEPSEEK_KEY_FILE")
     os.environ["A2FLOW_BSIDE_PEPPER"] = _secret("A2FLOW_PEPPER_FILE")
@@ -33,7 +33,6 @@ def initialize(dsn):
     from deploy.assets import bundle_validator
     from activity_planning_demo.package_bundle import make_package_bundle
     from a2flow_asset_store import PostgresAssetRepository
-    from a2flow_management import PostgresDraftRepository
     schemas()
     database = os.environ["A2FLOW_DATABASE_NAME"]
     namespace = os.environ["A2FLOW_ASSET_NAMESPACE"]
@@ -42,7 +41,6 @@ def initialize(dsn):
     repository.setup()
     repository.import_bundle(make_package_bundle("PRT"),
                              expected_namespace=namespace, dry_run=False)
-    PostgresDraftRepository(dsn, environment="PRT", database=database).setup()
     print("PRT schemas and reviewed prerequisite assets initialized")
 
 
@@ -95,7 +93,6 @@ def runtime():
 
 def main():
     commands = {
-        "management": "deploy.management.app:create_app_from_environment",
         "bside": "deploy.realchat.launcher:bside",
         "runtime": "deploy.realchat.launcher:runtime",
     }

@@ -1,9 +1,9 @@
 """Reusable bounded A2UI validators for asset-store and Runtime wiring."""
 
-from a2flow_management import ManagementError
+from .errors import ValidationError
 
 from .component_catalog import validate_component_definition
-from .management import _definition_profile
+from .validation import _definition_profile
 from .schema import validate_json_data
 
 
@@ -16,7 +16,7 @@ def application_validator(value):
             return False
         _definition_profile(asset["applicationKey"], value)
         return True
-    except (ManagementError, ValueError, TypeError):
+    except (ValidationError, ValueError, TypeError):
         return False
 
 
@@ -26,7 +26,7 @@ def component_validator(value):
             return False
         validate_component_definition(value["catalogKey"], value)
         return True
-    except (ManagementError, ValueError, TypeError):
+    except (ValidationError, ValueError, TypeError):
         return False
 
 
@@ -37,5 +37,5 @@ def application_data_validator(application, value):
     schema = application["surfaceTemplate"]["inputSchema"]
     try:
         return validate_json_data(schema, value)
-    except ManagementError:
+    except ValidationError:
         return False
