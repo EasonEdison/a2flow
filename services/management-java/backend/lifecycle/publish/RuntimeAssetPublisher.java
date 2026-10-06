@@ -1,58 +1,41 @@
 package dev.a2flow.management.lifecycle.publish;
 
 import java.io.IOException;
-import java.util.Objects;
-
 import org.springframework.stereotype.Service;
-
 import dev.a2flow.management.release.ReleaseModels.ReleasePublishContext;
 
-/** 只同步完整不可变发布材料到环境隔离的 Runtime DB，不调用业务 RPC。 */
+/** Retains complete compiler artifacts in the selected environment database. */
 @Service
 public final class RuntimeAssetPublisher {
-    public record Selection(String kind, String key, String environment) { }
-    public record Request(String kind, String key, String environment, String assetKey,
-            String sourceId, String sourceDigest, String payloadDigest, String payloadJson, String requestId,
-            String expectedServingDigest) { }
     public record Receipt(boolean published, String kind, String key, String environment,
             String sourceId, String sourceDigest, String versionId, String contentDigest,
             String servingDigest, String requestId) { }
-
-    private final HttpRuntimeSkillPublicationAdapter bridge;
-
-    public RuntimeAssetPublisher(HttpRuntimeSkillPublicationAdapter bridge) {
-        this.bridge = bridge;
-    }
-
+    private final RuntimePublicationStore store;
+    public RuntimeAssetPublisher(RuntimePublicationStore store) { this.store = store; }
     public Receipt publish(String kind, String key, ReleasePublishContext context) {
         if (context == null || context.getSnapshot() == null || context.getEnvironment() == null) {
             throw new IllegalArgumentException("RUNTIME_PUBLICATION_CONTEXT_REQUIRED");
         }
         try {
-            var environment = context.getEnvironment().name();
-            var selection = bridge.call("/asset/selection", new Selection(kind, key, environment),
-                    HttpRuntimeSkillPublicationAdapter.SelectionResponse.class);
-            if (selection.servingDigest() == null || !selection.servingDigest().matches("sha256:[0-9a-f]{64}")) {
-                throw new IOException("PUBLICATION_SELECTION_INVALID");
+            String environment = context.getEnvironment().name();
+            var request = PublicationJson.object("kind", kind, "key", key, "environment", environment,
+                    "assetKey", context.getAssetKey(), "sourceId", context.getSourceId(),
+                    "sourceDigest", context.getSnapshot().getDigest(), "payloadDigest",
+                    PublicationJson.digest(context.getSnapshot().getPayloadJson().getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                    "payloadJson", context.getSnapshot().getPayloadJson(), "requestId", context.getRequestId());
+            var definition = PublicationJson.object("runtimeProfile", "a2flow.java-rpc.v1");
+            for (String field : new String[]{"assetKey", "sourceId", "sourceDigest", "payloadDigest", "payloadJson"}) {
+                definition.set(field, request.get(field));
             }
-            var request = new Request(kind, key, environment, context.getAssetKey(), context.getSourceId(),
-                    context.getSnapshot().getDigest(), "sha256:" +
-                        dev.a2flow.management.release.ReleaseDigestUtils.sha256(context.getSnapshot().getPayloadJson()),
-                    context.getSnapshot().getPayloadJson(),
-                    context.getRequestId(), selection.servingDigest());
-            var receipt = bridge.call("/asset/publish", request, Receipt.class);
-            if (!receipt.published() || !Objects.equals(receipt.kind(), kind)
-                    || !Objects.equals(receipt.key(), key) || !Objects.equals(receipt.environment(), environment)
-                    || !Objects.equals(receipt.sourceId(), request.sourceId())
-                    || !Objects.equals(receipt.sourceDigest(), request.sourceDigest())
-                    || !Objects.equals(receipt.requestId(), request.requestId())
-                    || receipt.versionId() == null || receipt.versionId().isBlank()
-                    || receipt.contentDigest() == null || !receipt.contentDigest().matches("sha256:[0-9a-f]{64}")) {
-                throw new IOException("RUNTIME_PUBLICATION_RECEIPT_INVALID");
-            }
-            return receipt;
-        } catch (IOException exception) {
-            throw new IllegalStateException("RUNTIME_PUBLICATION_FAILED", exception);
-        }
+            var deps = PublicationMaterial.javaDependencies(kind, key, definition);
+            String version = "java-" + PublicationJson.hash(PublicationJson.bytes(
+                    PublicationJson.array(context.getSourceId(), context.getSnapshot().getDigest())));
+            String receiptId = "runtime:" + PublicationJson.hash(PublicationJson.bytes(
+                    PublicationJson.array(kind, key, context.getRequestId())));
+            var result = store.publish(kind, key, environment, receiptId, request, version, definition, deps,
+                    store.selection(kind, key, environment));
+            return new Receipt(true, kind, key, environment, context.getSourceId(), context.getSnapshot().getDigest(),
+                    version, result.path("contentDigest").asText(), result.path("servingDigest").asText(), context.getRequestId());
+        } catch (IOException exception) { throw new IllegalStateException("RUNTIME_PUBLICATION_FAILED", exception); }
     }
 }
