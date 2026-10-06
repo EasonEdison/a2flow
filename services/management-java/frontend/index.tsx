@@ -1779,6 +1779,8 @@ const SkillFactoryPage: React.FC = () => {
   const [fileContent, setFileContent] = useState<WorkspaceFileContent | null>(null);
   const [editorContent, setEditorContent] = useState('');
   const [isFileEditing, setIsFileEditing] = useState(false);
+  const [createSkillFileOpen, setCreateSkillFileOpen] = useState(false);
+  const [newSkillFileContent, setNewSkillFileContent] = useState('');
 
   const [workspaceNotice, setWorkspaceNotice] = useState('');
   const [workspaceViewMode, setWorkspaceViewMode] = useState<WorkspaceViewMode>(
@@ -2595,6 +2597,25 @@ const SkillFactoryPage: React.FC = () => {
       await loadWorkspace(selectedSkill.workspaceId, WORKSPACE_VIEW_PREPROD_CURRENT);
     } catch (error) {
       message.error(error instanceof Error ? error.message : '文件保存失败');
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const handleCreateSkillFile = async () => {
+    if (!selectedSkill || readonlyWorkspace || !workspaceTree || workspaceTree.fileCount !== 0
+      || !newSkillFileContent.trim() || actionLoading) return;
+    setActionLoading('createSkillFile');
+    try {
+      await skillFactoryApi.saveFile(
+        selectedSkill.workspaceId, selectedSkill.skillCode, 'SKILL.md', newSkillFileContent,
+      );
+      setCreateSkillFileOpen(false);
+      setNewSkillFileContent('');
+      await loadWorkspace(selectedSkill.workspaceId, WORKSPACE_VIEW_PREPROD_CURRENT);
+      message.success('SKILL.md 已创建');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '创建 SKILL.md 失败');
     } finally {
       setActionLoading('');
     }
@@ -4640,6 +4661,29 @@ const SkillFactoryPage: React.FC = () => {
 
   const renderFiles = () => (
     <div className="skill-factory-workspace">
+      <Modal
+        title="创建 SKILL.md"
+        open={createSkillFileOpen}
+        okText="创建并保存"
+        cancelText="取消"
+        confirmLoading={actionLoading === 'createSkillFile'}
+        okButtonProps={{ disabled: !newSkillFileContent.trim() || readonlyWorkspace }}
+        onOk={handleCreateSkillFile}
+        onCancel={() => {
+          if (actionLoading === 'createSkillFile') return;
+          setCreateSkillFileOpen(false);
+          setNewSkillFileContent('');
+        }}
+      >
+        <Text type="secondary">填写完整 Skill 文件，包含 name、description 的 YAML frontmatter 和正文。保存不会自动发布。</Text>
+        <TextArea
+          aria-label="新建 SKILL.md 内容"
+          value={newSkillFileContent}
+          onChange={(event) => setNewSkillFileContent(event.target.value)}
+          autoSize={{ minRows: 12, maxRows: 24 }}
+          disabled={actionLoading === 'createSkillFile'}
+        />
+      </Modal>
       <Card className="skill-factory-workspace-meta-card">
         <div className="skill-factory-workspace-meta">
           <div>
@@ -4708,6 +4752,15 @@ const SkillFactoryPage: React.FC = () => {
         <div className="skill-factory-file-layout">
           <div className="skill-factory-file-tree">
             <div className="skill-factory-file-panel-title">项目文件</div>
+            {workspaceTree?.fileCount === 0 && !readonlyWorkspace ? (
+              <Button
+                icon={<PlusOutlined />}
+                disabled={Boolean(actionLoading)}
+                onClick={() => setCreateSkillFileOpen(true)}
+              >
+                创建 SKILL.md
+              </Button>
+            ) : null}
             <Tree
               blockNode
               showIcon
