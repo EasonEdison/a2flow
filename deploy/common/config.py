@@ -5,14 +5,14 @@ from pathlib import Path
 import stat
 
 
-def _required(name):
+def _required(name: str) -> str:
     value = os.environ.get(name)
     if not value:
         raise RuntimeError("MISSING_HOST_CONFIGURATION:" + name)
     return value
 
 
-def _secret(name):
+def _secret(name: str) -> str:
     path = Path(_required(name))
     descriptor = None
     try:

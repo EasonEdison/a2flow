@@ -1,5 +1,13 @@
 # 业务能力与 A2UI 的 Chat 执行链
 
+## 当前迁移边界（2026-10-06）
+
+Java 管理端直接通过 JDBC 发布到 PRT/ONLINE Runtime 资产库，Python 发布桥与旧 Python CRUD 已退役。账号登录仍保留独立 Python 服务；B、Agent/Workflow Runtime 与目标业务执行服务使用 Python。发布配置采用 `A2FLOW_PUBLICATION_{PRT,ONLINE}_{JDBC_URL,USER,PASSWORD,DATABASE,NAMESPACE}`，不再配置桥接地址或令牌。回执表迁移在 `backend/storage/db/runtime-publication/V001__publication_receipts.sql`，既有库不得由测试脚本初始化。
+
+下文记录 2026-09-23 Java 确定性执行链的设计与隔离验证，不代表当前目标运行态或本次直接发布迁移已完成公网部署。2026-10-04 的当前运行态规则为按可信 environment/userId 读取当前有效发布配置，旧资产版本不要求卡片 RESET；保留 requestId 幂等、身份/归属、执行占用及 UNKNOWN 不自动重试。历史 revision/RESET 描述不再作为当前准入要求。
+
+## 2026-09-23 历史链路
+
 本轮只接通手填管理端与普通 Chat。Workflow 编排、节点推进、M 端 AI 辅助生成均不在本轮范围。
 
 ## 职责
@@ -11,7 +19,7 @@
 
 ## 两段 RPC
 
-引擎到 Java、Java 到业务下游均为 Protobuf gRPC；业务请求不转发 Cookie。`userId` 使用带 presence 的 signed int64，来自已验证的服务端会话。管理页面和账号登录仍是 HTTP；发布桥是控制面 HTTP，不是业务执行兜底。
+引擎到 Java、Java 到业务下游均为 Protobuf gRPC；业务请求不转发 Cookie。`userId` 使用带 presence 的 signed int64，来自已验证的服务端会话。当时管理页面、账号登录与发布桥使用 HTTP；发布桥已由上述 Java 直接发布替代。
 
 通道支持 mTLS；只有显式本机测试配置允许 loopback 明文。Java 当前固定监听 127.0.0.1，生产跨机拓扑还需明确受控网络入口，不能仅设置 mTLS 就认为跨主机部署完成。[RPC 配置说明](backend/capabilityrpc/README.zh-CN.md)列出证书与目标映射。地址、证书来自宿主配置，不放入模型参数。超时不自动重试，不推断下游是否已经产生副作用。
 
@@ -39,11 +47,11 @@ Application 发布变化在业务调用前返回 `RESET_REQUIRED`，提示重新
 
 基础 Catalog 使用官方明确 ID，扩展 Markdown 使用独立 Catalog。只注册实际有渲染实现的组件；未知 Catalog/自定义组件显式报错。组件中心的注册和编译校验不能代替 B 端渲染实现。
 
-可复跑的验证：
+保留的验证入口与历史边界（先核对所测版本）：
 
 - `tests/host/run-local.sh`：独立 PostgreSQL、账号会话与真实管理宿主启动。
 - `backend/storage/db/tests/run-capability-rpc-probe.sh`：真实双段 gRPC、发布读取、精度、环境与错误边界。
-- `publication-bridge/run-local-tests.sh`：PRT/ONLINE 数据库发布、依赖闭包、完整材料留存和原子回执。
+- 旧 `publication-bridge/run-local-tests.sh` 已退役；直接 JDBC 发布需验证 PRT/ONLINE 隔离、完整材料、摘要及原子回执，不沿用旧桥接结果作为本轮结论。
 - `tests/runtime/run-chat-rpc-integration.sh` 与 Python `deploy.attended.verify_rpc_chat`：通过真实 M 接口创建与发布，再验证 Chat 卡片持久化链。
 
 源码、隔离联调、生产证书验收和公网部署是不同交付状态。以最终验证记录为准，不以文件存在或单项构建通过代替整链验收。

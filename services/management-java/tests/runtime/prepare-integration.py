@@ -23,10 +23,9 @@ def main():
         dsn = f"host=127.0.0.1 port=56502 dbname={database}"
         PostgresAssetRepository(dsn, environment=env, database=database, validator=validator).setup()
         with psycopg.connect(dsn) as connection:
-            connection.execute(Path(os.environ["INTEGRATION_JAVA_ROOT"], "publication-bridge/migrations/V001__publication_receipts.sql").read_text())
+            connection.execute(Path(os.environ["INTEGRATION_JAVA_ROOT"], "backend/storage/db/runtime-publication/V001__publication_receipts.sql").read_text())
         destinations[env] = dsn
     token = secrets.token_urlsafe(32)
-    bridge_token = secrets.token_urlsafe(40)
     user_id = 9223372036854775807
     with psycopg.connect("host=127.0.0.1 port=56502 dbname=chat_rpc_management") as connection:
         connection.execute("CREATE TABLE users (user_id bigint PRIMARY KEY, role text NOT NULL)")
@@ -35,10 +34,6 @@ def main():
         connection.execute("INSERT INTO sessions VALUES (%s, %s, CURRENT_TIMESTAMP + INTERVAL '8 hours')", (hashlib.sha256(token.encode()).hexdigest(), user_id))
     env = {
         "A2FLOW_MANAGEMENT_NAMESPACE": namespace,
-        "A2FLOW_PUBLICATION_BRIDGE_TOKEN": bridge_token,
-        "A2FLOW_PUBLICATION_VALIDATOR_FACTORY": "deploy.assets:bundle_validator",
-        "A2FLOW_PUBLICATION_BRIDGE_PORT": "18892",
-        "A2FLOW_PUBLICATION_BRIDGE_URL": "http://127.0.0.1:18892",
         "M_ORIGIN": "http://127.0.0.1:18890",
         "M_COOKIE": "a2flow_management_session=" + token,
         "M_SESSION_COOKIE": "a2flow_management_session=" + token,
@@ -52,7 +47,12 @@ def main():
         "RUNTIME_ENV_FILE": str(directory / "runtime-env.json"),
     }
     for environment in destinations:
-        env[f"A2FLOW_PUBLICATION_{environment}_DSN"] = destinations[environment]
+        database = "chat_rpc_" + environment.lower()
+        env[f"A2FLOW_PUBLICATION_{environment}_JDBC_URL"] = (
+            "jdbc:postgresql://127.0.0.1:56502/" + database
+        )
+        env[f"A2FLOW_PUBLICATION_{environment}_USER"] = os.environ["A2FLOW_MANAGEMENT_DB_USER"]
+        env[f"A2FLOW_PUBLICATION_{environment}_PASSWORD"] = os.environ["A2FLOW_MANAGEMENT_DB_PASSWORD"]
         env[f"A2FLOW_PUBLICATION_{environment}_DATABASE"] = "chat_rpc_" + environment.lower()
         env[f"A2FLOW_PUBLICATION_{environment}_NAMESPACE"] = namespace
     write_private(directory / "environment.sh", "".join("export " + key + "=" + shlex.quote(value) + "\n" for key, value in env.items()))

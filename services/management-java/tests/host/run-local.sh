@@ -14,7 +14,7 @@ cleanup() {
 }
 trap cleanup EXIT
 cd "$project_dir"
-for port in 56478 18790 18791 18792 18793; do
+for port in 56478 18790 18791 18793; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     printf '测试端口已占用，拒绝连接现有服务：%s\n' "$port"; exit 1
   fi
@@ -35,8 +35,15 @@ export A2FLOW_MANAGEMENT_NAMESPACE=host-smoke
 export A2FLOW_MANAGEMENT_BROWSER_ORIGINS=http://127.0.0.1:18790
 export A2FLOW_MANAGEMENT_PORT=18790
 export A2FLOW_ACCOUNT_LOGIN_ORIGIN=http://127.0.0.1:18791
-export A2FLOW_PUBLICATION_BRIDGE_URL=http://127.0.0.1:18792
-export A2FLOW_PUBLICATION_BRIDGE_TOKEN=synthetic-publication-test-token-not-live
+for environment in PRT ONLINE; do
+  database="management_host_$(printf '%s' "$environment" | tr '[:upper:]' '[:lower:]')"
+  "$PG_BIN/createdb" -h 127.0.0.1 -p 56478 "$database"
+  export "A2FLOW_PUBLICATION_${environment}_JDBC_URL=jdbc:postgresql://127.0.0.1:56478/$database"
+  export "A2FLOW_PUBLICATION_${environment}_USER=$A2FLOW_MANAGEMENT_DB_USER"
+  export "A2FLOW_PUBLICATION_${environment}_PASSWORD=$A2FLOW_MANAGEMENT_DB_PASSWORD"
+  export "A2FLOW_PUBLICATION_${environment}_DATABASE=$database"
+  export "A2FLOW_PUBLICATION_${environment}_NAMESPACE=host-smoke"
+done
 export A2FLOW_MANAGEMENT_STATIC_DIR="$project_dir/frontend/dist"
 export A2FLOW_RUNTIME_RPC_MODE=LOOPBACK
 export A2FLOW_RUNTIME_RPC_PORT=18793

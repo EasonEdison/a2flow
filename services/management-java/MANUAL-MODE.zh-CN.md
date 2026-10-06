@@ -1,6 +1,12 @@
 # 手填管理端：配置与交付状态
 
-## 2026-09-23 最新增量
+## 2026-10-06 Python 管理能力退役
+
+管理资产的编写、编译与发布由 Java 管理端负责。发布使用 Java JDBC 直接写入 PRT/ONLINE 各自的 Runtime 资产库；旧 Python publication bridge 和 CRUD 管理服务已退役。账号与会话仍由独立 Python 账号服务维护，Java 通过既有只读账号连接验证会话，并代理登录/注销 HTTP。B 与 Runtime 保持 Python。
+
+此处描述本次源码迁移，不据此声称新版本已部署或完成公网验收。下文带日期的验证结果属于当时版本；旧 HTTP 发布桥的历史证据不能代替 Java 直接发布回归。
+
+## 2026-09-23 历史增量
 
 业务能力两段统一使用 gRPC；Application 确定性执行及 Python Chat 持久卡片已接入。能力、18 个官方基础组件、Catalog、Application、Skill 已通过独立数据库上的真实 M HTTP 创建/保存/绑定/预发发布验证。完整配置与发布身份落入 Runtime 环境库，不返回占位发布成功。详细边界及最终 Chat 验收见 [RPC-CHAT.zh-CN.md](RPC-CHAT.zh-CN.md)。Workflow 新开发与 M 端 AI 辅助生成仍暂停。本文验证不代表公网已经部署。
 
@@ -36,8 +42,11 @@
 | `A2FLOW_MANAGEMENT_BROWSER_ORIGINS` | 浏览器来源白名单，逗号分隔完整origin，不能带路径。 |
 | `A2FLOW_MANAGEMENT_STATIC_DIR` | 原版管理前端构建后的dist绝对目录。 |
 | `A2FLOW_ACCOUNT_LOGIN_ORIGIN` | 既有账号登录服务的loopback HTTP origin，必须显式端口。 |
-| `A2FLOW_PUBLICATION_BRIDGE_URL` | Python资产发布桥接服务loopback HTTP origin。 |
-| `A2FLOW_PUBLICATION_BRIDGE_TOKEN` | 服务间认证秘密；部署安全注入，禁止提交或打印。 |
+| `A2FLOW_PUBLICATION_{PRT,ONLINE}_JDBC_URL` | 两个环境各自的 PostgreSQL JDBC 地址。 |
+| `A2FLOW_PUBLICATION_{PRT,ONLINE}_USER` | 各环境 Runtime 发布库账号。 |
+| `A2FLOW_PUBLICATION_{PRT,ONLINE}_PASSWORD` | 发布库密码，由秘密配置注入，禁止提交或打印。 |
+| `A2FLOW_PUBLICATION_{PRT,ONLINE}_DATABASE` | 精确数据库名，PRT 与 ONLINE 必须不同。 |
+| `A2FLOW_PUBLICATION_{PRT,ONLINE}_NAMESPACE` | 各环境可信资产命名空间。 |
 | `A2FLOW_RUNTIME_RPC_MODE` | 必填 `MTLS` 或显式本机验证用 `LOOPBACK`；不会缺证书自动降级。 |
 | `A2FLOW_RUNTIME_RPC_PORT` | Java 确定性执行 gRPC 端口；当前固定监听 127.0.0.1。 |
 | `A2FLOW_CAPABILITY_GRPC_TARGETS_JSON` | 服务端维护 targetKey 到 PRT/ONLINE 业务 gRPC 通道配置的映射，不来自模型或浏览器。证书字段见 RPC 配置说明。 |
@@ -69,7 +78,7 @@ Application 编辑页的“PRT 真实联调”只执行当前 PRT 已发布版�
 
 管理服务通过 `A2FLOW_CAPABILITY_GRPC_TARGETS_JSON` 中精确的 `a2ui-execution.PRT` 目标调用 Python executor，客户端固定为 `PC`。正式部署使用 `deploy/python-execution/management.override.yaml` 的 8794 mTLS 配置；缺少该精确目标或证书时直接失败，不向 ONLINE、明文通道或其他 target 降级。联调会话只保存在当前管理进程内并有 TTL/容量限制，服务重启或点击“结束联调”后失效。
 
-## 已验证与未验证
+## 历史验证记录（2026-09-23，不代表本次迁移验收）
 
 已通过独立临时 PostgreSQL 检查：
 
@@ -80,11 +89,11 @@ Application 编辑页的“PRT 真实联调”只执行当前 PRT 已发布版�
 
 Java 17 Maven 编译与测试源码编译通过；独立权限检查验证可信 operator 匹配、普通账号禁止创建及负责人不能提升账号角色。444 个 Java 文件的 `git diff --no-index --check` 无空白错误。
 
-真实Spring完整上下文现已启动通过；`RuntimeSkillPublicationPort`已有真实HTTP适配器，不是空实现。发布桥接复用现有Python资产校验和存储，不调用模型，独立验证进度以桥接说明为准。完整Java HTTP检查覆盖资产列表、请求作用域、PG会话、来源校验、SSE以及编辑页刷新；公网账号链路仍未验收。
+当时的 Spring 完整上下文和 HTTP 发布桥已通过隔离检查；这些记录属于已退役的桥接实现。当前 `RuntimeSkillPublicationPort` 使用 Java JDBC 适配器，需按本次直接发布回归单独验收。完整Java HTTP检查覆盖资产列表、请求作用域、PG会话、来源校验、SSE以及编辑页刷新；公网账号链路仍未验收。
 
 追加HTTP实测已通过：管理员创建Skill、手填并保存SKILL.md、不同请求重建文件树并逐字读回内容、普通用户创建得到明确权限拒绝。测试使用配置中的合成专员和临时数据库；不冒充真实业务联调。新建工作区不自动生成SKILL.md，保持手填模式。
 
-Skill、Capability 和 Application 现已通过真实 Java 管理 HTTP 请求发布到 Python 环境资产库；完整材料、依赖闭包、发布身份与字节摘要均留存。早期仅 Skill 桥接的验证记录不代表当前范围。Workflow 的发布到 Python Runtime 适配仍暂停，不能据此宣布四类资产全部打通。当前验证边界见 `RPC-CHAT.zh-CN.md`，发布存储机制见 `publication-bridge/VERIFICATION.md`。
+Skill、Capability 和 Application 现已通过真实 Java 管理 HTTP 请求发布到 Python 环境资产库；完整材料、依赖闭包、发布身份与字节摘要均留存。早期仅 Skill 桥接的验证记录不代表当前范围。Workflow 的发布到 Python Runtime 适配仍暂停，不能据此宣布四类资产全部打通。当前验证边界见 `RPC-CHAT.zh-CN.md`，当前回执表迁移见 `backend/storage/db/runtime-publication/V001__publication_receipts.sql`；该迁移需显式运行，服务启动不自动建表。
 
 新实例表结构迁移源码及隔离PG验证已完成：11张元数据表、2张共享资产表、版本校验记录、Workflow XML分页/CAS、MyBatis与JDBC共享事务回滚。没有对现有数据库执行迁移。
 
