@@ -1,5 +1,11 @@
 # A2Flow contributor instructions
 
+## 管理能力语言边界（2026-10-06）
+
+- M 资产管理、编排、编译和发布使用 Java；发布直接写入隔离的 PostgreSQL 运行材料库，不再依赖 Python publication-bridge。
+- 公共账号登录允许并保留 Python，独立 accounts Host 不提供资产 CRUD；B、Agent/Workflow 和业务执行运行态继续 Python。不能因为 M Python 退役而把登录或 B 运行态迁到 Java。
+- 旧 Python 管理入口已移除。保留实际被 Runtime 引用的 Skill 读取与资产校验，不根据 registry/composer 旧目录名整删。
+
 ## 运行时简化版本（2026-10-04 最新用户决定）
 
 - 运行时按请求中的可信 environment、userId 解析最新已发布资产；资产换版不要求卡片 RESET，也不把旧资产 revision 作为业务执行门槛。
