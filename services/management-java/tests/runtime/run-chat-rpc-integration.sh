@@ -8,9 +8,9 @@ umask 077
 export PATH="$JAVA_HOME/bin:$PATH"
 project_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 test_dir="$(mktemp -d "${TMPDIR:-/tmp}/a2flow-chat-integration.XXXXXX")"
-host_pid=""; bridge_pid=""; business_pid=""
+host_pid=""; business_pid=""
 cleanup() {
-  for process in "$host_pid" "$bridge_pid" "$business_pid"; do
+  for process in "$host_pid" "$business_pid"; do
     if [[ -n "$process" ]]; then kill "$process" 2>/dev/null || true; wait "$process" 2>/dev/null || true; fi
   done
   "$PG_BIN/pg_ctl" -D "$test_dir/data" -m fast stop >/dev/null 2>&1 || true
@@ -19,7 +19,7 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 0' TERM INT
 cd "$project_dir"
-for port in 56502 18890 18891 18892 18893 18894; do
+for port in 56502 18890 18891 18893 18894; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     printf '拒绝连接已有监听端口：%s\n' "$port"; exit 1
   fi
@@ -40,7 +40,7 @@ for database in chat_rpc_management chat_rpc_prt chat_rpc_online; do
   "$PG_BIN/createdb" -h 127.0.0.1 -p 56502 "$database"
 done
 export INTEGRATION_JAVA_ROOT="$project_dir"
-export PYTHONPATH="$project_dir/publication-bridge:$PYTHON_SOURCE:$PYTHON_SOURCE/packages/contracts/src:$PYTHON_SOURCE/packages/asset-store/src:$PYTHON_SOURCE/services/skill-registry/src:$PYTHON_SOURCE/services/capability-registry/src:$PYTHON_SOURCE/services/a2ui-composer/src:$PYTHON_SOURCE/services/management-api/src:$PYTHON_SOURCE/examples/activity-planning:$PYTHON_SOURCE/apps/agent-runtime/src"
+export PYTHONPATH="$PYTHON_SOURCE:$PYTHON_SOURCE/packages/contracts/src:$PYTHON_SOURCE/packages/asset-store/src:$PYTHON_SOURCE/services/skill-registry/src:$PYTHON_SOURCE/services/capability-registry/src:$PYTHON_SOURCE/services/a2ui-composer/src:$PYTHON_SOURCE/examples/activity-planning:$PYTHON_SOURCE/services/agent-workflow-runtime/src"
 export A2FLOW_MANAGEMENT_JDBC_URL=jdbc:postgresql://127.0.0.1:56502/chat_rpc_management
 export A2FLOW_MANAGEMENT_DB_USER="$(id -un)"
 export A2FLOW_MANAGEMENT_DB_PASSWORD=synthetic-isolated-db-only
@@ -58,14 +58,13 @@ export A2FLOW_RUNTIME_RPC_PORT=18893
 export A2FLOW_CAPABILITY_GRPC_TARGETS_JSON='{"integration-business":{"PRT":{"host":"127.0.0.1","port":18894,"loopbackPlaintext":true},"ONLINE":{"host":"127.0.0.1","port":18894,"loopbackPlaintext":true}}}'
 export M_FRESH_TEST_DB=1
 export B_WEB_DIR="$PYTHON_SOURCE/apps/digital-employee/web"
-"$PYTHON_BIN" publication-bridge/bridge.py > "$test_dir/bridge.log" 2>&1 & bridge_pid=$!
 java -cp "$test_dir/fixture-classes:$classpath" dev.a2flow.management.capabilityrpc.SyntheticBusinessGrpc 18894 "$RPC_DESCRIPTOR_FILE" > "$test_dir/business.log" 2>&1 & business_pid=$!
 java -cp "$classpath" dev.a2flow.management.host.ManagementApplication > "$test_dir/host.log" 2>&1 & host_pid=$!
 services_ready=false
 for ((attempt=0; attempt<150; attempt++)); do
-  if ! kill -0 "$host_pid" "$bridge_pid" "$business_pid" 2>/dev/null; then printf '进程启动失败，请查看隔离目录日志\n'; exit 1; fi
+  if ! kill -0 "$host_pid" "$business_pid" 2>/dev/null; then printf '进程启动失败，请查看隔离目录日志\n'; exit 1; fi
   if [[ -s "$RPC_DESCRIPTOR_FILE" ]] && curl --fail --silent --max-time 1 http://127.0.0.1:18890/management >/dev/null \
-      && lsof -nP -iTCP:18892 -sTCP:LISTEN >/dev/null 2>&1 && lsof -nP -iTCP:18893 -sTCP:LISTEN >/dev/null 2>&1; then services_ready=true; break; fi
+      && lsof -nP -iTCP:18893 -sTCP:LISTEN >/dev/null 2>&1; then services_ready=true; break; fi
   sleep 0.2
 done
 if [[ "$services_ready" != true ]]; then printf '服务就绪超时，拒绝进入作者态验收\n'; exit 1; fi

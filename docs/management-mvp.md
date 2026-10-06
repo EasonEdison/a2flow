@@ -1,5 +1,13 @@
 # Management console MVP / 管理台首版
 
+## Historical record / 历史记录
+
+This page records the September 2026 Python management MVP. Its CRUD host and publication bridge were retired in the October 6 Java management migration. The historical `apps/management` frontend remains in source, but is not the current management deployment. Test counts and browser results below apply only to their recorded commits.
+
+本文保留 2026 年 9 月 Python 管理台的历史验收；其 CRUD 服务和发布桥已在 10 月 6 日迁移中退役。当前管理端为 Java，发布直接写入环境资产库；账号登录仍可由独立 Python 服务提供。`apps/management` 历史前端保留，但不是当前部署入口。下文验证数量和浏览器结果只对应记载的旧提交，不能作为新链路验收。
+
+Current configuration: [Java management guide](../services/management-java/MANUAL-MODE.zh-CN.md). Runtime and migration boundaries: [Chat execution guide](../services/management-java/RPC-CHAT.zh-CN.md).
+
 ## Publication UI update / 发布界面更新
 
 AF12-B (UI candidate `8d1710c`, reviewed integration `ab32dbb`) connects retained-version browsing, explicitly confirmed publication and configuration rollback. Ordinary users remain read-only. Changing a draft or publication target invalidates its prepared candidate. Pending writes lock navigation and editing. Successful writes refresh history, detail and the asset list; a later refresh failure is distinguished from a failed write. Conflicts require manual refresh and review, never automatic retry.
@@ -53,6 +61,6 @@ After verification, all ten immutable version rows and ten serving rows had the 
 
 验证前后，10 条不可变版本记录及 10 条生效记录的汇总摘要完全一致。临时服务、数据库容器、socket、凭据和隧道均已清理，源码工作区保持干净。
 
-See [private Host setup](../deploy/management/README.md) and [asset version decisions](adr/0005-asset-versions-and-rollback.md). The preview authentication is deliberately private and is not a production identity-provider implementation.
+The old private Python Host setup was removed with the retired service. See the current Java management guide above and the historical [asset version decisions](adr/0005-asset-versions-and-rollback.md). The old preview authentication was limited to private verification.
 
-运行方式见以上链接。预览鉴权仅用于私有验证，不能替代生产身份系统。
+当前运行方式见页首 Java 管理端链接。旧预览鉴权仅用于私有验证。
