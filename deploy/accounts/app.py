@@ -8,16 +8,49 @@ import threading
 import time
 from urllib.parse import parse_qs
 
-from fastapi import Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from dataclasses import dataclass
+from typing import Any, Mapping, Protocol
+
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from a2flow_bside.auth import (
     hash_password, verify_password, new_session_token, hash_session_token,
 )
-from a2flow_management import ManagementError, TrustedManagementContext
-from .app import _headers, _IDENTITY_HEADERS, _UNSAFE_METHODS
+
+Scope = Mapping[str, Any]
+_IDENTITY_HEADERS = frozenset({b"x-a2flow-environment", b"x-a2flow-role",
+    b"x-a2flow-roles", b"x-a2flow-user-id", b"x-environment", b"x-role",
+    b"x-roles", b"x-user-id"})
+_UNSAFE_METHODS = frozenset({"DELETE", "PATCH", "POST", "PUT"})
+
+
+def _headers(scope: Scope, name: bytes) -> list[bytes]:
+    return [value for key, value in scope.get("headers", ()) if key.lower() == name]
+
+
+class AccountError(Exception):
+    def __init__(self, code: str, status: int) -> None:
+        super().__init__(code)
+        self.code, self.status = code, status
+
+
+@dataclass(frozen=True)
+class AccountIdentity:
+    user_id: int
+    environment: str
+    roles: frozenset[str]
+
+
+class Users(Protocol):
+    def find_by_username(self, username: str) -> dict[str, Any] | None: ...
+
+
+class Sessions(Protocol):
+    def find_identity(self, token_sha256: str, now: datetime) -> dict[str, Any] | None: ...
+    def create(self, *, token_sha256: str, user_id: int, expires_at: datetime) -> None: ...
+    def delete(self, token_sha256: str) -> None: ...
 
 _COOKIE = "a2flow_management_session"
 _SECONDS = 7200
@@ -27,7 +60,8 @@ _LOGOUT_PATHS = {"/logout", "/private-preview/logout"}
 
 
 class AccountAuthentication:
-    def __init__(self, *, users, sessions, pepper, environment, origins):
+    def __init__(self, *, users: Users, sessions: Sessions, pepper: str,
+                 environment: str, origins: list[str]) -> None:
         self.users = users
         self.sessions = sessions
         self.pepper = pepper
@@ -42,11 +76,11 @@ class AccountAuthentication:
         self._attempts = deque()
         self._lock = threading.Lock()
 
-    def reject_identity(self, scope):
+    def reject_identity(self, scope: Scope) -> None:
         if any(name.lower() in _IDENTITY_HEADERS for name, _ in scope.get("headers", ())):
-            raise ManagementError("CLIENT_IDENTITY_FIELDS_NOT_ALLOWED", 400)
+            raise AccountError("CLIENT_IDENTITY_FIELDS_NOT_ALLOWED", 400)
 
-    def origin_allowed(self, scope):
+    def origin_allowed(self, scope: Scope) -> bool:
         origins = _headers(scope, b"origin")
         if len(origins) != 1:
             return False
@@ -57,7 +91,7 @@ class AccountAuthentication:
         fetch_sites = _headers(scope, b"sec-fetch-site")
         return origin in self.origins and (not fetch_sites or fetch_sites == [b"same-origin"])
 
-    def _token(self, scope):
+    def _token(self, scope: Scope) -> str | None:
         cookies = _headers(scope, b"cookie")
         if len(cookies) != 1:
             return None
@@ -71,28 +105,28 @@ class AccountAuthentication:
         except (CookieError, KeyError, UnicodeDecodeError):
             return None
 
-    def identity(self, scope):
+    def identity(self, scope: Scope) -> AccountIdentity | None:
         self.reject_identity(scope)
         # This mode deliberately never authenticates Authorization headers.
         if _headers(scope, b"authorization"):
-            raise ManagementError("ACCOUNT_AUTHENTICATION_REQUIRED", 401)
+            raise AccountError("ACCOUNT_AUTHENTICATION_REQUIRED", 401)
         token = self._token(scope)
         if token is None:
             return None
         identity = self.sessions.find_identity(hash_session_token(token), datetime.now(timezone.utc))
         if not identity or identity["role"] not in {"ADMIN", "USER"}:
             return None
-        return TrustedManagementContext(identity["userId"], self.environment, frozenset({identity["role"]}))
+        return AccountIdentity(identity["userId"], self.environment, frozenset({identity["role"]}))
 
-    def __call__(self, scope):
+    def __call__(self, scope: Scope) -> AccountIdentity:
         principal = self.identity(scope)
         if principal is None:
-            raise ManagementError("ACCOUNT_AUTHENTICATION_REQUIRED", 401)
+            raise AccountError("ACCOUNT_AUTHENTICATION_REQUIRED", 401)
         if scope.get("method") in _UNSAFE_METHODS and not self.origin_allowed(scope):
-            raise ManagementError("ACCOUNT_ORIGIN_REQUIRED", 403)
+            raise AccountError("ACCOUNT_ORIGIN_REQUIRED", 403)
         return principal
 
-    def _admit(self, scope, username):
+    def _admit(self, scope: Scope, username: str) -> bool:
         # Bounded per-process limiter. Ignore untrusted forwarding headers.
         client = scope.get("client") or ("unknown", 0)
         address = client[0]
@@ -107,7 +141,7 @@ class AccountAuthentication:
             self._attempts.append((now, address, username))
             return True
 
-    def login(self, username, password, scope):
+    def login(self, username: str, password: str, scope: Scope) -> str | None:
         self.reject_identity(scope)
         if (_headers(scope, b"authorization") or not self.origin_allowed(scope)
                 or not self._admit(scope, username)):
@@ -122,20 +156,20 @@ class AccountAuthentication:
                              expires_at=datetime.now(timezone.utc) + timedelta(seconds=_SECONDS))
         return token
 
-    def set_cookie(self, response, token):
+    def set_cookie(self, response: Response, token: str) -> None:
         response.set_cookie(_COOKIE, token, max_age=_SECONDS, httponly=True,
                             secure=self.secure, samesite="strict", path="/")
 
-    def logout(self, scope):
+    def logout(self, scope: Scope) -> None:
         self(scope)
         self.sessions.delete(hash_session_token(self._token(scope)))
 
-    def delete_cookie(self, response):
+    def delete_cookie(self, response: Response) -> None:
         response.delete_cookie(_COOKIE, httponly=True, secure=self.secure,
                                samesite="strict", path="/")
 
 
-def login_page(status=200):
+def login_page(status: int = 200) -> HTMLResponse:
     message = "<p role='alert'>账号或密码错误，请稍后重试。</p>" if status != 200 else ""
     response = HTMLResponse(
         "<!doctype html><html lang='zh-CN'><meta charset='utf-8'>"
@@ -159,31 +193,29 @@ def login_page(status=200):
     return response
 
 
-def attach_account_browser(app, authentication, static_directory):
+def attach_account_browser(app: FastAPI, authentication: AccountAuthentication) -> None:
     @app.middleware("http")
-    async def protect(request, call_next):
+    async def protect(request: Request, call_next: Any) -> Response:
         try:
             authentication.reject_identity(request.scope)
-            path = request.url.path
-            if not (path.startswith("/management") or path in _LOGIN_PATHS | _LOGOUT_PATHS):
-                if not await run_in_threadpool(authentication.identity, request.scope):
-                    return RedirectResponse("/login", status_code=303)
+            if request.url.path not in _LOGIN_PATHS | _LOGOUT_PATHS:
+                return JSONResponse({"error": {"code": "NOT_FOUND"}}, status_code=404)
             response = await call_next(request)
             response.headers["Cache-Control"] = "no-store"
             return response
-        except ManagementError as error:
+        except AccountError as error:
             return JSONResponse({"error": {"code": error.code}}, status_code=error.status)
 
     @app.get("/private-preview/login")
     @app.get("/login")
-    async def get_login(request: Request):
+    async def get_login(request: Request) -> Response:
         if await run_in_threadpool(authentication.identity, request.scope):
             return RedirectResponse("/", status_code=303)
         return login_page()
 
     @app.post("/private-preview/login")
     @app.post("/login")
-    async def post_login(request: Request):
+    async def post_login(request: Request) -> Response:
         if (request.headers.get("content-type", "").split(";", 1)[0] != "application/x-www-form-urlencoded"
                 or not authentication.origin_allowed(request.scope)):
             return login_page(401)
@@ -211,10 +243,48 @@ def attach_account_browser(app, authentication, static_directory):
 
     @app.post("/private-preview/logout")
     @app.post("/logout")
-    async def logout(request: Request):
+    async def logout(request: Request) -> Response:
         await run_in_threadpool(authentication.logout, request.scope)
         response = RedirectResponse("/login", status_code=303)
         authentication.delete_cookie(response)
         return response
 
-    app.mount("/", StaticFiles(directory=static_directory, html=True), name="management-ui")
+def create_app(authentication: AccountAuthentication) -> FastAPI:
+    """Expose only account browser endpoints; no assets, static UI or M CRUD."""
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    attach_account_browser(app, authentication)
+    return app
+
+
+def create_app_from_environment() -> FastAPI:
+    import psycopg
+    from psycopg.rows import dict_row
+    from psycopg.conninfo import make_conninfo
+    from urllib.parse import urlsplit
+    from a2flow_bside.repositories import UsersRepository, SessionsRepository
+    from deploy.common.config import _required, _secret
+
+    environment = _required("A2FLOW_ENVIRONMENT")
+    if environment not in {"PRT", "ONLINE"}:
+        raise RuntimeError("INVALID_ACCOUNT_ENVIRONMENT")
+    origins = [value.strip() for value in _required("A2FLOW_MANAGEMENT_BROWSER_ORIGINS").split(",")]
+    for origin in origins:
+        url = urlsplit(origin)
+        if (url.scheme not in {"http", "https"} or not url.hostname or url.username
+                or url.password or url.path or url.query or url.fragment):
+            raise RuntimeError("INVALID_ACCOUNT_BROWSER_ORIGIN")
+    dsn = make_conninfo(host="/run/postgresql", dbname=_required("A2FLOW_DATABASE_NAME"),
+                        user=_required("A2FLOW_DATABASE_USER"),
+                        password=_secret("A2FLOW_POSTGRES_PASSWORD_FILE"))
+
+    def connection() -> psycopg.Connection:
+        return psycopg.connect(dsn, row_factory=dict_row)
+
+    pepper = _secret("A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE")
+    if len(pepper) < 32:
+        raise RuntimeError("SECRET_FILE_INVALID:A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE")
+    authentication = AccountAuthentication(users=UsersRepository(connection),
+        sessions=SessionsRepository(connection),
+        pepper=pepper,
+        environment=environment, origins=origins)
+    return create_app(authentication)
