@@ -27,13 +27,14 @@ services:
       - ${A2FLOW_DEPLOY_PRIVATE}/rpc/server-key.pem:/run/a2flow/rpc/server-key.pem:ro
       - ${A2FLOW_DEPLOY_PRIVATE}/rpc/ca.pem:/run/a2flow/rpc/ca.pem:ro
     command: [java, -Xms32m, -Xmx256m, -XX:MaxMetaspaceSize=192m, -cp, "/opt/management/classes:/opt/management/dependency/*", dev.a2flow.management.host.ManagementApplication]
-  publication:
+  accounts:
     <<: *private
     image: ${A2FLOW_PYTHON_IMAGE:?set reviewed Python image}
-    env_file: ["${A2FLOW_DEPLOY_PRIVATE}/publication.env"]
+    env_file: ["${A2FLOW_DEPLOY_PRIVATE}/accounts.env"]
     volumes:
       - postgres_socket:/run/postgresql
-    entrypoint: [sh, -c, 'export PYTHONPATH="/opt/a2flow:$$PYTHONPATH"; exec python /opt/a2flow/services/management-java/publication-bridge/bridge.py']
+      - ${A2FLOW_EXISTING_SECRETS:?set existing account secrets directory}:/run/secrets:ro
+    entrypoint: [python, -m, deploy.accounts.launcher]
   bside:
     <<: *private
     image: ${A2FLOW_PYTHON_IMAGE}

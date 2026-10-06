@@ -36,7 +36,7 @@ def prepare(directory: Path, origin: str) -> None:
     password = Path("/run/secrets/app_postgres_password").read_text().strip()
     connection = make_conninfo(host="/run/postgresql", user="a2flow_realchat",
                               dbname="postgres", password=password)
-    management_password, account_password, bridge_token = (secrets.token_urlsafe(32) for _ in range(3))
+    management_password, account_password = (secrets.token_urlsafe(32) for _ in range(2))
     with psycopg.connect(connection, autocommit=True) as database:
         if database.execute("SELECT 1 FROM pg_database WHERE datname='a2flow_java_management'").fetchone():
             raise ValueError("MANAGEMENT_DATABASE_ALREADY_EXISTS")
@@ -55,7 +55,7 @@ def prepare(directory: Path, origin: str) -> None:
         database.execute("GRANT USAGE ON SCHEMA public TO a2flow_java_accounts")
         database.execute("GRANT SELECT ON public.users, public.sessions TO a2flow_java_accounts")
     jdbc_suffix = "?socketFactory=org.newsclub.net.unix.AFUNIXSocketFactory%24FactoryArg&socketFactoryArg=/run/postgresql/.s.PGSQL.5432&sslmode=disable"
-    env_file(directory / "java.env", {
+    java = {
         "A2FLOW_ENVIRONMENT": "PRT", "A2FLOW_MANAGEMENT_NAMESPACE": "a2flow-management",
         "A2FLOW_MANAGEMENT_JDBC_URL": "jdbc:postgresql://localhost/a2flow_java_management" + jdbc_suffix,
         "A2FLOW_MANAGEMENT_DB_USER": "a2flow_java_owner", "A2FLOW_MANAGEMENT_DB_PASSWORD": management_password,
@@ -65,21 +65,28 @@ def prepare(directory: Path, origin: str) -> None:
         "A2FLOW_ACCOUNT_DB_POOL_SIZE": "2", "A2FLOW_MANAGEMENT_CONFIG": "/run/a2flow/management.json",
         "A2FLOW_MANAGEMENT_PORT": "8790", "A2FLOW_MANAGEMENT_STATIC_DIR": "/opt/management-static",
         "A2FLOW_MANAGEMENT_BROWSER_ORIGINS": origin, "A2FLOW_ACCOUNT_LOGIN_ORIGIN": "http://127.0.0.1:8780",
-        "A2FLOW_PUBLICATION_BRIDGE_URL": "http://127.0.0.1:8792", "A2FLOW_PUBLICATION_BRIDGE_TOKEN": bridge_token,
         "A2FLOW_RUNTIME_RPC_MODE": "MTLS", "A2FLOW_RUNTIME_RPC_PORT": "8793",
         "A2FLOW_RUNTIME_RPC_CERT_FILE": "/run/a2flow/rpc/server.pem",
         "A2FLOW_RUNTIME_RPC_KEY_FILE": "/run/a2flow/rpc/server-key.pem",
         "A2FLOW_RUNTIME_RPC_ENGINE_CA_FILE": "/run/a2flow/rpc/ca.pem",
         "A2FLOW_CAPABILITY_GRPC_TARGETS_JSON": "{}",
-    })
-    publication = {"A2FLOW_PUBLICATION_VALIDATOR_FACTORY": "deploy.assets:bundle_validator",
-                   "A2FLOW_PUBLICATION_BRIDGE_PORT": "8792", "A2FLOW_PUBLICATION_BRIDGE_TOKEN": bridge_token}
+    }
     for environment in ("PRT", "ONLINE"):
         name = "a2flow_realchat_" + environment.lower()
-        publication.update({f"A2FLOW_PUBLICATION_{environment}_DATABASE": name,
-                            f"A2FLOW_PUBLICATION_{environment}_DSN": make_conninfo(connection, dbname=name),
-                            f"A2FLOW_PUBLICATION_{environment}_NAMESPACE": "a2flow-mvp-activity-planning"})
-    env_file(directory / "publication.env", publication)
+        java.update({f"A2FLOW_PUBLICATION_{environment}_DATABASE": name,
+                     f"A2FLOW_PUBLICATION_{environment}_JDBC_URL": "jdbc:postgresql://localhost/" + name + jdbc_suffix,
+                     f"A2FLOW_PUBLICATION_{environment}_USER": "a2flow_realchat",
+                     f"A2FLOW_PUBLICATION_{environment}_PASSWORD": password,
+                     f"A2FLOW_PUBLICATION_{environment}_NAMESPACE": "a2flow-mvp-activity-planning"})
+    env_file(directory / "java.env", java)
+    env_file(directory / "accounts.env", {
+        "A2FLOW_ENVIRONMENT": "PRT", "A2FLOW_DATABASE_NAME": "a2flow_realchat_prt",
+        "A2FLOW_DATABASE_USER": "a2flow_realchat",
+        "A2FLOW_POSTGRES_PASSWORD_FILE": "/run/secrets/app_postgres_password",
+        "A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE": "/run/secrets/pepper",
+        "A2FLOW_MANAGEMENT_BROWSER_ORIGINS": origin,
+        "A2FLOW_LISTEN_PORT": "8780",
+    })
     env_file(directory / "bside.env", {
         "A2FLOW_ENVIRONMENT": "PRT", "A2FLOW_DATABASE_NAME": "a2flow_realchat_prt",
         "A2FLOW_DATABASE_USER": "a2flow_realchat", "A2FLOW_POSTGRES_PASSWORD_FILE": "/run/secrets/app_postgres_password",
