@@ -9,17 +9,18 @@ import time
 from urllib.parse import parse_qs
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol, TypedDict
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.types import Scope
 
 from a2flow_bside.auth import (
     hash_password, verify_password, new_session_token, hash_session_token,
 )
 
-Scope = Mapping[str, Any]
 _IDENTITY_HEADERS = frozenset({b"x-a2flow-environment", b"x-a2flow-role",
     b"x-a2flow-roles", b"x-a2flow-user-id", b"x-environment", b"x-role",
     b"x-roles", b"x-user-id"})
@@ -43,12 +44,23 @@ class AccountIdentity:
     roles: frozenset[str]
 
 
+class AccountUserRow(TypedDict):
+    user_id: int
+    role: str
+    password_hash: str
+
+
+class AccountSessionIdentity(TypedDict):
+    userId: int
+    role: str
+
+
 class Users(Protocol):
-    def find_by_username(self, username: str) -> dict[str, Any] | None: ...
+    def find_by_username(self, username: str) -> AccountUserRow | None: ...
 
 
 class Sessions(Protocol):
-    def find_identity(self, token_sha256: str, now: datetime) -> dict[str, Any] | None: ...
+    def find_identity(self, token_sha256: str, now: datetime) -> AccountSessionIdentity | None: ...
     def create(self, *, token_sha256: str, user_id: int, expires_at: datetime) -> None: ...
     def delete(self, token_sha256: str) -> None: ...
 
@@ -73,7 +85,7 @@ class AccountAuthentication:
             raise RuntimeError("MIXED_MANAGEMENT_BROWSER_ORIGIN_SCHEMES")
         self.secure = all(origin.startswith("https://") for origin in origins)
         self._dummy_hash = hash_password(secrets.token_urlsafe(32), pepper=pepper)
-        self._attempts = deque()
+        self._attempts: deque[tuple[float, str, str]] = deque()
         self._lock = threading.Lock()
 
     def reject_identity(self, scope: Scope) -> None:
@@ -195,7 +207,7 @@ def login_page(status: int = 200) -> HTMLResponse:
 
 def attach_account_browser(app: FastAPI, authentication: AccountAuthentication) -> None:
     @app.middleware("http")
-    async def protect(request: Request, call_next: Any) -> Response:
+    async def protect(request: Request, call_next: RequestResponseEndpoint) -> Response:
         try:
             authentication.reject_identity(request.scope)
             if request.url.path not in _LOGIN_PATHS | _LOGOUT_PATHS:
@@ -277,7 +289,7 @@ def create_app_from_environment() -> FastAPI:
                         user=_required("A2FLOW_DATABASE_USER"),
                         password=_secret("A2FLOW_POSTGRES_PASSWORD_FILE"))
 
-    def connection() -> psycopg.Connection:
+    def connection() -> psycopg.Connection[dict[str, Any]]:
         return psycopg.connect(dsn, row_factory=dict_row)
 
     pepper = _secret("A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE")
