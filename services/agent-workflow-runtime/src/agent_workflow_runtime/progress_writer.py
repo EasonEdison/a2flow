@@ -30,6 +30,8 @@ FIELDS = {
     "TOOL_RETURNED": {"toolOperationId", "toolName"},
     "TOOL_INTERRUPTED": {"toolOperationId", "toolName"},
     "TOOL_UNCONFIRMED": {"toolOperationId", "toolName"},
+    "TOOL_DETAIL": {"toolOperationId", "toolName", "toolCallId", "detailKind",
+                    "chunkIndex", "chunkCount", "text"},
     "NODE_STARTED": {"nodeOperationId"}, "NODE_RETURNED": {"nodeOperationId"},
     "NODE_INTERRUPTED": {"nodeOperationId"}, "NODE_UNCONFIRMED": {"nodeOperationId"},
     "CAPTURE_INCOMPLETE": {"code"},
@@ -190,6 +192,8 @@ class ProgressWriter:
                 if text is not None:
                     body["text"] = text
                 text_size = len(text.encode("utf-8")) if text is not None else 0
+                if kind == "TOOL_DETAIL":
+                    text_size = len(body["text"].encode("utf-8"))
                 now = monotonic()
                 record = {"kind": kind, "observedAt": datetime.now(timezone.utc).isoformat(),
                           "payload": body}

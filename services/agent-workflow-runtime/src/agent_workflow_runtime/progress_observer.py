@@ -1,14 +1,19 @@
 """Public SDK observation hooks; no persistence/control decisions in callbacks."""
 
+from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from uuid import uuid4
 
 from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.types import ToolCallRequest
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.messages import ToolMessage
+from langgraph.types import Command
 
 from .deepseek_model import DeepSeekChat
+from .progress_tool_details import emit_tool_arguments, emit_tool_result
 from .models import ActionRejected
 from .service import require_owner
 
@@ -127,7 +132,10 @@ class ProgressMiddleware(AgentMiddleware):
             finally:
                 _VISIBLE_MODEL.reset(token)
 
-    def wrap_tool_call(self, request, handler):
+    def wrap_tool_call(
+        self, request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
         with self._capture():
             scope = _SCOPE.get()
             if scope is None:
@@ -135,6 +143,7 @@ class ProgressMiddleware(AgentMiddleware):
             operation = uuid4().hex
             payload = {"toolOperationId": operation, "toolName": request.tool_call["name"]}
             scope.emit("TOOL_STARTED", payload)
+            emit_tool_arguments(scope, operation, request.tool_call)
             try:
                 result = handler(request)
             except BaseException as error:
@@ -142,6 +151,31 @@ class ProgressMiddleware(AgentMiddleware):
                 scope.emit("TOOL_INTERRUPTED" if isinstance(error, GraphInterrupt)
                            else "TOOL_UNCONFIRMED", payload)
                 raise
+            emit_tool_result(scope, operation, request.tool_call, result)
+            scope.emit("TOOL_RETURNED", payload)
+            return result
+
+    async def awrap_tool_call(
+        self, request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        """Observe the same boundary for native asynchronous tool execution."""
+        with self._capture():
+            scope = _SCOPE.get()
+            if scope is None:
+                return await handler(request)
+            operation = uuid4().hex
+            payload = {"toolOperationId": operation, "toolName": request.tool_call["name"]}
+            scope.emit("TOOL_STARTED", payload)
+            emit_tool_arguments(scope, operation, request.tool_call)
+            try:
+                result = await handler(request)
+            except BaseException as error:
+                from langgraph.errors import GraphInterrupt
+                scope.emit("TOOL_INTERRUPTED" if isinstance(error, GraphInterrupt)
+                           else "TOOL_UNCONFIRMED", payload)
+                raise
+            emit_tool_result(scope, operation, request.tool_call, result)
             scope.emit("TOOL_RETURNED", payload)
             return result
 
