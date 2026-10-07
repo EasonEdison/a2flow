@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { statusLabels, terminal, type InteractiveCard, type NodeView } from '../presentation';
 import { ApplicationCard, DisplayApplicationCard } from './ApplicationCard';
@@ -11,12 +11,14 @@ export function NodeCard({
   busy,
   onAction,
   onHistory,
+  children,
 }: {
   node: NodeView;
   index: number;
   busy: boolean;
   onAction: (card: InteractiveCard, value: string) => Promise<void>;
   onHistory: () => Promise<void>;
+  children?: ReactNode;
 }) {
   const [disclosure, setDisclosure] = useState<{ status: string; open: boolean } | null>(
     null,
@@ -103,6 +105,7 @@ export function NodeCard({
           onSubmit={(value) => onAction(waitingInteractive, value)}
         />
       ) : null}
+      {children}
 
       {hasResult ? (
         <section className="result">
