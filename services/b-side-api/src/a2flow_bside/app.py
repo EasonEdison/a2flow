@@ -40,6 +40,25 @@ _USERNAME = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
+def _query_allowed(request: Request) -> bool:
+    """Allow only declared GET query fields; identity checks still run in each route."""
+    if request.method != "GET":
+        return False
+    path = request.url.path
+    if re.fullmatch(r"/api/internal/runs/[^/]+/cards/[^/]+/resume-status", path):
+        allowed = {"userId", "environment", "nodeId", "interactionId",
+                   "requestId", "actionRequestId"}
+    elif (re.fullmatch(r"/api/runs/[^/]+/progress", path)
+          or re.fullmatch(
+              r"/api/runs/[^/]+/nodes/[^/]+/executions/[^/]+/(history|stream)", path)):
+        allowed = {"after", "limit"}
+    else:
+        return False
+    pairs = request.query_params.multi_items()
+    keys = [key for key, _ in pairs]
+    return len(keys) == len(set(keys)) and set(keys) <= allowed
+
+
 class MemoryEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
@@ -280,7 +299,7 @@ def create_app(
         if request.url.path.startswith("/api"):
             internal = request.url.path.startswith("/api/internal/")
             try:
-                if request.query_params:
+                if request.query_params and not _query_allowed(request):
                     raise BsideError("QUERY_PARAMETERS_NOT_ALLOWED", 400)
                 lowered = {name.lower() for name in request.headers.keys()}
                 if lowered & {
