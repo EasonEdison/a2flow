@@ -554,6 +554,8 @@ class ChatCardStore:
                 card["display"], card["binding_metadata"] = display, metadata
             card["status"] = ("COMPLETED" if business_success and completes
                               else waiting_status)
+            if card["status"] == "COMPLETED" and "workflow" in card["binding_metadata"]:
+                card["binding_metadata"]["workflowCompletionRequestId"] = request_id
             card["revision"] += 1
             card["result"], card["has_result"] = result, True
             card["active_request_id"] = None

@@ -30,3 +30,15 @@ Integration requires scheduler owner ResumeWorkflow with user_id/environment/car
 PostgresOutbox on the existing card database, and scheduler_outbox schema migration.
 Image needs scheduler-mq src/dependencies and current B-side RPC certs/environment.
 Root owns integration, public delivery and deployment.
+
+Review corrections:
+- Resume requestId identifies the queue control; actionRequestId identifies the
+  persisted terminal Action. Card metadata records that terminal Action ID.
+- GET /runtime/runs/{runId}/cards/{cardId}/resume-status verifies node/card/control
+  identity. Only delivery RETURNED confirms native invocation delivery.
+  resumeConsumed alone is an internal Tool admission fact, not checkpoint proof.
+  DISPATCHING and UNCONFIRMED are never automatically invoked again.
+- RunRecord, RunLifecycle, TrustedContext, typed host options and response DTOs
+  replace untyped fixed control inputs. Arbitrary JSON remains at business boundaries.
+- Bounded probes passed split request IDs, historical paging rejection, exact
+  resume-status semantics and uncertain-delivery no-replay.

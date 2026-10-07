@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from collections.abc import Iterator
 from dataclasses import replace
 from hashlib import sha256
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command, interrupt
@@ -32,6 +32,12 @@ from .rpc_assets import RpcAssetReader
 
 def card_scope(run_id: str, node_id: str) -> str:
     return "workflow:" + sha256(json.dumps([run_id, node_id]).encode()).hexdigest()
+
+
+class ResumeStatus(TypedDict):
+    runId: str
+    delivery: Literal["NOT_REQUESTED", "DISPATCHING", "UNCONFIRMED", "RETURNED"]
+    resumeConsumed: bool
 
 
 class WorkflowCard(TypedDict):
@@ -80,8 +86,9 @@ class WorkflowAssets(RpcChatAssets):
     def _registry_context(self) -> RegistryContext:
         return RegistryContext(
             contract_revision=CONTRACT_REVISION,
-            trusted_context=RegistryOwner(user_id=self.owner.user_id,
-                                          environment=self.owner.environment),
+            trusted_context=RegistryOwner(
+                user_id=self.owner.user_id, environment=self.owner.environment
+            ),
             invocation_scope=RegistryScope(
                 kind="WORKFLOW",
                 conversation_id=None,
@@ -242,7 +249,14 @@ class WorkflowActions(ActionService):
             self.lifecycle.finish(self.run.owner, self.run.run_id, operation.operation_id, response)
         return response
 
-    def resume_card(self, node_id: str, interaction_id: str, card_id: str, request_id: str) -> None:
+    def resume_card(
+        self,
+        node_id: str,
+        interaction_id: str,
+        card_id: str,
+        request_id: str,
+        action_request_id: str,
+    ) -> None:
         binding = self.binding(node_id, interaction_id, card_id)
         scope = card_scope(self.run.run_id, node_id)
         facts = _read_observations(
@@ -256,10 +270,13 @@ class WorkflowActions(ActionService):
         matches = [
             fact
             for fact in facts
-            if fact.kind == "ACTION" and fact.card_id == card_id and fact.request_id == request_id
+            if fact.kind == "ACTION"
+            and fact.card_id == card_id
+            and fact.request_id == action_request_id
         ]
         if (
             binding["card"]["status"] != "COMPLETED"
+            or binding["metadata"].get("workflowCompletionRequestId") != action_request_id
             or len(matches) != 1
             or matches[0].status != "SUCCEEDED"
             or matches[0].business_success is not True
@@ -269,11 +286,18 @@ class WorkflowActions(ActionService):
         key = (self.run.run_id, node_id, interaction_id)
         with self.repository.scope(self.run.owner, self.run.run_id):
             saved = self._get(key, self.run.owner)
-            if saved.resume_consumed:
-                return
-            self._active(saved, self.run.owner)
             if saved.resume_started:
+                if saved.completion_request_id != request_id:
+                    raise ActionRejected("CONTROL_REQUEST_CONFLICT")
+                prior = [
+                    attempt
+                    for attempt in saved.attempts
+                    if attempt.request.control_request_id == request_id
+                ]
+                if len(prior) == 1 and prior[0].resume_status == "RETURNED":
+                    return
                 raise ActionRejected("RESUME_UNCONFIRMED")
+            self._active(saved, self.run.owner)
             request = ActionRequest(
                 self.run.run_id,
                 node_id,
@@ -306,6 +330,43 @@ class WorkflowActions(ActionService):
                 self._delivery_status(request, "UNCONFIRMED", self.run.owner)
                 raise
             self._delivery_status(request, "RETURNED", self.run.owner)
+
+    def resume_status(
+        self,
+        node_id: str,
+        interaction_id: str,
+        card_id: str,
+        request_id: str,
+        action_request_id: str,
+    ) -> ResumeStatus:
+        binding = self.binding(node_id, interaction_id, card_id)
+        if (
+            binding["card"]["status"] != "COMPLETED"
+            or binding["metadata"].get("workflowCompletionRequestId") != action_request_id
+        ):
+            raise ActionRejected("INTERACTION_NOT_COMPLETED")
+        key = (self.run.run_id, node_id, interaction_id)
+        with self.repository.scope(self.run.owner, self.run.run_id):
+            saved = self._get(key, self.run.owner)
+        if not saved.resume_started:
+            return {"runId": self.run.run_id, "delivery": "NOT_REQUESTED", "resumeConsumed": False}
+        if saved.completion_request_id != request_id:
+            raise ActionRejected("CONTROL_REQUEST_CONFLICT")
+        attempts = [
+            attempt
+            for attempt in saved.attempts
+            if attempt.request.control_request_id == request_id
+        ]
+        if len(attempts) != 1:
+            raise ActionRejected("RESUME_FACT_UNAVAILABLE")
+        status = attempts[0].resume_status
+        if status not in {"DISPATCHING", "UNCONFIRMED", "RETURNED"}:
+            raise ActionRejected("RESUME_FACT_UNAVAILABLE")
+        return {
+            "runId": self.run.run_id,
+            "delivery": cast(Literal["DISPATCHING", "UNCONFIRMED", "RETURNED"], status),
+            "resumeConsumed": saved.resume_consumed,
+        }
 
     def render(
         self, assets: WorkflowAssets, app_code: str, params: dict[str, Any], tool_call_id: str
