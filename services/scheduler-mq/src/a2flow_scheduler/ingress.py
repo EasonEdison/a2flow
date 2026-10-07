@@ -111,7 +111,7 @@ class BsideCommandClient:
                 )
                 if status.runId != command.run_id:
                     raise ValueError("RESUME_STATUS_RUN_ID_MISMATCH")
-                if status.delivery == "RETURNED" or status.resumeConsumed:
+                if status.delivery == "RETURNED":
                     return Admission(controlRequestId=command.message_id, status="SUBMITTED")
                 return None
             return self._read(urllib.request.Request(self.base_url + path))
