@@ -42,3 +42,16 @@ Review corrections:
   replace untyped fixed control inputs. Arbitrary JSON remains at business boundaries.
 - Bounded probes passed split request IDs, historical paging rejection, exact
   resume-status semantics and uncertain-delivery no-replay.
+
+## 公网恢复记录校验修复（2026-10-07）
+
+- 基线：origin/main 045f77a。现象为业务卡片已完成，但原生节点仍等待、恢复消息状态未知。
+- 原因：恢复代码直接构造 ActionRequest，自行生成 inputs_json；存储层用
+  ActionRequest.from_mapping 进行规范化回读，两者格式不一致而拒绝写入。
+  实际错误为 INVALID_STORED_RECORD，发生在原生恢复派发之前。
+- 最小修复：统一通过现有 ActionRequest.from_mapping 创建请求，不改 Action、
+  业务入参、完成判定、幂等边界或消息投递策略。
+- 证据：只读读取真实操作记录，在内存重建后验证原实现 encode 失败；
+  规范化请求 encode 成功。未写数据库，未重发 Action 或 resume，未调用模型。
+- 旧验收运行与 UNKNOWN 证据由主线程保留；本线程只交付源码，部署与新 Cron
+  完整回归由主线程执行。

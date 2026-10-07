@@ -298,13 +298,15 @@ class WorkflowActions(ActionService):
                     return
                 raise ActionRejected("RESUME_UNCONFIRMED")
             self._active(saved, self.run.owner)
-            request = ActionRequest(
-                self.run.run_id,
-                node_id,
-                interaction_id,
-                fact.action_name or "",
-                request_id,
-                json.dumps(fact.arguments or {}, ensure_ascii=False),
+            request = ActionRequest.from_mapping(
+                {
+                    "runId": self.run.run_id,
+                    "nodeId": node_id,
+                    "interactionId": interaction_id,
+                    "actionName": fact.action_name or "",
+                    "controlRequestId": request_id,
+                    "inputs": fact.arguments or {},
+                }
             )
             attempt = Attempt(
                 request,
