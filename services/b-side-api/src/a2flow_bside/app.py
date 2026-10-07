@@ -565,6 +565,11 @@ def create_app(
                 "Runtime start failed category=%s control_id=%s",
                 type(start_error).__name__, control_id,
             )
+            if (
+                not isinstance(start_error, RemoteRuntimeError)
+                or start_error.code != "RUNTIME_UNREACHABLE"
+            ):
+                raise
             # A failed HTTP response does not prove failed admission. Read the
             # same durable control once; never submit the business start again.
             try:
