@@ -40,6 +40,12 @@ B 镜像 `cron-streams-493888d`；Runtime `cron-streams-32d57fe`；Scheduler `cr
 
 一次实测 Redis RSS 约 8 MiB、消费者约 37 MiB；服务器 available 在本轮 508–598 MiB 间波动。不是固定容量保证。
 
-## 未通过门禁
+## 浏览器门禁及收口
 
 第一轮浏览器曾显示真实阅读卡片、选择及输入保留；最终版本尚未完成浏览器点击、刷新与视觉验收。旧标签停止确认后浏览器输入失效，新标签同样无点击效果，无 console 错误；已请求用户解除工具阻塞。HTTP/源码通过不代表此项通过。
+
+2026-10-07 后续复验：新验收标签正常登录，工作流中心的我的运行显示一个已完成、两个已停止。打开上述已完成运行，三个节点与三张真实卡片均可见。阅读选择 rp-2/rp-3、补充意见、选题和稿件内容保留；确认按钮及输入框 isEnabled=false。历史过程展开包含 use_skill、execute_ability、query_skill_dependencies、render_application 的实际记录。三个节点结果收起后 aria-expanded 均为 false，卡片本身也可折叠。
+
+刷新页面后，从通知中心的“工作流已完成 2026/10/7 13:11:26”再次进入同一完成运行，三节点、选择和内容恢复；页面刷新回到对话入口，未声称保留 Workflow 导航位置。定时管理显示 * * * * * / Asia/Shanghai / 已停用。此次只读取已有运行，未再次启动模型、提交 Action 或启用 Cron。浏览器 warn/error 记录为空。
+
+截图：本地 /tmp/a2flow-cron-browser-accepted-20261007.png。本次范围 READY；不代表手机端、全站回归或最终运行三次 Action 均经 UI 点击。后续展示优化：摘要中英文混排，未导出稿件的提示措辞仍可改进。
