@@ -288,6 +288,11 @@ export function recordLine(execution: string, record: ProgressRecord): RecordLin
   };
   return {
     id: execution + ':' + record.seq,
+    eventKind: record.kind,
+    observedAt: record.observedAt,
+    operationId: typeof payload.toolOperationId === 'string'
+      ? payload.toolOperationId
+      : typeof payload.nodeOperationId === 'string' ? payload.nodeOperationId : undefined,
     kind:
       record.kind === 'REASONING_DELTA'
         ? 'reasoning'

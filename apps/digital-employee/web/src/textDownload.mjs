@@ -19,6 +19,9 @@ export function validateTextDownload({ filename, mediaType, content }) {
 }
 
 export function textDownloadError(payload, isValid, validationErrors = []) {
+  if (typeof payload.content === 'string' && payload.content.length === 0) {
+    return '尚未生成下载内容';
+  }
   if (isValid === false) return validationErrors[0] || '请先保存当前修改';
   return validateTextDownload(payload);
 }

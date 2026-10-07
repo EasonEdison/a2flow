@@ -13,6 +13,9 @@ export type RecordLine = {
   id: string;
   kind: 'reasoning' | 'text' | 'operation' | 'notice';
   text: string;
+  eventKind?: string;
+  observedAt?: string;
+  operationId?: string;
 };
 
 export type Choice = {

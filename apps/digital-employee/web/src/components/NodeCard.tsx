@@ -4,6 +4,7 @@ import { statusLabels, terminal, type InteractiveCard, type NodeView } from '../
 import { ApplicationCard, DisplayApplicationCard } from './ApplicationCard';
 import { Icon } from './Icon';
 import { MarkdownContent } from './MarkdownContent';
+import { nodeSummary } from '../nodeSummary';
 
 export function NodeCard({
   node,
@@ -50,7 +51,7 @@ export function NodeCard({
         </span>
         <div className="node-title">
           <h2>{node.title}</h2>
-          {node.summary ? <p>{node.summary}</p> : null}
+          <p>{nodeSummary(node)}</p>
         </div>
         <span className={'badge ' + node.status.toLowerCase()}>
           {statusLabels[node.status]}
