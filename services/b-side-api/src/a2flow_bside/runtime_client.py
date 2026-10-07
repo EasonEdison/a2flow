@@ -40,6 +40,16 @@ class RuntimeClient(Protocol):
 
     def view(self, run_id: str) -> dict: ...
 
+    def cards(self, run_id: str) -> dict[str, object]: ...
+
+    def card_action(
+        self, run_id: str, card_id: str, payload: dict[str, object],
+    ) -> dict[str, object]: ...
+
+    def resume_card(
+        self, run_id: str, card_id: str, payload: dict[str, object],
+    ) -> dict[str, object]: ...
+
     def action_stream(self, run_id: str, node_id: str,
                       payload: dict) -> "object": ...
 
@@ -109,6 +119,27 @@ class HttpRuntimeClient:
     def view(self, run_id: str) -> dict:
         quoted = urllib.parse.quote(run_id, safe="")
         return self._request("GET", "/runtime/runs/" + quoted + "/view")
+
+    def cards(self, run_id: str) -> dict[str, object]:
+        return self._request(
+            "GET", "/runtime/runs/" + urllib.parse.quote(run_id, safe="") + "/cards",
+        )
+
+    def card_action(
+        self, run_id: str, card_id: str, payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._request(
+            "POST", "/runtime/runs/" + urllib.parse.quote(run_id, safe="")
+            + "/cards/" + urllib.parse.quote(card_id, safe="") + "/actions", payload,
+        )
+
+    def resume_card(
+        self, run_id: str, card_id: str, payload: dict[str, object],
+    ) -> dict[str, object]:
+        return self._request(
+            "POST", "/runtime/runs/" + urllib.parse.quote(run_id, safe="")
+            + "/cards/" + urllib.parse.quote(card_id, safe="") + "/resume", payload,
+        )
 
     def action_stream(self, run_id: str, node_id: str, payload: dict):
         """POST the action and yield the runtime SSE chunks verbatim."""

@@ -13,7 +13,7 @@ import re
 import threading
 import uuid
 from contextlib import asynccontextmanager
-from typing import Callable
+from typing import Callable, Literal
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -81,13 +81,16 @@ class RunRefCreate(BaseModel):
 
 
 class InternalRunStart(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    requestId: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
+    environment: str = Field(pattern=r"^(PRT|ONLINE)$")
     userId: int
     workflowKey: str = Field(min_length=1, max_length=256)
     input: dict[str, object] | str
 
     @field_validator("userId", mode="before")
     @classmethod
-    def parse_user_id(cls, value):
+    def parse_user_id(cls, value: object) -> int:
         return user_id_from_wire(value)
 
 
@@ -105,18 +108,44 @@ class ChatCardAction(BaseModel):
     inputs: dict[str, object]
 
 
+class WorkflowCardAction(ChatCardAction):
+    nodeId: str = Field(min_length=1, max_length=256)
+    interactionId: str = Field(min_length=1, max_length=256)
+
+
+class InternalResume(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    userId: int
+    environment: Literal["PRT", "ONLINE"]
+    requestId: str = Field(min_length=1, max_length=128)
+    nodeId: str = Field(min_length=1, max_length=256)
+    interactionId: str = Field(min_length=1, max_length=256)
+
+    @field_validator("userId", mode="before")
+    @classmethod
+    def parse_user_id(cls, value: object) -> int:
+        return user_id_from_wire(value)
+
+
+class CronRuleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expression: str = Field(min_length=1, max_length=128)
+
+
 class ScheduleCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     workflowKey: str = Field(min_length=1, max_length=256)
-    ruleType: str = Field(min_length=1, max_length=16)
-    ruleJson: dict
+    ruleType: Literal["cron"]
+    ruleJson: CronRuleInput
     timezone: str | None = Field(default=None, max_length=64)
     inputText: str = Field(min_length=1, max_length=4000)
 
 
 class ScheduleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     enabled: bool | None = None
-    ruleType: str | None = Field(default=None, min_length=1, max_length=16)
-    ruleJson: dict | None = None
+    ruleType: Literal["cron"] | None = None
+    ruleJson: CronRuleInput | None = None
     timezone: str | None = Field(default=None, max_length=64)
     inputText: str | None = Field(default=None, min_length=1, max_length=4000)
 
@@ -457,7 +486,7 @@ def create_app(
 
     # ---- runs (proxied runtime control; ownership recorded per control id) ----
 
-    def _require_run_owner(control_id: str, owner_user: str) -> None:
+    def _require_run_owner(control_id: str, owner_user: int) -> None:
         recorded = run_ownership.owner(control_id)
         if recorded is None:
             raise BsideError("NOT_FOUND", 404)
@@ -472,6 +501,7 @@ def create_app(
         run_id = view.get("runId") or view.get("run_id")
         if not isinstance(run_id, str) or not run_id:
             raise BsideError("RUN_NOT_RESOLVED", 409)
+        run_ownership.bind_run_id(control_id, run_id)
         return run_id
 
     def _resolve_inputs(workflow_key: str, user_id: int, raw_input):
@@ -508,15 +538,94 @@ def create_app(
                         identity: RequestIdentity = Depends(identity)):
         return _start_for(identity.userId, body.workflowKey, body.input)
 
-    @app.post("/api/internal/runs")
-    async def internal_start(request: Request, body: InternalRunStart):
+    def _require_internal(request: Request) -> None:
         token = os.environ.get("A2FLOW_BSIDE_INTERNAL_TOKEN")
         if not token:
             raise BsideError("INTERNAL_API_DISABLED", 503)
         provided = request.headers.get("x-a2flow-internal-token") or ""
         if not hmac.compare_digest(provided, token):
             raise BsideError("INTERNAL_TOKEN_REQUIRED", 401)
-        return _start_for(body.userId, body.workflowKey, body.input)
+
+    @app.post("/api/internal/runs")
+    async def internal_start(request: Request, body: InternalRunStart):
+        _require_internal(request)
+        if body.environment != environment:
+            raise BsideError("ENVIRONMENT_MISMATCH", 400)
+        inputs = _resolve_inputs(body.workflowKey, body.userId, body.input)
+        # Commit ownership before calling Runtime. A timeout must not cause a
+        # new control ID; Runtime's durable allocation deduplicates this ID.
+        await asyncio.to_thread(
+            run_ownership.reserve, control_id=body.requestId,
+            user_id=body.userId, workflow_key=body.workflowKey,
+        )
+        await asyncio.to_thread(
+            _runtime(body.userId).start, body.requestId, body.workflowKey, inputs,
+        )
+        return {"controlRequestId": body.requestId, "status": "SUBMITTED"}
+
+    @app.get("/api/internal/runs/{request_id}")
+    async def internal_run_status(request: Request, request_id: str):
+        _require_internal(request)
+        owner = run_ownership.owner(request_id)
+        if owner is None:
+            raise BsideError("NOT_FOUND", 404)
+        view = await asyncio.to_thread(_runtime(owner).control, request_id)
+        return {"controlRequestId": request_id, "status": "SUBMITTED", "view": view}
+
+    @app.get("/api/runs/{control_id}/cards")
+    async def workflow_cards(
+        control_id: str, identity: RequestIdentity = Depends(identity),
+    ):
+        _require_run_owner(control_id, identity.userId)
+        try:
+            run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
+        except BsideError as error:
+            if error.code == "RUN_NOT_RESOLVED":
+                return {"cards": []}
+            raise
+        except RemoteRuntimeError as error:
+            if error.code == "CONTROL_NOT_FOUND":
+                return {"cards": []}
+            raise
+        return await asyncio.to_thread(_runtime(identity.userId).cards, run_id)
+
+    @app.post("/api/internal/runs/{run_id}/cards/{card_id}/resume")
+    async def internal_resume(
+        request: Request, run_id: str, card_id: str, body: InternalResume,
+    ):
+        _require_internal(request)
+        if body.environment != environment:
+            raise BsideError("ENVIRONMENT_MISMATCH", 400)
+        if run_ownership.owner_by_run(run_id) != body.userId:
+            raise BsideError("NOT_FOUND", 404)
+        return await asyncio.to_thread(
+            _runtime(body.userId).resume_card, run_id, card_id,
+            body.model_dump(exclude={"userId", "environment"}),
+        )
+
+    @app.get("/api/internal/run-controls/{request_id}")
+    async def internal_control_status(
+        request: Request, request_id: str, userId: str, environment: str,
+    ):
+        _require_internal(request)
+        owner = user_id_from_wire(userId)
+        if environment not in {"PRT", "ONLINE"}:
+            raise BsideError("ENVIRONMENT_MISMATCH", 400)
+        view = await asyncio.to_thread(
+            runtime_client.for_user(owner, environment).control, request_id,
+        )
+        return {"controlRequestId": request_id, "status": "SUBMITTED", "view": view}
+
+    @app.post("/api/runs/{control_id}/cards/{card_id}/actions")
+    async def workflow_card_action(
+        control_id: str, card_id: str, body: WorkflowCardAction,
+        identity: RequestIdentity = Depends(identity),
+    ):
+        _require_run_owner(control_id, identity.userId)
+        run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
+        return await asyncio.to_thread(
+            _runtime(identity.userId).card_action, run_id, card_id, body.model_dump(),
+        )
 
     @app.get("/api/runs")
     async def list_runs(identity: RequestIdentity = Depends(identity)):
@@ -603,11 +712,11 @@ def create_app(
             body: ScheduleCreate,
             identity: RequestIdentity = Depends(identity)):
         timezone = body.timezone or "Asia/Shanghai"
-        next_at = _computed_next(body.ruleType, body.ruleJson, timezone)
+        next_at = _computed_next(body.ruleType, body.ruleJson.model_dump(), timezone)
         row = schedules.create(
             user_id=identity.userId, workflow_key=body.workflowKey,
             environment=environment, rule_type=body.ruleType,
-            rule_json=body.ruleJson, timezone=timezone,
+            rule_json=body.ruleJson.model_dump(), timezone=timezone,
             input_text=body.inputText, next_run_at=next_at)
         return _schedule_json(row)
 
@@ -635,7 +744,7 @@ def create_app(
                         or body.timezone is not None)
         if rule_changed:
             rule_type = body.ruleType or row["rule_type"]
-            rule_json = body.ruleJson if body.ruleJson is not None \
+            rule_json = body.ruleJson.model_dump() if body.ruleJson is not None \
                 else row["rule_json"]
             timezone = body.timezone or row["timezone"]
             fields["rule_type"] = rule_type

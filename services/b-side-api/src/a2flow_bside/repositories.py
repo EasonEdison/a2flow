@@ -286,6 +286,29 @@ class RunOwnershipRepository:
                 " VALUES (%s, %s, %s)",
                 (control_id, user_id, workflow_key))
 
+    def reserve(self, *, control_id: str, user_id: int, workflow_key: str) -> None:
+        """Idempotently bind a scheduled control before remote dispatch."""
+        require_user_id(user_id)
+        with self._factory() as connection:
+            connection.execute(
+                "INSERT INTO run_ownership (control_id, user_id, workflow_key) "
+                "VALUES (%s, %s, %s) ON CONFLICT (control_id) DO NOTHING",
+                (control_id, user_id, workflow_key),
+            )
+            row = connection.execute(
+                "SELECT user_id, workflow_key FROM run_ownership WHERE control_id = %s",
+                (control_id,),
+            ).fetchone()
+            if row is None or row["user_id"] != user_id or row["workflow_key"] != workflow_key:
+                raise BsideError("RUN_CONTROL_ID_CONFLICT", 409)
+
+    def owner_by_run(self, run_id: str) -> int | None:
+        with self._factory() as connection:
+            row = connection.execute(
+                "SELECT user_id FROM run_ownership WHERE run_id = %s", (run_id,),
+            ).fetchone()
+        return row["user_id"] if row is not None else None
+
     def list_for(self, user_id: int, limit: int = 50) -> list[dict]:
         require_user_id(user_id)
         with self._factory() as connection:
