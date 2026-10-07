@@ -742,7 +742,8 @@ def create_app(
         rule_changed = (body.ruleType is not None
                         or body.ruleJson is not None
                         or body.timezone is not None)
-        if rule_changed:
+        reenabled = body.enabled is True and not row["enabled"]
+        if rule_changed or reenabled:
             rule_type = body.ruleType or row["rule_type"]
             rule_json = body.ruleJson.model_dump() if body.ruleJson is not None \
                 else row["rule_json"]
