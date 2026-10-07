@@ -4,18 +4,29 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import Callable, Iterator
+from typing import Any, Literal, Protocol, TypedDict, Unpack
 
 from fastapi import Request
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import HumanMessage
+from langgraph.graph import MessagesState
+from starlette.responses import Response
+from starlette.types import Scope
 from langgraph.types import Command
 from pydantic import BaseModel, ConfigDict, Field
-from skillweave_contracts import TrustedInvocationContext
+from skillweave_contracts import TrustedContext, TrustedInvocationContext
 
 from .assembly import build_engine
 from .chat.cards import ChatCardStore, CompletionObserver, JsonObject
+from .chat.rpc_actions import ChatActionResponse
+from .deepseek_model import DeepSeekChat
+from .events import EventSink
+from .lifecycle import RunLifecycle, RunRecord
+from .personal_memory import PersonalMemory
+from .ability_execution import OperationSpec
 from .chat.tools import (
     AbilityArgs,
     QuerySkillDependenciesArgs,
@@ -29,14 +40,42 @@ from .http import _Lane
 from .langgraph_adapter import LangGraphContinuation
 from .models import ActionRejected
 from .mvp_assembly import MvpRuntimeHost, _close_model, validate_workflow_inputs
-from .mvp_host import create_mvp_app
+from .mvp_host import VerifiedIdentity, create_mvp_app
 from .mvp_tools import AbilityModelArgs
-from .native_control import ControlledRunRunner
+from .native_control import ControlledRunRunner, RunGraphBinding
 from .rpc_assets import RpcAssetReader
 from .rpc_client import RpcClient
 from .service import ExecutionSession
 from .workflow_loader import compose_workflow
-from .workflow_rpc import WorkflowActions, WorkflowAssets
+from .workflow_rpc import WorkflowActions, WorkflowAssets, WorkflowCard, ResumeStatus
+
+
+class WorkflowModelFactory(Protocol):
+    def create(self, reference: str, owner: TrustedContext) -> DeepSeekChat: ...
+
+
+class HostOptions(TypedDict, total=False):
+    database: str
+    environment: Literal["PRT", "ONLINE"]
+    bundle_validator: Callable[..., object]
+    application_validator: Callable[..., bool]
+    application_data_validator: Callable[..., bool] | None
+    operation_specs: dict[str, OperationSpec]
+    identity_resolver: Callable[[Scope], TrustedContext]
+    model_reference: str
+    static_directory: str | None
+    unexpected_error_observer: Callable[..., None] | None
+    event_sink: EventSink | None
+    personal_memory: PersonalMemory | None
+
+
+class CardsResponse(TypedDict):
+    cards: list[WorkflowCard]
+
+
+class ResumeResponse(TypedDict):
+    runId: str
+    delivery: Literal["RETURNED"]
 
 
 class CardActionBody(BaseModel):
@@ -50,7 +89,8 @@ class CardActionBody(BaseModel):
 
 class CardResumeBody(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    requestId: str = Field(min_length=1, max_length=128)
+    requestId: str = Field(min_length=1, max_length=200)
+    actionRequestId: str = Field(min_length=1, max_length=128)
     nodeId: str = Field(min_length=1, max_length=128)
     interactionId: str = Field(min_length=1, max_length=128)
 
@@ -102,18 +142,27 @@ def tools_for(assets: WorkflowAssets, actions: WorkflowActions) -> tuple[BaseToo
 
 class RpcWorkflowHost(MvpRuntimeHost):
     def __init__(
-        self, *, rpc: RpcClient, completion_observer: CompletionObserver, **kwargs: Any
+        self,
+        *,
+        rpc: RpcClient,
+        completion_observer: CompletionObserver,
+        conninfo: str,
+        namespace: str,
+        model_factory: WorkflowModelFactory,
+        **kwargs: Unpack[HostOptions],
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(
+            conninfo=conninfo, namespace=namespace, model_factory=model_factory, **kwargs
+        )
         self.rpc = rpc
-        self.reader = RpcAssetReader(self.asset_repository, kwargs["namespace"], rpc)
+        self.reader = RpcAssetReader(self.asset_repository, namespace, rpc)
         self.card_store = ChatCardStore(
-            kwargs["conninfo"],
+            conninfo,
             environment=self.environment,
             completion_observer=completion_observer,
         )
 
-    def _actions(self, run: Any) -> WorkflowActions:
+    def _actions(self, run: RunRecord) -> WorkflowActions:
         definition = self.reader.resolve_workflow(run.definition_key, run.owner).definition
         return WorkflowActions(
             self.interactions,
@@ -126,12 +175,14 @@ class RpcWorkflowHost(MvpRuntimeHost):
         )
 
     @contextmanager
-    def execution_session(self, owner: Any) -> Iterator[ExecutionSession]:
-        models: list[Any] = []
+    def execution_session(self, owner: TrustedContext) -> Iterator[ExecutionSession]:
+        models: list[BaseChatModel] = []
         built: dict[str, WorkflowActions] = {}
         with self._checkpointer_factory() as saver:
 
-            def graph_factory(run: Any, lifecycle: Any) -> tuple[Any, dict[str, Any]]:
+            def graph_factory(
+                run: RunRecord, lifecycle: RunLifecycle
+            ) -> tuple[RunGraphBinding, MessagesState]:
                 definition = self.reader.resolve_workflow(run.definition_key, run.owner).definition
                 actions = self._actions(run)
                 agents = {}
@@ -201,7 +252,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                 actions.continuation = LangGraphContinuation(graph, lifecycle=lifecycle)
                 built[run.run_id] = actions
                 inputs = validate_workflow_inputs(json.loads(run.initial_inputs_json))
-                return graph, {"messages": [{"role": "user", "content": inputs["requirement"]}]}
+                return graph, {"messages": [HumanMessage(content=inputs["requirement"])]}
 
             runner = ControlledRunRunner(
                 self.lifecycle,
@@ -209,7 +260,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                 lambda current_owner, key: self.reader.versions(current_owner, key),
             )
 
-            def action_service(run: Any) -> WorkflowActions:
+            def action_service(run: RunRecord) -> WorkflowActions:
                 if run.run_id not in built:
                     graph_factory(run, self.lifecycle)
                 return built[run.run_id]
@@ -220,7 +271,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                 for model in reversed(models):
                     _close_model(model)
 
-    def create_app(self) -> Any:
+    def create_app(self) -> VerifiedIdentity:
         executions = _Lane(1)
         wrapped = create_mvp_app(
             self.service,
@@ -237,20 +288,22 @@ class RpcWorkflowHost(MvpRuntimeHost):
         reads = _Lane(2)
 
         @app.get("/runtime/runs/{run_id}/cards")
-        async def cards(request: Request, run_id: str) -> Any:
+        async def cards(request: Request, run_id: str) -> Response:
             owner = self._owner(request.scope)
 
-            def read() -> dict[str, Any]:
+            def read() -> CardsResponse:
                 run = self.lifecycle.read(owner, run_id)
                 return {"cards": self._actions(run).list_cards()}
 
             return await reads.call(read, timeout=3)
 
         @app.post("/runtime/runs/{run_id}/cards/{card_id}/actions")
-        async def action(request: Request, run_id: str, card_id: str, body: CardActionBody) -> Any:
+        async def action(
+            request: Request, run_id: str, card_id: str, body: CardActionBody
+        ) -> Response:
             owner = self._owner(request.scope)
 
-            def dispatch() -> Any:
+            def dispatch() -> ChatActionResponse:
                 run = self.lifecycle.read(owner, run_id)
                 return self._actions(run).execute_card(
                     body.nodeId,
@@ -264,16 +317,48 @@ class RpcWorkflowHost(MvpRuntimeHost):
             return await executions.call(dispatch)
 
         @app.post("/runtime/runs/{run_id}/cards/{card_id}/resume")
-        async def resume(request: Request, run_id: str, card_id: str, body: CardResumeBody) -> Any:
+        async def resume(
+            request: Request, run_id: str, card_id: str, body: CardResumeBody
+        ) -> Response:
             owner = self._owner(request.scope)
 
-            def dispatch() -> dict[str, str]:
+            def dispatch() -> ResumeResponse:
                 run = self.lifecycle.read(owner, run_id)
                 with self.execution_session(owner) as session:
                     actions = session.action_service(run)
-                    actions.resume_card(body.nodeId, body.interactionId, card_id, body.requestId)
+                    actions.resume_card(
+                        body.nodeId,
+                        body.interactionId,
+                        card_id,
+                        body.requestId,
+                        body.actionRequestId,
+                    )
                 return {"runId": run_id, "delivery": "RETURNED"}
 
             return await executions.call(dispatch)
+
+        @app.get("/runtime/runs/{run_id}/cards/{card_id}/resume-status")
+        async def resume_status(
+            request: Request,
+            run_id: str,
+            card_id: str,
+            nodeId: str,
+            interactionId: str,
+            requestId: str,
+            actionRequestId: str,
+        ) -> Response:
+            owner = self._owner(request.scope)
+
+            def read_status() -> ResumeStatus:
+                run = self.lifecycle.read(owner, run_id)
+                return self._actions(run).resume_status(
+                    nodeId,
+                    interactionId,
+                    card_id,
+                    requestId,
+                    actionRequestId,
+                )
+
+            return await reads.call(read_status, timeout=3)
 
         return wrapped
