@@ -30,3 +30,14 @@ replay is added; a historical stuck run remains unchanged and can use normal Sto
 Isolated current-image probes passed for continuation error, original exception,
 pending-node-only updates, preserved Action, interrupt exclusion and observer
 failure. No model invocation or production data mutation was used by the probes.
+
+The approved terminal follow-up also persists FAILED for a real shared graph
+execution exception. Both snapshot and view expose lifecycle=FAILED; polling
+treats it as terminal, and the existing non-RUNNING admission rejects new work.
+STOPPED/SUCCEEDED/FAILED cannot be overwritten with a different terminal state.
+Successful business Actions and completed nodes remain unchanged. Failure events
+use the existing RUN_FAILED notification path; scheduler uncertainty reconciliation
+still performs GET only and never replays a workflow command.
+Isolated probes additionally cover FAILED storage/codec/read projection,
+non-active admission rejection and terminal immutability. Historical stuck runs
+are not repaired; normal Stop remains the authorized way to close those old runs.

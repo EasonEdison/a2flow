@@ -37,7 +37,7 @@ def receipt(row, control_id):
 def snapshot(run, operations, interactions):
     if run is None:
         raise ActionRejected("RUN_NOT_FOUND")
-    status = _enum(run["status"], {"RUNNING", "STOPPED", "SUCCEEDED"})
+    status = _enum(run["status"], {"RUNNING", "STOPPED", "SUCCEEDED", "FAILED"})
     observed_operations = [
         {"nodeId": identifier(row["node_id"]),
          "kind": _enum(row["kind"], {"NODE", "ROUTER", "MODEL", "TOOL", "ACTION", "FINALIZER", "RETRY"}),
