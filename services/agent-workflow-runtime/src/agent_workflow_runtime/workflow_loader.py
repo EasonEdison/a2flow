@@ -134,4 +134,21 @@ def compose_workflow(
     for before, after in zip(nodes, nodes[1:]):
         builder.add_edge(before["nodeId"], after["nodeId"])
     builder.add_edge(nodes[-1]["nodeId"], END)
-    return RunGraphBinding(builder.compile(checkpointer=checkpointer), lifecycle, progress)
+
+    def record_failure(error: BaseException) -> None:
+        # The sequential composition leaves a NODE permit open across native
+        # interrupts. A real graph exception must close that permit as unknown,
+        # without converting prior completed nodes/Actions into failed writes.
+        with lifecycle.repository.run_scope(run.owner, run.run_id):
+            pending = tuple(fact for fact in lifecycle.repository.operations(
+                run.owner, run.run_id)
+                if fact.kind == "NODE" and fact.status == "IN_FLIGHT")
+        for fact in pending:
+            lifecycle.finish(run.owner, run.run_id, fact.operation_id,
+                             {"errorType": type(error).__name__}, status="UNCONFIRMED")
+            if lifecycle.read(run.owner, run.run_id).status != "STOPPED":
+                views.node(run.owner, run.run_id, fact.node_id, "UNCONFIRMED")
+
+    return RunGraphBinding(
+        builder.compile(checkpointer=checkpointer), lifecycle, progress, record_failure,
+    )
