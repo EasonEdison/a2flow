@@ -26,8 +26,10 @@ export function useProgress(runId: string | null, transport: ProgressClient = cl
     const reconnecting = new Set<string>();
     const retryTimers = new Set<ReturnType<typeof setTimeout>>();
     const seen = new Set<string>();
+    let captureIncomplete = false;
 
-    const unavailable = () => {
+    const unavailable = (permanent = false) => {
+      captureIncomplete ||= permanent;
       if (!alive) return;
       setState(previous => ({
         runId,
@@ -77,12 +79,16 @@ export function useProgress(runId: string | null, transport: ProgressClient = cl
         completed.add(executionId);
         source.close();
         streams.delete(executionId);
+        if (!captureIncomplete && reconnecting.size === 0) {
+          setState(previous => previous.runId === runId && previous.error
+            ? { ...previous, error: '' } : previous);
+        }
       });
       source.addEventListener('capture', event => {
         try {
           const data = JSON.parse((event as MessageEvent).data);
           if (data.capture?.incomplete || data.capture?.observation_outcome === 'UNAVAILABLE') {
-            unavailable();
+            unavailable(true);
           }
         } catch {
           unavailable();
@@ -122,7 +128,7 @@ export function useProgress(runId: string | null, transport: ProgressClient = cl
               after = history.nextCursor;
               cursors.set(executionId, after);
               sealed = history.capture.sealed;
-              if (history.capture.incomplete) unavailable();
+              if (history.capture.incomplete) unavailable(true);
               if (!history.hasMore) break;
             }
             seen.add('segment:' + executionId);
