@@ -6,7 +6,7 @@ import type { NodeView } from '../presentation';
 import { ExecutionPanel } from './AssistantThread';
 
 export function WorkflowExecution({ node }: { node: NodeView }) {
-  const message = useMemo(() => workflowMessage(node), [node.id, node.status, node.records]);
+  const message = useMemo(() => workflowMessage(node), [node.id, node.status, node.records, node.output]);
   const runtime = useExternalStoreRuntime({
     messages: [message], convertMessage: toAssistantMessage,
     isRunning: node.status === 'RUNNING', isDisabled: true,

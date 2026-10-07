@@ -44,6 +44,10 @@ export function WorkflowTimeline({ node, entries, renderCard }: {
       {block.records.length ? <WorkflowExecution node={{ ...node, records: block.records }} /> : null}
       {block.card ? <section className="workflow-business-surface">{renderCard(block.card)}</section> : null}
     </Fragment>)}
-    {!blocks.length ? <p className="muted">{node.status === 'PENDING' ? '步骤尚未开始。' : '正在读取执行记录…'}</p> : null}
+    {!blocks.length ? <p className="muted">{
+      node.status === 'PENDING' ? '步骤尚未开始。'
+        : ['RUNNING', 'WAITING'].includes(node.status) ? '正在读取执行记录…'
+          : '暂无已保存的执行记录。'
+    }</p> : null}
   </div>;
 }
