@@ -654,6 +654,13 @@ def create_app(
             if item["view"] and item["view"].get("runId"):
                 run_ownership.bind_run_id(
                     row["control_id"], item["view"]["runId"])
+                try:
+                    actual = await asyncio.to_thread(
+                        _runtime(identity.userId).view, item["view"]["runId"],
+                    )
+                    item["lifecycle"] = actual.get("lifecycle")
+                except RemoteRuntimeError:
+                    item["lifecycle"] = "UNKNOWN"
             items.append(item)
         return {"runs": items}
 
