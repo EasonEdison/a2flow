@@ -44,6 +44,7 @@ class PostgresOutbox:
         with self.connection.transaction():
             rows = self.connection.execute(
                 "SELECT message_id, channel FROM scheduler_outbox WHERE state='pending' "
+                "AND available_at <= now() "
                 "AND (published_at IS NULL OR published_at < now()-interval '60 seconds') "
                 "ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT %s",
                 (limit,),
@@ -62,7 +63,8 @@ class PostgresOutbox:
         with self.connection.transaction():
             row = self.connection.execute(
                 "UPDATE scheduler_outbox SET state='dispatching',claimed_at=now() "
-                "WHERE message_id=%s AND state='pending' RETURNING payload::text",
+                "WHERE message_id=%s AND state='pending' AND available_at <= now() "
+                "RETURNING payload::text",
                 (message_id,),
             ).fetchone()
             if row is None:
@@ -71,6 +73,15 @@ class PostgresOutbox:
             if not isinstance(payload, str):
                 raise ValueError("INVALID_OUTBOX_PAYLOAD")
             return COMMANDS.validate_json(payload)
+
+    def defer_unadmitted(self, message_id: str) -> None:
+        """Only a proved pre-admission capacity rejection can re-enter pending."""
+        self.connection.execute(
+            "UPDATE scheduler_outbox SET state='pending',available_at=now()+interval '30 seconds',"
+            "claimed_at=NULL,published_at=NULL,error_code='CAPACITY_EXHAUSTED' "
+            "WHERE message_id=%s AND state='dispatching'",
+            (message_id,),
+        )
 
     def finish(
         self,

@@ -5,9 +5,20 @@ from __future__ import annotations
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Literal
+
+from pydantic import ValidationError
 
 from a2flow_scheduler.contracts import CommandModel, ResumeWorkflow, StartWorkflow
-from a2flow_scheduler.delivery import Admission
+from a2flow_scheduler.delivery import Admission, AdmissionBusy
+
+
+class CapacityError(CommandModel):
+    code: Literal["CAPACITY_EXHAUSTED"]
+
+
+class CapacityRejection(CommandModel):
+    error: CapacityError
 
 
 class StartRequest(CommandModel):
@@ -20,6 +31,7 @@ class StartRequest(CommandModel):
 
 class ResumeRequest(CommandModel):
     requestId: str
+    actionRequestId: str
     userId: str
     environment: str
     nodeId: str
@@ -36,8 +48,17 @@ class BsideCommandClient:
     def _read(self, request: urllib.request.Request) -> Admission:
         request.add_header("x-a2flow-internal-token", self.token)
         request.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(request, timeout=15) as response:
-            return Admission.model_validate_json(response.read())
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                return Admission.model_validate_json(response.read())
+        except urllib.error.HTTPError as exc:
+            if request.get_method() == "POST" and exc.code == 503:
+                try:
+                    CapacityRejection.model_validate_json(exc.read(65536))
+                except ValidationError:
+                    raise exc from None
+                raise AdmissionBusy("CAPACITY_EXHAUSTED") from exc
+            raise
 
     def start(self, command: StartWorkflow) -> Admission:
         request = StartRequest(
@@ -73,6 +94,7 @@ class BsideCommandClient:
     def resume(self, command: ResumeWorkflow) -> Admission:
         request = ResumeRequest(
             requestId=command.message_id,
+            actionRequestId=command.action_request_id,
             userId=str(command.user_id),
             environment=command.environment,
             nodeId=command.node_id,
