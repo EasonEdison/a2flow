@@ -712,6 +712,57 @@ def create_app(
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"})
 
+    # Read-only progress uses Runtime's native catalog/history/SSE contracts.
+    def _progress_query(request: Request, *, streaming: bool = False) -> list[tuple[str, str]]:
+        query = request.query_params.multi_items()
+        if request.headers.get("last-event-id") is not None and (
+            not streaming or "after" in request.query_params
+        ):
+            raise BsideError("INVALID_PROGRESS_CURSOR", 400)
+        # Keep all pairs, including duplicate or unknown keys, for native validation.
+        return query
+
+    @app.get("/api/runs/{control_id}/progress")
+    async def run_progress_catalog(
+        request: Request, control_id: str, identity: RequestIdentity = Depends(identity),
+    ) -> dict[str, object]:
+        _require_run_owner(control_id, identity.userId)
+        query = _progress_query(request)
+        # An unbound run returns the existing explicit RUN_NOT_RESOLVED error.
+        run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
+        return await asyncio.to_thread(_runtime(identity.userId).progress_catalog, run_id, query)
+
+    @app.get("/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/history")
+    async def run_progress_history(
+        request: Request, control_id: str, node_id: str, execution_id: str,
+        identity: RequestIdentity = Depends(identity),
+    ) -> dict[str, object]:
+        _require_run_owner(control_id, identity.userId)
+        query = _progress_query(request)
+        run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
+        return await asyncio.to_thread(
+            _runtime(identity.userId).progress_history, run_id, node_id, execution_id, query,
+        )
+
+    @app.get("/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/stream")
+    async def run_progress_stream(
+        request: Request, control_id: str, node_id: str, execution_id: str,
+        identity: RequestIdentity = Depends(identity),
+    ) -> StreamingResponse:
+        _require_run_owner(control_id, identity.userId)
+        query = _progress_query(request, streaming=True)
+        run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
+        stream = await asyncio.to_thread(
+            _runtime(identity.userId).progress_stream, run_id, node_id, execution_id,
+            query, request.headers.get("last-event-id"),
+        )
+        # StreamingResponse consumes this sync iterator in its worker pool;
+        # no unbounded queue or synthetic progress events are introduced.
+        return StreamingResponse(
+            stream, media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+
     # ---- schedules ----
 
     def _computed_next(rule_type: str, rule_json: dict,

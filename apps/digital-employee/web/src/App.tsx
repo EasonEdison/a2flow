@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { NodeCard } from './components/NodeCard';
 import { WorkflowApplications } from './components/WorkflowApplications';
+import { productProgress } from './api/client';
+import { useProgress } from './hooks/useProgress';
 import { MemorySettingsPage } from './components/MemorySettingsPage';
 import { AssistantThread } from './components/AssistantThread';
 import './chat.css';
@@ -71,6 +73,7 @@ function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
   }, [runId]);
   useEffect(() => { setRun(null); setCards([]); void refresh(); }, [refresh]);
   const active = run ? ['RUNNING', 'WAITING', 'PENDING'].includes(run.lifecycle) : false;
+  const progress = useProgress(run?.nodes.length ? runId : null, productProgress);
   useEffect(() => {
     if (!active) return;
     const controller = new AbortController();
@@ -111,10 +114,12 @@ function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
   if (!run) return <div className="loading">{error ? <p role="alert">{error}</p> : '正在加载运行…'}</div>;
   return <section className="run-detail">
     {error ? <p className="inline-error" role="alert">{error}</p> : null}
+    {progress.error ? <p className="observation-warning" role="status">{progress.error}</p> : null}
     <div className="section-heading">{onBack ? <button className="secondary" onClick={onBack}>返回</button> : null}<div><h2>{run.title}</h2><p>{run.requirement}</p></div><span className={`status ${run.lifecycle.toLowerCase()}`}>{runLabels[run.lifecycle] ?? run.lifecycle}</span>{['RUNNING', 'WAITING'].includes(run.lifecycle) ? <button className="quiet danger" onClick={async () => { if (!confirm('停止后无法恢复，确认停止？')) return; await productApi.stopRun(run.id); await refresh(); }}>停止运行</button> : null}</div>
     <div className="nodes">{run.nodes.map((node, index) => {
       const entries = cards.filter(entry => entry.nodeId === node.id);
-      return <NodeCard key={node.id} node={entries.length ? { ...node, card: undefined } : node} index={index} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); await refresh(); } finally { setBusy(false); } }}>
+      const observedNode = { ...node, records: progress.records[node.id] ?? node.records, ...(entries.length ? { card: undefined } : {}) };
+      return <NodeCard key={node.id} node={observedNode} index={index} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); await refresh(); } finally { setBusy(false); } }}>
         <WorkflowApplications runId={run.id} entries={entries} disabled={!['RUNNING', 'WAITING'].includes(run.lifecycle) || !['RUNNING', 'WAITING'].includes(node.status) || busy} onUpdate={card => { cardReadEpoch.current++; setCards(current => current.map(entry => entry.card.cardId === card.cardId ? { ...entry, card } : entry)); }} onSettled={refresh} />
       </NodeCard>;
     })}</div>

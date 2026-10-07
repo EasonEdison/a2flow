@@ -11,6 +11,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterator
 from typing import Protocol
 from skillweave_contracts.user_id import require_user_id, user_id_to_wire
 
@@ -59,6 +60,17 @@ class RuntimeClient(Protocol):
                       payload: dict) -> "object": ...
 
     def surface_stream(self, run_id: str) -> "object": ...
+
+    def progress_catalog(self, run_id: str, query: list[tuple[str, str]]) -> dict[str, object]: ...
+
+    def progress_history(
+        self, run_id: str, node_id: str, execution_id: str, query: list[tuple[str, str]],
+    ) -> dict[str, object]: ...
+
+    def progress_stream(
+        self, run_id: str, node_id: str, execution_id: str,
+        query: list[tuple[str, str]], last_event_id: str | None,
+    ) -> Iterator[str]: ...
 
 
 class HttpRuntimeClient:
@@ -174,7 +186,41 @@ class HttpRuntimeClient:
         request.add_header("Accept", "text/event-stream")
         return self._stream(request)
 
-    def _stream(self, request):
+    @staticmethod
+    def _progress_path(run_id: str, node_id: str, execution_id: str) -> str:
+        quote = urllib.parse.quote
+        return ("/runtime/runs/" + quote(run_id, safe="")
+                + "/nodes/" + quote(node_id, safe="")
+                + "/executions/" + quote(execution_id, safe=""))
+
+    def progress_catalog(self, run_id: str, query: list[tuple[str, str]]) -> dict[str, object]:
+        return self._request(
+            "GET", "/runtime/runs/" + urllib.parse.quote(run_id, safe="")
+            + "/progress?" + urllib.parse.urlencode(query),
+        )
+
+    def progress_history(
+        self, run_id: str, node_id: str, execution_id: str, query: list[tuple[str, str]],
+    ) -> dict[str, object]:
+        return self._request(
+            "GET", self._progress_path(run_id, node_id, execution_id)
+            + "/history?" + urllib.parse.urlencode(query),
+        )
+
+    def progress_stream(
+        self, run_id: str, node_id: str, execution_id: str,
+        query: list[tuple[str, str]], last_event_id: str | None,
+    ) -> Iterator[str]:
+        request = urllib.request.Request(
+            self._base + self._progress_path(run_id, node_id, execution_id)
+            + "/stream?" + urllib.parse.urlencode(query),
+        )
+        request.add_header("Accept", "text/event-stream")
+        if last_event_id is not None:
+            request.add_header("Last-Event-ID", last_event_id)
+        return self._stream(request)
+
+    def _stream(self, request: urllib.request.Request) -> Iterator[str]:
         self._identify(request)
         try:
             response = urllib.request.urlopen(request, timeout=180.0)

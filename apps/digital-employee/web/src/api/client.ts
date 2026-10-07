@@ -8,6 +8,25 @@ let data:unknown;try{data=JSON.parse(text);}catch{throw new ApiError('INVALID_RE
 if(!response.ok){const error=object(object(data).error);throw new ApiError(string(error.code),response.status);}return data;
 }
 const runPath=(id:string)=>'/runtime/runs/'+encoded(id);
+export function createProgressClient(path: (id: string) => string) {
+  return {
+    catalog: async (id: string, after?: string, signal?: AbortSignal) => {
+      const value = object(await request(path(id) + '/progress?limit=100' + (after ? '&after=' + encoded(after) : ''), undefined, signal));
+      const segments = list(value.segments).map(item => {
+        const segment = object(item);
+        string(segment.node_id); string(segment.execution_id);
+        return segment as unknown as Segment;
+      });
+      return { segments, nextCursor: string(value.nextCursor), hasMore: value.hasMore === true };
+    },
+    history: async (id: string, node: string, execution: string, after?: string, signal?: AbortSignal) => parseHistory(await request(
+      path(id) + '/nodes/' + encoded(node) + '/executions/' + encoded(execution) + '/history?limit=100' + (after ? '&after=' + encoded(after) : ''), undefined, signal,
+    )),
+    streamUrl: (id: string, node: string, execution: string, after?: string) => path(id) + '/nodes/' + encoded(node) + '/executions/' + encoded(execution) + '/stream' + (after ? '?after=' + encoded(after) : ''),
+  };
+}
+export type ProgressClient = ReturnType<typeof createProgressClient>;
+export const productProgress = createProgressClient(id => '/api/runs/' + encoded(id));
 export const client={
 session:async(signal?:AbortSignal)=>parseSession(await request('/runtime/session',undefined,signal)),
 workflows:async(signal?:AbortSignal)=>parseWorkflows(await request('/runtime/workflows',undefined,signal)),
@@ -18,7 +37,5 @@ start:(controlRequestId:string,definitionKey:string,inputs:JsonObject)=>request(
 stop:(id:string,controlRequestId:string)=>request(runPath(id)+'/stop',{controlRequestId}),
 restart:(id:string,controlRequestId:string,inputs:JsonObject)=>request(runPath(id)+'/restart',{controlRequestId,inputs}),
 action:(id:string,nodeId:string,controlRequestId:string,interactionId:string,actionName:string,inputs:JsonObject)=>request(runPath(id)+'/nodes/'+encoded(nodeId)+'/actions',{controlRequestId,interactionId,actionName,inputs}),
-catalog:async(id:string,after?:string,signal?:AbortSignal)=>{const x=object(await request(runPath(id)+'/progress?limit=100'+(after?'&after='+encoded(after):''),undefined,signal));const segments=list(x.segments).map(v=>{const y=object(v);string(y.node_id);string(y.execution_id);return y as unknown as Segment;});return {segments,nextCursor:string(x.nextCursor),hasMore:x.hasMore===true};},
-history:async(id:string,node:string,execution:string,after?:string,signal?:AbortSignal)=>parseHistory(await request(runPath(id)+'/nodes/'+encoded(node)+'/executions/'+encoded(execution)+'/history?limit=100'+(after?'&after='+encoded(after):''),undefined,signal)),
-streamUrl:(id:string,node:string,execution:string,after?:string)=>runPath(id)+'/nodes/'+encoded(node)+'/executions/'+encoded(execution)+'/stream'+(after?'?after='+encoded(after):'')
+...createProgressClient(runPath)
 };
