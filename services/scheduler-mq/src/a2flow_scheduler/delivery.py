@@ -12,6 +12,7 @@ from a2flow_scheduler.contracts import (
     ResumeWorkflow,
     StartWorkflow,
 )
+from a2flow_scheduler.notification_delivery import persist_notification
 from a2flow_scheduler.outbox import PostgresOutbox
 from a2flow_scheduler.streams import RedisStreamTransport, StreamChannel
 
@@ -30,6 +31,10 @@ class WorkflowIngress(Protocol):
 
 class NotificationSender(Protocol):
     def send_notification(self, command: NotificationCommand) -> None: ...
+
+
+class AdmissionBusy(Exception):
+    """Runtime proved the command was refused before execution admission."""
 
 
 def consume_one(
@@ -57,22 +62,14 @@ def consume_one(
             if accepted.controlRequestId != command.message_id:
                 raise ValueError("CONTROL_REQUEST_ID_MISMATCH")
         elif isinstance(command, NotificationCommand):
-            with outbox.connection.transaction():
-                outbox.connection.execute(
-                    "INSERT INTO notifications "
-                    "(user_id,kind,title,body,ref_type,ref_id,idempotency_key) "
-                    "VALUES (%s,%s,%s,%s,'run',%s,%s) ON CONFLICT (idempotency_key) DO NOTHING",
-                    (
-                        command.user_id,
-                        command.event,
-                        command.title,
-                        command.body,
-                        command.run_id,
-                        command.message_id,
-                    ),
-                )
-            if sender is not None:
-                sender.send_notification(command)
+            notification = persist_notification(outbox, command)
+            if sender is not None and notification is not None:
+                sender.send_notification(notification)
+    except AdmissionBusy:
+        if isinstance(command, (StartWorkflow, ResumeWorkflow)):
+            outbox.defer_unadmitted(command.message_id)
+        else:
+            outbox.finish(command.message_id, "unknown", "DELIVERY_UNCONFIRMED")
     except Exception:
         # Includes HTTP ambiguity and external notification ambiguity. No business retry.
         outbox.finish(command.message_id, "unknown", "DELIVERY_UNCONFIRMED")

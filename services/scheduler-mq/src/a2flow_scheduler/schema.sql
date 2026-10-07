@@ -26,3 +26,6 @@ CREATE TABLE IF NOT EXISTS scheduler_outbox (
 );
 CREATE INDEX IF NOT EXISTS scheduler_outbox_pending
     ON scheduler_outbox(created_at) WHERE state = 'pending';
+
+ALTER TABLE scheduler_outbox ADD COLUMN IF NOT EXISTS
+    available_at timestamptz NOT NULL DEFAULT now();

@@ -35,13 +35,21 @@ from PostgreSQL without replaying admitted business commands. Duplicate stream
 references cannot claim an already admitted command. Stream acknowledgement
 means delivery has a durable outcome, not that a workflow completed successfully.
 
-Each command makes at most one automatic POST attempt. Ambiguous delivery and
+An exact POST HTTP 503 `{"error":{"code":"CAPACITY_EXHAUSTED"}}` proves
+the runtime refused the command before admission. Only this response returns the
+command to pending with a 30-second delay; duplicate Redis references cannot
+bypass that delay. This is an admission retry, never a business execution retry.
+Other ambiguous delivery and
 interrupted dispatch become durable `unknown` rows. Start and resume unknowns
 are reconciled with read-only B-side control queries every 30 seconds; a 404
 retains UNKNOWN and never restarts business execution. Stale dispatch claims
 become UNKNOWN after five minutes. External notification ambiguity remains
 actionable in the outbox; no blind Feishu retry is performed. In-app notifications
-are saved idempotently before optional external delivery.
+are saved idempotently before optional external delivery. The existing per-user
+20-notification rolling-hour cap is preserved: excess events produce at most one
+merged summary per UTC hour, with a per-user transaction lock preventing concurrent
+consumers from exceeding the cap. The Feishu summary is sent only when that
+summary is first inserted.
 
 The process requires internal B-side start, resume, and control-read endpoints.
 It does not run the legacy automatic wait-timeout stop monitor or consume legacy
