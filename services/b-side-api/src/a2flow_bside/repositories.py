@@ -255,9 +255,13 @@ class NotificationsRepository:
         require_user_id(user_id)
         with self._factory() as connection:
             rows = connection.execute(
-                "SELECT id, kind, title, body, ref_type, ref_id, read, "
-                "created_at FROM notifications WHERE user_id = %s "
-                "ORDER BY read ASC, created_at DESC LIMIT %s",
+                "SELECT n.id, n.kind, n.title, n.body, n.ref_type, "
+                "CASE WHEN n.ref_type='run' THEN COALESCE("
+                "(SELECT r.control_id FROM run_ownership r "
+                "WHERE r.run_id=n.ref_id AND r.user_id=n.user_id LIMIT 1), n.ref_id) "
+                "ELSE n.ref_id END AS ref_id, n.read, n.created_at "
+                "FROM notifications n WHERE n.user_id = %s "
+                "ORDER BY n.read ASC, n.created_at DESC LIMIT %s",
                 (user_id, limit)).fetchall()
         return [dict(row) for row in rows]
 
