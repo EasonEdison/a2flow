@@ -1,42 +1,80 @@
-"""Attended runtime host: MvpRuntimeHost assembly plus the PostgreSQL event sink.
+"""Current RPC Workflow host and typed durable scheduler delivery wiring.
 
-Same reviewed pieces as deploy/mvp/app.py (flash model, trusted identity,
-activity-package operations); additionally constructs the host with a
-PostgresEventSink toward the b-side queue database when
-A2FLOW_EVENT_QUEUE_DATABASE_URL is configured. Import performs no DDL and no
-listener start.
+Card completion enqueues resume on the card transaction. Lifecycle notifications
+use the same database outbox. Import performs no DDL or listener startup.
 """
 
 from __future__ import annotations
 
 import os
+import json
 
 import psycopg
 from pydantic import SecretStr
 
-from agent_workflow_runtime.event_sink_postgres import PostgresEventSink
-from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
+from hashlib import sha256
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict
+from agent_workflow_runtime.chat.cards import CardCompletion
+from agent_workflow_runtime.events import DomainEvent
+from agent_workflow_runtime.rpc_client import RpcClient
+from a2flow_scheduler.contracts import NotificationCommand, ResumeWorkflow
+from a2flow_scheduler.outbox import PostgresOutbox
+from agent_workflow_runtime.workflow_rpc_host import RpcWorkflowHost
 from agent_workflow_runtime.internal_identity import private_identity
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.personal_memory import PersonalMemory
-from deploy.mvp import app as mvp
 
 
-def _event_sink():
-    dsn = os.environ.get("A2FLOW_EVENT_QUEUE_DATABASE_URL")
-    if not dsn:
-        return None
-    secret_path = os.environ.get("A2FLOW_EVENT_QUEUE_PASSWORD_FILE")
-    if secret_path:
-        with open(secret_path, "r", encoding="utf-8") as stream:
-            dsn = psycopg.conninfo.make_conninfo(dsn, password=stream.read().strip())
-    connection = psycopg.connect(dsn, autocommit=True)
-    return PostgresEventSink(connection)
+class WorkflowBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    runId: str
+    nodeId: str
+
+
+def completed_card(connection: psycopg.Connection[Any], completion: CardCompletion) -> None:
+    value = completion.metadata.get("workflow")
+    if value is None:
+        return
+    binding = WorkflowBinding.model_validate(value)
+    identity = json.dumps([completion.owner.environment, str(completion.owner.user_id),
+                           completion.card_id, completion.request_id])
+    PostgresOutbox(connection).enqueue(ResumeWorkflow(
+        message_id="resume:" + sha256(identity.encode()).hexdigest(),
+        user_id=completion.owner.user_id, environment=completion.owner.environment,
+        run_id=binding.runId, node_id=binding.nodeId,
+        interaction_id=completion.card_id, card_id=completion.card_id,
+        action_request_id=completion.request_id,
+    ))
+
+
+class SchedulerEventSink:
+    def __init__(self, conninfo: str) -> None:
+        self.conninfo = conninfo
+
+    def publish(self, event: DomainEvent) -> None:
+        names: dict[str, Literal["waiting", "completed", "failed", "stopped"]] = {
+            "NODE_WAITING": "waiting", "RUN_FINISHED": "completed",
+            "RUN_FAILED": "failed", "RUN_STOPPED": "stopped",
+        }
+        kind = names.get(event.event_type)
+        if kind is None:
+            return
+        with psycopg.connect(self.conninfo) as connection:
+            PostgresOutbox(connection).enqueue(NotificationCommand(
+                message_id="event:" + str(event.event_id), user_id=event.user_id,
+                run_id=event.run_id, event=kind,
+                title={"waiting": "工作流等待操作", "completed": "工作流已完成",
+                       "failed": "工作流执行失败", "stopped": "工作流已停止"}[kind],
+                body="请查看工作流运行详情。",
+            ))
 
 
 def create_app_from_environment():
     """Uvicorn factory: reviewed mvp assembly + optional queue event sink."""
-    sink = _event_sink()
+    from deploy.mvp import app as mvp
+    sink = SchedulerEventSink(mvp.conninfo)
     def configuration(reference, owner):
         if reference != "deepseek-v4-flash" or owner.environment != mvp.environment:
             raise RuntimeError("MODEL_CONFIGURATION_NOT_FOUND")
@@ -61,7 +99,9 @@ def create_app_from_environment():
                 return mvp.BoundedDeepSeekFactory(owner).create(reference, owner)
             return DeepSeekModelFactory(configuration, secret).create(reference, owner)
 
-    host = MvpRuntimeHost(
+    host = RpcWorkflowHost(
+        rpc=RpcClient.from_environment(os.environ),
+        completion_observer=completed_card,
         conninfo=mvp.conninfo,
         database=mvp.required("A2FLOW_DATABASE_NAME"),
         environment=mvp.environment,

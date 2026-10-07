@@ -96,19 +96,20 @@ class VerifiedIdentity:
 def create_mvp_app(
     service, views, workflow_catalog, identity_resolver, *, lifespan=None,
     static_directory=None, read_capacity=2, execution_capacity=2,
-    read_timeout=3, unexpected_error_observer=None,
+    read_timeout=3, unexpected_error_observer=None, execution_lane=None,
 ):
     if not callable(identity_resolver):
         raise ValueError("VERIFIED_IDENTITY_RESOLVER_REQUIRED")
     app = create_app(
         service, read_capacity=read_capacity, read_timeout=read_timeout,
         unexpected_error_observer=unexpected_error_observer,
-        action_stream=True,
+        action_stream=True, execution_capacity=execution_capacity,
+        execution_lane=execution_lane,
     )
     if lifespan is not None:
         app.router.lifespan_context = lifespan
     reads = _Lane(read_capacity)
-    execution = _Lane(execution_capacity)
+    execution = execution_lane if execution_lane is not None else _Lane(execution_capacity)
 
     def options(request, *, paged=False):
         owner = require_owner(request.scope.get("a2flow.trusted_context"))

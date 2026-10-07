@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import AbstractContextManager, nullcontext
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
@@ -60,6 +61,7 @@ class RpcChatActionService:
 
     def execute(self, owner: TrustedContext, conversation_id: str, card_id: str, *,
                 request_id: str, action_name: str, inputs: dict[str, Any],
+                dispatch_admission: Callable[[], AbstractContextManager[Any]] | None = None,
                 ) -> ChatActionResponse:
         saved = self.store.get_binding(owner, conversation_id, card_id)
         card, metadata = saved["card"], saved["metadata"]
@@ -83,8 +85,9 @@ class RpcChatActionService:
         if len(matching) != 1:
             raise ActionRejected("ACTION_NOT_BOUND")
         persisted = trusted_card(owner, card, metadata)
-        claim = self.store.claim(owner, conversation_id, card_id, request_id,
-                                 action_name, inputs)
+        with dispatch_admission() if dispatch_admission is not None else nullcontext():
+            claim = self.store.claim(owner, conversation_id, card_id, request_id,
+                                     action_name, inputs)
         if not claim["dispatch"]:
             return _response(cast(dict[str, Any], claim["card"]), request_id)
         # The DB claim is committed before RPC. No lock or transaction spans
