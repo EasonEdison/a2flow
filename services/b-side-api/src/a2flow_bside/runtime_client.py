@@ -17,6 +17,7 @@ from skillweave_contracts.user_id import require_user_id, user_id_to_wire
 from .errors import RemoteRuntimeError
 
 _STATUS_BY_CODE = {
+    "CAPACITY_EXHAUSTED": 503,
     "INVALID_INPUT": 400,
     "INVALID_SERVICE_INPUT": 400,
     "CONTROL_NOT_FOUND": 404,
