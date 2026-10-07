@@ -11,18 +11,25 @@ const runPath=(id:string)=>'/runtime/runs/'+encoded(id);
 export function createProgressClient(path: (id: string) => string) {
   return {
     catalog: async (id: string, after?: string, signal?: AbortSignal) => {
-      const value = object(await request(path(id) + '/progress?limit=100' + (after ? '&after=' + encoded(after) : ''), undefined, signal));
+      const url = path(id) + '/progress?limit=100' + (after ? '&after=' + encoded(after) : '');
+      const value = object(await request(url, undefined, signal));
       const segments = list(value.segments).map(item => {
         const segment = object(item);
-        string(segment.node_id); string(segment.execution_id);
+        string(segment.node_id);
+        string(segment.execution_id);
         return segment as unknown as Segment;
       });
       return { segments, nextCursor: string(value.nextCursor), hasMore: value.hasMore === true };
     },
-    history: async (id: string, node: string, execution: string, after?: string, signal?: AbortSignal) => parseHistory(await request(
-      path(id) + '/nodes/' + encoded(node) + '/executions/' + encoded(execution) + '/history?limit=100' + (after ? '&after=' + encoded(after) : ''), undefined, signal,
-    )),
-    streamUrl: (id: string, node: string, execution: string, after?: string) => path(id) + '/nodes/' + encoded(node) + '/executions/' + encoded(execution) + '/stream' + (after ? '?after=' + encoded(after) : ''),
+    history: async (id: string, node: string, execution: string, after?: string, signal?: AbortSignal) => {
+      const url = path(id) + '/nodes/' + encoded(node) + '/executions/' + encoded(execution)
+        + '/history?limit=100' + (after ? '&after=' + encoded(after) : '');
+      return parseHistory(await request(url, undefined, signal));
+    },
+    streamUrl: (id: string, node: string, execution: string, after?: string) => (
+      path(id) + '/nodes/' + encoded(node) + '/executions/' + encoded(execution)
+      + '/stream' + (after ? '?after=' + encoded(after) : '')
+    ),
   };
 }
 export type ProgressClient = ReturnType<typeof createProgressClient>;
