@@ -16,8 +16,9 @@ import dataclasses
 import datetime as dt
 import re
 from zoneinfo import ZoneInfo
+from croniter import croniter
 
-_RULE_TYPES = frozenset({"once", "period"})
+_RULE_TYPES = frozenset({"once", "period", "cron"})
 _PERIOD_STEPS = frozenset({"15m", "1h", "1d", "1w"})
 _HHMM = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _STEP_DELTAS = {
@@ -53,6 +54,14 @@ class ScheduleRule:
                 dt.datetime.fromisoformat(at)
             except ValueError:
                 raise ScheduleRuleError("INVALID_ONCE_AT") from None
+        elif self.rule_type == "cron":
+            expression = self.rule_json.get("expression")
+            if not isinstance(expression, str) or len(expression.split()) != 5:
+                raise ScheduleRuleError("CRON_REQUIRES_FIVE_FIELDS")
+            if any(re.fullmatch(r"[0-9*,/\-]+", field) is None for field in expression.split()):
+                raise ScheduleRuleError("CRON_REQUIRES_NUMERIC_FIELDS")
+            if not croniter.is_valid(expression):
+                raise ScheduleRuleError("INVALID_CRON_EXPRESSION")
         else:
             every = self.rule_json.get("every")
             if every not in _PERIOD_STEPS:
@@ -93,6 +102,9 @@ def parse_rule(
 
 
 def _next_period_candidate(rule: ScheduleRule, after: dt.datetime) -> dt.datetime:
+    if rule.rule_type == "cron":
+        return croniter(rule.rule_json["expression"], after.astimezone(rule.zone),
+                        max_years_between_matches=8).get_next(dt.datetime).astimezone(dt.timezone.utc)
     if rule.rule_type != "period":
         raise ScheduleRuleError("NOT_A_PERIOD_RULE")
     every = rule.rule_json["every"]
