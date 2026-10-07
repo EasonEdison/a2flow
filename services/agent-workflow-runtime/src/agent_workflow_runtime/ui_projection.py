@@ -115,7 +115,7 @@ def _interaction_card(interaction, node_ids):
 
 def project_view(document, revision, lifecycle, lifecycle_revision, interactions):
     view = bounded(document)
-    if lifecycle not in {"RUNNING", "STOPPED", "SUCCEEDED"}:
+    if lifecycle not in {"RUNNING", "STOPPED", "SUCCEEDED", "FAILED"}:
         raise ActionRejected("PROJECTION_UNAVAILABLE")
     node_ids = frozenset(node["nodeId"] for node in view["nodes"])
     cards = []
@@ -149,13 +149,15 @@ def project_view(document, revision, lifecycle, lifecycle_revision, interactions
             raise ActionRejected("PROJECTION_UNAVAILABLE")
         if lifecycle == "STOPPED" and node["status"] != "SUCCEEDED":
             node["status"] = "STOPPED"
+        elif lifecycle == "FAILED" and node["status"] in {"RUNNING", "WAITING"}:
+            node["status"] = "UNCONFIRMED"
     for card in view["cards"]:
         interaction = interactions[card["interactionId"]]
         waiting = (lifecycle == "RUNNING" and interaction.phase == "WAITING"
                    and interaction.run_active and interaction.node_waiting
                    and not interaction.resume_started)
         card["state"] = "WAITING" if waiting else (
-            "INVALIDATED" if lifecycle == "STOPPED" or interaction.phase == "INVALIDATED"
+            "INVALIDATED" if lifecycle in {"STOPPED", "FAILED"} or interaction.phase == "INVALIDATED"
             or not interaction.run_active else "READ_ONLY")
         card["actionEligibility"] = "REVALIDATION_REQUIRED" if waiting else "NOT_OPERABLE"
     return bounded(view)

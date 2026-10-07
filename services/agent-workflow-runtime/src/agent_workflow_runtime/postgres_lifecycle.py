@@ -48,7 +48,7 @@ def decode_record(value, cls):
             data["versions"] = tuple(tuple(p) for p in versions)
             if len(dict(data["versions"])) != len(versions):
                 raise ValueError()
-            if data["status"] not in {"RUNNING", "STOPPED", "SUCCEEDED"}:
+            if data["status"] not in {"RUNNING", "STOPPED", "SUCCEEDED", "FAILED"}:
                 raise ValueError()
             if type(data["revision"]) is not int or data["revision"] < 0:
                 raise ValueError()
@@ -173,7 +173,7 @@ class PostgresRunRepository:
             return None
         if (row["user_id"] != owner.user_id or row["environment"] != owner.environment
                 or row["run_id"] != run_id
-                or row["status"] not in {"RUNNING", "STOPPED", "SUCCEEDED"}
+                or row["status"] not in {"RUNNING", "STOPPED", "SUCCEEDED", "FAILED"}
                 or type(row["definition_key"]) is not str or not row["definition_key"]):
             raise ActionRejected("INVALID_RESTART_IDENTITY")
         return {"runId": run_id, "status": row["status"], "definitionKey": row["definition_key"]}
@@ -184,8 +184,8 @@ class PostgresRunRepository:
                VALUES (%s,%s,%s,%s,%s)
                ON CONFLICT (user_id,environment,run_id) DO UPDATE SET document=EXCLUDED.document
                WHERE runtime_runs.thread_id=EXCLUDED.thread_id
-                 AND (runtime_runs.document->>'status'<>'STOPPED'
-                      OR EXCLUDED.document->>'status'='STOPPED')
+                 AND (runtime_runs.document->>'status'='RUNNING'
+                      OR EXCLUDED.document->>'status'=runtime_runs.document->>'status')
                RETURNING run_id""",
             (run.owner.user_id, run.owner.environment, run.run_id, run.thread_id, Jsonb(encode_record(run))),
         ).fetchone()

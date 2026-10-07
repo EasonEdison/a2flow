@@ -47,7 +47,7 @@ class _IdleGuard:
 
 
 def _terminal(view: dict) -> bool:
-    return view.get("lifecycle") in {"SUCCEEDED", "STOPPED"}
+    return view.get("lifecycle") in {"SUCCEEDED", "STOPPED", "FAILED"}
 
 
 def _as_view(result) -> dict | None:

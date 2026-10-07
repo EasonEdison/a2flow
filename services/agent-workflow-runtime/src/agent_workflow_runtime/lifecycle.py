@@ -266,6 +266,19 @@ class RunLifecycle:
             return {"runId": run_id, "threadId": run.thread_id, "status": run.status,
                     "inFlightCallsStillPending": bool(pending), "inFlightCallCount": len(pending)}
 
+    def fail(self, owner, run_id: str) -> RunRecord | None:
+        """Close a real graph failure without changing successful business facts."""
+        from dataclasses import replace
+        with self.repository.run_scope(owner, run_id):
+            run = self.repository.get_run(owner, run_id, for_update=True)
+            if run is None:
+                raise ActionRejected("RUN_NOT_FOUND")
+            if run.status != "RUNNING":
+                return None
+            failed = replace(run, status="FAILED", revision=run.revision + 1)
+            self.repository.put_run(failed)
+        return failed
+
     def succeed(self, owner, run_id):
         from dataclasses import replace
         with self.repository.run_scope(owner, run_id):

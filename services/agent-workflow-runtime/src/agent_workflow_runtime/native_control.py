@@ -1,5 +1,6 @@
 """Public synchronous SDK hooks. No scheduler, hidden retries or mutable SDK patch."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from contextvars import ContextVar
 
@@ -180,6 +181,7 @@ class RunGraphBinding:
     graph: object
     lifecycle: object
     progress: object = None
+    failure_observer: Callable[[BaseException], None] | None = None
 
     def get_state(self, *args, **kwargs):
         return self.graph.get_state(*args, **kwargs)
@@ -203,9 +205,11 @@ class ControlledRunRunner:
         )
         if not fresh:
             return self.lifecycle.snapshot(owner, run.run_id)
+        invoked = False
         try:
             self.lifecycle.assert_active(owner, run.run_id)
             graph, initial_state = self.graph_factory(run, self.lifecycle)
+            invoked = True
             self.invoke(run, graph, initial_state)
         except RunStoppedControl as signal:
             self.lifecycle.raise_observed_fatal(owner, run.run_id)
@@ -215,11 +219,10 @@ class ControlledRunRunner:
             self.lifecycle.control_status(owner, control_id, "RETURNED")
             return self.lifecycle.snapshot(owner, run.run_id)
         except BaseException as error:
-            try:
-                self.lifecycle.publish_event(
-                    RUN_FAILED, run, payload={"reason": type(error).__name__})
-            except Exception:
-                error.add_note("RUN_FAILURE_EVENT_PUBLISH_UNCONFIRMED")
+            # invoke handles both first execution and Action continuation. Only
+            # setup failures occur before that shared boundary.
+            if not invoked:
+                self._record_failure(run, None, error)
             try:
                 self.lifecycle.control_status(owner, control_id, "UNCONFIRMED")
             except Exception:
@@ -271,11 +274,35 @@ class ControlledRunRunner:
             if signal.run_id != run.run_id or saved.status != "STOPPED":
                 raise
             return self.lifecycle.snapshot(run.owner, run.run_id)
-        except BaseException:
+        except BaseException as error:
+            from langgraph.errors import GraphInterrupt
+            if not isinstance(error, GraphInterrupt):
+                self._record_failure(run, graph, error)
             self.lifecycle.raise_observed_fatal(run.owner, run.run_id)
             raise
         finally:
             _CURRENT_WORKFLOW_NODE.reset(token)
+
+    def _record_failure(self, run, graph, error: BaseException) -> None:
+        """Publish failure facts without replaying or undoing completed Actions."""
+        if isinstance(graph, RunGraphBinding):
+            try:
+                failed = self.lifecycle.fail(run.owner, run.run_id)
+                if failed is None:
+                    return  # Never replace STOPPED, SUCCEEDED or prior FAILED.
+                run = failed
+            except Exception:
+                error.add_note("RUN_FAILURE_STATE_SAVE_UNCONFIRMED")
+        if isinstance(graph, RunGraphBinding) and graph.failure_observer is not None:
+            try:
+                graph.failure_observer(error)
+            except Exception:
+                error.add_note("NODE_FAILURE_OBSERVATION_UNCONFIRMED")
+        try:
+            self.lifecycle.publish_event(
+                RUN_FAILED, run, payload={"reason": type(error).__name__})
+        except Exception:
+            error.add_note("RUN_FAILURE_EVENT_PUBLISH_UNCONFIRMED")
 
     def action(self, run, service, payload):
         """AF04 Action entry cannot silently select the legacy AF03 test path."""
