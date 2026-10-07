@@ -14,6 +14,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 from typing import Any, Literal, Never, TypeAlias, TypedDict, cast
+from collections.abc import Callable
 
 import psycopg
 from psycopg.rows import dict_row
@@ -305,10 +306,25 @@ def _typed_observation(row: ObservationRow) -> ChatObservation:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class CardCompletion:
+    owner: TrustedContext
+    conversation_id: str
+    card_id: str
+    request_id: str
+    metadata: JsonObject
+
+
+CompletionObserver: TypeAlias = Callable[
+    [psycopg.Connection[Any], CardCompletion], None
+]
+
+
 class ChatCardStore:
     """PostgreSQL card store with an explicit test-only storage injection seam."""
 
-    def __init__(self, conninfo, *, environment, _storage=None):
+    def __init__(self, conninfo, *, environment, _storage=None,
+                 completion_observer: CompletionObserver | None = None):
         if environment not in {"PRT", "ONLINE"}:
             raise ValueError("CARD_ENVIRONMENT_REQUIRED")
         if _storage is None:
@@ -316,6 +332,7 @@ class ChatCardStore:
                 raise ValueError("CARD_CONNINFO_REQUIRED")
             _storage = _PostgresStorage(conninfo)
         self._environment, self._storage = environment, _storage
+        self._completion_observer = completion_observer
 
     def setup(self):
         """Create only the isolated card tables; never runs from request paths."""
@@ -571,6 +588,12 @@ class ChatCardStore:
                     error_code=None,
                 ),
             )
+            if card["status"] == "COMPLETED" and self._completion_observer is not None:
+                self._completion_observer(
+                    transaction._connection,
+                    CardCompletion(owner, conversation_id, card_id, request_id,
+                                   cast(JsonObject, deepcopy(card["binding_metadata"]))),
+                )
             return _public(card)
 
     def fail(self, owner: TrustedContext, conversation_id: str, card_id: str, request_id: str,

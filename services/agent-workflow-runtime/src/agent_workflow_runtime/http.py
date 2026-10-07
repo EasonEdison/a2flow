@@ -172,6 +172,7 @@ class Action(Restart):
 def create_app(
     service, *, execution_capacity=2, read_capacity=2, stop_capacity=1,
     read_timeout=3, unexpected_error_observer=None, action_stream=False,
+    execution_lane=None,
 ):
     """Host middleware must set scope['a2flow.trusted_context'] to TrustedContext.
 
@@ -185,7 +186,8 @@ def create_app(
         raise ValueError("unexpected error observer must be callable")
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.add_middleware(BodyLimit)
-    execution, reads, stops = (_Lane(execution_capacity), _Lane(read_capacity), _Lane(stop_capacity))
+    execution = execution_lane if execution_lane is not None else _Lane(execution_capacity)
+    reads, stops = _Lane(read_capacity), _Lane(stop_capacity)
 
     def owner(request):
         if request.query_params:

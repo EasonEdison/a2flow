@@ -127,26 +127,39 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
     ) -> ToolMessage | Command[Any]:
         """Record only a successful message returned by the invoked handler."""
 
-        if not isinstance(result, ToolMessage) or result.status == "error":
-            return result
         call_id = request.tool_call.get("id")
         call_name = request.tool_call.get("name")
+        update = {}
+        original = result
+        if isinstance(result, Command):
+            if not isinstance(result.update, dict):
+                return original
+            update = dict(result.update)
+            candidates = [message for message in update.get("messages", ())
+                          if isinstance(message, ToolMessage)
+                          and message.tool_call_id == call_id and message.name == call_name]
+            if len(candidates) != 1:
+                return original
+            result = candidates[0]
+        if not isinstance(result, ToolMessage) or result.status == "error":
+            return original
         if (
             not isinstance(call_id, str)
             or not isinstance(call_name, str)
             or result.tool_call_id != call_id
             or result.name != call_name
         ):
-            return result
+            return original
         evidence_state = request.state.get(_RUNTIME_TOOL_EVIDENCE)
         if not isinstance(evidence_state, Mapping):
-            return result
+            return original
         invocation_id = evidence_state.get("invocation_id")
         if not isinstance(invocation_id, str) or not invocation_id:
-            return result
+            return original
         return Command(
             update={
-                "messages": [result],
+                **update,
+                "messages": update.get("messages", [result]),
                 _RUNTIME_TOOL_EVIDENCE: {
                     "invocation_id": invocation_id,
                     "facts": [(call_id, call_name)],

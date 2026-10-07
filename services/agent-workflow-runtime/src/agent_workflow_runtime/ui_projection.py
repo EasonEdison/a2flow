@@ -103,6 +103,8 @@ def _interaction_card(interaction, node_ids):
         card = json.loads(interaction.display_json)
     except (TypeError, ValueError, RecursionError):
         raise ActionRejected("PROJECTION_UNAVAILABLE") from None
+    if isinstance(card, dict) and card.get("protocolProfile") == "a2flow.java-rpc.v1":
+        return None  # Current RPC cards have their own /cards projection.
     scope = interaction.context.invocation_scope
     if (type(card) is not dict or card.get("interactionId") != interaction.interaction_id
             or card.get("nodeId") != scope.node_id or card.get("nodeId") not in node_ids
@@ -128,6 +130,8 @@ def project_view(document, revision, lifecycle, lifecycle_revision, interactions
             node = next(item for item in view["nodes"] if item["nodeId"] == scope.node_id)
             if node["status"] not in {"SUCCEEDED", "STOPPED"}:
                 node["status"] = "WAITING"
+        if card is None and interaction.display_json is not None:
+            continue
         for attempt in interaction.attempts:
             if (attempt.status == "EXECUTED" and attempt.business_success
                     and attempt.result_json is not None):

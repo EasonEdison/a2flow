@@ -67,6 +67,8 @@ class ActionService:
     def submit(self, payload: object, owner: TrustedContext) -> Attempt:
         """Execute once per saved control request; failed/uncertain delivery never reexecutes."""
         request = ActionRequest.from_mapping(payload)
+        if self.configuration is None or self.executor is None:
+            raise ActionRejected("RPC_CARD_ACTION_REQUIRED")
         with self.repository.scope(owner, request.run_id):
             interaction = self._get(request.key, owner)
             self._active(interaction, owner)
@@ -206,7 +208,7 @@ class ActionService:
         with self.repository.scope(owner, key[0]):
             item = self._get(key, owner)
             self._active(item, owner)
-            self._versions(item)
+
             if (
                 item.phase != "COMPLETED" or not item.resume_started
                 or item.completion_request_id != value["controlRequestId"]
@@ -231,7 +233,7 @@ class ActionService:
             for item in self.repository.for_node(
                 context.trusted_context, scope.run_id, scope.node_id,
             ):
-                self._versions(item)
+
                 if item.node_waiting:
                     self._active(item, context.trusted_context)
                 elif (not item.run_active or item.phase != "COMPLETED"

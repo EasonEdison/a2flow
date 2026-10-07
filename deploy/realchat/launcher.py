@@ -59,7 +59,9 @@ def runtime():
         bundle_validator, application_validator, application_data_validator,
     )
     from deploy.mvp.operations import operations
-    from agent_workflow_runtime.mvp_assembly import MvpRuntimeHost
+    from agent_workflow_runtime.workflow_rpc_host import RpcWorkflowHost
+    from agent_workflow_runtime.rpc_client import RpcClient
+    from deploy.attended.runtime_app import completed_card, SchedulerEventSink
     from agent_workflow_runtime.internal_identity import private_identity
     from agent_workflow_runtime.model_factory import DeepSeekModelFactory
     from agent_workflow_runtime.personal_memory import PersonalMemory
@@ -78,7 +80,9 @@ def runtime():
         return SecretStr(os.environ["DEEPSEEK_API_KEY"])
 
     dsn = os.environ["A2FLOW_DATABASE_URL"]
-    return MvpRuntimeHost(
+    return RpcWorkflowHost(
+        rpc=RpcClient.from_environment(os.environ),
+        completion_observer=completed_card, event_sink=SchedulerEventSink(dsn),
         conninfo=dsn, database=os.environ["A2FLOW_DATABASE_NAME"],
         environment="PRT", namespace=os.environ["A2FLOW_ASSET_NAMESPACE"],
         bundle_validator=bundle_validator(),
