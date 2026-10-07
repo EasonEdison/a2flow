@@ -118,6 +118,7 @@ class InternalResume(BaseModel):
     userId: int
     environment: Literal["PRT", "ONLINE"]
     requestId: str = Field(min_length=1, max_length=128)
+    actionRequestId: str = Field(min_length=1, max_length=128)
     nodeId: str = Field(min_length=1, max_length=256)
     interactionId: str = Field(min_length=1, max_length=256)
 
