@@ -15,7 +15,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Callable, Literal
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -559,9 +559,11 @@ def create_app(
             run_ownership.reserve, control_id=body.requestId,
             user_id=body.userId, workflow_key=body.workflowKey,
         )
-        await asyncio.to_thread(
+        view = await asyncio.to_thread(
             _runtime(body.userId).start, body.requestId, body.workflowKey, inputs,
         )
+        if view.get("runId"):
+            run_ownership.bind_run_id(body.requestId, view["runId"])
         return {"controlRequestId": body.requestId, "status": "SUBMITTED"}
 
     @app.get("/api/internal/runs/{request_id}")
@@ -571,6 +573,8 @@ def create_app(
         if owner is None:
             raise BsideError("NOT_FOUND", 404)
         view = await asyncio.to_thread(_runtime(owner).control, request_id)
+        if view.get("runId"):
+            run_ownership.bind_run_id(request_id, view["runId"])
         return {"controlRequestId": request_id, "status": "SUBMITTED", "view": view}
 
     @app.get("/api/runs/{control_id}/cards")
@@ -599,23 +603,29 @@ def create_app(
             raise BsideError("ENVIRONMENT_MISMATCH", 400)
         if run_ownership.owner_by_run(run_id) != body.userId:
             raise BsideError("NOT_FOUND", 404)
-        return await asyncio.to_thread(
+        await asyncio.to_thread(
             _runtime(body.userId).resume_card, run_id, card_id,
             body.model_dump(exclude={"userId", "environment"}),
         )
+        return {"controlRequestId": body.requestId, "status": "SUBMITTED"}
 
-    @app.get("/api/internal/run-controls/{request_id}")
-    async def internal_control_status(
-        request: Request, request_id: str, userId: str, environment: str,
+    @app.get("/api/internal/runs/{run_id}/cards/{card_id}/resume-status")
+    async def internal_resume_status(
+        request: Request, run_id: str, card_id: str, userId: str,
+        nodeId: str, interactionId: str, requestId: str, actionRequestId: str,
+        requested_environment: str = Query(alias="environment"),
     ):
         _require_internal(request)
         owner = user_id_from_wire(userId)
-        if environment not in {"PRT", "ONLINE"}:
+        if requested_environment != environment:
             raise BsideError("ENVIRONMENT_MISMATCH", 400)
-        view = await asyncio.to_thread(
-            runtime_client.for_user(owner, environment).control, request_id,
+        if run_ownership.owner_by_run(run_id) != owner:
+            raise BsideError("NOT_FOUND", 404)
+        return await asyncio.to_thread(
+            _runtime(owner).resume_status, run_id, card_id,
+            {"nodeId": nodeId, "interactionId": interactionId,
+             "requestId": requestId, "actionRequestId": actionRequestId},
         )
-        return {"controlRequestId": request_id, "status": "SUBMITTED", "view": view}
 
     @app.post("/api/runs/{control_id}/cards/{card_id}/actions")
     async def workflow_card_action(

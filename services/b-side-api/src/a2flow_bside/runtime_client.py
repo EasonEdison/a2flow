@@ -51,6 +51,10 @@ class RuntimeClient(Protocol):
         self, run_id: str, card_id: str, payload: dict[str, object],
     ) -> dict[str, object]: ...
 
+    def resume_status(
+        self, run_id: str, card_id: str, query: dict[str, str],
+    ) -> dict[str, object]: ...
+
     def action_stream(self, run_id: str, node_id: str,
                       payload: dict) -> "object": ...
 
@@ -140,6 +144,15 @@ class HttpRuntimeClient:
         return self._request(
             "POST", "/runtime/runs/" + urllib.parse.quote(run_id, safe="")
             + "/cards/" + urllib.parse.quote(card_id, safe="") + "/resume", payload,
+        )
+
+    def resume_status(
+        self, run_id: str, card_id: str, query: dict[str, str],
+    ) -> dict[str, object]:
+        return self._request(
+            "GET", "/runtime/runs/" + urllib.parse.quote(run_id, safe="")
+            + "/cards/" + urllib.parse.quote(card_id, safe="") + "/resume-status?"
+            + urllib.parse.urlencode(query),
         )
 
     def action_stream(self, run_id: str, node_id: str, payload: dict):
