@@ -1,0 +1,4 @@
+# New Streams modules; existing scheduler entry is not switched by this file.
+pydantic==2.13.5
+redis==5.3.1
+croniter==6.0.0
