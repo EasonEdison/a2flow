@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { NodeCard } from './components/NodeCard';
+import { WorkflowApplications } from './components/WorkflowApplications';
 import { MemorySettingsPage } from './components/MemorySettingsPage';
 import { AssistantThread } from './components/AssistantThread';
 import './chat.css';
 import { FixturePreview } from './FixturePreview';
 import { applyChatStreamEvent, preserveUpdatedCards } from './assistantChat';
 import { apiErrorMessage, messageFromContent, productApi, type ChatCard, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
+import type { WorkflowCard } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
@@ -54,9 +56,37 @@ function Shell({ session, page, unread, onPage, onLogout, children }: { session:
 function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
   const [run, setRun] = useState<RunView | null>(null);
   const [busy, setBusy] = useState(false);
-  const refresh = useCallback(async () => setRun(await productApi.run(runId)), [runId]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  const [cards, setCards] = useState<WorkflowCard[]>([]);
+  const [error, setError] = useState('');
+  const currentRunId = useRef(runId);
+  const cardReadEpoch = useRef(0);
+  currentRunId.current = runId;
+  const refresh = useCallback(async () => {
+    const epoch = ++cardReadEpoch.current;
+    try {
+      const [view, entries] = await Promise.all([productApi.run(runId), productApi.runCards(runId)]);
+      if (currentRunId.current !== runId || cardReadEpoch.current !== epoch) return;
+      setRun(view); setCards(entries); setError('');
+    } catch { if (currentRunId.current === runId) setError('运行或卡片状态同步失败，请刷新页面重试。'); }
+  }, [runId]);
+  useEffect(() => { setRun(null); setCards([]); void refresh(); }, [refresh]);
   const active = run ? ['RUNNING', 'WAITING', 'PENDING'].includes(run.lifecycle) : false;
+  useEffect(() => {
+    if (!active) return;
+    const controller = new AbortController();
+    let loading = false;
+    const timer = window.setInterval(() => {
+      if (loading) return;
+      loading = true;
+      const epoch = cardReadEpoch.current;
+      void productApi.runCards(runId, controller.signal).then(entries => {
+        if (!controller.signal.aborted && epoch === cardReadEpoch.current) { setCards(entries); setError(''); }
+      }).catch(() => {
+        if (!controller.signal.aborted) setError('卡片状态同步失败，正在等待重新读取。');
+      }).finally(() => { loading = false; });
+    }, 2000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [runId, active]);
   useEffect(() => {
     if (!active) return;
     const controller = new AbortController();
@@ -78,10 +108,16 @@ function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
     })();
     return () => { closed = true; controller.abort(); };
   }, [runId, active]);
-  if (!run) return <div className="loading">正在加载运行…</div>;
+  if (!run) return <div className="loading">{error ? <p role="alert">{error}</p> : '正在加载运行…'}</div>;
   return <section className="run-detail">
+    {error ? <p className="inline-error" role="alert">{error}</p> : null}
     <div className="section-heading">{onBack ? <button className="secondary" onClick={onBack}>返回</button> : null}<div><h2>{run.title}</h2><p>{run.requirement}</p></div><span className={`status ${run.lifecycle.toLowerCase()}`}>{runLabels[run.lifecycle] ?? run.lifecycle}</span>{['RUNNING', 'WAITING'].includes(run.lifecycle) ? <button className="quiet danger" onClick={async () => { if (!confirm('停止后无法恢复，确认停止？')) return; await productApi.stopRun(run.id); await refresh(); }}>停止运行</button> : null}</div>
-    <div className="nodes">{run.nodes.map((node, index) => <NodeCard key={node.id} node={node} index={index} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); } finally { setBusy(false); } }} />)}</div>
+    <div className="nodes">{run.nodes.map((node, index) => {
+      const entries = cards.filter(entry => entry.nodeId === node.id);
+      return <NodeCard key={node.id} node={entries.length ? { ...node, card: undefined } : node} index={index} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); await refresh(); } finally { setBusy(false); } }}>
+        <WorkflowApplications runId={run.id} entries={entries} disabled={!['RUNNING', 'WAITING'].includes(run.lifecycle) || !['RUNNING', 'WAITING'].includes(node.status) || busy} onUpdate={card => { cardReadEpoch.current++; setCards(current => current.map(entry => entry.card.cardId === card.cardId ? { ...entry, card } : entry)); }} onSettled={refresh} />
+      </NodeCard>;
+    })}</div>
   </section>;
 }
 
@@ -257,18 +293,58 @@ function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
   const [items, setItems] = useState<Schedule[]>([]);
   const [workflowKey, setWorkflowKey] = useState(initialWorkflow);
   const [input, setInput] = useState('');
-  const [cadenceType, setCadenceType] = useState<'minutes' | 'daily' | 'weekly' | 'once'>('daily');
-  const [interval, setInterval] = useState('15');
+  const [expression, setExpression] = useState('0 9 * * *');
+  const [timezone, setTimezone] = useState('Asia/Shanghai');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const load = useCallback(async () => setItems((await productApi.schedules()).items), []);
-  useEffect(() => { void Promise.all([productApi.workflows(), productApi.schedules()]).then(([catalog, schedules]) => { setWorkflows(catalog.items); setItems(schedules.items); setWorkflowKey((value) => value || catalog.items[0]?.key || ''); }); }, []);
+  useEffect(() => {
+    let active = true;
+    void Promise.all([productApi.workflows(), productApi.schedules()]).then(([catalog, schedules]) => {
+      if (!active) return;
+      setWorkflows(catalog.items); setItems(schedules.items);
+      setWorkflowKey((value) => value || catalog.items[0]?.key || '');
+    }).catch(() => { if (active) setError('定时任务加载失败，请刷新页面重试。'); });
+    return () => { active = false; };
+  }, []);
   const workflowNames = useMemo(() => Object.fromEntries(workflows.map((item) => [item.key, item.name])), [workflows]);
-  const scheduleRule = (): { ruleType: string; ruleJson: Record<string, string> } => {
-    if (cadenceType === 'minutes') return { ruleType: 'period', ruleJson: { every: Number(interval) >= 60 ? '1h' : '15m' } };
-    if (cadenceType === 'daily') return { ruleType: 'period', ruleJson: { every: '1d', at: '09:00' } };
-    if (cadenceType === 'weekly') return { ruleType: 'period', ruleJson: { every: '1w', at: '09:00' } };
-    return { ruleType: 'once', ruleJson: { at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() } };
+  const mutate = async (operation: () => Promise<unknown>) => {
+    if (busy) return;
+    setBusy(true); setError('');
+    try { await operation(); await load(); }
+    catch (reason) { setError(apiErrorMessage(reason, '定时任务操作失败，请核对 Cron 表达式和时区。')); }
+    finally { setBusy(false); }
   };
-  return <section><div className="page-title"><h1>定时管理</h1><p>为工作流设置周期或一次性自动执行。</p></div><section className="schedule-form card"><h2>创建定时任务</h2><form onSubmit={async (event) => { event.preventDefault(); await productApi.createSchedule({ workflowKey, input, ...scheduleRule() }); setInput(''); await load(); }}><label htmlFor="schedule-workflow">工作流</label><select id="schedule-workflow" value={workflowKey} onChange={(event) => setWorkflowKey(event.target.value)}>{workflows.map((item) => <option value={item.key} key={item.key}>{item.name}</option>)}</select><label htmlFor="cadence">执行周期</label><select id="cadence" value={cadenceType} onChange={(event) => setCadenceType(event.target.value as 'minutes' | 'daily' | 'weekly' | 'once')}><option value="minutes">每 N 分钟</option><option value="daily">每天</option><option value="weekly">每周</option><option value="once">一次性（24 小时后）</option></select>{cadenceType === 'minutes' ? <><label htmlFor="interval">分钟间隔</label><input id="interval" type="number" min="15" value={interval} onChange={(event) => setInterval(event.target.value)} /></> : null}<label htmlFor="schedule-input">执行输入</label><textarea id="schedule-input" value={input} onChange={(event) => setInput(event.target.value)} required placeholder="输入工作流执行内容" /><button className="primary">创建定时任务</button></form></section><div className="schedule-list">{items.length ? items.map((item) => <article className="card" key={item.id}><div><h2>{workflowNames[item.workflowKey] ?? item.workflowName}</h2><p>{item.input}</p><small>{item.cadence} · 下次运行 {new Date(item.nextRunAt).toLocaleString()}</small></div><label className="switch"><input role="switch" type="checkbox" checked={item.enabled} onChange={async (event) => { await productApi.toggleSchedule(item.id, event.target.checked); await load(); }} /><span>{item.enabled ? '已启用' : '已停用'}</span></label><button className="quiet danger" onClick={async () => { await productApi.deleteSchedule(item.id); await load(); }}>删除</button></article>) : <div className="empty-card">暂无定时任务</div>}</div></section>;
+  return <section>
+    <div className="page-title"><h1>定时管理</h1><p>按 Cron 表达式和指定时区自动执行工作流。</p></div>
+    {error ? <p className="inline-error" role="alert">{error}</p> : null}
+    <section className="schedule-form card"><h2>创建定时任务</h2>
+      <form onSubmit={(event) => {
+        event.preventDefault();
+        if (expression.trim().split(/\s+/).length !== 5) { setError('Cron 需要五个字段：分 时 日 月 周。'); return; }
+        void mutate(async () => {
+          await productApi.createSchedule({ workflowKey, input, ruleType: 'cron', ruleJson: { expression: expression.trim() }, timezone: timezone.trim() });
+          setInput('');
+        });
+      }}>
+        <label htmlFor="schedule-workflow">工作流</label>
+        <select id="schedule-workflow" required value={workflowKey} onChange={(event) => setWorkflowKey(event.target.value)}>{workflows.map((item) => <option value={item.key} key={item.key}>{item.name}</option>)}</select>
+        <label htmlFor="schedule-cron">Cron 表达式</label>
+        <input id="schedule-cron" required value={expression} onChange={(event) => setExpression(event.target.value)} aria-describedby="cron-help" />
+        <small id="cron-help">分 时 日 月 周。例如 0 9 * * * 表示每天 09:00；*/15 * * * * 表示每 15 分钟。</small>
+        <label htmlFor="schedule-timezone">时区</label>
+        <input id="schedule-timezone" required value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="Asia/Shanghai" />
+        <label htmlFor="schedule-input">执行输入</label>
+        <textarea id="schedule-input" value={input} onChange={(event) => setInput(event.target.value)} required placeholder="输入工作流执行内容" />
+        <button className="primary" disabled={busy || !workflowKey}>{busy ? '正在保存…' : '创建定时任务'}</button>
+      </form>
+    </section>
+    <div className="schedule-list">{items.length ? items.map((item) => <article className="card" key={item.id}>
+      <div><h2>{workflowNames[item.workflowKey] ?? item.workflowName}</h2><p>{item.input}</p><small>{item.cadence} · 下次运行 {item.nextRunAt ? new Date(item.nextRunAt).toLocaleString() : '暂无'}</small></div>
+      <label className="switch"><input role="switch" type="checkbox" disabled={busy} checked={item.enabled} onChange={(event) => { void mutate(() => productApi.toggleSchedule(item.id, event.target.checked)); }} /><span>{item.enabled ? '已启用' : '已停用'}</span></label>
+      <button className="quiet danger" disabled={busy} onClick={() => { void mutate(() => productApi.deleteSchedule(item.id)); }}>删除</button>
+    </article>) : <div className="empty-card">暂无定时任务</div>}</div>
+  </section>;
 }
 
 function NotificationPage({ items, refresh, onRun }: { items: Notification[]; refresh: () => Promise<void>; onRun: (id: string) => void }) {

@@ -2,7 +2,7 @@ import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { A2uiSurface, MarkdownContext } from '@a2ui/react/v0_9';
 import { renderMarkdown } from '@a2ui/markdown-it';
 import { actionRequest, actionResponsePending, cardIsOperable, createSnapshotProcessor, persistedSnapshotKey } from '../a2uiSnapshot.mjs';
-import { productApi, type ChatCard, type ComposerDraftEffect } from '../productApi';
+import { productApi, type ChatCard, type ChatActionResponse, type ComposerDraftEffect } from '../productApi';
 import { createUuidV4 } from '../secureUuid.mjs';
 import { registeredCatalogs } from './a2uiCatalogs';
 import '../../node_modules/@a2ui/react/v0_9/index.css';
@@ -20,18 +20,20 @@ class RendererBoundary extends Component<{ children: ReactNode }, { failed: bool
   render() { return this.state.failed ? <p role="alert">组件渲染失败，已禁止操作。请核对 Catalog 实现。</p> : this.props.children; }
 }
 
-export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStateChange }: {
+export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStateChange, submitAction, disabled = false }: {
   card: ChatCard;
   onUpdate: (card: ChatCard) => void;
   onComposerDraft: (effect: ComposerDraftEffect) => void;
   onActionStateChange?: (active: boolean) => void;
+  submitAction?: (card: ChatCard, requestId: string, actionName: string, inputs: Record<string, unknown>) => Promise<ChatActionResponse>;
+  disabled?: boolean;
 }) {
   const [processor, setProcessor] = useState<ReturnType<typeof createSnapshotProcessor>>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const current = useRef({ card, onUpdate, onComposerDraft, onActionStateChange });
-  current.current = { card, onUpdate, onComposerDraft, onActionStateChange };
+  const current = useRef({ card, onUpdate, onComposerDraft, onActionStateChange, submitAction, disabled });
+  current.current = { card, onUpdate, onComposerDraft, onActionStateChange, submitAction, disabled };
   // Polling unchanged snapshots must not erase unsent user edits.
   const displayKey = JSON.stringify(card.display);
   const snapshotKey = persistedSnapshotKey(card);
@@ -56,7 +58,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
           if (!disposed) { inFlight.current = true; setError('组件绑定或表达式失败，已禁止操作。请核对 Catalog 配置。'); setBusy(true); }
         }));
         subscriptions.push(surface.onAction.subscribe(async event => {
-          if (disposed || inFlight.current || !cardIsOperable(current.current.card)) return;
+          if (disposed || inFlight.current || current.current.disabled || !cardIsOperable(current.current.card)) return;
           const latest = current.current.card;
           let request: ReturnType<typeof actionRequest>;
           let requestId: string;
@@ -72,7 +74,9 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
           actionStateCallback?.(true);
           setBusy(true); setError('');
           try {
-            const response = await productApi.chatAction(latest.conversationId, latest, requestId, request.actionName, request.inputs);
+            const response = current.current.submitAction
+              ? await current.current.submitAction(latest, requestId, request.actionName, request.inputs)
+              : await productApi.chatAction(latest.conversationId, latest, requestId, request.actionName, request.inputs);
             if (!disposed) {
               current.current.onUpdate(response.card);
               response.effects.filter(effect => effect.requestId === requestId)
@@ -96,7 +100,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
     }
     return () => { disposed = true; subscriptions.forEach(item => item.unsubscribe()); next?.model.dispose(); };
   }, [displayKey, snapshotKey]);
-  const operable = cardIsOperable(card) && !busy && !error;
+  const operable = cardIsOperable(card) && !busy && !error && !disabled;
   return <details className="display-card" open={['WAITING_ACTION', 'DISPLAY_ONLY', 'UNKNOWN'].includes(card.status)}>
     <summary>{card.display.applicationKey} · {labels[card.status] ?? '只读卡片'}</summary>
     <RendererBoundary key={snapshotKey}>
