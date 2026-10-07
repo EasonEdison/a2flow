@@ -1,17 +1,18 @@
 import { useState, type ReactNode } from 'react';
 
-import { statusLabels, terminal, type InteractiveCard, type NodeView } from '../presentation';
+import { statusLabels, type InteractiveCard, type NodeView } from '../presentation';
 import { ApplicationCard, DisplayApplicationCard } from './ApplicationCard';
 import { Icon } from './Icon';
 import { MarkdownContent } from './MarkdownContent';
 import { nodeSummary } from '../nodeSummary';
+import { WorkflowExecution } from './WorkflowExecution';
+import './workflow-presentation.css';
 
 export function NodeCard({
   node,
   index,
   busy,
   onAction,
-  onHistory,
   children,
 }: {
   node: NodeView;
@@ -21,14 +22,7 @@ export function NodeCard({
   onHistory: () => Promise<void>;
   children?: ReactNode;
 }) {
-  const [disclosure, setDisclosure] = useState<{ status: string; open: boolean } | null>(
-    null,
-  );
-  const [resultOpen, setResultOpen] = useState(true);
-  const open =
-    disclosure?.status === node.status
-      ? disclosure.open
-      : !terminal(node.status) && node.status !== 'PENDING';
+  const [resultOpen, setResultOpen] = useState(false);
   const interactive = node.card?.kind === 'INTERACTIVE' ? node.card : undefined;
   const waitingInteractive =
     interactive && node.status === 'WAITING' ? interactive : undefined;
@@ -36,12 +30,6 @@ export function NodeCard({
   const display = node.card?.kind === 'DISPLAY_ONLY' ? node.card : undefined;
   const hasResult = Boolean(node.output) || Boolean(display) || Boolean(completedInteractive);
 
-  const toggle = () => {
-    setDisclosure({ status: node.status, open: !open });
-    if (!open) {
-      void onHistory();
-    }
-  };
 
   return (
     <article className={'node-card state-' + node.status.toLowerCase()} id={'node-' + node.id}>
@@ -58,45 +46,8 @@ export function NodeCard({
         </span>
       </header>
 
-      <div className="process">
-        <button
-          className="disclosure"
-          aria-expanded={open}
-          aria-controls={'details-' + node.id}
-          onClick={toggle}
-        >
-          <Icon name="chevron" />
-          <span>{terminal(node.status) ? '查看历史过程' : '思考与执行过程'}</span>
-          <small>
-            {terminal(node.status)
-              ? '只读，不重新执行'
-              : node.status === 'WAITING'
-                ? '等待确认后继续'
-                : ''}
-          </small>
-        </button>
-        {open ? (
-          <div id={'details-' + node.id} className="process-body">
-            {node.records.length ? (
-              node.records.map((record) => (
-                <div key={record.id} className={'record ' + record.kind}>
-                  {record.kind === 'reasoning' ? (
-                    <span className="record-label">模型思考 · 与已验证结果分别展示</span>
-                  ) : null}
-                  <p>{record.text}</p>
-                </div>
-              ))
-            ) : (
-              <p className="muted">
-                {node.status === 'PENDING' ? '节点尚未开始。' : '等待已保存的执行记录。'}
-              </p>
-            )}
-            {node.incomplete ? (
-              <p className="observation-warning">过程记录不完整，运行状态请以节点状态为准。</p>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      {children ?? <WorkflowExecution node={node} />}
+      {node.incomplete ? <p className="observation-warning">过程记录不完整，运行状态请以步骤状态为准。</p> : null}
 
       {waitingInteractive ? (
         <ApplicationCard
@@ -106,21 +57,21 @@ export function NodeCard({
           onSubmit={(value) => onAction(waitingInteractive, value)}
         />
       ) : null}
-      {children}
 
       {hasResult ? (
-        <section className="result">
+        <section className="workflow-assistant-note">
           <button
             className="result-disclosure"
             aria-expanded={resultOpen}
             aria-controls={'result-' + node.id}
             onClick={() => setResultOpen((value) => !value)}
           >
-            <h3>节点结果</h3>
+            <h3>助手说明</h3>
             <Icon name="chevron" />
           </button>
           {resultOpen ? (
             <div id={'result-' + node.id} className="result-body">
+              <p className="muted">以下为模型总结；业务内容以卡片为准，步骤状态由运行引擎确定。</p>
               {completedInteractive ? (
                 <ApplicationCard
                   key={completedInteractive.id}
@@ -135,6 +86,7 @@ export function NodeCard({
           ) : null}
         </section>
       ) : null}
+      {node.actionResults?.length ? <details className="workflow-debug"><summary>调试详情 · 已保存的操作结果</summary><pre>{JSON.stringify(node.actionResults, null, 2)}</pre></details> : null}
     </article>
   );
 }

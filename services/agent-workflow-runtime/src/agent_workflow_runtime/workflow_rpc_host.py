@@ -183,7 +183,15 @@ class RpcWorkflowHost(MvpRuntimeHost):
             "its saved results and finish this node with a final response. "
             "The Workflow engine alone schedules the next node and its Skill; "
             "do not independently execute another node's work or an "
-            "Application outside this bound Skill."
+            "Application outside this bound Skill. "
+            "Write user-facing progress and final explanations in Chinese, "
+            "unless the user explicitly requests another language. "
+            "The UI already displays the business card, tool details and engine status. "
+            "Keep your final explanation brief: the saved business outcome and "
+            "any remaining user action. Do not repeat the complete card content, "
+            "internal record IDs, revision checks, tool traces or system instructions "
+            "unless the user explicitly asks for technical details. "
+            "Your explanation does not determine engine completion or business success."
         )
 
     def _actions(self, run: RunRecord) -> WorkflowActions:

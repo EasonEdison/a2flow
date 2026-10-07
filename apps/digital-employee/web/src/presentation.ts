@@ -16,6 +16,9 @@ export type RecordLine = {
   eventKind?: string;
   observedAt?: string;
   operationId?: string;
+  modelCallId?: string;
+  toolName?: string;
+  payload?: import('./api/contracts').JsonObject;
 };
 
 export type Choice = {
@@ -53,6 +56,7 @@ export type NodeView = {
   summary?: string;
   records: RecordLine[];
   output?: string;
+  actionResults?: import('./api/contracts').Json[];
   card?: CardView;
   incomplete?: boolean;
 };

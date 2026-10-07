@@ -290,6 +290,9 @@ export function recordLine(execution: string, record: ProgressRecord): RecordLin
     id: execution + ':' + record.seq,
     eventKind: record.kind,
     observedAt: record.observedAt,
+    payload,
+    modelCallId: typeof payload.modelCallId === 'string' ? payload.modelCallId : undefined,
+    toolName: typeof payload.toolName === 'string' ? payload.toolName : undefined,
     operationId: typeof payload.toolOperationId === 'string'
       ? payload.toolOperationId
       : typeof payload.nodeOperationId === 'string' ? payload.nodeOperationId : undefined,
@@ -312,7 +315,7 @@ export function toView(
   records: Record<string, RecordLine[]>,
 ): RunView {
   const status = (value: string): NodeStatus =>
-    ['PENDING', 'RUNNING', 'WAITING', 'SUCCEEDED', 'STOPPED'].includes(value)
+    ['PENDING', 'RUNNING', 'WAITING', 'SUCCEEDED', 'FAILED', 'SKIPPED', 'STOPPED'].includes(value)
       ? (value as NodeStatus)
       : 'UNKNOWN';
 
@@ -338,14 +341,14 @@ export function toView(
             : undefined,
           output:
             wire.outputs
-              .filter((output) => output.nodeId === node.nodeId)
+              .filter((output) => output.nodeId === node.nodeId && output.kind === 'MODEL_TEXT')
               .map((output) =>
-                (output.kind === 'MODEL_TEXT' ? '模型输出\n' : '已保存的交互结果\n') +
                 (typeof output.content === 'string'
                   ? output.content
                   : JSON.stringify(output.content, null, 2)),
               )
               .join('\n\n') || undefined,
+          actionResults: wire.outputs.filter(output => output.nodeId === node.nodeId && output.kind === 'ACTION_RESULT').map(output => output.content),
           incomplete: wire.availability === 'UNCONFIRMED',
         };
       }),

@@ -43,6 +43,7 @@ class ResumeStatus(TypedDict):
 class WorkflowCard(TypedDict):
     nodeId: str
     interactionId: str
+    toolCallId: str
     card: dict[str, Any]
 
 
@@ -178,7 +179,12 @@ class WorkflowActions(ActionService):
                 if not active:
                     card["status"] = "DISPLAY_ONLY"
                     card["display"]["actions"] = []
-                result.append({"nodeId": node_id, "interactionId": card["cardId"], "card": card})
+                binding = self.store.get_binding(
+                    self.run.owner, card_scope(self.run.run_id, node_id), card["cardId"]
+                )
+                result.append({"nodeId": node_id, "interactionId": card["cardId"],
+                               "toolCallId": binding["metadata"].get("toolCallId", ""),
+                               "card": card})
         return result
 
     def binding(self, node_id: str, interaction_id: str, card_id: str) -> dict[str, Any]:

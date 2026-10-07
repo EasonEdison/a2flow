@@ -3,8 +3,9 @@ import { productApi, type ChatCard, type WorkflowCard } from '../productApi';
 
 const A2uiSnapshotCard = lazy(() => import('./A2uiSnapshotCard').then(module => ({ default: module.A2uiSnapshotCard })));
 
-export function WorkflowApplications({ runId, entries, disabled, onUpdate, onSettled }: {
+export function WorkflowApplications({ runId, entries, disabled, onUpdate, onSettled, title }: {
   runId: string;
+  title?: string;
   entries: WorkflowCard[];
   disabled: boolean;
   onUpdate: (card: ChatCard) => void;
@@ -14,6 +15,8 @@ export function WorkflowApplications({ runId, entries, disabled, onUpdate, onSet
     {entries.map(entry => <A2uiSnapshotCard
       key={entry.card.cardId}
       card={entry.card}
+      title={title ? `${title} · 业务卡片` : '业务卡片'}
+      initiallyExpanded={!disabled}
       disabled={disabled}
       onUpdate={onUpdate}
       onComposerDraft={() => {}}

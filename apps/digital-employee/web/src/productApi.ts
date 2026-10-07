@@ -16,6 +16,9 @@ export type ChatModelMessage = {
   phase: 'process' | 'final';
 };
 export type ChatToolCall = {
+  observationStatus?: 'waiting' | 'unconfirmed';
+  argumentsUnavailable?: boolean;
+  resultUnavailable?: boolean;
   sequence: number;
   toolCallId: string;
   name: string;
@@ -92,7 +95,7 @@ export type ChatCard = { cardId: string; conversationId: string; turnId: string;
     actions: { actionName: string; surfaceId: string; componentId: string; inputSchema: Record<string, unknown> }[] } };
 export type ComposerDraftEffect = { type: 'COMPOSER_DRAFT'; mode: 'APPEND'; requestId: string; text: string };
 export type ChatActionResponse = { card: ChatCard; effects: ComposerDraftEffect[] };
-export type WorkflowCard = { nodeId: string; interactionId: string; card: ChatCard };
+export type WorkflowCard = { nodeId: string; interactionId: string; toolCallId?: string; card: ChatCard };
 
 const friendlyMessages: Record<string, string> = {
   INVALID_USERNAME: '用户名需为 3–32 位字母、数字、下划线或连字符',
@@ -499,7 +502,7 @@ export const productApi = {
     return payload.cards.map(value => {
       const entry = recordOf(value);
       if (!entry.nodeId || !entry.interactionId) throw new Error('WORKFLOW_CARD_CONTRACT_INVALID');
-      return { nodeId: textOf(entry.nodeId), interactionId: textOf(entry.interactionId), card: chatCardOf(entry.card) };
+      return { nodeId: textOf(entry.nodeId), interactionId: textOf(entry.interactionId), toolCallId: textOf(entry.toolCallId), card: chatCardOf(entry.card) };
     });
   },
   runCardAction: async (id: string, entry: WorkflowCard, requestId: string, actionName: string, inputs: Record<string, unknown>): Promise<ChatActionResponse> => {

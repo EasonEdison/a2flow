@@ -1,0 +1,22 @@
+.workflow-execution { margin: 18px 0; min-width: 0; }
+.workflow-execution .execution-panel { margin-bottom: 0; }
+.workflow-execution .tool-process summary { display: flex; flex-wrap: wrap; }
+.workflow-execution .tool-process-state { margin-left: auto; }
+.workflow-execution .tool-process-id { display: none; }
+.workflow-execution .tool-process-grid { min-width: 0; }
+.workflow-assistant-note { margin-top: 20px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.workflow-assistant-note .result-disclosure { padding: 14px 18px; width: 100%; display: flex; align-items: center; justify-content: space-between; border: 0; background: transparent; text-align: left; }
+.workflow-assistant-note h3 { font-size: 14px; color: #475569; }
+.workflow-assistant-note .result-body { padding: 0 18px 18px; }
+.workflow-assistant-note .muted { margin-bottom: 14px; font-size: 12px; }
+.workflow-debug { margin-top: 12px; font-size: 12px; color: #64748b; }
+.workflow-debug pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+.node-card > .display-card { margin-top: 18px; }
+.workflow-business-surface { margin: 18px 0; padding: 2px; border: 1px solid #cbdaf2; border-radius: 12px; background: #fff; }
+.workflow-business-surface .display-card { margin: 0; }
+.workflow-execution .model-process h4 { color: #64748b; font-size: 12px; }
+@media(max-width:700px) {
+  .workflow-execution .tool-process-grid { grid-template-columns: minmax(0,1fr); }
+  .workflow-execution .tool-process summary { gap: 6px; }
+  .workflow-execution .tool-process strong { overflow-wrap: anywhere; }
+}

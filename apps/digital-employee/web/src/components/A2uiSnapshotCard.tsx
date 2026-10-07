@@ -20,14 +20,17 @@ class RendererBoundary extends Component<{ children: ReactNode }, { failed: bool
   render() { return this.state.failed ? <p role="alert">组件渲染失败，已禁止操作。请核对 Catalog 实现。</p> : this.props.children; }
 }
 
-export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStateChange, submitAction, disabled = false }: {
+export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStateChange, submitAction, disabled = false, title, initiallyExpanded }: {
   card: ChatCard;
   onUpdate: (card: ChatCard) => void;
   onComposerDraft: (effect: ComposerDraftEffect) => void;
   onActionStateChange?: (active: boolean) => void;
   submitAction?: (card: ChatCard, requestId: string, actionName: string, inputs: Record<string, unknown>) => Promise<ChatActionResponse>;
   disabled?: boolean;
+  title?: string;
+  initiallyExpanded?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(initiallyExpanded ?? ['WAITING_ACTION', 'DISPLAY_ONLY', 'UNKNOWN'].includes(card.status));
   const [processor, setProcessor] = useState<ReturnType<typeof createSnapshotProcessor>>();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -101,8 +104,8 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
     return () => { disposed = true; subscriptions.forEach(item => item.unsubscribe()); next?.model.dispose(); };
   }, [displayKey, snapshotKey]);
   const operable = cardIsOperable(card) && !busy && !error && !disabled;
-  return <details className="display-card" open={['WAITING_ACTION', 'DISPLAY_ONLY', 'UNKNOWN'].includes(card.status)}>
-    <summary>{card.display.applicationKey} · {labels[card.status] ?? '只读卡片'}</summary>
+  return <details className="display-card" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
+    <summary>{title ?? card.display.applicationKey} · {disabled ? '只读历史' : labels[card.status] ?? '只读卡片'}</summary>
     <RendererBoundary key={snapshotKey}>
       {processor ? <MarkdownContext.Provider value={renderMarkdown}><fieldset className="a2ui-card-content" disabled={!operable} aria-busy={busy}>
         {Array.from(processor.model.surfacesMap.values()).map(surface =>
@@ -111,6 +114,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
     </RendererBoundary>
     {busy ? <p role="status">等待自动同步已保存的卡片状态</p> : null}
     {card.result !== undefined ? <details><summary>操作结果</summary><pre>{JSON.stringify(card.result, null, 2)}</pre></details> : null}
+    {title ? <details className="workflow-debug"><summary>卡片技术信息</summary><p>Application：{card.display.applicationKey}</p><p>卡片 ID：{card.cardId}</p></details> : null}
     {error ? <p role="alert">{error}</p> : null}
   </details>;
 }

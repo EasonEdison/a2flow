@@ -55,6 +55,8 @@ const prettyJson = (value: unknown) => {
 };
 
 const toolStateLabel = (tool: ChatToolCall) => {
+  if (tool.observationStatus === 'waiting') return '本次调用暂停于交互';
+  if (tool.observationStatus === 'unconfirmed') return '结果未确认';
   if (tool.lifecycleStatus === 'running') return '调用中';
   if (tool.lifecycleStatus === 'raised') return '调用异常';
   if (tool.toolMessageStatus === 'error') return '工具返回错误';
@@ -111,7 +113,7 @@ function ToolProcessBody({ tool }: { tool: ChatToolCall }) {
     : 'idle';
 
   return <div className="tool-process-grid">
-    <section><h4>输入参数</h4><pre>{prettyJson(tool.arguments)}</pre></section>
+    <section><h4>输入参数</h4><pre>{tool.argumentsUnavailable ? '该次调用未保存完整参数，不能从历史恢复。' : prettyJson(tool.arguments)}</pre></section>
     <section className="tool-result">
       <header>
         <h4>返回结果</h4>
@@ -121,7 +123,7 @@ function ToolProcessBody({ tool }: { tool: ChatToolCall }) {
           </button>
           : null}
       </header>
-      <pre>{formattedResult.text}</pre>
+      <pre>{tool.observationStatus === 'waiting' && tool.result === undefined ? '此次执行已暂停等待用户操作，尚无最终工具返回结果。' : tool.resultUnavailable ? '该次调用未保存完整返回结果，不能从历史恢复。' : formattedResult.text}</pre>
       <span className={`copy-feedback ${copyStatus}`} aria-live="polite">
         {copyStatus === 'copied'
           ? '已复制'
@@ -151,7 +153,7 @@ function ModelProcess({ message, showProcessText = true }: {
   </section>;
 }
 
-function ExecutionPanel({ message }: { message: Message }) {
+export function ExecutionPanel({ message }: { message: Message }) {
   const execution = message.execution;
   const hasOrderedText = Boolean(message.parts?.some(part => part.type === 'text'));
   const legacyReasoning = !execution ? message.reasoning : '';
