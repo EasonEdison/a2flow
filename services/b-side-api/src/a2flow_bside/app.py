@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import logging
 import os
 import hmac
 import queue
@@ -38,6 +39,7 @@ from .scheduling import ScheduleRuleError, next_run_after, parse_rule
 
 _USERNAME = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_LOGGER = logging.getLogger(__name__)
 
 
 def _query_allowed(request: Request) -> bool:
@@ -544,19 +546,51 @@ def create_app(
             return {required[0]: raw_input}
         raise BsideError("INVALID_INPUT", 400)
 
-    def _start_for(user_id: int, workflow_key: str, raw_input) -> dict:
+    async def _start_for(
+        user_id: int, workflow_key: str, raw_input: dict[str, object] | str,
+    ) -> dict[str, str]:
         control_id = uuid.uuid4().hex
-        inputs = _resolve_inputs(workflow_key, user_id, raw_input)
-        _runtime(user_id).start(control_id, workflow_key, inputs)
-        run_ownership.create(
-            control_id=control_id, user_id=user_id,
-            workflow_key=workflow_key)
+        inputs = await asyncio.to_thread(
+            _resolve_inputs, workflow_key, user_id, raw_input,
+        )
+        await asyncio.to_thread(
+            run_ownership.reserve, control_id=control_id, user_id=user_id,
+            workflow_key=workflow_key,
+        )
+        runtime = _runtime(user_id)
+        try:
+            view = await asyncio.to_thread(runtime.start, control_id, workflow_key, inputs)
+        except Exception as start_error:
+            _LOGGER.warning(
+                "Runtime start failed category=%s control_id=%s",
+                type(start_error).__name__, control_id,
+            )
+            # A failed HTTP response does not prove failed admission. Read the
+            # same durable control once; never submit the business start again.
+            try:
+                view = await asyncio.to_thread(runtime.control, control_id)
+                if (
+                    view.get("controlRequestId") != control_id
+                    or not isinstance(view.get("runId"), str)
+                    or not view["runId"]
+                ):
+                    raise ValueError("INVALID_CONTROL_ADMISSION")
+            except Exception as query_error:
+                _LOGGER.warning(
+                    "Runtime start unresolved category=%s control_id=%s",
+                    type(query_error).__name__, control_id,
+                )
+                # Keep ownership visible in My Runs, but do not claim success.
+                raise start_error from None
+        run_id = view.get("runId")
+        if isinstance(run_id, str) and run_id:
+            await asyncio.to_thread(run_ownership.bind_run_id, control_id, run_id)
         return {"controlRequestId": control_id, "status": "SUBMITTED"}
 
     @app.post("/api/runs")
     async def start_run(body: RunStart,
                         identity: RequestIdentity = Depends(identity)):
-        return _start_for(identity.userId, body.workflowKey, body.input)
+        return await _start_for(identity.userId, body.workflowKey, body.input)
 
     def _require_internal(request: Request) -> None:
         token = os.environ.get("A2FLOW_BSIDE_INTERNAL_TOKEN")
