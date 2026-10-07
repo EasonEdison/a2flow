@@ -1,12 +1,13 @@
 # 实施任务
 
-- [x] 明确 Cron、消息、A2UI 及资源边界。
-- [x] 编写具名消息 DTO、独立 Cron 计算器和 Streams 引用投递适配器。
-- [ ] 将上述模块接入实际调度入口，移除旧启动失败盲目重入队。
-- [ ] PostgreSQL outbox、稳定运行 ID 与命令处理去重闭环。
-- [ ] 定时计划 API/页面支持 cron + timezone。
-- [ ] Workflow 复用当前 Skill/A2UI，终结 Action 通过消息恢复节点。
-- [ ] 部署 Redis 与消费者，实际测量内存。
-- [ ] 公网完整定时触发、等待、完成交互、后继节点、通知验收。
+- [x] Cron 表达式、时区和明确的错过触发策略。
+- [x] 具名消息 DTO、Redis Streams 引用投递、PostgreSQL outbox。
+- [x] 稳定触发 ID、运行接受去重、UNKNOWN 只读对账；删除旧失败盲重入队路径。
+- [x] 定时计划 API 与页面。
+- [x] Workflow 复用当前 RPC Skill/A2UI；成功终结 Action 经消息恢复。
+- [x] Workflow 真实执行详情 catalog/history/SSE 接入。
+- [x] 低内存部署与真实三节点业务链路验证。
+- [x] 公网账号登录后的运行、历史卡片、通知与进度接口回读。
+- [ ] 最终版本浏览器点击、刷新恢复、通知跳转及执行详情展开视觉验收。
 
-源码模块存在不代表已接线或已上线。准出以 regression.md 为准。
+未完成项受验收浏览器输入失效阻塞；不以接口通过替代页面通过。具体证据见 regression.md。

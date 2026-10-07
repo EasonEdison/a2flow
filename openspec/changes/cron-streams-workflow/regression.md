@@ -1,12 +1,45 @@
 # 验证记录
 
-2026-10-07 第一批源码：contracts.py、cron.py、streams.py。
+## 源码及适配器
 
-- Python 3.11 strict mypy：3个文件通过，无类型忽略。
-- Ruff：新增三文件检查通过；格式检查后规范化 Streams 文件。
-- 本机独立 Redis 8.0.3 Unix socket：初始化可重复、发送、消费、模拟未 ACK 超时后另一 consumer 接管、ACK + 删除、pending/队列清空通过。验证实例已 shutdown；未连接公网 Redis 或业务数据库。
-- Cron `0 9 * * *` / Asia/Shanghai：UTC 00:00 后下一次为 UTC 01:00。
-- 消息 DTO：正 int64 最大值 JSON 序列化为字符串，反序列化精确恢复。
-- 未执行项目单测，遵守用户要求；以上是类型检查与最小真实适配器探针，不是端到端验收。
+2026-10-07：具名消息 DTO、Cron、Streams 的 Python 3.11 strict mypy/Ruff 通过；调度实现九个模块 strict mypy/Ruff/compile 通过。独立 Redis Unix socket 的发送、claim/reclaim、ACK 删除通过；真实隔离 PostgreSQL/Redis/HTTP smoke 通过。前端 TypeScript/Vite build 通过。用户免除单测，本轮未以完整单测或全站回归作为已通过项。
 
-未完成：现有计划API接入、outbox与运行接受去重、消费者服务接线、Workflow/A2UI适配、Redis部署及公网定时任务验证。
+进度桥接的 Python lint/type 存在与基线相同的诊断，未扩大范围处理；新增路径未增加诊断。SSE 上游最多 60 秒 lease，不能承诺客户端断开即刻释放上游连接。
+
+## 真实运行
+
+测试工作流 `reading-creation-cron-demo`：阅读材料与确认 → 选择创作选题 → 生成并确认稿件。输入为自写技术验收材料，无真实联系人或外部发布。
+
+- 实际 Cron：`* * * * *`，Asia/Shanghai；第三轮于 2026-10-07 05:08 UTC 触发，触发后停用。
+- controlId：`0a96c96d-5d24-5e1d-9d98-e9f8fd7fce78`。
+- runId：`bac80de457a0480fa5830da2b0c73fe0`。
+- 模型/业务 RPC 生成三个真实 A2UI 卡片。第二、三轮因浏览器输入阻塞，使用同一部署的运行接口提交测试确认，不冒称 UI 点击验收。
+- 第三轮三个节点均 SUCCEEDED，三个业务确认已保存；只生成草稿，未执行导出或外部发布。
+- 启动 + 三个 resume + 三个 waiting 通知 + 完成通知，共八条 outbox 全部 completed。
+- 两条曾因状态查询被拦截而 UNKNOWN 的恢复消息，在查询修复后由已有只读对账收敛，无 Action 或模型重放。
+
+## 公网认证回读
+
+使用已授权账号，经正常 `/api/auth/login` 登录，凭据和 cookie 仅存在内存，未写入源码或文档：
+
+- `/api/runs/{controlId}`：SUCCEEDED，三个节点全部 SUCCEEDED。
+- `/api/runs/{controlId}/cards`：三个历史快照均 DISPLAY_ONLY，完成运行不再开放操作。
+- `/api/notifications`：完成通知 refId 为可访问的 controlId，不是错误的 native runId。
+- `/api/runs/{controlId}/progress?limit=100` 与节点 history：返回实际已持久化执行记录。
+- query guard 的定向 ASGI probe：正常状态/进度查询通过，缺少内部 token 401，未知/重复 query 400，无关接口仍拒绝 query。
+
+## 本轮修复
+
+1. ActionRequest 统一使用 from_mapping，避免非 canonical 中文 JSON 无法往返。
+2. 节点提示明确整体目标不是跨节点授权；Skill 成功后返回，后继由 Workflow 调度。保留原应用权限与 Finalizer，不把业务场景写入引擎。
+3. B 查询白名单只放行指定 status/progress 路径的声明参数，修复 UNKNOWN 对账与执行详情读取。
+
+## 部署与资源
+
+B 镜像 `cron-streams-493888d`；Runtime `cron-streams-32d57fe`；Scheduler `cron-streams-045f77a`。Redis 仅私有 Unix socket，无公开端口。Java、账号、业务执行、内容和 PostgreSQL 未重建。
+
+一次实测 Redis RSS 约 8 MiB、消费者约 37 MiB；服务器 available 在本轮 508–598 MiB 间波动。不是固定容量保证。
+
+## 未通过门禁
+
+第一轮浏览器曾显示真实阅读卡片、选择及输入保留；最终版本尚未完成浏览器点击、刷新与视觉验收。旧标签停止确认后浏览器输入失效，新标签同样无点击效果，无 console 错误；已请求用户解除工具阻塞。HTTP/源码通过不代表此项通过。
