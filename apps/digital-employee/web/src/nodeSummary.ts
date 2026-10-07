@@ -24,6 +24,8 @@ function durationLabel(milliseconds: number): string {
 /** Describe only state and observed events; model output remains in the result panel. */
 export function nodeSummary(node: NodeView): string {
   const parts = [summaries[node.status]];
+  if (node.historyStatus === 'loading') return parts.join(' · ') + ' · 正在加载执行过程';
+  if (node.historyStatus === 'incomplete') return parts.join(' · ') + ' · 执行记录未完整加载';
   const toolCalls = new Set<string>();
   const nodeStarts = new Map<string, number>();
   let durationMs = 0;

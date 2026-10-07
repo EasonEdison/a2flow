@@ -40,11 +40,13 @@ export function WorkflowTimeline({ node, entries, renderCard }: {
 }) {
   const blocks = useMemo(() => workflowBlocks(node, entries), [node, entries]);
   return <div className="workflow-timeline">
+    {node.historyStatus === 'loading' ? <p className="muted" role="status">正在加载执行过程…</p> : null}
     {blocks.map(block => <Fragment key={block.id}>
       {block.records.length ? <WorkflowExecution node={{ ...node, records: block.records }} /> : null}
       {block.card ? <section className="workflow-business-surface">{renderCard(block.card)}</section> : null}
     </Fragment>)}
-    {!blocks.length ? <p className="muted">{
+    {!blocks.length && node.historyStatus !== 'loading' ? <p className="muted">{
+      node.historyStatus === 'incomplete' ? '执行记录未完整加载，暂不展示调用总数。' :
       node.status === 'PENDING' ? '步骤尚未开始。'
         : ['RUNNING', 'WAITING'].includes(node.status) ? '正在读取执行记录…'
           : '暂无已保存的执行记录。'

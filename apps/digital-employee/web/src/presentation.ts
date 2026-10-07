@@ -55,6 +55,7 @@ export type NodeView = {
   status: NodeStatus;
   summary?: string;
   records: RecordLine[];
+  historyStatus?: 'loading' | 'ready' | 'incomplete';
   output?: string;
   actionResults?: import('./api/contracts').Json[];
   card?: CardView;
