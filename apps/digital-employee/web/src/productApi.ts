@@ -470,11 +470,14 @@ export const productApi = {
       items: (payload.runs ?? []).map((row) => {
         const view = (row.view ?? null) as Row | null;
         const bound = Boolean(view && view.runId);
+        const lifecycle = textOf(row.lifecycle);
+        const status = ['PENDING', 'RUNNING', 'WAITING', 'SUCCEEDED', 'STOPPED', 'FAILED', 'SKIPPED', 'UNKNOWN'].includes(lifecycle)
+          ? lifecycle : bound ? 'UNKNOWN' : 'SUBMITTED';
         return {
           id: textOf(row.controlRequestId),
           workflowKey: textOf(row.workflowKey),
           title: bound ? textOf(view?.title) || textOf(row.workflowKey) : textOf(row.workflowKey),
-          status: bound ? 'RUNNING' : 'SUBMITTED',
+          status,
           input: '',
           createdAt: textOf(row.createdAt),
         };
