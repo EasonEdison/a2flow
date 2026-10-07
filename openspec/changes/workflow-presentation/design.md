@@ -1,14 +1,24 @@
-# Workflow execution presentation
+# Workflow 执行展示分层
 
-Approved scope: reuse the Chat assistant-ui execution view within Workflow steps; distinguish persisted business cards, model explanations and authoritative engine state. No business/control changes.
+## 已批准范围
 
-- Node header status comes from the engine. Model final text is a collapsed assistant explanation, not a green business-success panel.
-- Tool start/end observations combine by operation ID. Model text/reasoning combine by provider model-call ID. Only provider-returned reasoning is shown.
-- TOOL_DETAIL contains credential-redacted argument/result JSON in bounded numbered chunks. Display a value only when all chunks are present. Historical missing values are explicitly unavailable; never replay tools to fill them.
-- Chat and Workflow share ExecutionPanel and ToolProcess; Workflow uses assistant-ui ExternalStore runtime scoped to the node. No second conversation store.
-- Workflow card metadata exposes only its existing toolCallId, not private binding metadata. New recorded calls place cards after their render call; records before/after remain ordered. Older records lacking call linkage retain a separate card section rather than guessing timestamps.
-- Card headings use the configured business step title; technical Application codes and card IDs are inside technical details. This does not invent an application display name or alter A2UI component contracts.
-- Completed steps show readonly historical cards, initially folded. The authored A2UI content is preserved; no heuristic deletion of editor components.
-- Raw action results remain expandable. Existing saved model explanations remain intact; new model responses are prompted to be brief and Chinese, without internal IDs unless requested.
+Workflow 步骤内复用 Chat 的 assistant-ui，区分业务卡片、模型说明和引擎状态。不重新设计 A2UI，不新增业务规则、自动重试或降级。
 
-Verification before public acceptance: TypeScript/build; bounded capture/import probes; live public historical restoration, tool detail expansion/copy, new run and A2UI action continuation; console/desktop/narrow viewport checks. A build is not runtime acceptance.
+## 展示与数据来源
+
+- 节点状态来自引擎。模型最终文本改为默认折叠的“助手说明”，不再用绿色“节点结果”表达权威成功。
+- 工具按 operationId 合并，展示状态、耗时、参数和完整结果。模型输出按 modelCallId 聚合，只展示实际收到的内容，不编造思考过程。
+- TOOL_DETAIL 保存凭据脱敏后的参数、结果 JSON，按编号分块，继续受原有采集上限约束。仅在分块齐全时展示；旧历史未采集数据明确提示不可恢复，禁止重放工具补历史。
+- Chat 和 Workflow 共用 ExecutionPanel、ToolProcess。Workflow 使用节点作用域的 assistant-ui ExternalStore，不增加第二份会话存储。
+- 卡片接口只暴露现有绑定中的 toolCallId。新记录按调用标识将卡片插入真实渲染位置，保留前后过程；旧记录缺少关联时独立展示，不猜测顺序。
+- 业务卡片标题使用配置的步骤名称。Application code 和卡片 ID 放入技术详情，不把技术标识当业务名称。
+- 已完成卡片只读、初始折叠，保留 A2UI 作者配置，不启发式删除编辑器组件。
+- 操作结果可单独展开。历史说明保持原文；新最终说明提示使用简洁中文，非用户要求不罗列内部 ID。
+
+## 联调发现的错误收敛
+
+卡片提交后的续跑可能发生业务 RPC 异常。业务提交成功不等于后继节点成功；必须按既有引擎失败语义反映异常，不持续显示执行中，不自动重试，不回滚或重放已完成 Action。
+
+## 验证边界
+
+验证包括 TypeScript/build、采集分块与脱敏探针、公网历史恢复、工具详情、新运行的 A2UI 提交、控制台与窄屏检查。构建通过不等于公网完整业务验收通过，具体结果见 regression.md。
