@@ -38,6 +38,12 @@ class ResumeRequest(CommandModel):
     interactionId: str
 
 
+class ResumeStatus(CommandModel):
+    runId: str
+    delivery: Literal["NOT_REQUESTED", "DISPATCHING", "UNCONFIRMED", "RETURNED"]
+    resumeConsumed: bool
+
+
 class BsideCommandClient:
     def __init__(self, base_url: str, token: str) -> None:
         if not base_url.startswith(("https://", "http://")) or not token:
@@ -46,11 +52,17 @@ class BsideCommandClient:
         self.token = token
 
     def _read(self, request: urllib.request.Request) -> Admission:
+        return Admission.model_validate_json(self._read_bytes(request))
+
+    def _read_bytes(self, request: urllib.request.Request) -> bytes:
         request.add_header("x-a2flow-internal-token", self.token)
         request.add_header("Content-Type", "application/json")
         try:
             with urllib.request.urlopen(request, timeout=15) as response:
-                return Admission.model_validate_json(response.read())
+                payload: object = response.read()
+                if not isinstance(payload, bytes):
+                    raise ValueError("INVALID_INGRESS_RESPONSE")
+                return payload
         except urllib.error.HTTPError as exc:
             if request.get_method() == "POST" and exc.code == 503:
                 try:
@@ -78,13 +90,30 @@ class BsideCommandClient:
 
     def reconcile(self, command: StartWorkflow | ResumeWorkflow) -> Admission | None:
         if isinstance(command, ResumeWorkflow):
-            path = "/api/internal/run-controls/" + urllib.parse.quote(command.message_id, safe="")
+            path = "/api/internal/runs/" + urllib.parse.quote(command.run_id, safe="")
+            path += "/cards/" + urllib.parse.quote(command.card_id, safe="") + "/resume-status"
             path += "?" + urllib.parse.urlencode(
-                {"userId": str(command.user_id), "environment": command.environment}
+                {
+                    "userId": str(command.user_id),
+                    "environment": command.environment,
+                    "nodeId": command.node_id,
+                    "interactionId": command.interaction_id,
+                    "requestId": command.message_id,
+                    "actionRequestId": command.action_request_id,
+                }
             )
         else:
             path = "/api/internal/runs/" + urllib.parse.quote(command.message_id, safe="")
         try:
+            if isinstance(command, ResumeWorkflow):
+                status = ResumeStatus.model_validate_json(
+                    self._read_bytes(urllib.request.Request(self.base_url + path))
+                )
+                if status.runId != command.run_id:
+                    raise ValueError("RESUME_STATUS_RUN_ID_MISMATCH")
+                if status.delivery == "RETURNED" or status.resumeConsumed:
+                    return Admission(controlRequestId=command.message_id, status="SUBMITTED")
+                return None
             return self._read(urllib.request.Request(self.base_url + path))
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
