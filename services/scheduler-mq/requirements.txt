@@ -1,4 +1,5 @@
-# New Streams modules; existing scheduler entry is not switched by this file.
+# Scheduler process dependencies; PG payloads + Redis references + IANA cron.
 pydantic==2.13.5
 redis==5.3.1
 croniter==6.0.0
+psycopg[binary]==3.3.6

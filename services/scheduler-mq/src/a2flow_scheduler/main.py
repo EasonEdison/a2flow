@@ -1,175 +1,117 @@
-"""scheduler-mq process entry and small HTTP client (env-configured).
-
-The process runs four bounded iterations in a loop:
-trigger (advisory-locked), run_workflow consumer, domain-event consumer, and
-the wait-timeout monitor. All intervals, endpoints and secrets come from the
-environment; nothing has a default.
-"""
+"""Cron/outbox/Redis worker. Only transport publication and status reads retry."""
 
 from __future__ import annotations
 
-import datetime as dt
-import json as jsonlib
+import logging
 import os
+import socket
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+import psycopg
+from redis import Redis
+
+from a2flow_scheduler.contracts import NotificationCommand
+from a2flow_scheduler.delivery import consume_one, reconcile_unknown
+from a2flow_scheduler.ingress import BsideCommandClient
+from a2flow_scheduler.lark import LarkWebhookClient
+from a2flow_scheduler.outbox import PostgresOutbox
+from a2flow_scheduler.scheduler import trigger_due
+from a2flow_scheduler.streams import RedisStreamTransport, StreamChannel
+
+LOG = logging.getLogger(__name__)
 
 
-class RemoteHttpError(Exception):
-    """Non-2xx response from a platform service."""
-
-
-class BsideHttpClient:
-    """Minimal JSON HTTP client toward the b-side API (run start / stop)."""
-
-    def __init__(
-        self, base_url: str, *, timeout: float = 10.0, opener=None
-    ) -> None:
-        if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
-            raise ValueError("INVALID_BSIDE_URL")
-        self._base = base_url.rstrip("/")
-        self._timeout = timeout
-        self._opener = opener or urllib.request.urlopen
-
-    def post_internal(self, path: str, *, token: str, json: dict) -> dict:
-        body = jsonlib.dumps(json, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(
-            self._base + path, data=body, method="POST"
-        )
-        request.add_header("Content-Type", "application/json")
-        request.add_header("x-a2flow-internal-token", token)
-        return self._execute(request)
-
-    def post(self, path: str, *, json: dict) -> dict:
-        body = jsonlib.dumps(json, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(
-            self._base + path, data=body, method="POST"
-        )
-        request.add_header("Content-Type", "application/json")
-        return self._execute(request)
-
-    def _execute(self, request) -> dict:
-        try:
-            with self._opener(request, timeout=self._timeout) as response:
-                status = getattr(response, "status", None) or response.code
-                payload = response.read().decode("utf-8")
-        except (urllib.error.URLError, OSError) as exc:
-            raise RemoteHttpError("REMOTE_UNAVAILABLE") from exc
-        if not 200 <= status < 300:
-            raise RemoteHttpError(f"REMOTE_STATUS_{status}")
-        try:
-            return jsonlib.loads(payload) if payload else {}
-        except ValueError:
-            return {}
-
-
-def _required(name: str) -> str:
+def required(name: str) -> str:
     value = os.environ.get(name)
     if not value:
         raise RuntimeError("MISSING_SCHEDULER_CONFIGURATION:" + name)
     return value
 
 
-def _optional_float(name: str, default: float) -> float:
-    raw = os.environ.get(name)
-    if raw is None or raw == "":
-        return default
-    try:
-        value = float(raw)
-    except ValueError:
-        raise RuntimeError("INVALID_SCHEDULER_CONFIGURATION:" + name) from None
-    if value <= 0:
-        raise RuntimeError("INVALID_SCHEDULER_CONFIGURATION:" + name)
-    return value
+def secret(name: str) -> str:
+    path = os.environ.get(name + "_FILE")
+    return Path(path).read_text().strip() if path else required(name)
 
 
 @dataclass(frozen=True)
 class SchedulerSettings:
     database_url: str
+    redis_url: str
+    namespace: str
     bside_url: str
-    lark_url: str | None
-    lark_secret: str | None
-    trigger_seconds: float
-    monitor_seconds: float
-    timeout_hours: float
+    internal_token: str
+    interval: float
 
     @classmethod
-    def from_environment(cls) -> "SchedulerSettings":
+    def from_environment(cls) -> SchedulerSettings:
+        interval = float(os.environ.get("A2FLOW_SCHEDULER_TRIGGER_SECONDS", "5"))
+        if not 0 < interval <= 60:
+            raise ValueError("INVALID_SCHEDULER_TRIGGER_SECONDS")
+        dsn = required("A2FLOW_SCHEDULER_DATABASE_URL")
+        password_file = os.environ.get("A2FLOW_SCHEDULER_POSTGRES_PASSWORD_FILE")
+        if password_file:
+            dsn = psycopg.conninfo.make_conninfo(
+                dsn, password=Path(password_file).read_text().strip()
+            )
         return cls(
-            database_url=_required("A2FLOW_SCHEDULER_DATABASE_URL"),
-            bside_url=_required("A2FLOW_SCHEDULER_BSIDE_URL"),
-            lark_url=os.environ.get("A2FLOW_LARK_WEBHOOK_URL") or None,
-            lark_secret=os.environ.get("A2FLOW_LARK_SECRET") or None,
-            trigger_seconds=_optional_float(
-                "A2FLOW_SCHEDULER_TRIGGER_SECONDS", 30.0
-            ),
-            monitor_seconds=_optional_float(
-                "A2FLOW_SCHEDULER_MONITOR_SECONDS", 300.0
-            ),
-            timeout_hours=_optional_float("A2FLOW_WAIT_TIMEOUT_HOURS", 24.0),
+            dsn,
+            secret("A2FLOW_SCHEDULER_REDIS_URL"),
+            required("A2FLOW_SCHEDULER_STREAM_NAMESPACE"),
+            required("A2FLOW_SCHEDULER_BSIDE_URL"),
+            secret("A2FLOW_SCHEDULER_INTERNAL_TOKEN"),
+            interval,
         )
 
 
-def _connect(settings: SchedulerSettings):
-    import psycopg
+class LarkNotifications:
+    def __init__(self, url: str, signing_secret: str | None) -> None:
+        self.client = LarkWebhookClient(url, secret=signing_secret)
 
-    dsn = settings.database_url
-    secret_path = os.environ.get("A2FLOW_SCHEDULER_POSTGRES_PASSWORD_FILE")
-    if secret_path:
-        with open(secret_path, "r", encoding="utf-8") as stream:
-            dsn = psycopg.conninfo.make_conninfo(dsn, password=stream.read().strip())
-    return psycopg.connect(dsn, autocommit=True)
-
-
-def _build_lark(settings: SchedulerSettings):
-    from a2flow_scheduler import lark as lark_module
-
-    if not settings.lark_url:
-        return None
-    return lark_module.LarkWebhookClient(
-        settings.lark_url, secret=settings.lark_secret
-    )
-
-
-def run_once(
-    *,
-    settings: SchedulerSettings,
-    conn,
-    queue,
-    http,
-    lark,
-    now: dt.datetime,
-) -> None:
-    from a2flow_scheduler import loops
-
-    loops.run_trigger_iteration(conn=conn, queue=queue, now=now)
-    loops.run_workflow_consumer_iteration(conn=conn, queue=queue, http=http)
-    loops.run_event_consumer_iteration(conn=conn, queue=queue, lark=lark)
-    loops.run_monitor_iteration(
-        conn=conn, http=http, timeout_hours=settings.timeout_hours, now=now
-    )
+    def send_notification(self, command: NotificationCommand) -> None:
+        self.client.send(
+            {
+                "config": {"wide_screen_mode": True},
+                "header": {
+                    "template": "blue",
+                    "title": {"tag": "plain_text", "content": command.title},
+                },
+                "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": command.body}}],
+            },
+            dedup_key=command.message_id,
+        )
 
 
 def main() -> None:
-    from a2flow_bside.queue import PostgresQueueClient
-
+    logging.basicConfig(level=logging.INFO)
     settings = SchedulerSettings.from_environment()
-    http = BsideHttpClient(settings.bside_url)
-    lark = _build_lark(settings)
-    with _connect(settings) as conn:
-        queue = PostgresQueueClient(conn)
-        while True:
-            run_once(
-                settings=settings,
-                conn=conn,
-                queue=queue,
-                http=http,
-                lark=lark,
-                now=dt.datetime.now(dt.timezone.utc),
-            )
-            time.sleep(settings.trigger_seconds)
+    client = Redis.from_url(
+        settings.redis_url, decode_responses=True, socket_connect_timeout=5, socket_timeout=5
+    )
+    transport = RedisStreamTransport(
+        client, namespace=settings.namespace, consumer=f"{socket.gethostname()}:{os.getpid()}"
+    )
+    ingress = BsideCommandClient(settings.bside_url, settings.internal_token)
+    lark_url = os.environ.get("A2FLOW_LARK_WEBHOOK_URL")
+    sender = LarkNotifications(lark_url, os.environ.get("A2FLOW_LARK_SECRET")) if lark_url else None
+    while True:
+        try:
+            transport.initialize()
+            with psycopg.connect(settings.database_url, autocommit=True) as connection:
+                outbox = PostgresOutbox(connection)
+                trigger_due(outbox, datetime.now(UTC))
+                outbox.publish(transport)
+                for channel in StreamChannel:
+                    for _ in range(50):
+                        if not consume_one(outbox, transport, channel, ingress, sender):
+                            break
+                reconcile_unknown(outbox, ingress)
+        except Exception as exc:
+            # Do not log credentials, payloads or provider response bodies.
+            LOG.error("Scheduler pass failed: %s", type(exc).__name__)
+        time.sleep(settings.interval)
 
 
 if __name__ == "__main__":

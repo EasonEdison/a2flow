@@ -29,7 +29,7 @@ class UserCommand(CommandModel):
 
 class StartWorkflow(UserCommand):
     kind: Literal["start_workflow"] = "start_workflow"
-    message_id: Annotated[str, Field(min_length=1, max_length=200)]
+    message_id: Annotated[str, Field(min_length=1, max_length=128)]
     schedule_id: Annotated[int, Field(gt=0)]
     scheduled_at: datetime
     environment: Literal["PRT", "ONLINE"]
@@ -44,10 +44,12 @@ class StartWorkflow(UserCommand):
         return value
 
 
-class ResumeWorkflow(CommandModel):
+class ResumeWorkflow(UserCommand):
     kind: Literal["resume_workflow"] = "resume_workflow"
-    message_id: Annotated[str, Field(min_length=1, max_length=200)]
+    message_id: Annotated[str, Field(min_length=1, max_length=128)]
     run_id: Annotated[str, Field(min_length=1)]
+    environment: Literal["PRT", "ONLINE"]
+    card_id: Annotated[str, Field(min_length=1)]
     node_id: Annotated[str, Field(min_length=1)]
     interaction_id: Annotated[str, Field(min_length=1)]
     action_request_id: Annotated[str, Field(min_length=1)]

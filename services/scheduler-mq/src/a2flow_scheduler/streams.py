@@ -35,7 +35,7 @@ class RedisStreamTransport:
 
     def __init__(
         self,
-        client: Redis,
+        client: Redis[str],
         *,
         namespace: str,
         consumer: str,
