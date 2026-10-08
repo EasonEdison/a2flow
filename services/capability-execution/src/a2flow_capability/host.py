@@ -20,6 +20,11 @@ from .releases import PostgresReleaseReader
 from .rpc import CapabilityRpcService, parse_object
 from .transport import Endpoint, GrpcTransport
 
+# Bound active work separately from accepted requests. The extra slots wait in
+# the executor rather than rejecting ordinary parallel Tool/Describe bursts.
+RPC_WORKERS = 4
+RPC_MAX_IN_FLIGHT = 16
+
 
 def text(value: JsonValue) -> str:
     if not isinstance(value, str) or not value:
@@ -96,10 +101,10 @@ def run(values: Mapping[str, str]) -> None:
     transport = GrpcTransport(
         targets(parse_object(Path(values["A2FLOW_CAPABILITY_TARGETS_FILE"]).read_bytes()))
     )
-    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="capability-rpc") as pool:
+    with ThreadPoolExecutor(max_workers=RPC_WORKERS, thread_name_prefix="capability-rpc") as pool:
         server = grpc.server(
             pool,
-            maximum_concurrent_rpcs=4,
+            maximum_concurrent_rpcs=RPC_MAX_IN_FLIGHT,
             options=(
                 ("grpc.max_receive_message_length", 2 * 1024 * 1024),
                 ("grpc.max_send_message_length", 6 * 1024 * 1024),

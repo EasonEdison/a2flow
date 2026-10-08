@@ -14,7 +14,7 @@ import grpc
 from a2flow.a2ui.v1.a2ui_pb2_grpc import add_A2uiExecutionServicer_to_server
 from a2flow.capability.v1.capability_pb2_grpc import add_CapabilityExecutionServicer_to_server
 from a2flow_capability.executor import CapabilityExecutor
-from a2flow_capability.host import configure_listener, targets
+from a2flow_capability.host import RPC_MAX_IN_FLIGHT, RPC_WORKERS, configure_listener, targets
 from a2flow_capability.invoker import PostgresCapabilityIndex, PublishedCapabilityInvoker
 from a2flow_capability.models import Environment
 from a2flow_capability.releases import PostgresReleaseReader
@@ -53,10 +53,10 @@ def run(values: Mapping[str, str]) -> None:
     )
     invoker = PublishedCapabilityInvoker(capability_reader, executor, index)
     runtime = A2uiRuntimeService(application_reader, invoker)
-    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="a2flow-engine-rpc") as pool:
+    with ThreadPoolExecutor(max_workers=RPC_WORKERS, thread_name_prefix="a2flow-engine-rpc") as pool:
         server = grpc.server(
             pool,
-            maximum_concurrent_rpcs=4,
+            maximum_concurrent_rpcs=RPC_MAX_IN_FLIGHT,
             options=(
                 ("grpc.max_receive_message_length", 2 * 1024 * 1024),
                 ("grpc.max_send_message_length", 6 * 1024 * 1024),

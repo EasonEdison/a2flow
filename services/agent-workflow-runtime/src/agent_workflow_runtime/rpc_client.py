@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import math
 from pathlib import Path
 from collections.abc import Callable, Iterable, Mapping
@@ -28,6 +29,7 @@ from .models import ActionRejected
 JsonValue: TypeAlias = Union[None, bool, int, float, str, Mapping[str, "JsonValue"], tuple["JsonValue", ...]]
 JsonObject: TypeAlias = Mapping[str, JsonValue]
 ResponseT = TypeVar("ResponseT", bound=Message)
+LOG = logging.getLogger(__name__)
 
 
 class RpcFailure(ActionRejected):
@@ -323,7 +325,11 @@ class RpcClient:
         try:
             return operation(request, timeout=self._timeout, wait_for_ready=False)
         except grpc.RpcError as exception:
+            # Status only: provider detail may contain credentials or payloads.
+            LOG.warning("RPC transport failed: status=%s", exception.code().name)
             detail = exception.details() or ""
+            if exception.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
+                raise RpcFailure("RPC_RESOURCE_EXHAUSTED") from None
             if exception.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                 raise RpcFailure("RPC_TIMEOUT_OUTCOME_UNKNOWN") from None
             if exception.code() in (grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIED):
