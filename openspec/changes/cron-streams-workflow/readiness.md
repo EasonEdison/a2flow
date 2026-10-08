@@ -1,5 +1,13 @@
 # 准出
 
+## 2026-10-08 类型化持久化部署回归：READY
+
+本轮只覆盖已迁移的 B 通知、Scheduler/Outbox 及运行态生命周期通知。源码 ce083cc，加 RPC 准入修复84872cd，均已集成双remote main；公网新 Cron → 三次页面卡片确认 → SUCCEEDED → 通知已读/跳转 → 历史恢复验收通过。新八条 Outbox completed，两个 Streams pending=0。
+
+之前失败运行保留；其原始 RPC 状态未保存，不能把本次复现的并发拒绝倒推为已证明的历史根因。一次续跑曾短暂 UNKNOWN，现有只读对账确认已接纳后收敛，无重试。测试 Cron 已停用，未导出或对外发布稿件。原镜像/私有回滚配置保留；未做全面并发压测、手机端或全套单测。
+
+下面为此前版本记录。
+
 2026-10-07：**本次 Cron + Streams 三节点联调范围 READY**。服务端、公网认证接口与浏览器历史回读验收通过。
 
 已部署 B `493888d`，Runtime `32d57fe`，Scheduler `045f77a`（该模块此后没有变化）。真实 Cron 经 Redis Streams 执行三节点，三次 A2UI 确认及后继推进成功，运行 SUCCEEDED。本轮八条 outbox 均 completed，通知与历史卡片可通过公网认证接口回读。

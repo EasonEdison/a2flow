@@ -1,5 +1,15 @@
 # 验证记录
 
+## 2026-10-08 SQLAlchemy 部署与 RPC 准入回归
+
+- 源码：B 通知5b37e77、Scheduler/Outbox ce083cc、RPC准入84872cd；均双remote main集成。B/runtime/scheduler叠加已安装SQLAlchemy；后续只更新execution/runtime修复，未重建Java或改数据库结构。
+- 旧 execution 六路只读 project.get 复现四成功两RESOURCE_EXHAUSTED。保持4线程，最大在途改16；隔离gRPC验证峰值4、六请求成功、第17拒绝。上线1/3/6路全部成功。Runtime仅记录transport status，不记参数或凭据，不加业务重试。
+- 新schedule3：`* * * * *`，Asia/Shanghai，22:59触发一次后页面停用。control61805aae-79a2-5572-b389-8986f63095be，run3a3c1af8c7e34536bb6034cf12321bec。三次确认均经公网页面：阅读p3/p4及补充意见；选题t3且编辑标题；稿件确认，不导出/不对外发布。DB最终SUCCEEDED。
+- 本次八条Outbox全部completed；三条waiting通知19/20/21及finished22落库。第二次resume曾UNKNOWN，既有只读reconcile自动确认接纳后completed，不重新执行业务。两个Streams pending0。
+- 刷新后通过完成通知22跳转回运行，工具次数7/7/8完整恢复；稿件标题与编辑选题一致、最终稿按钮禁用，旧Chat人员卡片勾选仍恢复。通知22标记已读成功。console warn/error为空，无框架错误覆盖层。
+- 更新服务running/restart0/oomfalse；中途可用内存约459MiB，属瞬时值。回滚配置服务器 `.deploy-plans/rpc-capacity-84872cd/*-rollback.json`，原镜像保留。截图本机 `/tmp/a2flow-rpc-regression-complete-20261008.jpg`。
+- 旧run0403c556691c4b9680d983a599d75e10仍失败、原UNKNOWN保留，未重放。未覆盖移动端/全面压测/全套单测，不宣称全仓ORM迁移完成。
+
 ## 源码及适配器
 
 2026-10-07：具名消息 DTO、Cron、Streams 的 Python 3.11 strict mypy/Ruff 通过；调度实现九个模块 strict mypy/Ruff/compile 通过。独立 Redis Unix socket 的发送、claim/reclaim、ACK 删除通过；真实隔离 PostgreSQL/Redis/HTTP smoke 通过。前端 TypeScript/Vite build 通过。用户免除单测，本轮未以完整单测或全站回归作为已通过项。

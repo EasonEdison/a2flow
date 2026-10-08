@@ -22,5 +22,11 @@ No completed Action, unknown execution, or failed workflow is replayed.
 - The earlier workflow checkpoint recorded RPC_EXECUTION_FAILED, not the original
   transport status. The capacity issue is reproduced but cannot retrospectively
   be proven to be that run's exact cause.
-- Deployment and a fresh complete workflow regression are pending. Do not infer
-  end-to-end readiness from the isolated admission check.
+- Deployed execution/runtime overlays from clean main 84872cd. Live read-only
+  bursts of one, three and six calls all succeeded. Four workers remain bounded.
+- Fresh Cron schedule 3 fired once then was disabled. Run
+  3a3c1af8c7e34536bb6034cf12321bec reached SUCCEEDED after three public-UI
+  confirmations. All eight new outbox entries completed; both Streams pending=0.
+- The second resume briefly entered UNKNOWN; existing read-only reconciliation
+  proved admission and completed it, without replay. Old failed runs remain unchanged.
+- This proves the exercised flow, not comprehensive capacity or failure testing.
