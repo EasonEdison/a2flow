@@ -81,7 +81,8 @@ export type ChatStreamEvent = ChatStreamBase & (
 );
 export type Workflow = { key: string; name: string; description: string; inputHint: string };
 export type RunItem = { id: string; workflowKey: string; title: string; status: string; input: string; createdAt: string };
-export type Schedule = { id: string; workflowKey: string; workflowName: string; input: string; cadence: string; enabled: boolean; nextRunAt: string };
+export type ScheduleRun = { scheduleId: string; controlId: string; runId: string | null; scheduledAt: string; deliveryState: string; lifecycle: string | null; inputText: string };
+export type Schedule = { id: string; workflowKey: string; workflowName: string; input: string; cadence: string; enabled: boolean; nextRunAt: string; expression: string; timezone: string; lastRunAt: string; latestRun: ScheduleRun | null };
 export type Notification = { id: string; type: string; title: string; relatedType?: string; relatedId?: string; read: boolean; createdAt: string };
 
 export type ApiError = Error & { code: string };
@@ -547,7 +548,7 @@ export const productApi = {
   },
   stopRun: (id: string) => api(`/api/runs/${encodeURIComponent(id)}/stop`, body({})),
   schedules: async (): Promise<{ items: Schedule[] }> => {
-    const payload = await api<{ schedules?: Row[] }>('/api/schedules');
+    const payload = await api<{ schedules?: (Row & { latestRun?: ScheduleRun | null })[] }>('/api/schedules');
     return {
       items: (payload.schedules ?? []).map((row) => ({
         id: idOf(row.id),
@@ -557,11 +558,17 @@ export const productApi = {
         cadence: cadenceOf(row),
         enabled: row.enabled === true,
         nextRunAt: textOf(row.nextRunAt),
+        expression: textOf((row.ruleJson as { expression?: string } | undefined)?.expression),
+        timezone: textOf(row.timezone),
+        lastRunAt: textOf(row.lastRunAt),
+        latestRun: row.latestRun ?? null,
       })),
     };
   },
   createSchedule: (value: { workflowKey: string; input: string; ruleType: string; ruleJson: Record<string, string>; timezone: string }) => api<Schedule>('/api/schedules', body({ workflowKey: value.workflowKey, inputText: value.input, ruleType: value.ruleType, ruleJson: value.ruleJson, timezone: value.timezone })),
   toggleSchedule: (id: string, enabled: boolean) => api<Schedule>(`/api/schedules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ enabled }), headers: { 'Content-Type': 'application/json' } }),
+  updateSchedule: (id: string, value: { expression: string; timezone: string; input: string }) => api(`/api/schedules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ ruleType: 'cron', ruleJson: { expression: value.expression }, timezone: value.timezone, inputText: value.input }), headers: { 'Content-Type': 'application/json' } }),
+  scheduleRuns: (id: string, before?: string) => api<{ runs: ScheduleRun[]; nextCursor: string | null }>(`/api/schedules/${encodeURIComponent(id)}/runs${before ? `?before=${encodeURIComponent(before)}` : ''}`),
   deleteSchedule: (id: string) => api(`/api/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   notifications: async (): Promise<{ items: Notification[] }> => {
     const payload = await api<{ notifications?: Row[] }>('/api/notifications');

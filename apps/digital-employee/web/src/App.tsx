@@ -11,6 +11,7 @@ import './chat.css';
 import { FixturePreview } from './FixturePreview';
 import { applyChatStreamEvent, preserveUpdatedCards } from './assistantChat';
 import { apiErrorMessage, messageFromContent, productApi, type ChatCard, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
+import { ScheduleEditor, ScheduleHistory, scheduleRunLabel, scheduleTime } from './ScheduleDetails';
 import type { WorkflowCard } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
@@ -295,6 +296,9 @@ function WorkflowCenter({ onSchedule }: { onSchedule: (workflowKey: string) => v
 }
 
 function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [history, setHistory] = useState<string | null>(null);
+  const [selectedRun, setSelectedRun] = useState('');
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [items, setItems] = useState<Schedule[]>([]);
   const [workflowKey, setWorkflowKey] = useState(initialWorkflow);
@@ -321,6 +325,7 @@ function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
     catch (reason) { setError(apiErrorMessage(reason, '定时任务操作失败，请核对 Cron 表达式和时区。')); }
     finally { setBusy(false); }
   };
+  if (selectedRun) return <RunDetail runId={selectedRun} onBack={() => { setSelectedRun(''); void load().catch(() => setError('定时任务加载失败。')); }} />;
   return <section>
     <div className="page-title"><h1>定时管理</h1><p>按 Cron 表达式和指定时区自动执行工作流。</p></div>
     {error ? <p className="inline-error" role="alert">{error}</p> : null}
@@ -345,10 +350,17 @@ function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
         <button className="primary" disabled={busy || !workflowKey}>{busy ? '正在保存…' : '创建定时任务'}</button>
       </form>
     </section>
-    <div className="schedule-list">{items.length ? items.map((item) => <article className="card" key={item.id}>
-      <div><h2>{workflowNames[item.workflowKey] ?? item.workflowName}</h2><p>{item.input}</p><small>{item.cadence} · 下次运行 {item.nextRunAt ? new Date(item.nextRunAt).toLocaleString() : '暂无'}</small></div>
-      <label className="switch"><input role="switch" type="checkbox" disabled={busy} checked={item.enabled} onChange={(event) => { void mutate(() => productApi.toggleSchedule(item.id, event.target.checked)); }} /><span>{item.enabled ? '已启用' : '已停用'}</span></label>
-      <button className="quiet danger" disabled={busy} onClick={() => { void mutate(() => productApi.deleteSchedule(item.id)); }}>删除</button>
+    <div className="schedule-list">{items.length ? items.map((item) => <article className="card schedule-card" key={item.id}>
+      <div className="schedule-overview"><h2>{workflowNames[item.workflowKey] ?? item.workflowName} <small>任务 #{item.id}</small></h2><p className="schedule-snapshot">{item.input}</p><small>{item.cadence}</small>
+        <p>下次执行：{item.enabled ? scheduleTime(item.nextRunAt, item.timezone) : '已停用，不会触发'}<br />最近触发：{scheduleTime(item.lastRunAt, item.timezone)}</p>
+        <p>最近结果：{item.latestRun ? scheduleRunLabel(item.latestRun) : '尚未触发'} {item.latestRun?.runId ? <button className="quiet" onClick={() => setSelectedRun(item.latestRun!.controlId)}>查看最近运行</button> : null}</p>
+      </div>
+      <div className="schedule-actions"><label className="switch"><input role="switch" type="checkbox" disabled={busy || editing !== null} checked={item.enabled} onChange={(event) => { void mutate(() => productApi.toggleSchedule(item.id, event.target.checked)); }} /><span>{item.enabled ? '已启用' : '已停用'}</span></label>
+      <button className="secondary" disabled={busy || editing !== null} onClick={() => setEditing(item.id)}>编辑</button>
+      <button className="secondary" disabled={editing !== null} onClick={() => setHistory(history === item.id ? null : item.id)}>{history === item.id ? '收起运行记录' : '查看运行记录'}</button>
+      <button className="quiet danger" disabled={busy || editing !== null} onClick={() => { void mutate(() => productApi.deleteSchedule(item.id)); }}>删除</button></div>
+      {editing === item.id ? <ScheduleEditor key={item.id} item={item} onCancel={() => setEditing(null)} onSave={async () => { await load(); setEditing(null); }} /> : null}
+      {history === item.id ? <ScheduleHistory key={item.id} item={item} onRun={setSelectedRun} /> : null}
     </article>) : <div className="empty-card">暂无定时任务</div>}</div>
   </section>;
 }

@@ -1,0 +1,15 @@
+.schedule-list .schedule-card { display: block; }
+.schedule-overview { min-width: 0; }
+.schedule-overview h2 small { font-size: 13px; color: var(--muted); font-weight: normal; }
+.schedule-overview > p { margin: 10px 0; }
+.schedule-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.schedule-editor, .schedule-history { border-top: 1px solid var(--border); padding-top: 20px; margin-top: 20px; }
+.schedule-editor > p, .schedule-history > p { color: var(--muted); margin: 8px 0 14px; }
+.schedule-editor form { display: grid; gap: 14px; }
+.schedule-editor label { display: grid; gap: 6px; font-weight: 600; }
+.schedule-editor input, .schedule-editor textarea { width: 100%; padding: 10px; border: 1px solid #d9dee7; border-radius: 8px; font-weight: normal; }
+.schedule-editor textarea { min-height: 140px; resize: vertical; }
+.schedule-history-item { padding: 16px; border: 1px solid var(--border); border-radius: 8px; margin: 12px 0; }
+.schedule-history-item > div { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.schedule-history-item details { margin: 12px 0; }
+.schedule-snapshot { white-space: pre-wrap; overflow-wrap: anywhere; }

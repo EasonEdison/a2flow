@@ -28,6 +28,7 @@ from a2flow_bside.repositories import (
 )
 from a2flow_bside.runtime_client import HttpRuntimeClient
 from a2flow_bside.notification_repository import NotificationsRepository, notification_engine
+from a2flow_bside.schedule_history import ScheduleHistoryRepository
 
 from pydantic import SecretStr
 
@@ -217,6 +218,7 @@ def create_app_from_environment():
         memory_replace=memory_replace,
         schedules=SchedulesRepository(connection_factory),
         notifications=NotificationsRepository(notification_engine(conninfo)),
+        schedule_history=ScheduleHistoryRepository(notification_engine(conninfo)),
         run_ownership=RunOwnershipRepository(connection_factory),
         runtime_client=HttpRuntimeClient(config.runtime_url),
         chat_runner=chat_runner,

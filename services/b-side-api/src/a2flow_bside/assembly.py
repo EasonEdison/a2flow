@@ -30,6 +30,7 @@ from .repositories import (
 )
 from .runtime_client import HttpRuntimeClient
 from .notification_repository import NotificationsRepository, notification_engine
+from .schedule_history import ScheduleHistoryRepository
 
 _FACTORY = re.compile(
     r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*:"
@@ -89,6 +90,7 @@ def create_app_from_environment(*, chat_runner=None):
         messages=MessagesRepository(connection_factory),
         schedules=SchedulesRepository(connection_factory),
         notifications=NotificationsRepository(notification_engine(config.conninfo)),
+        schedule_history=ScheduleHistoryRepository(notification_engine(config.conninfo)),
         run_ownership=RunOwnershipRepository(connection_factory),
         runtime_client=HttpRuntimeClient(config.runtime_url),
         workflow_catalog=workflow_catalog,

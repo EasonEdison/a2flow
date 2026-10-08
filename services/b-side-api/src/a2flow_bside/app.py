@@ -36,6 +36,8 @@ from .identity import (
 )
 from .runtime_client import RuntimeClient
 from .notification_repository import NotificationsRepository
+from .schedule_history import ScheduleHistoryRepository, ScheduleRunView, ScheduleTrigger
+from croniter import CroniterBadDateError
 from .scheduling import ScheduleRuleError, next_run_after, parse_rule
 
 _USERNAME = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
@@ -243,6 +245,7 @@ def create_app(
     environment: str,
     session_seconds: int,
     now: Callable[[], dt.datetime] | None = None,
+    schedule_history: ScheduleHistoryRepository | None = None,
     memory_view=None,
     memory_replace=None,
     chat_cards=None,
@@ -824,13 +827,28 @@ def create_app(
 
     # ---- schedules ----
 
+    async def trigger_view(trigger: ScheduleTrigger, user_id: int) -> ScheduleRunView:
+        lifecycle = None
+        if trigger.run_id:
+            try:
+                actual = await asyncio.to_thread(_runtime(user_id).view, trigger.run_id)
+                lifecycle = actual.get("lifecycle") or "UNKNOWN"
+            except RemoteRuntimeError:
+                lifecycle = "UNKNOWN"
+        return ScheduleRunView(
+            scheduleId=trigger.schedule_id, controlId=trigger.control_id,
+            runId=trigger.run_id, scheduledAt=trigger.scheduled_at,
+            deliveryState=trigger.delivery_state, lifecycle=lifecycle,
+            inputText=trigger.input_text,
+        )
+
     def _computed_next(rule_type: str, rule_json: dict,
                        timezone: str) -> dt.datetime:
         try:
             rule = parse_rule(rule_type, rule_json, timezone, clock())
-        except ScheduleRuleError as error:
+            next_at = next_run_after(rule, clock())
+        except (ScheduleRuleError, CroniterBadDateError):
             raise BsideError("INVALID_SCHEDULE", 400) from None
-        next_at = next_run_after(rule, clock())
         if next_at is None:
             raise BsideError("INVALID_SCHEDULE", 400)
         return next_at
@@ -851,9 +869,53 @@ def create_app(
     @app.get("/api/schedules")
     async def list_schedules(
             identity: RequestIdentity = Depends(identity)):
-        return {"schedules": [
+        rows = [
             _schedule_json(row)
-            for row in schedules.list_for(identity.userId)]}
+            for row in schedules.list_for(identity.userId)]
+        if schedule_history is not None:
+            triggers = await asyncio.to_thread(
+                schedule_history.read, identity.userId, environment)
+            visible = {str(row["id"]) for row in rows}
+            gate = asyncio.Semaphore(4)
+
+            async def latest(trigger: ScheduleTrigger) -> ScheduleRunView:
+                async with gate:
+                    return await trigger_view(trigger, identity.userId)
+
+            latest_runs = await asyncio.gather(*(
+                latest(trigger) for trigger in triggers if trigger.schedule_id in visible
+            ))
+            by_schedule = {item.scheduleId: item for item in latest_runs}
+            for row in rows:
+                row["latestRun"] = by_schedule.get(str(row["id"]))
+        return {"schedules": rows}
+
+    @app.get("/api/schedules/{schedule_id}/runs")
+    async def schedule_runs(
+        schedule_id: int, before: dt.datetime | None = None,
+        identity: RequestIdentity = Depends(identity),
+    ):
+        row = schedules.get(schedule_id)
+        if row is None or row["user_id"] != identity.userId or row["environment"] != environment:
+            raise BsideError("NOT_FOUND", 404)
+        if schedule_history is None:
+            raise BsideError("SCHEDULE_HISTORY_UNAVAILABLE", 503)
+        if before is not None and before.utcoffset() is None:
+            raise BsideError("INVALID_SCHEDULE_CURSOR", 400)
+        triggers = await asyncio.to_thread(
+            schedule_history.read, identity.userId, environment,
+            schedule_id=schedule_id, before=before, limit=11,
+        )
+        gate = asyncio.Semaphore(4)
+
+        async def view(trigger: ScheduleTrigger) -> ScheduleRunView:
+            async with gate:
+                return await trigger_view(trigger, identity.userId)
+
+        return {
+            "runs": await asyncio.gather(*(view(item) for item in triggers[:10])),
+            "nextCursor": triggers[9].scheduled_at if len(triggers) > 10 else None,
+        }
 
     @app.patch("/api/schedules/{schedule_id}")
     async def update_schedule(
