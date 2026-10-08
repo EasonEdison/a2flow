@@ -1,4 +1,5 @@
 .schedule-list .schedule-card { display: block; }
+.schedule-form form > small, .schedule-form form > button { grid-column: 2; }
 .schedule-overview { min-width: 0; }
 .schedule-overview h2 small { font-size: 13px; color: var(--muted); font-weight: normal; }
 .schedule-overview > p { margin: 10px 0; }
