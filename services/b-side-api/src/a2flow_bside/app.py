@@ -827,11 +827,16 @@ def create_app(
 
     # ---- schedules ----
 
+    schedule_status_gate = asyncio.Semaphore(1)
+
     async def trigger_view(trigger: ScheduleTrigger, user_id: int) -> ScheduleRunView:
         lifecycle = None
         if trigger.run_id:
             try:
-                actual = await asyncio.to_thread(_runtime(user_id).view, trigger.run_id)
+                # Runtime admits bounded reads; list/history share one lane so
+                # opening a schedule page does not consume its whole capacity.
+                async with schedule_status_gate:
+                    actual = await asyncio.to_thread(_runtime(user_id).view, trigger.run_id)
                 lifecycle = actual.get("lifecycle") or "UNKNOWN"
             except RemoteRuntimeError:
                 lifecycle = "UNKNOWN"
@@ -876,14 +881,9 @@ def create_app(
             triggers = await asyncio.to_thread(
                 schedule_history.read, identity.userId, environment)
             visible = {str(row["id"]) for row in rows}
-            gate = asyncio.Semaphore(4)
-
-            async def latest(trigger: ScheduleTrigger) -> ScheduleRunView:
-                async with gate:
-                    return await trigger_view(trigger, identity.userId)
-
             latest_runs = await asyncio.gather(*(
-                latest(trigger) for trigger in triggers if trigger.schedule_id in visible
+                trigger_view(trigger, identity.userId)
+                for trigger in triggers if trigger.schedule_id in visible
             ))
             by_schedule = {item.scheduleId: item for item in latest_runs}
             for row in rows:
@@ -906,14 +906,10 @@ def create_app(
             schedule_history.read, identity.userId, environment,
             schedule_id=schedule_id, before=before, limit=11,
         )
-        gate = asyncio.Semaphore(4)
-
-        async def view(trigger: ScheduleTrigger) -> ScheduleRunView:
-            async with gate:
-                return await trigger_view(trigger, identity.userId)
-
         return {
-            "runs": await asyncio.gather(*(view(item) for item in triggers[:10])),
+            "runs": await asyncio.gather(*(
+                trigger_view(item, identity.userId) for item in triggers[:10]
+            )),
             "nextCursor": triggers[9].scheduled_at if len(triggers) > 10 else None,
         }
 
