@@ -16,8 +16,13 @@ Required configuration:
 - Optional `A2FLOW_SCHEDULER_TRIGGER_SECONDS` (default 5, maximum 60).
 - Optional existing `A2FLOW_LARK_WEBHOOK_URL` / `A2FLOW_LARK_SECRET`.
 
-Use `PostgresOutbox(connection).enqueue(command)` within the transaction that
-persists a card action or lifecycle event. It neither commits nor accesses Redis.
+Create `PostgresOutbox(scheduler_engine(conninfo))`. Within
+`with outbox.transaction() as session`, call `outbox.enqueue(command, session=session)`.
+Enqueue joins that SQLAlchemy transaction and neither commits nor accesses Redis.
+The Runtime card store still owns a psycopg transaction: its completion hook must
+use `enqueue_on_card_transaction(connection, command)` on that same connection.
+That narrow parameterized-SQL adapter never commits, closes, or opens a connection.
+Do not substitute a separate SQLAlchemy session inside the card transaction.
 Commands are the strict `StartWorkflow`, `ResumeWorkflow`, and
 `NotificationCommand` DTOs in `contracts.py`. Reusing a message ID with different
 content raises a conflict. Scheduled control IDs are UUID5 values over schedule

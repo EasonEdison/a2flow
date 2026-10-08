@@ -20,7 +20,8 @@ from agent_workflow_runtime.chat.cards import CardCompletion
 from agent_workflow_runtime.events import DomainEvent
 from agent_workflow_runtime.rpc_client import RpcClient
 from a2flow_scheduler.contracts import NotificationCommand, ResumeWorkflow
-from a2flow_scheduler.outbox import PostgresOutbox
+from a2flow_scheduler.outbox import PostgresOutbox, enqueue_on_card_transaction
+from a2flow_scheduler.persistence import scheduler_engine
 from agent_workflow_runtime.workflow_rpc_host import RpcWorkflowHost
 from agent_workflow_runtime.internal_identity import private_identity
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
@@ -40,7 +41,7 @@ def completed_card(connection: psycopg.Connection[Any], completion: CardCompleti
     binding = WorkflowBinding.model_validate(value)
     identity = json.dumps([completion.owner.environment, str(completion.owner.user_id),
                            completion.card_id, completion.request_id])
-    PostgresOutbox(connection).enqueue(ResumeWorkflow(
+    enqueue_on_card_transaction(connection, ResumeWorkflow(
         message_id="resume:" + sha256(identity.encode()).hexdigest(),
         user_id=completion.owner.user_id, environment=completion.owner.environment,
         run_id=binding.runId, node_id=binding.nodeId,
@@ -51,7 +52,7 @@ def completed_card(connection: psycopg.Connection[Any], completion: CardCompleti
 
 class SchedulerEventSink:
     def __init__(self, conninfo: str) -> None:
-        self.conninfo = conninfo
+        self.outbox = PostgresOutbox(scheduler_engine(conninfo))
 
     def publish(self, event: DomainEvent) -> None:
         names: dict[str, Literal["waiting", "completed", "failed", "stopped"]] = {
@@ -61,14 +62,14 @@ class SchedulerEventSink:
         kind = names.get(event.event_type)
         if kind is None:
             return
-        with psycopg.connect(self.conninfo) as connection:
-            PostgresOutbox(connection).enqueue(NotificationCommand(
+        with self.outbox.transaction() as session:
+            self.outbox.enqueue(NotificationCommand(
                 message_id="event:" + str(event.event_id), user_id=event.user_id,
                 run_id=event.run_id, event=kind,
                 title={"waiting": "工作流等待操作", "completed": "工作流已完成",
                        "failed": "工作流执行失败", "stopped": "工作流已停止"}[kind],
                 body="请查看工作流运行详情。",
-            ))
+            ), session=session)
 
 
 def create_app_from_environment():

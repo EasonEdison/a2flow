@@ -18,6 +18,7 @@ from a2flow_scheduler.delivery import consume_one, reconcile_unknown
 from a2flow_scheduler.ingress import BsideCommandClient
 from a2flow_scheduler.lark import LarkWebhookClient
 from a2flow_scheduler.outbox import PostgresOutbox
+from a2flow_scheduler.persistence import scheduler_engine
 from a2flow_scheduler.scheduler import trigger_due
 from a2flow_scheduler.streams import RedisStreamTransport, StreamChannel
 
@@ -78,7 +79,9 @@ class LarkNotifications:
                     "template": "blue",
                     "title": {"tag": "plain_text", "content": command.title},
                 },
-                "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": command.body}}],
+                "elements": [
+                    {"tag": "div", "text": {"tag": "lark_md", "content": command.body}}
+                ],
             },
             dedup_key=command.message_id,
         )
@@ -88,26 +91,34 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     settings = SchedulerSettings.from_environment()
     client = Redis.from_url(
-        settings.redis_url, decode_responses=True, socket_connect_timeout=5, socket_timeout=5
+        settings.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
     )
     transport = RedisStreamTransport(
-        client, namespace=settings.namespace, consumer=f"{socket.gethostname()}:{os.getpid()}"
+        client,
+        namespace=settings.namespace,
+        consumer=f"{socket.gethostname()}:{os.getpid()}",
     )
     ingress = BsideCommandClient(settings.bside_url, settings.internal_token)
     lark_url = os.environ.get("A2FLOW_LARK_WEBHOOK_URL")
-    sender = LarkNotifications(lark_url, os.environ.get("A2FLOW_LARK_SECRET")) if lark_url else None
+    sender = (
+        LarkNotifications(lark_url, os.environ.get("A2FLOW_LARK_SECRET"))
+        if lark_url
+        else None
+    )
+    outbox = PostgresOutbox(scheduler_engine(settings.database_url))
     while True:
         try:
             transport.initialize()
-            with psycopg.connect(settings.database_url, autocommit=True) as connection:
-                outbox = PostgresOutbox(connection)
-                trigger_due(outbox, datetime.now(UTC))
-                outbox.publish(transport)
-                for channel in StreamChannel:
-                    for _ in range(50):
-                        if not consume_one(outbox, transport, channel, ingress, sender):
-                            break
-                reconcile_unknown(outbox, ingress)
+            trigger_due(outbox, datetime.now(UTC))
+            outbox.publish(transport)
+            for channel in StreamChannel:
+                for _ in range(50):
+                    if not consume_one(outbox, transport, channel, ingress, sender):
+                        break
+            reconcile_unknown(outbox, ingress)
         except Exception as exc:
             # Do not log credentials, payloads or provider response bodies.
             LOG.error("Scheduler pass failed: %s", type(exc).__name__)

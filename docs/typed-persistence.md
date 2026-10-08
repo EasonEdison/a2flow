@@ -35,4 +35,16 @@
 3. 内容服务与运行态存储逐模块审查；保留 LangGraph/SDK 自带存储，不重写其实现。
 4. 每批通过隔离 PostgreSQL 验证后再部署，分别记录源码、部署与公网证据。
 
+## 第二批：Scheduler 与 Outbox（2026-10-08）
+
+- 当前 Redis Streams 运行链路已改为 SQLAlchemy：定时扫描/推进、Outbox upsert/发布/认领/完成/延后/UNKNOWN 对账、通知限流与插入。
+- 使用 Mapped 实体与 DueSchedule/WorkflowCommand DTO；业务不再解包十列位置元组。JSONB 仅作为序列化边界，不把散装 JSON 用作控制协议。
+- 定时推进和 enqueue 共用显式 Session 事务。发布持有 SKIP LOCKED 行锁；外部执行前 claim 已提交，finish 提交后才能 ACK。
+- 卡片完成观察器保留一个明确的参数化 SQL 入队适配器，加入卡片原 psycopg 事务。不是两套 Outbox 服务，不另开事务，不改卡片数据库层。生命周期通知使用 SQLAlchemy 事务。
+- 原始 SQL schema/migrations、枚举文本、JSONB 相等幂等、60秒重发窗口、30秒容量延后、5分钟UNKNOWN收敛和通知限流语义保留。JSON文本先以Text绑定再cast JSONB，防止双重序列化。
+- 真实隔离 PostgreSQL 验证通过：相同/冲突消息、并发只认领一次、卡片事务回滚、UNKNOWN不认领、容量延后、并发扫描只触发一次、入队失败整体回滚、通知幂等及20条限流。
+- 真实隔离 Redis + PostgreSQL 验证通过：跳过已锁消息、发布冷却、消费入队引用、重复引用不再次派发、完成后ACK且pending清零。
+- 新改5模块strict mypy通过；Ruff、语法与diff检查。未跑全套单测。探针使用独立临时实例，未触碰公网任务/数据。
+- 未部署本批源码；现有历史 legacy loops/workers 不属于当前 Streams 入口，本轮未恢复或重写该旧队列。
+
 参考：https://docs.sqlalchemy.org/en/20/orm/declarative_tables.html
