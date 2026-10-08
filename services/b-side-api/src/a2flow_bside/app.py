@@ -35,6 +35,7 @@ from .identity import (
     resolve_identity,
 )
 from .runtime_client import RuntimeClient
+from .notification_repository import NotificationsRepository
 from .scheduling import ScheduleRuleError, next_run_after, parse_rule
 
 _USERNAME = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
@@ -232,7 +233,7 @@ def create_app(
     conversations,
     messages,
     schedules,
-    notifications,
+    notifications: NotificationsRepository,
     run_ownership,
     runtime_client: RuntimeClient,
     chat_runner: ChatRunner,
@@ -900,10 +901,10 @@ def create_app(
     async def list_notifications(
             identity: RequestIdentity = Depends(identity)):
         return {"notifications": [
-            {"id": row["id"], "kind": row["kind"], "title": row["title"],
-             "body": row["body"], "refType": row["ref_type"],
-             "refId": row["ref_id"], "read": row["read"],
-             "createdAt": _iso(row["created_at"])}
+            {"id": row.id, "kind": row.kind, "title": row.title,
+             "body": row.body, "refType": row.ref_type,
+             "refId": row.ref_id, "read": row.read,
+             "createdAt": row.created_at.isoformat()}
             for row in notifications.list_for(identity.userId)]}
 
     @app.post("/api/notifications/{notification_id}/read")

@@ -18,12 +18,14 @@ COPY deploy/mvp/model-requirements.lock /tmp/model-requirements.lock
 COPY deploy/mvp/listener-requirements.lock /tmp/listener-requirements.lock
 COPY services/agent-workflow-runtime/requirements-http.txt /tmp/runtime-http.txt
 COPY services/b-side-api/requirements-http.txt /tmp/bside-http.txt
+COPY services/b-side-api/requirements-db.txt /tmp/bside-db.txt
 RUN python -m pip install --no-cache-dir -r /tmp/runtime-requirements.lock \
     && python -m pip install --no-cache-dir -r /tmp/model-requirements.lock \
     && python -m pip install --no-cache-dir --no-deps --require-hashes \
         -r /tmp/runtime-http.txt \
     && python -m pip install --no-cache-dir --no-deps --require-hashes \
         -r /tmp/bside-http.txt \
+    && python -m pip install --no-cache-dir -r /tmp/bside-db.txt \
     && python -m pip install --no-cache-dir -r /tmp/listener-requirements.lock \
     && python -m pip install --no-cache-dir \
         -c /tmp/runtime-requirements.lock \

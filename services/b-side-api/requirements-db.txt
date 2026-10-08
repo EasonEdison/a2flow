@@ -1,0 +1,2 @@
+# Synchronous typed persistence; psycopg remains the PostgreSQL driver.
+SQLAlchemy==2.0.54

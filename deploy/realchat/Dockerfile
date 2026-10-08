@@ -10,6 +10,8 @@ RUN rm -rf /opt/a2flow/services/management-api \
 ENV PYTHONPATH=/opt/a2flow/packages/contracts/src:/opt/a2flow/packages/asset-store/src:/opt/a2flow/services/skill-registry/src:/opt/a2flow/services/capability-registry/src:/opt/a2flow/services/a2ui-composer/src:/opt/a2flow/services/b-side-api/src:/opt/a2flow/services/scheduler-mq/src:/opt/a2flow/services/agent-workflow-runtime/src:/opt/a2flow/examples/activity-planning
 
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+COPY services/b-side-api/requirements-db.txt /tmp/bside-db.txt
+RUN python -m pip install --no-cache-dir --index-url ${PIP_INDEX_URL} -r /tmp/bside-db.txt
 RUN python -m pip install --no-cache-dir --index-url ${PIP_INDEX_URL} jsonschema==4.26.0
 COPY packages /opt/a2flow/packages
 RUN python -m pip install --no-cache-dir --index-url ${PIP_INDEX_URL} /opt/a2flow/packages/rpc-contracts

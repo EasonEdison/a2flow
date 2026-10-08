@@ -247,34 +247,6 @@ class SchedulesRepository:
         return cursor.rowcount > 0
 
 
-class NotificationsRepository:
-    def __init__(self, connection_factory: Callable):
-        self._factory = connection_factory
-
-    def list_for(self, user_id: int, limit: int = 50) -> list[dict]:
-        require_user_id(user_id)
-        with self._factory() as connection:
-            rows = connection.execute(
-                "SELECT n.id, n.kind, n.title, n.body, n.ref_type, "
-                "CASE WHEN n.ref_type='run' THEN COALESCE("
-                "(SELECT r.control_id FROM run_ownership r "
-                "WHERE r.run_id=n.ref_id AND r.user_id=n.user_id LIMIT 1), n.ref_id) "
-                "ELSE n.ref_id END AS ref_id, n.read, n.created_at "
-                "FROM notifications n WHERE n.user_id = %s "
-                "ORDER BY n.read ASC, n.created_at DESC LIMIT %s",
-                (user_id, limit)).fetchall()
-        return [dict(row) for row in rows]
-
-    def mark_read(self, notification_id: int, user_id: int) -> bool:
-        require_user_id(user_id)
-        with self._factory() as connection:
-            cursor = connection.execute(
-                "UPDATE notifications SET read = TRUE "
-                "WHERE id = %s AND user_id = %s",
-                (notification_id, user_id))
-        return cursor.rowcount > 0
-
-
 class RunOwnershipRepository:
     """B-side ownership of Runtime control requests (v1 run identity)."""
 

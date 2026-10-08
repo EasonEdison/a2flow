@@ -1,0 +1,38 @@
+# Python 类型化数据访问规范与迁移
+
+状态：2026-10-08 用户批准；分模块实施，不代表全仓迁移完成。
+
+## 统一规范
+
+- 使用 SQLAlchemy 2.x，数据库字段以 `Mapped[T]` 声明；普通查询使用表达式，不拼业务值或列名。
+- Repository 输入/返回为明确类型；固定结构使用 dataclass/Pydantic DTO，不把任意 dict 数据库行传入业务层。HTTP JSON 只在边界序列化。
+- 持久化实体、请求与响应分别建模，不让数据库字段自动暴露到 API。
+- Repository 拥有短事务，跨 Repository 业务必须共享同一 Session/Connection 和事务，不能用两个独立连接拼接原子操作。
+- Outbox、条件 upsert、SKIP LOCKED 可用 Core；必要的参数化原生 SQL 集中管理，保留幂等、锁、UNKNOWN 不自动重放语义。
+- digest 由规范化序列化负责，与 ORM 解耦。禁止借迁移修改历史摘要、业务枚举落库值或已有表结构。
+- 当前沿用既有 SQL schema/migrations；不调用 metadata.create_all，不同时引入 Alembic。后续迁移治理单独评估。
+- 不引入 SQLModel 或自研通用 QueryWrapper。同步服务使用同步 Session；不为此增加异步连接栈。
+
+## 第一批：通知读取与标记已读
+
+- 新增 notification_repository.py：类型化通知实体、运行归属只读投影、NotificationView、Repository。
+- 删除旧 NotificationsRepository SQL 实现，两个 B 组装入口均接新实现；API 输出字段不变。
+- 保留用户过滤、未读优先/时间降序、limit、运行 ID 转 control ID 及原引用保留行为。
+- NullPool 保留按操作短连接，不增加常驻数据库连接；连接超时、语句超时、锁超时保持不变；参数不记录到 SQLAlchemy 错误文本。
+- SQLAlchemy==2.0.54 放入独立 requirements-db.txt，attended/realchat Dockerfile 均安装。psycopg 仍是数据库驱动。
+
+## 验证与准出
+
+- strict mypy（新增 Repository，依赖导入 follow-imports=silent）通过，未忽略缺失依赖或新增类型错误。
+- 临时 PostgreSQL 实例实测：DTO 查询、同用户运行引用转换、跨用户不可转换/修改、重复已读、缺失 ID、提交持久化、未读排序和 limit 均通过。
+- 无生产数据库写入、无模型调用；临时探针不提交。未跑全套单测。
+- 本批为源码交付，尚未部署到公网；不能将前一次 UI 部署视为本批 ORM 已部署。
+
+## 后续批次
+
+1. Scheduler 的 schedule 推进与 Outbox 入队作为同一事务整体迁移，再迁移通知写入与限流。
+2. B 端其他 Repository 按业务边界迁移并去掉 dict 传播。
+3. 内容服务与运行态存储逐模块审查；保留 LangGraph/SDK 自带存储，不重写其实现。
+4. 每批通过隔离 PostgreSQL 验证后再部署，分别记录源码、部署与公网证据。
+
+参考：https://docs.sqlalchemy.org/en/20/orm/declarative_tables.html
