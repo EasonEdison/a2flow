@@ -4,7 +4,7 @@ import { managementFetch } from './shared/managementSession';
 import type { ComponentListItem, ManagementListPage, ComponentAssetQuery, ComponentPreviewResult, ComponentRenderPreviewParams, ComponentRenderPreviewResult, AssetReleaseEnvironmentFacts, AssetAccessResult, AssetReleaseOperationResult, AssetReleaseOverview, ReleaseDiffDocument, ReleaseDiffQuery, ReleaseAssetType, ReleaseEnvironment, SkillFactoryComponentAsset, } from './types';
 import type { A2uiCatalogAuthoringJson, A2uiCatalogComponentContract, A2uiCatalogComponentQuery, A2uiCatalogComponentRecord, A2uiManagedCatalogImportResult, A2uiCatalogQuery, A2uiCatalogRecord, } from './a2uiCatalogContracts';
 import { parseA2uiCatalogAuthoringJson } from './a2uiCatalogContracts';
-import type { A2uiApplicationBlueprintCode, A2uiApplicationBlueprintWireSource, A2uiApplicationDraft, A2uiApplicationQuery, A2uiApplicationRecord, A2uiMessage, } from './a2uiApplicationContracts';
+import type { A2uiApplicationBlueprintCode, A2uiApplicationBlueprintWireSource, A2uiApplicationDraft, A2uiApplicationQuery, A2uiApplicationListItem, A2uiApplicationRecord, A2uiMessage, } from './a2uiApplicationContracts';
 import { projectA2uiApplicationBlueprintOptions, projectA2uiApplicationActionScanResult, projectA2uiApplicationBlueprintWireSource, normalizeA2uiApplicationDraft, toA2uiApplicationAuthoringPayload, } from './a2uiApplicationContracts';
 import type { CapabilityClient } from './capabilityClientVariantLayout';
 import { buildSpecialistPrtBindingRequest } from './specialistPrtDebug';
@@ -2105,8 +2105,7 @@ export interface A2uiPrtPreviewActionInput {
 }
 export const a2uiApplicationApi = {
     list: async (query: A2uiApplicationQuery = {}) => {
-        const applications = await callSkillFactory<A2uiApplicationRecord[]>(SkillFactoryMethod.A2UI_APPLICATION_LIST, compact(query));
-        return applications.map(normalizeA2uiApplicationDraft);
+        return callSkillFactory<ManagementListPage<A2uiApplicationListItem>>(SkillFactoryMethod.A2UI_APPLICATION_LIST, compact(query));
     },
     detail: async (id: string) => normalizeA2uiApplicationDraft(await callSkillFactory<A2uiApplicationRecord>(SkillFactoryMethod.A2UI_APPLICATION_DETAIL, {
         id,
@@ -2150,7 +2149,7 @@ export const skillBindingCandidateApi = {
     capabilityList: (keyword?: string) => callSkillFactory<CapabilityActionDraft[]>(SkillFactoryMethod.SKILL_CAPABILITY_CANDIDATE_LIST, compact({ keyword })),
 };
 export const capabilityCenterApi = {
-    list: (query: CapabilityCatalogQuery = {}) => callSkillFactory<CapabilityActionDraft[]>(SkillFactoryMethod.CAPABILITY_LIST, compact(query)),
+    list: (query: CapabilityCatalogQuery = {}) => callSkillFactory<ManagementListPage<CapabilityListItem>>(SkillFactoryMethod.CAPABILITY_LIST, compact(query)),
     publishedList: (keyword?: string) => callSkillFactory<CapabilityActionDraft[]>(SkillFactoryMethod.CAPABILITY_PUBLISHED_LIST, compact({ keyword })),
     create: (draft: CapabilityActionDraftData, selection?: CapabilityClassificationSelection) => callSkillFactory<CapabilityActionDraft>(SkillFactoryMethod.CAPABILITY_DRAFT_CREATE, selection
         ? {
@@ -2195,4 +2194,23 @@ export interface CapabilityCatalogQuery {
     capabilityDomain?: string;
     specialistId?: string;
     publishStatus?: 'EDITING' | 'ONLINE';
+    page?: number;
+    pageSize?: number;
+}
+export interface CapabilityListItem {
+    draftId: string;
+    actionCode?: string;
+    nameCn?: string;
+    description?: string;
+    sourceType?: string;
+    sideEffectLevel?: string;
+    businessDomain?: string;
+    businessDomainName?: string;
+    capabilityDomain?: string;
+    capabilityDomainName?: string;
+    specialistId?: string;
+    specialistName?: string;
+    editing: boolean;
+    online: boolean;
+    updateTime: number;
 }

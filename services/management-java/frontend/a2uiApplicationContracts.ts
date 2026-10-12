@@ -497,7 +497,18 @@ export function projectA2uiApplicationActionScanResult(
 export interface A2uiApplicationQuery {
   keyword?: string;
   status?: A2uiApplicationStatus | 'ALL';
+  page?: number;
+  pageSize?: number;
 }
+
+/** List projections never contain editable Show/Action payloads. */
+export type A2uiApplicationListItem = Pick<A2uiApplicationRecord,
+  'id' | 'appCode' | 'nameCn' | 'description' | 'interactionMode' | 'protocolVersion' |
+  'protocolStatus' | 'catalog' | 'status' | 'releases' | 'hasUnpublishedChanges' |
+  'sourceDigest' | 'createTime' | 'updateTime'> & {
+    showComponentCount: number;
+    actionBindingCount: number;
+  };
 
 export interface A2uiApplicationBuildValidationResult {
   valid: boolean;

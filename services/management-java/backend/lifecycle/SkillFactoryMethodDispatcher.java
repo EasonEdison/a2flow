@@ -37,6 +37,8 @@ import dev.a2flow.management.access.AssetNotFoundException;
 import dev.a2flow.management.access.AssetPermissionDeniedException;
 import dev.a2flow.management.agentcore.runtime.tool.CapabilityActionExecutor.CapabilityExecutionException;
 import dev.a2flow.management.lifecycle.domain.ComponentAsset;
+import dev.a2flow.management.lifecycle.domain.ApplicationListItem;
+import dev.a2flow.management.lifecycle.domain.ManagementPageQuery;
 import dev.a2flow.management.lifecycle.domain.graph.WorkflowGraphCompilationException;
 import dev.a2flow.management.lifecycle.domain.graph.WorkflowGraphDataException;
 import dev.a2flow.management.method.SkillFactoryMethodEnum;
@@ -45,6 +47,7 @@ import dev.a2flow.management.release.AssetReleaseApplicationService;
 import dev.a2flow.management.release.ReleaseAssetType;
 import dev.a2flow.management.release.WorkflowReleasePayloadValidationException;
 import dev.a2flow.management.release.dependency.AssetDependencyResolutionException;
+import dev.a2flow.management.storage.db.repository.ApplicationListRepository;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -181,6 +184,8 @@ public class SkillFactoryMethodDispatcher {
 
     @Resource
     private A2uiApplicationRegistryService a2uiApplicationRegistryService;
+    @Resource
+    private ApplicationListRepository applicationListRepository;
 
     @Resource
     private A2uiApplicationBlueprintService a2uiApplicationBlueprintService;
@@ -456,7 +461,7 @@ public class SkillFactoryMethodDispatcher {
     private SkillFactoryExecutionResult dispatchCapability(String userName, SkillFactoryMethodEnum method,
             Map<String, String> params) {
         if (method == SkillFactoryMethodEnum.CAPABILITY_LIST) {
-            return success(skillBindingCandidateService.capabilityCandidates(userName, params), true);
+            return success(capabilityActionDraftService.listPage(userName, params), true);
         }
         if (method == SkillFactoryMethodEnum.CAPABILITY_PUBLISHED_LIST) {
             return success(skillBindingCandidateService.enrichCapabilities(
@@ -740,7 +745,7 @@ public class SkillFactoryMethodDispatcher {
                     jsonObject(params, PARAM_COMPONENT_JSON)), false);
         }
         if (method == SkillFactoryMethodEnum.A2UI_APPLICATION_LIST) {
-            return success(projectApplications(a2uiApplicationRegistryService.list(params), params), true);
+            return success(projectApplicationPage(params), true);
         }
         if (method == SkillFactoryMethodEnum.A2UI_APPLICATION_DETAIL) {
             return success(projectApplication(
@@ -814,21 +819,61 @@ public class SkillFactoryMethodDispatcher {
                 asset, projectionRelease());
     }
 
-    private List<Map<String, Object>> projectApplications(
-            List<ComponentAsset> assets, Map<String, String> params) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        Map<String, Map<String, Object>> dependencies = new LinkedHashMap<>();
-        String status = params.get(FIELD_STATUS);
-        if (assets != null) {
-            for (ComponentAsset asset : assets) {
-                Map<String, Object> projected = projectApplication(asset, dependencies);
-                if (StringUtils.isBlank(status) || STATUS_ALL.equals(status)
-                        || status.equals(projected.get(FIELD_STATUS))) {
-                    result.add(projected);
-                }
+    @SuppressWarnings("unchecked")
+    private ManagementListPage<ApplicationListItem> projectApplicationPage(Map<String, String> params) {
+        ManagementListPage<ApplicationListRepository.Row> page = applicationListRepository.list(
+                params, ManagementPageQuery.from(params));
+        Map<String, Map<String, Object>> catalogs = new LinkedHashMap<>();
+        List<ApplicationListItem> items = new ArrayList<>();
+        for (ApplicationListRepository.Row row : page.list()) {
+            Map<String, Object> source = JsonSupport.fromJSON(row.sourceJson(), Map.class);
+            if (source == null || !row.appCode().equals(string(source.get("appCode")))) {
+                throw new IllegalStateException("Application registry source identity is invalid");
+            }
+            String catalogId = string(source.get(FIELD_CATALOG_ID));
+            Map<String, Object> dependencies = catalogs.computeIfAbsent(
+                    catalogId, this::projectApplicationDependencies);
+            String digest = A2uiImmutableJsonSupport.digest(source);
+            Map<String, Object> release = a2uiReleaseProjectionService.applicationProjection(row.appCode(), digest);
+            String expectedStatus = params == null ? null : params.get(FIELD_STATUS);
+            if (StringUtils.isNotBlank(expectedStatus) && !STATUS_ALL.equals(expectedStatus)
+                    && !expectedStatus.equals(release.get(FIELD_STATUS))) {
+                throw new IllegalStateException("Application release page projection changed during read");
+            }
+            items.add(new ApplicationListItem(String.valueOf(row.id()), row.appCode(),
+                    string(source.get("nameCn")), string(source.get("description")),
+                    string(source.getOrDefault(FIELD_INTERACTION_MODE, A2uiInteractionMode.DISPLAY_ONLY.name())),
+                    A2UI_PROTOCOL_VERSION, A2UI_PROTOCOL_STATUS,
+                    (Map<String, Object>) dependencies.get(FIELD_CATALOG),
+                    string(release.get(FIELD_STATUS)), (Map<String, Object>) release.get("releases"),
+                    (Boolean) release.get("hasUnpublishedChanges"), digest,
+                    countShowComponents(source), listValue(source.get("actionBindings")).size(),
+                    row.createTime(), row.updateTime()));
+        }
+        return new ManagementListPage<>(items, page.total(), page.page(), page.pageSize());
+    }
+
+    @SuppressWarnings("unchecked")
+    private int countShowComponents(Map<String, Object> source) {
+        Map<String, Object> show = source.get("showTemplate") instanceof Map
+                ? (Map<String, Object>) source.get("showTemplate") : Collections.emptyMap();
+        int count = 0;
+        for (Object value : listValue(show.get("messageTemplates"))) {
+            Map<String, Object> message = value instanceof Map ? (Map<String, Object>) value : Collections.emptyMap();
+            Map<String, Object> update = message.get("updateComponents") instanceof Map
+                    ? (Map<String, Object>) message.get("updateComponents") : Collections.emptyMap();
+            if (StringUtils.isBlank(string(update.get("surfaceId")))) continue;
+            for (Object candidate : listValue(update.get("components"))) {
+                if (candidate instanceof Map component
+                        && StringUtils.isNotBlank(string(component.get("id")))
+                        && StringUtils.isNotBlank(string(component.get("component")))) count++;
             }
         }
-        return result;
+        return count;
+    }
+
+    private List<?> listValue(Object value) {
+        return value instanceof List ? (List<?>) value : Collections.emptyList();
     }
 
     private Map<String, Object> projectApplication(ComponentAsset asset) {

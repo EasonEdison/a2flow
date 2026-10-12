@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Button,
   Card,
@@ -6,6 +6,7 @@ import {
   Empty,
   Form,
   Input,
+  Pagination,
   Select,
   Space,
   Spin,
@@ -18,14 +19,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   capabilityCenterApi,
   skillFactoryApi,
-  type CapabilityActionDraft,
+  type CapabilityListItem,
   type CapabilityCatalogQuery,
   type SkillFactoryPageConfig,
 } from './api';
 import {
   CAPABILITY_API_SOURCE_TYPE,
   registerCapabilityDraftWithName,
-  visibleCapabilityDrafts,
 } from './capabilityDraftLifecycle';
 import { capabilitySideEffectText, capabilitySourceText } from './shared/capabilityDisplayText';
 
@@ -45,12 +45,12 @@ function domainOptions(value: SkillFactoryPageConfig['businessDomains']) {
     .filter((item) => item.value && item.label);
 }
 
-function actionCodeOf(item: CapabilityActionDraft): string {
-  return item.draft?.basicInfo?.actionCode || '未填写 actionCode';
+function actionCodeOf(item: CapabilityListItem): string {
+  return item.actionCode || '未填写 actionCode';
 }
 
-function nameOf(item: CapabilityActionDraft): string {
-  return item.draft?.basicInfo?.nameCn || '未命名能力';
+function nameOf(item: CapabilityListItem): string {
+  return item.nameCn || '未命名能力';
 }
 
 const CapabilityCenterPage: React.FC = () => {
@@ -58,37 +58,54 @@ const CapabilityCenterPage: React.FC = () => {
   const [keyword, setKeyword] = useState('');
   const [filters, setFilters] = useState<CapabilityCatalogQuery>({});
   const [config, setConfig] = useState<SkillFactoryPageConfig>({});
-  const [items, setItems] = useState<CapabilityActionDraft[]>([]);
+  const [items, setItems] = useState<CapabilityListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [appliedFilters, setAppliedFilters] = useState<CapabilityCatalogQuery>({});
+  const requestSequence = useRef(0);
   const [loading, setLoading] = useState(false);
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [registrationForm] = Form.useForm<{ nameCn: string }>();
 
   const load = useCallback(async (query: CapabilityCatalogQuery) => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
     try {
-      setItems(visibleCapabilityDrafts(await capabilityCenterApi.list(query)));
+      const result = await capabilityCenterApi.list(query);
+      if (requestId !== requestSequence.current) return;
+      setItems(result.list);
+      setTotal(result.total);
     } catch (error) {
+      if (requestId !== requestSequence.current) return;
       message.error(error instanceof Error ? error.message : '能力列表加载失败');
+      setItems([]);
+      setTotal(0);
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load({});
+    load({ ...appliedFilters, page, pageSize });
+  }, [appliedFilters, load, page, pageSize]);
+
+  useEffect(() => {
     skillFactoryApi
       .config()
       .then(setConfig)
       .catch(() => setConfig({}));
-  }, [load]);
+    return () => { requestSequence.current += 1; };
+  }, []);
 
   const currentQuery = (): CapabilityCatalogQuery => ({ ...filters, keyword });
 
   const reset = () => {
     setKeyword('');
     setFilters({});
-    load({});
+    setPage(1);
+    setAppliedFilters({});
   };
 
   const openRegistration = () => {
@@ -127,7 +144,7 @@ const CapabilityCenterPage: React.FC = () => {
           </p>
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => load(currentQuery())}>
+          <Button icon={<ReloadOutlined />} onClick={() => load({ ...appliedFilters, page, pageSize })}>
             刷新
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openRegistration}>
@@ -145,7 +162,7 @@ const CapabilityCenterPage: React.FC = () => {
             value={keyword}
             style={{ width: 360 }}
             onChange={(event) => setKeyword(event.target.value)}
-            onPressEnter={() => load(currentQuery())}
+            onPressEnter={() => { setPage(1); setAppliedFilters(currentQuery()); }}
           />
           <Select
             allowClear
@@ -184,7 +201,7 @@ const CapabilityCenterPage: React.FC = () => {
             style={{ width: 180 }}
             onChange={(value) => setFilters((current) => ({ ...current, publishStatus: value }))}
           />
-          <Button type="primary" onClick={() => load(currentQuery())}>
+          <Button type="primary" onClick={() => { setPage(1); setAppliedFilters(currentQuery()); }}>
             搜索
           </Button>
           <Button onClick={reset}>重置</Button>
@@ -207,7 +224,7 @@ const CapabilityCenterPage: React.FC = () => {
                     {item.online ? <Tag color="success">已上线</Tag> : null}
                   </Space>
                 </div>
-                <p>{item.draft?.basicInfo?.description || '等待补充业务目标和模型调用边界。'}</p>
+                <p>{item.description || '等待补充业务目标和模型调用边界。'}</p>
                 <div className="capability-center-item-meta">
                   <span>{item.businessDomainName || item.businessDomain || '未设置业务域'}</span>
                   <span>
@@ -216,10 +233,10 @@ const CapabilityCenterPage: React.FC = () => {
                   <span>{item.specialistName || '未设置所属专员'}</span>
                   <span>
                     {capabilitySourceText(
-                      item.draft?.apiSource?.sourceType || CAPABILITY_API_SOURCE_TYPE,
+                      item.sourceType || CAPABILITY_API_SOURCE_TYPE,
                     )}
                   </span>
-                  <span>{capabilitySideEffectText(item.draft?.governance?.sideEffectLevel)}</span>
+                  <span>{capabilitySideEffectText(item.sideEffectLevel)}</span>
                 </div>
                 <div className="capability-center-item-footer">
                   <Button
@@ -242,6 +259,13 @@ const CapabilityCenterPage: React.FC = () => {
           </Card>
         )}
       </Spin>
+      <Pagination current={page} pageSize={pageSize} total={total} showSizeChanger
+        pageSizeOptions={[10, 20, 50, 100]}
+        showTotal={(count) => `共 ${count} 个能力`}
+        onChange={(nextPage, nextSize) => {
+          setPage(nextSize === pageSize ? nextPage : 1);
+          setPageSize(nextSize);
+        }} style={{ marginTop: 16, textAlign: 'right' }} />
 
       <Drawer
         title="注册业务能力"

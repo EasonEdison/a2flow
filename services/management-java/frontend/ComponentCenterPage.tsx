@@ -27,8 +27,7 @@ import {
   componentCenterDataSourceFor,
   type ComponentCenterAssetViewKey,
 } from './a2uiCatalogContracts';
-import type { A2uiApplicationQuery, A2uiApplicationRecord } from './a2uiApplicationContracts';
-import { extractShowComponents } from './a2uiApplicationShowAst';
+import type { A2uiApplicationQuery, A2uiApplicationListItem } from './a2uiApplicationContracts';
 import {
   A2uiApplicationReleaseStatus,
   applicationStatusOptions,
@@ -160,7 +159,8 @@ const ComponentCenterPage: React.FC = () => {
   const [assetTotal, setAssetTotal] = useState(0);
   const listRequestSequence = useRef(0);
   const editRequestSequence = useRef(0);
-  const [applications, setApplications] = useState<A2uiApplicationRecord[]>([]);
+  const [applications, setApplications] = useState<A2uiApplicationListItem[]>([]);
+  const [applicationTotal, setApplicationTotal] = useState(0);
   const [activeAssetViewKey, setActiveAssetViewKey] =
     useState<ComponentCenterAssetViewKey>('A2UI_ATOM');
   const [query, setQuery] = useState<ComponentAssetQuery>({
@@ -171,6 +171,8 @@ const ComponentCenterPage: React.FC = () => {
   });
   const [applicationQuery, setApplicationQuery] = useState<A2uiApplicationQuery>({
     status: 'ALL',
+    page: 1,
+    pageSize: 20,
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -180,7 +182,7 @@ const ComponentCenterPage: React.FC = () => {
 
   const isApplicationView = activeAssetViewKey === 'A2UI_APPLICATION';
 
-  const currentListCount = isApplicationView ? applications.length : assetTotal;
+  const currentListCount = isApplicationView ? applicationTotal : assetTotal;
 
   const enabledCount = useMemo(
     () =>
@@ -243,18 +245,22 @@ const ComponentCenterPage: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const list = await a2uiApplicationApi.list({
+      const result = await a2uiApplicationApi.list({
         keyword: applicationQuery.keyword?.trim(),
         status: applicationQuery.status,
+        page: applicationQuery.page,
+        pageSize: applicationQuery.pageSize,
       });
       if (requestId !== listRequestSequence.current) return;
-      setApplications(list);
+      setApplications(result.list);
+      setApplicationTotal(result.total);
       setAssets([]);
     } catch (e) {
       if (requestId !== listRequestSequence.current) return;
       const msg = e instanceof Error ? e.message : 'A2UI 编排列表加载失败';
       setError(msg);
       setApplications([]);
+      setApplicationTotal(0);
     } finally {
       if (requestId === listRequestSequence.current) setLoading(false);
     }
@@ -445,6 +451,7 @@ const ComponentCenterPage: React.FC = () => {
                   setApplicationQuery((prev) => ({
                     ...prev,
                     status: value as A2uiApplicationQuery['status'],
+                    page: 1,
                   }))
                 }
               />
@@ -455,6 +462,7 @@ const ComponentCenterPage: React.FC = () => {
                   setApplicationQuery((prev) => ({
                     ...prev,
                     keyword: event.target.value,
+                    page: 1,
                   }))
                 }
                 style={{ width: 320 }}
@@ -502,7 +510,17 @@ const ComponentCenterPage: React.FC = () => {
             <Table
               rowKey="id"
               dataSource={applications}
-              pagination={false}
+              pagination={{
+                current: applicationQuery.page || 1,
+                pageSize: applicationQuery.pageSize || 20,
+                total: applicationTotal,
+                showSizeChanger: true,
+                pageSizeOptions: [10, 20, 50, 100],
+                showTotal: (count) => `共 ${count} 个 Application`,
+                onChange: (page, pageSize) => setApplicationQuery((current) => ({
+                  ...current, page, pageSize,
+                })),
+              }}
               locale={{ emptyText: <Empty description={listEmptyText} /> }}
               onRow={(record) => ({
                 onClick: () => openApplicationEditor(record.id),
@@ -511,7 +529,7 @@ const ComponentCenterPage: React.FC = () => {
                 {
                   title: 'Application',
                   dataIndex: 'appCode',
-                  render: (value: string, record: A2uiApplicationRecord) => (
+                  render: (value: string, record: A2uiApplicationListItem) => (
                     <div className="component-center-name-cell">
                       <strong>{record.nameCn || value}</strong>
                       <span>{value}</span>
@@ -522,7 +540,7 @@ const ComponentCenterPage: React.FC = () => {
                 {
                   title: 'Catalog',
                   width: 240,
-                  render: (_: unknown, record: A2uiApplicationRecord) => (
+                  render: (_: unknown, record: A2uiApplicationListItem) => (
                     <span>
                       {record.catalog?.catalogId || '-'}@{record.catalog?.revision || '-'}
                     </span>
@@ -531,10 +549,9 @@ const ComponentCenterPage: React.FC = () => {
                 {
                   title: 'Show / Action',
                   width: 140,
-                  render: (_: unknown, record: A2uiApplicationRecord) => (
+                  render: (_: unknown, record: A2uiApplicationListItem) => (
                     <span>
-                      {extractShowComponents(record.showTemplate)?.length} /{' '}
-                      {record.actionBindings?.length}
+                      {record.showComponentCount} / {record.actionBindingCount}
                     </span>
                   ),
                 },
@@ -542,14 +559,14 @@ const ComponentCenterPage: React.FC = () => {
                   title: '发布状态',
                   dataIndex: 'status',
                   width: 230,
-                  render: (_: unknown, record: A2uiApplicationRecord) => (
+                  render: (_: unknown, record: A2uiApplicationListItem) => (
                     <A2uiApplicationReleaseStatus record={record} />
                   ),
                 },
                 {
                   title: '操作',
                   width: 100,
-                  render: (_: unknown, record: A2uiApplicationRecord) => (
+                  render: (_: unknown, record: A2uiApplicationListItem) => (
                     <Button
                       type="link"
                       icon={<EditOutlined />}

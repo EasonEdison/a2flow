@@ -1,6 +1,6 @@
 import React from 'react';
 import { Space, Tag } from 'antd';
-import type { A2uiApplicationRecord, A2uiApplicationStatus } from './a2uiApplicationContracts';
+import type { A2uiApplicationListItem, A2uiApplicationRecord, A2uiApplicationStatus } from './a2uiApplicationContracts';
 
 export const applicationStatusOptions = [
   { label: '全部状态', value: 'ALL' },
@@ -23,7 +23,7 @@ const statusLabel: Record<A2uiApplicationStatus, string> = {
   ONLINE: '已上线',
 };
 
-export const A2uiApplicationReleaseStatus: React.FC<{ record: A2uiApplicationRecord }> = ({
+export const A2uiApplicationReleaseStatus: React.FC<{ record: A2uiApplicationRecord | A2uiApplicationListItem }> = ({
   record,
 }) => (
   <Space direction="vertical" size={4}>

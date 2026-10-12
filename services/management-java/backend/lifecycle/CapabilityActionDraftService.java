@@ -19,6 +19,8 @@ import jakarta.annotation.Resource;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 import dev.a2flow.management.support.JsonSupport;
 import dev.a2flow.management.access.AssetAction;
@@ -27,11 +29,15 @@ import dev.a2flow.management.access.AssetCreationTransactionService;
 import dev.a2flow.management.model.CapabilityActionDraft;
 import dev.a2flow.management.model.CapabilityActionValidationResult;
 import dev.a2flow.management.model.CapabilityIntegerSupport;
+import dev.a2flow.management.lifecycle.domain.CapabilityListItem;
+import dev.a2flow.management.lifecycle.domain.ManagementPageQuery;
 import dev.a2flow.management.release.AssetReleaseEditGuard;
+import dev.a2flow.management.release.AssetReleasePointerQueryService;
 import dev.a2flow.management.release.PublishedAssetQueryService;
 import dev.a2flow.management.release.ReleaseAssetType;
 import dev.a2flow.management.release.ReleaseModels.PublishedAssetSnapshot;
 import dev.a2flow.management.storage.db.repository.CapabilityActionDraftRepository;
+import dev.a2flow.management.storage.db.repository.CapabilityListRepository;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -244,6 +250,10 @@ public class CapabilityActionDraftService {
     @Resource
     private CapabilityActionClassificationRelationService classificationRelationService;
     @Resource
+    private CapabilityListRepository capabilityListRepository;
+    @Resource
+    private AssetReleasePointerQueryService assetReleasePointerQueryService;
+    @Resource
     private CapabilityActionMutationTransactionService capabilityMutationTransactionService;
 
     /** 创建新的 canonical capability draft。 */
@@ -287,6 +297,37 @@ public class CapabilityActionDraftService {
                         value(params, PARAM_LIST_CAPABILITY_DOMAIN),
                         value(params, PARAM_LIST_SPECIALIST_ID)))
                 .toList();
+    }
+
+    /** 管理页只读取摘要；候选与发布列表保持原有完整合同。 */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public ManagementListPage<CapabilityListItem> listPage(String userName, Map<String, String> params) {
+        ManagementPageQuery request = ManagementPageQuery.from(params);
+        ManagementListPage<CapabilityListRepository.Row> page = capabilityListRepository.list(params, request);
+        List<CapabilityActionDraft> projected = page.list().stream().map(row -> new CapabilityActionDraft()
+                .setDraftId(row.draftId()).setRevision(row.revision())).toList();
+        classificationRelationService.projectAll(projected);
+        List<CapabilityListItem> items = new ArrayList<>();
+        for (int index = 0; index < page.list().size(); index++) {
+            CapabilityListRepository.Row row = page.list().get(index);
+            CapabilityActionDraft classification = projected.get(index);
+            var release = assetReleasePointerQueryService.projection(
+                    userName, ReleaseAssetType.CAPABILITY_ACTION, row.draftId());
+            boolean online = release.getEnvironmentPointers().containsKey("ONLINE");
+            boolean editing = "ACTIVE".equals(release.getStatus())
+                    || (!online && "UNPUBLISHED".equals(release.getStatus()));
+            String filter = params == null ? null : params.get("publishStatus");
+            if ("ONLINE".equals(filter) && !online || "EDITING".equals(filter) && !editing) {
+                throw new IllegalStateException("capability release page projection changed during read");
+            }
+            items.add(new CapabilityListItem(row.draftId(), row.actionCode(), row.nameCn(),
+                    row.description(), row.sourceType(), row.sideEffectLevel(),
+                    classification.getBusinessDomain(), classification.getBusinessDomainName(),
+                    classification.getCapabilityDomain(), classification.getCapabilityDomainName(),
+                    classification.getSpecialistId(), classification.getSpecialistName(),
+                    editing, online, row.updateTime()));
+        }
+        return new ManagementListPage<>(items, page.total(), page.page(), page.pageSize());
     }
 
     /**

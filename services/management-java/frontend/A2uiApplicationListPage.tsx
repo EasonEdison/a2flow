@@ -1,11 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Card, Empty, Input, Select, Space, Spin, Table } from 'antd';
 import { EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { a2uiApplicationApi } from './api';
 import { a2uiApplicationEditorRoute } from './a2uiCatalogContracts';
-import type { A2uiApplicationQuery, A2uiApplicationRecord } from './a2uiApplicationContracts';
-import { extractShowComponents } from './a2uiApplicationShowAst';
+import type { A2uiApplicationQuery, A2uiApplicationListItem } from './a2uiApplicationContracts';
 import {
   A2uiApplicationReleaseStatus,
   applicationStatusOptions,
@@ -14,32 +13,41 @@ import {
 const A2uiApplicationListPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [query, setQuery] = useState<A2uiApplicationQuery>({ status: 'ALL' });
-  const [applications, setApplications] = useState<A2uiApplicationRecord[]>([]);
+  const [query, setQuery] = useState<A2uiApplicationQuery>({ status: 'ALL', page: 1, pageSize: 20 });
+  const [applications, setApplications] = useState<A2uiApplicationListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const requestSequence = useRef(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const loadApplications = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
     setError('');
     try {
-      setApplications(
-        await a2uiApplicationApi.list({
+      const result = await a2uiApplicationApi.list({
           keyword: query.keyword?.trim(),
           status: query.status,
-        }),
-      );
+          page: query.page,
+          pageSize: query.pageSize,
+        });
+      if (requestId !== requestSequence.current) return;
+      setApplications(result.list);
+      setTotal(result.total);
     } catch (reason) {
+      if (requestId !== requestSequence.current) return;
       setApplications([]);
+      setTotal(0);
       setError(reason instanceof Error ? reason.message : 'A2UI 编排列表加载失败');
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
   }, [query]);
 
   useEffect(() => {
     loadApplications();
   }, [loadApplications]);
+  useEffect(() => () => { requestSequence.current += 1; }, []);
 
   const openEditor = (id?: string) => {
     navigate(a2uiApplicationEditorRoute(id, searchParams));
@@ -81,6 +89,7 @@ const A2uiApplicationListPage: React.FC = () => {
               setQuery((current) => ({
                 ...current,
                 status: value as A2uiApplicationQuery['status'],
+                page: 1,
               }))
             }
           />
@@ -90,7 +99,7 @@ const A2uiApplicationListPage: React.FC = () => {
             allowClear
             style={{ width: 320 }}
             onChange={(event) =>
-              setQuery((current) => ({ ...current, keyword: event.target.value }))
+              setQuery((current) => ({ ...current, keyword: event.target.value, page: 1 }))
             }
           />
           <Button onClick={loadApplications}>刷新</Button>
@@ -104,14 +113,22 @@ const A2uiApplicationListPage: React.FC = () => {
           <Table
             rowKey="id"
             dataSource={applications}
-            pagination={false}
+            pagination={{
+              current: query.page || 1,
+              pageSize: query.pageSize || 20,
+              total,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50, 100],
+              showTotal: (count) => `共 ${count} 个 Application`,
+              onChange: (page, pageSize) => setQuery((current) => ({ ...current, page, pageSize })),
+            }}
             locale={{ emptyText: <Empty description="暂无 A2UI Application" /> }}
             onRow={(record) => ({ onClick: () => openEditor(record.id) })}
             columns={[
               {
                 title: 'Application',
                 dataIndex: 'appCode',
-                render: (value: string, record: A2uiApplicationRecord) => (
+                render: (value: string, record: A2uiApplicationListItem) => (
                   <div className="component-center-name-cell">
                     <strong>{record.nameCn || value}</strong>
                     <span>{value}</span>
@@ -122,7 +139,7 @@ const A2uiApplicationListPage: React.FC = () => {
               {
                 title: 'Catalog',
                 width: 210,
-                render: (_: unknown, record: A2uiApplicationRecord) => (
+                render: (_: unknown, record: A2uiApplicationListItem) => (
                   <span>
                     {record.catalog?.catalogId}@{record.catalog?.revision || '-'}
                   </span>
@@ -131,10 +148,9 @@ const A2uiApplicationListPage: React.FC = () => {
               {
                 title: 'Show / Action',
                 width: 140,
-                render: (_: unknown, record: A2uiApplicationRecord) => (
+                render: (_: unknown, record: A2uiApplicationListItem) => (
                   <span>
-                    {extractShowComponents(record.showTemplate)?.length} /{' '}
-                    {record.actionBindings?.length}
+                    {record.showComponentCount} / {record.actionBindingCount}
                   </span>
                 ),
               },
@@ -142,14 +158,14 @@ const A2uiApplicationListPage: React.FC = () => {
                 title: '发布状态',
                 dataIndex: 'status',
                 width: 230,
-                render: (_: unknown, record: A2uiApplicationRecord) => (
+                render: (_: unknown, record: A2uiApplicationListItem) => (
                   <A2uiApplicationReleaseStatus record={record} />
                 ),
               },
               {
                 title: '操作',
                 width: 100,
-                render: (_: unknown, record: A2uiApplicationRecord) => (
+                render: (_: unknown, record: A2uiApplicationListItem) => (
                   <Button
                     type="link"
                     icon={<EditOutlined />}
