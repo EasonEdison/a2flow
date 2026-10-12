@@ -10,6 +10,7 @@ from deepagents import (
     register_harness_profile,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
@@ -27,10 +28,17 @@ IMPLICIT_DEEP_AGENT_TOOLS = frozenset({
 
 
 def build_agent(
-    model, tools, validators, *, harness_profile_key, middleware=(),
-    checkpointer=None, context_schema=None, system_prompt=None,
-    control_middleware=(),
-):
+    model: BaseChatModel,
+    tools: Sequence[BaseTool],
+    validators: Mapping[str, ModelArgsValidator],
+    *,
+    harness_profile_key: str,
+    middleware: Sequence[AgentMiddleware] = (),
+    checkpointer: Any = None,
+    context_schema: type[Any] | None = None,
+    system_prompt: str | None = None,
+    control_middleware: Sequence[AgentMiddleware] = (),
+) -> CompiledStateGraph:
     """Shared SDK construction; scope-specific lifecycle stays in middleware.
 
     No native Skill directory, filesystem execution or delegated agents are
@@ -68,6 +76,7 @@ def build_engine(
     node_context: Any = None,
     system_prompt: str | None = None,
     personal_memory: Any = None,
+    tool_alternatives: Mapping[str, Sequence[str]] | None = None,
 ) -> CompiledStateGraph:
     """Build from trusted backend inputs, never request-selected Python internals.
 
@@ -120,6 +129,7 @@ def build_engine(
             RequiredToolFinalizerAdmission(
                 required_tool_names, terminal_guard, lifecycle=run_lifecycle,
                 node_context=node_context,
+                tool_alternatives=tool_alternatives,
             ),
         ],
     )

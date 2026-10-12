@@ -71,6 +71,7 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
         self, required_tool_names: Sequence[str],
         terminal_guard: Callable[[Any], None] | None = None, *, lifecycle=None,
         node_context=None,
+        tool_alternatives: Mapping[str, Sequence[str]] | None = None,
     ) -> None:
         names = tuple(required_tool_names)
         if not names or any(not isinstance(name, str) or not name for name in names):
@@ -81,6 +82,10 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
         self._terminal_guard = terminal_guard
         self._lifecycle = lifecycle
         self._node_context = node_context
+        self._tool_alternatives = {
+            name: frozenset(alternatives)
+            for name, alternatives in (tool_alternatives or {}).items()
+        }
 
     def _context(self, fallback):
         if self._node_context is None:
@@ -215,6 +220,7 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
             name
             for name in self._required_tool_names
             if name not in successful_tools
+            and not self._tool_alternatives.get(name, frozenset()).intersection(successful_tools)
         ]
         if missing:
             raise FinalizationRejected(

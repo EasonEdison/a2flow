@@ -120,16 +120,70 @@ class RuntimeSession:
 
 
 @dataclass(frozen=True, slots=True)
+class GenerationScope:
+    conversation_id: str
+    workflow_run_id: str = ""
+    node_id: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class GeneratedDefinition:
+    origin_app_code: str
+    candidate: JsonObject
+    scope: GenerationScope
+    owner_user_id: int
+    environment: str
+    artifact_digest: str
+
+    def record(self) -> dict[str, object]:
+        return {
+            "originAppCode": self.origin_app_code,
+            "candidate": thaw(self.candidate),
+            "scope": {"conversationId": self.scope.conversation_id,
+                      "workflowRunId": self.scope.workflow_run_id, "nodeId": self.scope.node_id},
+            "ownerUserId": self.owner_user_id, "environment": self.environment,
+            "artifactDigest": self.artifact_digest,
+        }
+
+    @classmethod
+    def from_record(cls, value: Mapping[str, object]) -> GeneratedDefinition:
+        scope = value.get("scope")
+        candidate = freeze(value.get("candidate"))
+        if (not isinstance(scope, Mapping) or not isinstance(candidate, Mapping)
+                or type(value.get("ownerUserId")) is not int
+                or any(type(value.get(key)) is not str for key in
+                       ("originAppCode", "environment", "artifactDigest"))
+                or any(type(scope.get(key)) is not str for key in
+                       ("conversationId", "workflowRunId", "nodeId"))):
+            raise RpcFailure("A2UI_GENERATED_DEFINITION_INVALID")
+        return cls(cast(str, value["originAppCode"]), candidate,
+                   GenerationScope(scope["conversationId"], scope["workflowRunId"], scope["nodeId"]),
+                   cast(int, value["ownerUserId"]), cast(str, value["environment"]),
+                   cast(str, value["artifactDigest"]))
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationSource:
+    origin_release: ReleaseIdentity
+    catalog: CatalogDescriptor
+    contract: JsonObject
+
+
+@dataclass(frozen=True, slots=True)
 class TrustedCard:
     user_id: int
     app_code: str
     params: JsonObject
     snapshot: tuple[JsonObject, ...]
+    generated_definition: GeneratedDefinition | None = None
+    scope: GenerationScope | None = None
 
     def __post_init__(self) -> None:
         params = freeze(self.params)
         snapshot = freeze(self.snapshot)
-        if (type(self.app_code) is not str or not self.app_code
+        if (type(self.app_code) is not str
+                or (not self.app_code and self.generated_definition is None)
+                or (self.generated_definition is not None and (self.app_code or self.scope is None))
                 or not isinstance(params, Mapping) or not isinstance(snapshot, tuple) or any(
             not isinstance(message, Mapping) for message in snapshot
         )):
@@ -192,6 +246,7 @@ class RuntimeResult:
     business_success: bool
     action_observation: ActionExecutionObservation | None = None
     composer_draft_effects: tuple[ComposerDraftEffect, ...] = ()
+    generated_definition: GeneratedDefinition | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,6 +297,29 @@ def _catalog(value: ui.CatalogDescriptor) -> CatalogDescriptor:
     if not all((result.protocol_version, result.catalog_id, result.catalog_revision, result.catalog_digest)):
         raise RpcFailure("RPC_CATALOG_INVALID")
     return result
+
+
+def _scope(value: GenerationScope) -> ui.GenerationScope:
+    return ui.GenerationScope(conversation_id=value.conversation_id,
+                              workflow_run_id=value.workflow_run_id, node_id=value.node_id)
+
+
+def _generated(value: ui.GeneratedDefinition, owner: TrustedContext) -> GeneratedDefinition:
+    if (value.owner_user_id != owner.user_id or _environment(value.environment) != owner.environment
+            or not value.origin_app_code or not value.artifact_digest):
+        raise RpcFailure("A2UI_GENERATED_OWNER_MISMATCH")
+    return GeneratedDefinition(value.origin_app_code, _object(value.candidate_json),
+                               GenerationScope(value.scope.conversation_id,
+                                               value.scope.workflow_run_id, value.scope.node_id),
+                               value.owner_user_id, owner.environment, value.artifact_digest)
+
+
+def _generated_wire(value: GeneratedDefinition) -> ui.GeneratedDefinition:
+    return ui.GeneratedDefinition(origin_app_code=value.origin_app_code,
+                                  candidate_json=_encode(value.candidate), scope=_scope(value.scope),
+                                  owner_user_id=value.owner_user_id,
+                                  environment=cap.Environment.Value(value.environment),
+                                  artifact_digest=value.artifact_digest)
 
 
 def _actions(values: Iterable[ui.ActionDescriptor]) -> tuple[ActionDescriptor, ...]:
@@ -363,6 +441,30 @@ class RpcClient:
                            params_json=_encode(params)))
         return self._result(value, owner, app_code)
 
+    def describe_generation_source(
+        self, owner: TrustedContext, app_code: str, request_id: str,
+    ) -> GenerationSource:
+        value = self._call(self._ui.DescribeGenerationSource, ui.DescribeGenerationSourceRequest(
+            context=self._context(owner, request_id), origin_app_code=app_code,
+        ))
+        return GenerationSource(_release(value.origin_release, owner, app_code),
+                                _catalog(value.catalog), _object(value.generation_contract_json))
+
+    def activate_generated(
+        self, owner: TrustedContext, app_code: str, params: JsonObject,
+        candidate: JsonObject, scope: GenerationScope, request_id: str,
+    ) -> RuntimeResult:
+        value = self._call(self._ui.ActivateGenerated, ui.ActivateGeneratedRequest(
+            context=self._context(owner, request_id), origin_app_code=app_code,
+            params_json=_encode(params), candidate_json=_encode(candidate), scope=_scope(scope),
+        ))
+        result = self._result(value, owner, app_code)
+        definition = result.generated_definition
+        if (definition is None or definition.scope != scope
+                or definition.origin_app_code != app_code):
+            raise RpcFailure("A2UI_GENERATED_DEFINITION_MISMATCH")
+        return result
+
     def act(self, owner: TrustedContext, card: TrustedCard, action_message: JsonObject, request_id: str,
             *, correlation_id: str) -> RuntimeResult:
         context = self._context(owner, request_id)
@@ -371,10 +473,18 @@ class RpcClient:
         trusted = ui.TrustedCard(user_id=card.user_id, app_code=card.app_code,
                                  params_json=_encode(card.params),
                                  snapshot_json=_encode(card.snapshot))
+        expected_code = card.app_code
+        if card.generated_definition is not None:
+            trusted.generated_definition.CopyFrom(_generated_wire(card.generated_definition))
+            trusted.scope.CopyFrom(_scope(cast(GenerationScope, card.scope)))
+            expected_code = card.generated_definition.origin_app_code
         value = self._call(self._ui.Act, ui.ActRequest(context=context, card=trusted,
                 correlation_id=correlation_id, idempotency_key=request_id,
                 action_message_json=_encode(action_message)))
-        return self._result(value, owner, card.app_code)
+        result = self._result(value, owner, expected_code)
+        if result.generated_definition != card.generated_definition:
+            raise RpcFailure("A2UI_GENERATED_DEFINITION_MISMATCH")
+        return result
 
     def execute(self, owner: TrustedContext, asset_key: str, arguments: JsonObject,
                 request_id: str) -> AbilityResult:
@@ -390,6 +500,9 @@ class RpcClient:
     def _result(self, value: ui.RuntimeResponse, owner: TrustedContext, app_code: str) -> RuntimeResult:
         if value.error_code:
             raise RpcFailure(value.error_code)
+        if (value.definition_source not in (ui.PUBLISHED, ui.GENERATED)
+                or (value.definition_source == ui.GENERATED) != value.HasField("generated_definition")):
+            raise RpcFailure("A2UI_DEFINITION_SOURCE_INVALID")
         release = _release(value.release, owner, app_code)
         catalog = _catalog(value.catalog)
         session = RuntimeSession(value.session.token, value.session.app_build_id, value.session.protocol_version,
@@ -428,4 +541,7 @@ class RpcClient:
             value.business_success,
             observation,
             effects,
+            _generated(value.generated_definition, owner)
+            if value.definition_source == ui.GENERATED and value.HasField("generated_definition")
+            else None,
         )

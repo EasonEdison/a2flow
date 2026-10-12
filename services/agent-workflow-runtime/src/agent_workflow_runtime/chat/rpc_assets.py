@@ -15,9 +15,12 @@ from a2flow_asset_store.java_runtime import (
 from skillweave_contracts import TrustedContext
 
 from ..application_runtime import PreparedApplication
+from ..a2ui_generation import A2uiGenerator
 from ..models import ActionRejected
 from ..rpc_client import (
     ApplicationDescription,
+    GeneratedDefinition,
+    GenerationScope,
     RpcClient,
     RuntimeResult,
     TrustedCard,
@@ -50,6 +53,7 @@ def prepare_result(result: RuntimeResult) -> PreparedApplication:
         "protocolProfile": PROFILE,
         "applicationKey": result.release.app_code,
         "applicationVersion": version,
+        "definitionSource": "GENERATED" if result.generated_definition else "PUBLISHED",
         "snapshotMessages": plain(result.snapshot),
         "catalog": {"protocolVersion": result.catalog.protocol_version,
                     "catalogId": result.catalog.catalog_id,
@@ -67,8 +71,11 @@ def prepare_result(result: RuntimeResult) -> PreparedApplication:
 
 def runtime_metadata(result: RuntimeResult) -> dict[str, Any]:
     # Persist private session material only in binding_metadata, never display/events.
-    return {"release": asdict(result.release), "session": asdict(result.session),
-            "params": plain(result.params)}
+    value = {"release": asdict(result.release), "session": asdict(result.session),
+             "params": plain(result.params)}
+    if result.generated_definition is not None:
+        value["generatedDefinition"] = result.generated_definition.record()
+    return value
 
 
 def rendered_business_state(result: RuntimeResult) -> JsonObject:
@@ -86,10 +93,18 @@ def _plain_snapshot(result: RuntimeResult) -> list[JsonObject]:
 def trusted_card(owner: TrustedContext, card: dict[str, Any],
                  metadata: dict[str, Any]) -> TrustedCard:
     private = metadata["rpc"]
+    definition = (
+        GeneratedDefinition.from_record(private["generatedDefinition"])
+        if "generatedDefinition" in private else None
+    )
+    workflow = metadata.get("workflow", {})
+    scope = GenerationScope(metadata["conversationId"], workflow.get("runId", ""),
+                            workflow.get("nodeId", "")) if definition else None
     return TrustedCard(user_id=owner.user_id,
-                       app_code=card["display"]["applicationKey"],
+                       app_code="" if definition else card["display"]["applicationKey"],
                        params=private["params"],
-                       snapshot=card["display"]["snapshotMessages"])
+                       snapshot=card["display"]["snapshotMessages"],
+                       generated_definition=definition, scope=scope)
 
 
 class RpcChatAssets(ChatAssets):
@@ -99,6 +114,35 @@ class RpcChatAssets(ChatAssets):
         self.rpc = rpc
         self._action_descriptions: dict[str, str | None] = {}
         self._render_observations: dict[str, dict[str, Any]] = {}
+
+    def admitted_tool_names(self) -> frozenset[str]:
+        tools = super().admitted_tool_names()
+        return tools | {"generate_a2ui"} if "render_application" in tools else tools
+
+    def generation_scope(self) -> GenerationScope:
+        return GenerationScope(self.conversation_id)
+
+    def generate_application(
+        self, application_key: str, data: dict[str, Any], intent: str,
+        tool_call_id: str, generator: A2uiGenerator,
+    ) -> dict[str, Any]:
+        if not tool_call_id:
+            raise ActionRejected("TOOL_CALL_ID_REQUIRED")
+        with self._render_lock:
+            if self._waiting_action is not None:
+                raise ActionRejected("INTERACTION_REQUIRED")
+            self.application_description(application_key)
+            contract = self.rpc.describe_generation_source(
+                self.owner, application_key, "generation-contract:" + uuid4().hex,
+            )
+            candidate = generator.generate(intent, contract.contract)
+            # Recheck admission after the model call; no business work has run yet.
+            self.application_description(application_key)
+            result = self.rpc.activate_generated(
+                self.owner, application_key, data, candidate.model_dump(mode="json"),
+                self.generation_scope(), "generated-render:" + uuid4().hex,
+            )
+            return self._save_render_result(application_key, result, tool_call_id, intent=intent)
 
     def admit_skill(self, skill_key: str) -> dict[str, Any]:
         value = super().admit_skill(skill_key)
@@ -195,30 +239,38 @@ class RpcChatAssets(ChatAssets):
                            tool_call_id: str) -> dict[str, Any]:
         if type(tool_call_id) is not str or not tool_call_id:
             raise ActionRejected("TOOL_CALL_ID_REQUIRED")
-        admitted = self._require_admission()
         with self._render_lock:
             if self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
-            _, description = self.application_description(application_key)
+            self.application_description(application_key)
             result = self.rpc.activate(self.owner, application_key, data,
                                        "render:" + uuid4().hex)
-            prepared = prepare_result(result)
-            snapshot = _plain_snapshot(result)
-            business_state = project_business_state(snapshot)
-            metadata = {
+            return self._save_render_result(application_key, result, tool_call_id)
+
+    def _save_render_result(
+        self, application_key: str, result: RuntimeResult, tool_call_id: str,
+        *, intent: str | None = None,
+    ) -> dict[str, Any]:
+        admitted = self._require_admission()
+        prepared = prepare_result(result)
+        snapshot = _plain_snapshot(result)
+        business_state = project_business_state(snapshot)
+        metadata = {
                 "owner": {"userId": self.owner.user_id, "environment": self.owner.environment},
                 "conversationId": self.conversation_id, "controlRequestId": self.control_request_id,
                 "toolCallId": tool_call_id, "skillKey": admitted.skill_key,
                 "applicationKey": application_key, "applicationVersion": prepared.application_version,
                 "rpc": runtime_metadata(result),
                 "observation": {"arguments": business_state},
-            }
-            saved = self._card_sink(prepared, metadata)
-            self._render_observations[saved["cardId"]] = {
+        }
+        if intent is not None:
+            metadata["generationIntent"] = intent
+        saved = self._card_sink(prepared, metadata)
+        self._render_observations[saved["cardId"]] = {
                 "cardId": saved["cardId"], "applicationKey": application_key,
                 "arguments": business_state,
                 "preparedContent": project_rendered_content(snapshot),
-            }
-            if prepared.interactive:
-                self._waiting_action = saved
-            return saved
+        }
+        if prepared.interactive:
+            self._waiting_action = saved
+        return saved

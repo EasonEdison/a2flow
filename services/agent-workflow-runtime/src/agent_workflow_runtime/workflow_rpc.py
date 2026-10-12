@@ -18,6 +18,7 @@ from skillweave_contracts import CONTRACT_REVISION, TrustedInvocationContext
 
 from .actions import ActionService
 from .application_runtime import PreparedApplication
+from .a2ui_generation import A2uiGenerator
 from .chat.cards import ChatCardStore, JsonObject, _card_id
 from .chat.loop import _action_observation_message, _read_observations
 from .chat.render_projection import project_rendered_content
@@ -26,7 +27,7 @@ from .chat.rpc_assets import RpcChatAssets
 from .lifecycle import OperationFact, RunLifecycle, RunRecord
 from .models import ActionRejected, ActionRequest, Attempt, Interaction
 from .ports import InteractionRepository
-from .rpc_client import RpcClient
+from .rpc_client import GenerationScope, RpcClient
 from .rpc_assets import RpcAssetReader
 
 
@@ -76,13 +77,29 @@ class WorkflowAssets(RpcChatAssets):
         )
         return cast(
             dict[str, Any],
-            self.store.save(
-                self.owner,
-                self.conversation_id,
-                prepared,
-                metadata,
-            ),
+            self.store.save(self.owner, self.conversation_id, prepared, metadata),
         )
+
+    def generation_scope(self) -> GenerationScope:
+        return GenerationScope(self.conversation_id, self.run.run_id, self.node_id)
+
+    def generate_application(
+        self, application_key: str, data: dict[str, Any], intent: str,
+        tool_call_id: str, generator: A2uiGenerator,
+    ) -> dict[str, Any]:
+        self.current()
+        card_id = _card_id(self.owner, self.conversation_id, self.control_request_id, tool_call_id)
+        saved = self.store.read(self.owner, self.conversation_id, card_id)
+        if saved is None:
+            return super().generate_application(application_key, data, intent, tool_call_id, generator)
+        metadata = self.store.get_binding(self.owner, self.conversation_id, card_id)["metadata"]
+        if (metadata["applicationKey"] != application_key or metadata["rpc"]["params"] != data
+                or metadata.get("generationIntent") != intent
+                or "generatedDefinition" not in metadata["rpc"]
+                or metadata.get("workflow") != {"runId": self.run.run_id, "nodeId": self.node_id}):
+            raise ActionRejected("CARD_REPLAY_CONFLICT")
+        # Native interrupt replay reuses the saved artifact; never reruns generation/load.
+        return cast(dict[str, Any], saved)
 
     def _registry_context(self) -> RegistryContext:
         return RegistryContext(
@@ -377,9 +394,17 @@ class WorkflowActions(ActionService):
         }
 
     def render(
-        self, assets: WorkflowAssets, app_code: str, params: dict[str, Any], tool_call_id: str
+        self, assets: WorkflowAssets, app_code: str, params: dict[str, Any], tool_call_id: str,
+        *, generator: A2uiGenerator | None = None, intent: str | None = None,
     ) -> Command:
-        card = assets.render_application(app_code, params, tool_call_id)
+        if generator is None:
+            card = assets.render_application(app_code, params, tool_call_id)
+            tool_name = "render_application"
+        else:
+            if not intent:
+                raise ActionRejected("A2UI_GENERATION_INTENT_INVALID")
+            card = assets.generate_application(app_code, params, intent, tool_call_id, generator)
+            tool_name = "generate_a2ui"
         context = assets.run.context(assets.node_id)
         key = (self.run.run_id, assets.node_id, card["cardId"])
         with self.repository.scope(self.run.owner, self.run.run_id):
@@ -414,7 +439,7 @@ class WorkflowActions(ActionService):
                     ensure_ascii=False,
                 ),
                 tool_call_id=tool_call_id,
-                name="render_application",
+                name=tool_name,
                 artifact={"cardId": card["cardId"], "appCode": app_code},
             )
         ]

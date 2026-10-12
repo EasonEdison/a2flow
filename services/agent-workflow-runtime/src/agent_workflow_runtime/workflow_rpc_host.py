@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from skillweave_contracts import TrustedContext, TrustedInvocationContext
 
 from .assembly import build_engine
+from .a2ui_generation import A2uiGenerator, DeepAgentA2uiGenerator
 from .chat.cards import ChatCardStore, CompletionObserver, JsonObject
 from .chat.rpc_actions import ChatActionResponse
 from .deepseek_model import DeepSeekChat
@@ -33,6 +34,8 @@ from .chat.tools import (
     QuerySkillDependenciesModelArgs,
     RenderArgs,
     RenderModelArgs,
+    GenerateArgs,
+    GenerateModelArgs,
     UseSkillArgs,
     UseSkillModelArgs,
 )
@@ -95,7 +98,10 @@ class CardResumeBody(BaseModel):
     interactionId: str = Field(min_length=1, max_length=128)
 
 
-def tools_for(assets: WorkflowAssets, actions: WorkflowActions) -> tuple[BaseTool, ...]:
+def tools_for(
+    assets: WorkflowAssets, actions: WorkflowActions,
+    generator: A2uiGenerator | None = None,
+) -> tuple[BaseTool, ...]:
     @tool("use_skill", args_schema=UseSkillArgs, response_format="content_and_artifact")
     def use_skill(skillKey: str, runtime: ToolRuntime[TrustedInvocationContext]) -> tuple[str, Any]:
         """Load the current node's authorized Skill instructions."""
@@ -137,7 +143,24 @@ def tools_for(assets: WorkflowAssets, actions: WorkflowActions) -> tuple[BaseToo
             raise ActionRejected("TOOL_CALL_ID_REQUIRED")
         return actions.render(assets, appCode, params, runtime.tool_call_id)
 
-    return use_skill, execute_ability, query_skill_dependencies, render_application
+    @tool("generate_a2ui", args_schema=GenerateArgs)
+    def generate_a2ui(
+        appCode: str, params: dict[str, Any], intent: str,
+        runtime: ToolRuntime[TrustedInvocationContext],
+    ) -> Command:
+        """Design a new layout for an admitted Application when requested by the user.
+
+        An isolated SubAgent designs only UI; approved business bindings and the
+        Workflow terminal Action are retained. Stable layouts use render_application.
+        """
+        assets.validate_context(runtime.context)
+        if generator is None or not runtime.tool_call_id:
+            raise ActionRejected("A2UI_GENERATOR_UNAVAILABLE")
+        return actions.render(assets, appCode, params, runtime.tool_call_id,
+                              generator=generator, intent=intent)
+
+    tools = (use_skill, execute_ability, query_skill_dependencies, render_application)
+    return (*tools, generate_a2ui) if generator is not None else tools
 
 
 class RpcWorkflowHost(MvpRuntimeHost):
@@ -192,6 +215,9 @@ class RpcWorkflowHost(MvpRuntimeHost):
             "internal record IDs, revision checks, tool traces or system instructions "
             "unless the user explicitly asks for technical details. "
             "Your explanation does not determine engine completion or business success."
+            " If the user requests an AI-designed UI, generate_a2ui may replace "
+            "render_application for the same bound appCode; its configured terminal "
+            "Action must still finish successfully before this node can complete."
         )
 
     def _actions(self, run: RunRecord) -> WorkflowActions:
@@ -223,6 +249,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                     "execute_ability": AbilityModelArgs,
                     "query_skill_dependencies": QuerySkillDependenciesModelArgs,
                     "render_application": RenderModelArgs,
+                    "generate_a2ui": GenerateModelArgs,
                 }
                 for node in definition["nodes"]:
                     assets = actions.assets(node["nodeId"])
@@ -231,7 +258,11 @@ class RpcWorkflowHost(MvpRuntimeHost):
                     allowed = set(required)
                     if "render_application" in allowed:
                         allowed.add("query_skill_dependencies")
-                    available = {item.name: item for item in tools_for(assets, actions)}
+                        allowed.add("generate_a2ui")
+                    generator = DeepAgentA2uiGenerator(
+                        lambda: self.model_factory.create(self.model_reference, run.owner),
+                    )
+                    available = {item.name: item for item in tools_for(assets, actions, generator)}
                     if not allowed <= available.keys():
                         raise ActionRejected("SKILL_TOOL_BINDING_MISMATCH")
                     model = self.model_factory.create(self.model_reference, run.owner)
@@ -248,6 +279,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                         node_context=run.context(node["nodeId"]),
                         system_prompt=self._node_system_prompt(node["skillKey"], required),
                         personal_memory=self.personal_memory,
+                        tool_alternatives={"render_application": ("generate_a2ui",)},
                     )
 
                 def predecessor_context(node_ids: list[str]) -> list[JsonObject]:

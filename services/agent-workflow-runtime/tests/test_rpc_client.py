@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import grpc
 from a2flow.a2ui.v1 import a2ui_pb2 as ui, a2ui_pb2_grpc as ui_rpc
 from a2flow.capability.v1 import capability_pb2 as cap, capability_pb2_grpc as cap_rpc
-from agent_workflow_runtime.rpc_client import RpcClient, RpcFailure, TrustedCard, thaw
+from agent_workflow_runtime.rpc_client import RpcClient, RpcFailure, TrustedCard, GenerationScope, thaw
 from skillweave_contracts import TrustedContext
 
 
@@ -43,9 +43,30 @@ class Fixture(ui_rpc.A2uiExecutionServicer, cap_rpc.CapabilityExecutionServicer)
 
     def Act(self, request, context):
         assert request.card.HasField("user_id") and request.card.user_id == -(2**63)
-        assert request.card.app_code == "app"
+        assert request.card.app_code == "app" or request.card.HasField("generated_definition")
         assert request.idempotency_key == request.context.request_id
-        return self.result(request.context, request.card.params_json)
+        result = self.result(request.context, request.card.params_json)
+        if request.card.HasField("generated_definition"):
+            assert not request.card.app_code
+            assert request.card.scope == request.card.generated_definition.scope
+            result.definition_source = ui.GENERATED
+            result.generated_definition.CopyFrom(request.card.generated_definition)
+        return result
+
+    def DescribeGenerationSource(self, request, context):
+        assert request.origin_app_code == "app"
+        return ui.GenerationSource(origin_release=self.release(request.context), catalog=self.catalog(),
+                                   generation_contract_json=b'{"allowedComponents":[]}')
+
+    def ActivateGenerated(self, request, context):
+        result = self.result(request.context, request.params_json)
+        result.definition_source = ui.GENERATED
+        result.generated_definition.CopyFrom(ui.GeneratedDefinition(
+            origin_app_code=request.origin_app_code, candidate_json=request.candidate_json,
+            scope=request.scope, owner_user_id=request.context.user_id,
+            environment=request.context.environment, artifact_digest="digest",
+        ))
+        return result
 
     def Resolve(self, request, context):
         return cap.ResolveResponse(asset_key=request.asset_key, action_code="ability", capability_version=1,
@@ -92,6 +113,18 @@ class ClientTest(unittest.TestCase):
         executed = self.client.execute(self.owner, "asset", {"exact": 2**63 - 1}, "execute")
         self.assertEqual(thaw(executed.data), {"exact": 2**63 - 1})
         self.assertEqual(executed.resolved_environment, "PRT")
+
+    def test_generated_wire_roundtrip_and_scope_use_no_fake_application_code(self):
+        source = self.client.describe_generation_source(self.owner, "app", "describe-generated")
+        self.assertEqual(thaw(source.contract), {"allowedComponents": []})
+        scope = GenerationScope("conversation", "run", "node")
+        result = self.client.activate_generated(self.owner, "app", {},
+                                               {"messages": [], "actionPlacements": []}, scope, "generate")
+        self.assertEqual(result.generated_definition.scope, scope)
+        card = TrustedCard(self.owner.user_id, "", result.params, result.snapshot,
+                           result.generated_definition, scope)
+        updated = self.client.act(self.owner, card, {}, "action", correlation_id="card")
+        self.assertEqual(updated.generated_definition, result.generated_definition)
 
     def test_execute_resolves_the_current_release_without_a_pinned_identity(self):
         result = self.client.execute(self.owner, "asset", {}, "execute")

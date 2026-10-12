@@ -105,7 +105,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
   }, [displayKey, snapshotKey]);
   const operable = cardIsOperable(card) && !busy && !error && !disabled;
   return <details className="display-card" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
-    <summary>{title ?? card.display.applicationKey} · {disabled ? '只读历史' : labels[card.status] ?? '只读卡片'}</summary>
+    <summary>{title ?? card.display.applicationKey}{card.display.definitionSource === 'GENERATED' ? ' · AI 生成布局' : ''} · {disabled ? '只读历史' : labels[card.status] ?? '只读卡片'}</summary>
     <RendererBoundary key={snapshotKey}>
       {processor ? <MarkdownContext.Provider value={renderMarkdown}><fieldset className="a2ui-card-content" disabled={!operable} aria-busy={busy}>
         {Array.from(processor.model.surfacesMap.values()).map(surface =>

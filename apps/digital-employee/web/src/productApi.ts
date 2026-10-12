@@ -90,6 +90,7 @@ export type MemoryEntry = { id: string; text: string };
 export type MemorySettings = { revision: number; enabled: boolean; entries: MemoryEntry[] };
 export type ChatCard = { cardId: string; conversationId: string; turnId: string; status: string; result?: unknown;
   display: { applicationKey: string; applicationVersion?: string | number; protocolProfile: string;
+    definitionSource?: 'PUBLISHED' | 'GENERATED';
     snapshotMessages: Record<string, unknown>[];
     catalog: { protocolVersion: string; catalogId: string; catalogRevision: string | number; catalogDigest: string };
     rootId?: string; components?: Record<string, unknown>[]; data?: Record<string, unknown>;
@@ -208,6 +209,8 @@ const chatCardOf = (value: unknown): ChatCard => {
       ...(typeof display.applicationVersion === 'string' || typeof display.applicationVersion === 'number'
         ? { applicationVersion: display.applicationVersion } : {}),
       protocolProfile: textOf(display.protocolProfile),
+      ...(display.definitionSource === 'GENERATED' || display.definitionSource === 'PUBLISHED'
+        ? { definitionSource: display.definitionSource } : {}),
       snapshotMessages: display.snapshotMessages.map(recordOf),
       catalog: {
         protocolVersion: textOf(catalog.protocolVersion),

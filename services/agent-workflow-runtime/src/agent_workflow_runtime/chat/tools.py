@@ -32,6 +32,7 @@ from skillweave_contracts.models import (
 from .events import WORKFLOW_CONFIRM
 from ..mvp_tools import AbilityArgs
 from ..models import ActionRejected, json_copy
+from ..a2ui_generation import A2uiGenerator
 
 _EMITTER: ContextVar[Any] = ContextVar("a2flow_chat_emitter", default=None)
 
@@ -115,6 +116,15 @@ class RenderArgs(RenderModelArgs):
     runtime: ToolRuntime[TrustedInvocationContext]
 
 
+class GenerateModelArgs(RenderModelArgs):
+    intent: str = Field(min_length=1, max_length=4000)
+
+
+class GenerateArgs(GenerateModelArgs):
+    model_config = ConfigDict(extra="forbid", strict=True, arbitrary_types_allowed=True)
+    runtime: ToolRuntime[TrustedInvocationContext]
+
+
 def build_chat_tools(
     *,
     reader,
@@ -122,6 +132,7 @@ def build_chat_tools(
     conversation_id: str,
     control_request_id: str,
     chat_assets=None,
+    a2ui_generator: A2uiGenerator | None = None,
 ):
     """Build the legacy pair or the Skill-enabled four-tool tuple."""
 
@@ -241,6 +252,9 @@ def build_chat_tools(
         saved = chat_assets.render_application(
             appCode, params, runtime.tool_call_id,
         )
+        return _rendered(saved, appCode)
+
+    def _rendered(saved: dict[str, Any], appCode: str) -> tuple[str, dict[str, str]]:
         emitter = _EMITTER.get()
         if emitter is not None:
             emitter.emit("application_rendered", {"card": json_copy(saved)})
@@ -278,10 +292,30 @@ def build_chat_tools(
             },
         )
 
-    return (
+    @tool("generate_a2ui", args_schema=GenerateArgs, response_format="content_and_artifact")
+    def generate_a2ui_tool(
+        appCode: str, params: dict[str, Any], intent: str,
+        runtime: ToolRuntime[TrustedInvocationContext],
+    ) -> tuple[str, dict[str, str]]:
+        """Design a new A2UI layout with an isolated SubAgent when the user requests it.
+
+        appCode supplies this Skill's approved data/actions; params follow its queried
+        contract. intent describes the desired layout. Does not publish or change assets.
+        Use render_application for the stable published layout.
+        """
+        chat_assets.validate_context(runtime.context)
+        if a2ui_generator is None:
+            raise ActionRejected("A2UI_GENERATOR_UNAVAILABLE")
+        saved = chat_assets.generate_application(
+            appCode, params, intent, runtime.tool_call_id, a2ui_generator,
+        )
+        return _rendered(saved, appCode)
+
+    tools = (
         use_skill_tool,
         propose_tool,
         execute_ability_tool,
         query_skill_dependencies_tool,
         render_application_tool,
     )
+    return (*tools, generate_a2ui_tool) if a2ui_generator is not None else tools

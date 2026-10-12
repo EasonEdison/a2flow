@@ -31,6 +31,7 @@ from skillweave_contracts.models import (
 )
 
 from ..assembly import build_agent
+from ..a2ui_generation import DeepAgentA2uiGenerator, GENERATOR_TAG
 from ..deepseek_model import DeepSeekProtocolError
 from ..models import ActionRejected
 from ..mvp_tools import AbilityModelArgs
@@ -52,6 +53,7 @@ from .tools import (
     ProposeModelArgs,
     QuerySkillDependenciesModelArgs,
     RenderModelArgs,
+    GenerateModelArgs,
     UseSkillModelArgs,
     build_chat_tools,
 )
@@ -74,11 +76,14 @@ _TURN_LOCAL_SKILL_PROMPT: Final[str] = (
     "Ability or Application tools. For an admitted Application, call "
     "query_skill_dependencies with a2uiApplicationCodeList, then call "
     "render_application with appCode and params matching paramsSchema."
+    " If the user explicitly requests an AI-designed layout, use generate_a2ui with "
+    "the same admitted appCode/params plus intent. It retains approved business bindings."
 )
 _SKILL_TOOL_NAMES: Final[frozenset[str]] = frozenset({
     "execute_ability",
     "query_skill_dependencies",
     "render_application",
+    "generate_a2ui",
 })
 _SKILL_TOOL_ADMISSION_ERROR: Final[str] = (
     "Error: call use_skill in the current turn for a Skill that admits this tool."
@@ -422,7 +427,7 @@ class _InteractiveCardStop(AgentMiddleware):
         exclusive = [
             call
             for call in calls
-            if call.get("name") in {"use_skill", "render_application"}
+            if call.get("name") in {"use_skill", "render_application", "generate_a2ui"}
         ]
         if not exclusive:
             return None
@@ -674,6 +679,9 @@ class ChatLoop:
                 conversation_id=self._conversation_id,
                 control_request_id=self._control_request_id,
                 chat_assets=self._chat_assets,
+                a2ui_generator=DeepAgentA2uiGenerator(
+                    lambda: self._model_factory.create(self._model_reference, self._owner),
+                ) if self._chat_assets is not None else None,
             )
             from ..personal_memory import PersonalMemoryMiddleware
             middleware = [_ToolExecutionEvents(self._emitter)]
@@ -700,6 +708,7 @@ class ChatLoop:
                         QuerySkillDependenciesModelArgs.model_validate
                     ),
                     "render_application": RenderModelArgs.model_validate,
+                    "generate_a2ui": GenerateModelArgs.model_validate,
                 })
             graph = build_agent(
                 model, tools,
@@ -750,7 +759,8 @@ class ChatLoop:
             ):
                 if mode == "messages":
                     message, metadata = event
-                    if metadata.get("langgraph_node") != "model":
+                    if (metadata.get("langgraph_node") != "model"
+                            or GENERATOR_TAG in metadata.get("tags", ())):
                         continue
                     for text in self._text_deltas(message):
                         self._emitter.emit(

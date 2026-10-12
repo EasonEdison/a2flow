@@ -78,13 +78,23 @@ class RpcChatActionService:
         assets.admit_skill(metadata["skillKey"])
         action_descriptions = assets.action_descriptions()
         _, description = assets.application_description(card["display"]["applicationKey"])
-        matching = [action for action in description.actions
-                    if action.action_name == action_name
-                    and action.surface_id == inputs["surfaceId"]
-                    and action.component_id == inputs["sourceComponentId"]]
+        persisted = trusted_card(owner, card, metadata)
+        if persisted.generated_definition is not None:
+            # IDs belong to the saved generated layout; business permission still
+            # belongs to the currently approved origin. RPC validates the binding.
+            matching = [action for action in card["display"]["actions"]
+                        if action["actionName"] == action_name
+                        and action["surfaceId"] == inputs["surfaceId"]
+                        and action["componentId"] == inputs["sourceComponentId"]]
+            if not any(action.action_name == action_name for action in description.actions):
+                raise ActionRejected("ACTION_NOT_BOUND")
+        else:
+            matching = [action for action in description.actions
+                        if action.action_name == action_name
+                        and action.surface_id == inputs["surfaceId"]
+                        and action.component_id == inputs["sourceComponentId"]]
         if len(matching) != 1:
             raise ActionRejected("ACTION_NOT_BOUND")
-        persisted = trusted_card(owner, card, metadata)
         with dispatch_admission() if dispatch_admission is not None else nullcontext():
             claim = self.store.claim(owner, conversation_id, card_id, request_id,
                                      action_name, inputs)
