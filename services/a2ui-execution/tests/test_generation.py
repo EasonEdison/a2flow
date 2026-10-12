@@ -510,6 +510,28 @@ def test_schema_backed_display_does_not_authorize_input_or_unmapped_params() -> 
         validate_candidate(unmapped, membership, GeneratedCandidate.model_validate(raw))
 
 
+def test_nested_relative_list_keeps_original_contract_without_new_display_permission() -> None:
+    published, membership = _published_list_display()
+    build_raw = published.build.model_dump(by_alias=True)
+    components = build_raw["initialMessages"][1]["updateComponents"]["components"]
+    components[0]["children"] = ["listA"]
+    components[2]["children"] = ["claimText", "nestedList"]
+    components[4] = {
+        "id": "nestedList", "component": "List",
+        "children": {"componentId": "itemB", "path": "more"},
+    }
+    published = PublishedApplication(
+        published.release, ApplicationBuild.model_validate(build_raw)
+    )
+    policy = contract(published, membership)
+    assert any(item.path == "more" for item in policy.relative_data_bindings)
+    assert all(item.data_path == "/points" for item in policy.read_only_display_bindings)
+    validate_candidate(
+        published, membership,
+        GeneratedCandidate.model_validate(_list_display_candidate(published)),
+    )
+
+
 @pytest.mark.parametrize(
     "mutation,code",
     [

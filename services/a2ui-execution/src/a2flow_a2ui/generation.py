@@ -372,7 +372,12 @@ def _read_only_display_bindings(
                 continue
             item_id = children.get("componentId")
             data_path = children.get("path")
-            if not isinstance(item_id, str) or not isinstance(data_path, str):
+            if (
+                not isinstance(item_id, str)
+                or not isinstance(data_path, str)
+                or not data_path.startswith("/")
+                or data_path == "/"
+            ):
                 continue
             if len(contexts.get(item_id, frozenset())) != 1:
                 continue
@@ -389,8 +394,12 @@ def _read_only_display_bindings(
                     or input_binding.source_path is None
                 ):
                     continue
-                source_tokens = tokens(input_binding.source_path, allow_root=False)
-                target_tokens = tokens(input_binding.target_path, allow_root=False)
+                try:
+                    source_tokens = tokens(input_binding.source_path, allow_root=False)
+                    target_tokens = tokens(input_binding.target_path, allow_root=False)
+                except A2uiError:
+                    # A malformed legacy binding cannot create a new display permission.
+                    continue
                 if len(source_tokens) != 1 or target_tokens != (
                     "updateDataModel", "value", data_tokens[0]
                 ):

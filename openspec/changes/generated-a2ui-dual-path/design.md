@@ -23,6 +23,7 @@
    相对路径及原 List 模板作用域；它不并入通用数据路径或旧相对绑定规则，不授权输入控件、
    Action context、新函数或未声明字段。即使 schema 允许 `additionalProperties`，也不推断
    通配字段；`$ref`/组合 schema 未解析时保守拒绝。生成候选改变 List 模板作用域仍拒绝。
+   嵌套 List 的相对 `children.path` 不参与这项新增推导，仍由原相对绑定规则处理。
 5. 卡片快照及 GENERATED 定义同一笔卡片存储落库后，才发送可见事件。没有跨服务事务承诺。
 6. Action 从已保存定义恢复布局，并重新检查当前源 Application/能力权限。使用最新已发布
    配置，不恢复旧的版本锁；artifact digest 仅用于生成定义完整性，不是版本准入条件。
