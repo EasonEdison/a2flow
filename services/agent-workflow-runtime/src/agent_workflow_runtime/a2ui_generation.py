@@ -65,7 +65,10 @@ Use only the supplied official component schemas and current registered componen
 You may create new component IDs and layouts, except required anchors must be preserved.
 Preserve every declared surface ID, required engineering anchor and its bound property.
 Use surfaces[].rootComponentId for each tree root. Read mustPreserve and anchorComponents.
-Use only allowedDataPaths for data references. Data is loaded by the trusted runtime;
+Use allowedDataPaths for absolute data references. Relative data references are allowed
+only as described in relativeDataBindings, inside the exact listed templateScopes lineage.
+Preserve those List template bindings; rearrange layout inside their scope, not across scopes.
+Data is loaded by the trusted runtime;
 do not invent people, IDs, business records, permissions, success or confirmation.
 Never add RPC endpoints, credentials, scripts, URLs, new business actions or bindings.
 Place only supplied allowedActions; actionPlacements maps each approved bindingId to
