@@ -75,6 +75,10 @@ Use surfaces[].rootComponentId for each tree root. Read mustPreserve and anchorC
 Use allowedDataPaths for absolute data references. Relative data references are allowed
 only as described in relativeDataBindings, inside the exact listed templateScopes lineage.
 Preserve those List template bindings; rearrange layout inside their scope, not across scopes.
+Additional fields in readOnlyDisplayBindings may be shown only by Text.text.path inside
+their listed templateScopes. These are read permissions, never input or action bindings.
+For numbers/booleans, Text already converts the value to text; put any explanation in a
+separate static Text. Do not invent formatting functions, expressions or new data paths.
 Data is loaded by the trusted runtime;
 do not invent people, IDs, business records, permissions, success or confirmation.
 Never add RPC endpoints, credentials, scripts, URLs, new business actions or bindings.
