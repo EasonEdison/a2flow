@@ -2,6 +2,7 @@ package dev.a2flow.management.release;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,7 +18,7 @@ import dev.a2flow.management.release.ReleaseModels.EnvironmentState;
 import dev.a2flow.management.release.ReleaseModels.PublishedAssetSnapshot;
 import dev.a2flow.management.release.ReleaseModels.ReleaseBuild;
 import dev.a2flow.management.release.ReleaseModels.ReleaseVersion;
-import dev.a2flow.management.storage.db.repository.AssetReleaseStateRepository;
+import dev.a2flow.management.storage.db.repository.PublishedReleaseStateRepository;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -35,7 +36,7 @@ public class PublishedAssetQueryService {
     private static final String SOURCE_BUILD = "BUILD";
 
     @Resource
-    private AssetReleaseStateRepository assetReleaseStateRepository;
+    private PublishedReleaseStateRepository publishedReleaseStateRepository;
 
     /** 查询某类资产当前 ONLINE 正式版本列表。 */
     public List<PublishedAssetSnapshot> listOnline(ReleaseAssetType assetType) {
@@ -46,7 +47,7 @@ public class PublishedAssetQueryService {
     public List<PublishedAssetSnapshot> listPublished(
             ReleaseAssetType assetType, ReleaseEnvironment environment) {
         List<PublishedAssetSnapshot> result = new ArrayList<>();
-        assetReleaseStateRepository.scanByAssetType(assetType,
+        publishedReleaseStateRepository.scan(assetType, environment,
                 state -> resolve(state, environment).ifPresent(result::add));
         log.info("SkillFactory查询指定环境正式资产完成, assetType:{}, environment:{}, count:{}",
                 assetType, environment, result.size());
@@ -61,7 +62,7 @@ public class PublishedAssetQueryService {
     /** 按资产稳定 ID 和指定环境读取正式版本，不允许回退到其他环境或当前草稿。 */
     public PublishedAssetSnapshot requirePublished(ReleaseAssetType assetType, String assetKey,
             ReleaseEnvironment environment) {
-        AssetReleaseState state = assetReleaseStateRepository.find(assetType, assetKey);
+        AssetReleaseState state = publishedReleaseStateRepository.find(assetType, assetKey, EnumSet.of(environment));
         return resolve(state, environment).orElseThrow(() -> {
             log.warn("SkillFactory正式资产不存在或环境指针无效, assetType:{}, assetKey:{}, environment:{}",
                     assetType, assetKey, environment);
@@ -72,7 +73,8 @@ public class PublishedAssetQueryService {
     /** 从同一份发布聚合解析各环境指针，避免列表投影为每个环境重复加载历史快照。 */
     public Map<ReleaseEnvironment, PublishedAssetSnapshot> publishedEnvironments(
             ReleaseAssetType assetType, String assetKey) {
-        AssetReleaseState state = assetReleaseStateRepository.find(assetType, assetKey);
+        AssetReleaseState state = publishedReleaseStateRepository.find(
+                assetType, assetKey, EnumSet.allOf(ReleaseEnvironment.class));
         Map<ReleaseEnvironment, PublishedAssetSnapshot> result = new EnumMap<>(ReleaseEnvironment.class);
         for (ReleaseEnvironment environment : ReleaseEnvironment.values()) {
             resolve(state, environment).ifPresent(snapshot -> result.put(environment, snapshot));

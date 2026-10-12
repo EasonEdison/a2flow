@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dev.a2flow.management.storage.db.mapper.ReleaseRecordHeaderMapper">
+  <!-- 历史内容仍保存在原表；仅在数据库内提取索引，禁止把完整记录传回 JVM 后再裁剪。 -->
+  <select id="selectHeaders" resultType="dev.a2flow.management.storage.db.entity.ReleaseRecordHeader">
+    WITH records AS MATERIALIZED (
+      SELECT asset_key AS record_ref, (state_json::jsonb ->> 'recordJson')::jsonb AS envelope,
+             state_json::jsonb = jsonb_build_object('recordJson', state_json::jsonb ->> 'recordJson')
+               AND asset_key = encode(sha256(convert_to(state_json::jsonb ->> 'recordJson', 'UTF8')), 'hex')
+               AS checksum_valid
+      FROM skill_asset_release_state
+      WHERE asset_type = 'RELEASE_RECORD' AND deleted = 0
+      AND asset_key IN
+      <foreach collection="recordRefs" item="ref" open="(" separator="," close=")">#{ref}</foreach>
+    )
+    SELECT record_ref,
+           envelope ->> 'assetType' AS asset_type,
+           envelope ->> 'assetKey' AS asset_key,
+           envelope ->> 'collection' AS collection,
+           envelope ->> 'recordId' AS record_id,
+           CASE envelope ->> 'collection'
+             WHEN 'builds' THEN envelope #>> '{payload,buildId}'
+             WHEN 'versions' THEN envelope #>> '{payload,versionId}'
+           END AS payload_record_id,
+           envelope #>> '{payload,buildId}' AS build_id,
+           (envelope #>> '{payload,targetVersion}')::integer AS target_version,
+           (envelope #>> '{payload,version}')::integer AS version,
+           coalesce(envelope #> '{payload,snapshot}' != 'null'::jsonb, false) AS snapshot_present,
+           envelope #>> '{payload,snapshotBuildId}' AS snapshot_build_id,
+           coalesce(checksum_valid, false) AS checksum_valid
+    FROM records
+  </select>
+</mapper>

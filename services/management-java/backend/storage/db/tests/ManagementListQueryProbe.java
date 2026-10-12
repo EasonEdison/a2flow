@@ -16,7 +16,7 @@ import dev.a2flow.management.storage.db.mapper.EntityRelationMapper;
 import dev.a2flow.management.storage.db.mapper.CapabilityActionDraftMapper;
 import dev.a2flow.management.storage.db.repository.CapabilityActionDraftRepository;
 import java.util.Map;
-import org.postgresql.ds.PGSimpleDataSource;
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.core.io.ClassPathResource;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
@@ -32,6 +32,17 @@ import dev.a2flow.management.storage.db.mapper.AssetReleaseStateMapper;
 import dev.a2flow.management.storage.db.repository.AssetReleaseStateRepository;
 import dev.a2flow.management.storage.db.repository.AssetReleaseRecordStore;
 import dev.a2flow.management.release.ReleaseAssetType;
+import dev.a2flow.management.release.ReleaseEnvironment;
+import dev.a2flow.management.release.PublishedAssetQueryService;
+import dev.a2flow.management.release.ReleaseModels.AssetReleaseState;
+import dev.a2flow.management.release.ReleaseModels.AssetSnapshot;
+import dev.a2flow.management.release.ReleaseModels.EnvironmentState;
+import dev.a2flow.management.release.ReleaseModels.ReleaseBuild;
+import dev.a2flow.management.release.ReleaseModels.ReleaseDeployment;
+import dev.a2flow.management.release.ReleaseModels.ReleaseVersion;
+import dev.a2flow.management.storage.db.mapper.ReleaseRecordHeaderMapper;
+import dev.a2flow.management.storage.db.repository.PublishedReleaseStateRepository;
+import dev.a2flow.management.support.JsonSupport;
 
 /** 本次整改的隔离数据库探针，不连接任何业务数据库。 */
 public final class ManagementListQueryProbe {
@@ -39,9 +50,11 @@ public final class ManagementListQueryProbe {
         if (args.length != 2 || !args[0].matches("jdbc:postgresql://127\\.0\\.0\\.1:[0-9]+/management_query_test")) {
             throw new IllegalArgumentException("Requires a disposable loopback management_query_test database");
         }
-        var source = new PGSimpleDataSource();
-        source.setURL(args[0]);
-        source.setUser(args[1]);
+        var source = new HikariDataSource();
+        source.setJdbcUrl(args[0]);
+        source.setUsername(args[1]);
+        source.setMaximumPoolSize(1);
+        source.setMinimumIdle(0);
         try (var connection = source.getConnection()) { ExplicitManagementMigration.apply(connection); }
         var jdbc = new JdbcTemplate(source);
         jdbc.execute("TRUNCATE skill_draft, skill_asset_release_state, entity_relation, "
@@ -68,6 +81,7 @@ public final class ManagementListQueryProbe {
         configuration.addMapper(SkillListMapper.class);
         configuration.addMapper(ComponentListMapper.class);
         configuration.addMapper(AssetReleaseStateMapper.class);
+        configuration.addMapper(ReleaseRecordHeaderMapper.class);
         configuration.addMapper(EntityRelationMapper.class);
         configuration.addMapper(CapabilityActionDraftMapper.class);
         var counter = new QueryCounter();
@@ -76,7 +90,8 @@ public final class ManagementListQueryProbe {
         builder.setDataSource(source);
         builder.setConfiguration(configuration);
         builder.setMapperLocations(new ClassPathResource("storage/db/mapper/SkillListMapper.xml"),
-                new ClassPathResource("storage/db/mapper/ComponentListMapper.xml"));
+                new ClassPathResource("storage/db/mapper/ComponentListMapper.xml"),
+                new ClassPathResource("storage/db/mapper/ReleaseRecordHeaderMapper.xml"));
         var session = new SqlSessionTemplate(builder.getObject());
         var mapper = session.getMapper(SkillListMapper.class);
         var all = SkillListQuery.from(Map.of());
@@ -106,7 +121,116 @@ public final class ManagementListQueryProbe {
         verifyCapabilitySearch(jdbc, session);
         verifyComponentPage(jdbc, session);
         verifyReleaseScan(jdbc, session, counter);
+        verifyPublishedReader(jdbc, session, counter);
         System.out.println("PASS: PostgreSQL/MyBatis 125-row paging, search, counters, relation isolation; 6 relation queries for 125 capabilities");
+        source.close();
+    }
+    private static void verifyPublishedReader(JdbcTemplate jdbc, SqlSessionTemplate session,
+            QueryCounter counter) throws Exception {
+        var mapper = session.getMapper(AssetReleaseStateMapper.class);
+        var store = new AssetReleaseRecordStore();
+        inject(store, "mapper", mapper);
+        var full = new AssetReleaseStateRepository();
+        inject(full, "assetReleaseStateMapper", mapper);
+        inject(full, "recordStore", store);
+        var reader = new PublishedReleaseStateRepository();
+        inject(reader, "stateMapper", mapper);
+        inject(reader, "headerMapper", session.getMapper(ReleaseRecordHeaderMapper.class));
+        inject(reader, "recordStore", store);
+        var service = new PublishedAssetQueryService();
+        inject(service, "publishedReleaseStateRepository", reader);
+        var state = new AssetReleaseState().setAssetType("A2UI_APPLICATION").setAssetKey("published-probe");
+        for (int n = 1; n <= 225; n++) {
+            state.getBuilds().add(new ReleaseBuild().setBuildId("build-" + n).setTargetVersion(n)
+                    .setSourceDigest("digest-" + n).setInputDigest("input-" + n)
+                    .setSnapshot(new AssetSnapshot().setAssetType("A2UI_APPLICATION").setAssetKey("published-probe")
+                            .setPayloadJson("history-" + n + "x".repeat(8000)).setDigest("digest-" + n)));
+        }
+        for (int n = 1; n <= 3; n++) {
+            var build = state.getBuilds().get(n - 1);
+            state.getVersions().add(new ReleaseVersion().setVersion(n).setVersionId("version-" + n)
+                    .setSourceBuildId(build.getBuildId()).setInputDigest(build.getInputDigest())
+                    .setSourceDigest(build.getSourceDigest()).setSnapshot(build.getSnapshot()));
+            state.getDeployments().add(new ReleaseDeployment().setDeploymentId("deployment-" + n));
+        }
+        state.getEnvironments().put("PRT", new EnvironmentState().setSourceType("BUILD")
+                .setSourceId("build-225").setVersion(225).setDigest("digest-225"));
+        state.getEnvironments().put("ONLINE", new EnvironmentState().setSourceType("VERSION")
+                .setSourceId("version-2").setVersion(2).setDigest("digest-2"));
+        full.save(state, 0);
+        counter.count = 0;
+        counter.maxRows = 0;
+        var selected = reader.find(ReleaseAssetType.A2UI_APPLICATION, "published-probe",
+                java.util.EnumSet.allOf(ReleaseEnvironment.class));
+        check(selected.getBuilds().size() == 2 && selected.getVersions().size() == 1
+                && selected.getDeployments().isEmpty(), "只恢复两个环境所需3条记录，不恢复部署历史");
+        check(counter.count == 4 && counter.maxRows == 200, "根1+索引2批+正文1，索引SQL有界");
+        var complete = full.find(ReleaseAssetType.A2UI_APPLICATION, "published-probe");
+        var resolve = PublishedAssetQueryService.class.getDeclaredMethod("resolve", AssetReleaseState.class,
+                ReleaseEnvironment.class);
+        resolve.setAccessible(true);
+        for (var environment : ReleaseEnvironment.values()) {
+            check(resolve.invoke(service, complete, environment).equals(resolve.invoke(service, selected, environment)),
+                    "新旧快照完全一致 " + environment);
+        }
+        int fullBytes = JsonSupport.toJSON(complete).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        int selectedBytes = JsonSupport.toJSON(selected).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        check(selectedBytes < fullBytes / 20, "当前读模型不携带历史正文");
+        check(service.publishedEnvironments(ReleaseAssetType.A2UI_APPLICATION, "published-probe").size() == 2,
+                "正式查询接入轻量读模型");
+        check(service.requirePublished(ReleaseAssetType.A2UI_APPLICATION, "published-probe", ReleaseEnvironment.PRT)
+                .getVersionId().equals("build-225"), "PRT不回退ONLINE");
+        var scanKeys = new ArrayList<String>();
+        counter.count = 0;
+        counter.maxRows = 0;
+        reader.scan(ReleaseAssetType.COMPONENT, ReleaseEnvironment.PRT, item -> scanKeys.add(item.getAssetKey()));
+        check(scanKeys.size() == 225 && new java.util.HashSet<>(scanKeys).size() == 225
+                && counter.count == 3 && counter.maxRows == 100, "新发布读模型扫描仍物理分页且不截断");
+        // 不同的 ONLINE 派生 snapshot 不能误用来源 Build 的内容。
+        var derived = complete.getVersions().get(1);
+        String derivedJson = "{\"components\":[]}";
+        String derivedDigest = "sha256:" + dev.a2flow.management.release.ReleaseDigestUtils.sha256(derivedJson);
+        derived.setSnapshot(new AssetSnapshot().setAssetType("A2UI_APPLICATION").setAssetKey("published-probe")
+                .setDigest(derivedDigest).setPayloadJson(derivedJson)).setSourceDigest(derivedDigest);
+        complete.getEnvironments().get("ONLINE").setDigest(derivedDigest);
+        full.save(complete, 1);
+        check(service.requireOnline(ReleaseAssetType.A2UI_APPLICATION, "published-probe").getSnapshot()
+                .getPayloadJson().equals(derivedJson), "ONLINE派生正文不被Build替换");
+        var wrongDigest = full.find(ReleaseAssetType.A2UI_APPLICATION, "published-probe");
+        wrongDigest.getEnvironments().get("ONLINE").setDigest("wrong-digest");
+        full.save(wrongDigest, 2);
+        check(service.publishedEnvironments(ReleaseAssetType.A2UI_APPLICATION, "published-probe").size() == 1,
+                "指针摘要不匹配不能返回ONLINE或回退PRT");
+        // 无独立记录格式标记的旧聚合按原路径读取。
+        jdbc.update("INSERT INTO skill_asset_release_state(asset_type,asset_key,revision,state_json) VALUES (?,?,1,?)",
+                "A2UI_APPLICATION", "legacy-probe", JsonSupport.toJSON(state.setAssetKey("legacy-probe")));
+        check(reader.find(ReleaseAssetType.A2UI_APPLICATION, "legacy-probe",
+                java.util.EnumSet.of(ReleaseEnvironment.PRT)).getBuilds().size() == 225, "内联聚合原语义");
+        // 选中不可变记录的任何正文篡改仍必须报错，不静默读取其他环境或草稿。
+        String ref = jdbc.queryForObject("SELECT state_json::jsonb #>> '{builds,224,recordRef}' "
+                + "FROM skill_asset_release_state WHERE asset_type='A2UI_APPLICATION' AND asset_key='published-probe'",
+                String.class);
+        jdbc.update("UPDATE skill_asset_release_state SET state_json=replace(state_json,'history-225','tampered-225') "
+                + "WHERE asset_type='RELEASE_RECORD' AND asset_key=?", ref);
+        try {
+            service.requirePublished(ReleaseAssetType.A2UI_APPLICATION, "published-probe", ReleaseEnvironment.PRT);
+            throw new AssertionError("应拒绝摘要篡改");
+        } catch (IllegalStateException expected) { }
+        jdbc.update("DELETE FROM skill_asset_release_state WHERE asset_type='RELEASE_RECORD' AND asset_key=?", ref);
+        try {
+            reader.find(ReleaseAssetType.A2UI_APPLICATION, "published-probe", java.util.EnumSet.of(ReleaseEnvironment.PRT));
+            throw new AssertionError("应拒绝缺失引用");
+        } catch (IllegalStateException expected) { }
+        // 未选中的 Build 仍验证不可变记录摘要，索引篡改不能改变选择结果。
+        String oldRef = jdbc.queryForObject("SELECT state_json::jsonb #>> '{builds,0,recordRef}' "
+                + "FROM skill_asset_release_state WHERE asset_type='A2UI_APPLICATION' AND asset_key='published-probe'",
+                String.class);
+        jdbc.update("UPDATE skill_asset_release_state SET state_json=replace(state_json,'history-1','tampered-1') "
+                + "WHERE asset_type='RELEASE_RECORD' AND asset_key=?", oldRef);
+        var headers = session.getMapper(ReleaseRecordHeaderMapper.class).selectHeaders(List.of(oldRef));
+        check(headers.size() == 1 && !headers.get(0).checksumValid(), "历史索引摘要仍校验");
+        System.out.println("PASS: published reader 225 builds, 3 versions, selected 3 records; model bytes "
+                + fullBytes + " -> " + selectedBytes + "; exact pointers, derived snapshot, digest/missing checks");
     }
     private static void verifyReleaseScan(JdbcTemplate jdbc, SqlSessionTemplate session,
             QueryCounter counter) throws Exception {
