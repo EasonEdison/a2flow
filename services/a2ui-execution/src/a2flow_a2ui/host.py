@@ -52,8 +52,10 @@ def run(values: Mapping[str, str]) -> None:
         values["A2FLOW_RUNTIME_ASSET_NAMESPACE"],
     )
     invoker = PublishedCapabilityInvoker(capability_reader, executor, index)
-    runtime = A2uiRuntimeService(application_reader, invoker)
-    with ThreadPoolExecutor(max_workers=RPC_WORKERS, thread_name_prefix="a2flow-engine-rpc") as pool:
+    runtime = A2uiRuntimeService(application_reader, invoker, application_reader)
+    with ThreadPoolExecutor(
+        max_workers=RPC_WORKERS, thread_name_prefix="a2flow-engine-rpc"
+    ) as pool:
         server = grpc.server(
             pool,
             maximum_concurrent_rpcs=RPC_MAX_IN_FLIGHT,

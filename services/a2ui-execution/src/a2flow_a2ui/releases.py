@@ -21,6 +21,7 @@ from pydantic import ValidationError
 from .models import A2uiError, ApplicationBuild, ApplicationRelease, PublishedApplication
 
 _ASSET_TYPE = "A2UI_APPLICATION"
+_CATALOG_TYPE = "A2UI_CATALOG"
 _RECORD_TYPE = "RELEASE_RECORD"
 _MAX_STATE_BYTES = 32 * 1024 * 1024
 
@@ -114,6 +115,76 @@ class PostgresApplicationReader:
             state = self._hydrate(connection, app_code, row[0])
             return self._resolve(app_code, context.user_id, state)
 
+    def generation_catalog(self, catalog_id: str, context: TrustedContext) -> dict[str, str]:
+        """Read current published Catalog membership for the same trusted lane/user."""
+        if type(catalog_id) is not str or not catalog_id or len(catalog_id) > 512:
+            raise A2uiError("A2UI_GENERATION_CATALOG_INVALID")
+        if context.environment is not self.environment:
+            raise A2uiError("A2UI_ENVIRONMENT_MISMATCH")
+        with self._connection() as connection, connection.transaction():
+            self._prepare(connection)
+            row = connection.execute(
+                "SELECT state_json FROM skill_asset_release_state "
+                "WHERE asset_type=%s AND asset_key=%s AND deleted=%s",
+                (_CATALOG_TYPE, catalog_id, 0),
+            ).fetchone()
+            if row is None or len(row) != 1 or type(row[0]) is not str:
+                raise A2uiError("A2UI_GENERATION_CATALOG_NOT_AVAILABLE")
+            state = self._hydrate(connection, catalog_id, row[0], _CATALOG_TYPE)
+            environments = _object(state.get("environments"))
+            pointer = _object(environments.get(self.environment.value))
+            if self.environment is Environment.ONLINE:
+                pointer = self._online(pointer, context.user_id)
+            expected_source_type = "BUILD" if self.environment is Environment.PRT else "VERSION"
+            if (
+                pointer.get("environment") != self.environment.value
+                or pointer.get("sourceType") != expected_source_type
+            ):
+                raise A2uiError("A2UI_GENERATION_CATALOG_NOT_AVAILABLE")
+            collection, identity = (
+                ("builds", "buildId")
+                if self.environment is Environment.PRT
+                else ("versions", "versionId")
+            )
+            source_id = _text(pointer.get("sourceId"))
+            matches = [
+                item
+                for item in _object_list(state.get(collection))
+                if item.get(identity) == source_id
+            ]
+            if len(matches) != 1:
+                raise A2uiError("A2UI_GENERATION_CATALOG_NOT_AVAILABLE")
+            version_field = "targetVersion" if self.environment is Environment.PRT else "version"
+            if (
+                matches[0].get(version_field) != pointer.get("version")
+                or matches[0].get("sourceDigest") != pointer.get("digest")
+                or (self.environment is Environment.PRT and matches[0].get("status") != "SUCCEEDED")
+            ):
+                raise A2uiError("A2UI_GENERATION_CATALOG_NOT_AVAILABLE")
+            snapshot = _object(matches[0].get("snapshot"))
+            payload_json = _text(snapshot.get("payloadJson"))
+            digest = _text(pointer.get("digest"))
+            if (
+                snapshot.get("assetType") != _CATALOG_TYPE
+                or snapshot.get("assetKey") != catalog_id
+                or snapshot.get("digest") != digest
+                or digest != "sha256:" + hashlib.sha256(payload_json.encode()).hexdigest()
+            ):
+                raise A2uiError("A2UI_GENERATION_CATALOG_INVALID")
+            payload = _json_object(payload_json, "A2UI_GENERATION_CATALOG_INVALID")
+            if payload.get("catalogId") != catalog_id or payload.get("protocolVersion") != "v0.9.1":
+                raise A2uiError("A2UI_GENERATION_CATALOG_INVALID")
+            origins: dict[str, str] = {}
+            for entry in _object_list(payload.get("components")):
+                component_type = _text(entry.get("type"))
+                origin = _text(entry.get("componentOriginType"))
+                if component_type in origins or origin not in {"A2UI_OFFICIAL", "PLATFORM_CUSTOM"}:
+                    raise A2uiError("A2UI_GENERATION_CATALOG_INVALID")
+                origins[component_type] = origin
+            if not origins:
+                raise A2uiError("A2UI_GENERATION_CATALOG_INVALID")
+            return origins
+
     @contextmanager
     def _connection(self) -> Iterator[_Connection]:
         connection: _Connection | None = None
@@ -140,9 +211,11 @@ class PostgresApplicationReader:
         if connection.execute("SELECT current_database()").fetchone() != (self._database,):
             raise A2uiError("A2UI_DATABASE_MISMATCH")
 
-    def _hydrate(self, connection: _Connection, app_code: str, source: str) -> JsonObject:
+    def _hydrate(
+        self, connection: _Connection, app_code: str, source: str, asset_type: str = _ASSET_TYPE
+    ) -> JsonObject:
         root = _json_object(source, "A2UI_RELEASE_STATE_INVALID")
-        if root.get("assetType") != _ASSET_TYPE or root.get("assetKey") != app_code:
+        if root.get("assetType") != asset_type or root.get("assetKey") != app_code:
             raise A2uiError("A2UI_RELEASE_STATE_INVALID")
         storage = root.get("recordStorageVersion")
         if storage is None:
@@ -154,7 +227,7 @@ class PostgresApplicationReader:
         identities = {"builds": "buildId", "versions": "versionId", "deployments": "deploymentId"}
         for collection, identity_field in identities.items():
             records = [
-                self._entry(connection, app_code, collection, identity_field, value)
+                self._entry(connection, app_code, collection, identity_field, value, asset_type)
                 for value in _object_list(hydrated.get(collection))
             ]
             _index(records, identity_field)
@@ -187,6 +260,7 @@ class PostgresApplicationReader:
         collection: str,
         identity_field: str,
         entry: JsonObject,
+        asset_type: str,
     ) -> JsonObject:
         if "recordRef" not in entry:
             return entry
@@ -210,7 +284,7 @@ class PostgresApplicationReader:
         payload = _object(envelope.get("payload"))
         record_id = _text(envelope.get("recordId"))
         if (
-            envelope.get("assetType") != _ASSET_TYPE
+            envelope.get("assetType") != asset_type
             or envelope.get("assetKey") != app_code
             or envelope.get("collection") != collection
             or payload.get(identity_field) != record_id

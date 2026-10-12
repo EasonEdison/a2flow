@@ -19,10 +19,15 @@ from a2flow_capability.models import (
 )
 from a2flow_capability.releases import ReleaseError, ReleaseStorageError
 from a2flow_capability.rpc import json_value, parse_object, unique_object
+from pydantic import ValidationError
 
 from .models import (
     A2uiError,
     ApplicationRelease,
+    DefinitionSource,
+    GeneratedCandidate,
+    GeneratedDefinition,
+    GenerationScope,
     PublishedApplication,
     RuntimeResult,
     RuntimeSession,
@@ -119,6 +124,63 @@ def _session_model(value: a2ui_pb2.RuntimeSession) -> RuntimeSession:
     )
 
 
+def _scope(value: a2ui_pb2.GenerationScope) -> GenerationScope:
+    try:
+        return GenerationScope(
+            conversationId=value.conversation_id,
+            workflowRunId=value.workflow_run_id,
+            nodeId=value.node_id,
+        )
+    except ValidationError:
+        raise A2uiError("A2UI_GENERATION_SCOPE_INVALID") from None
+
+
+def _scope_rpc(value: GenerationScope) -> a2ui_pb2.GenerationScope:
+    return a2ui_pb2.GenerationScope(
+        conversation_id=value.conversation_id,
+        workflow_run_id=value.workflow_run_id,
+        node_id=value.node_id,
+    )
+
+
+def _candidate(value: bytes) -> GeneratedCandidate:
+    if len(value) > 256 * 1024:
+        raise A2uiError("A2UI_GENERATION_SIZE_LIMIT")
+    try:
+        return GeneratedCandidate.model_validate(_object(value))
+    except ValidationError:
+        raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID") from None
+
+
+def _definition_model(value: a2ui_pb2.GeneratedDefinition) -> GeneratedDefinition:
+    if not value.HasField("owner_user_id") or not value.HasField("scope"):
+        raise A2uiError("A2UI_GENERATED_CARD_SCOPE_MISMATCH")
+    try:
+        return GeneratedDefinition(
+            originAppCode=value.origin_app_code,
+            candidate=_candidate(value.candidate_json),
+            scope=_scope(value.scope),
+            ownerUserId=value.owner_user_id,
+            environment=_environment(value.environment),
+            artifactDigest=value.artifact_digest,
+        )
+    except ValidationError:
+        raise A2uiError("A2UI_GENERATED_CARD_SCOPE_MISMATCH") from None
+
+
+def _definition_rpc(value: GeneratedDefinition) -> a2ui_pb2.GeneratedDefinition:
+    return a2ui_pb2.GeneratedDefinition(
+        origin_app_code=value.origin_app_code,
+        candidate_json=_json(value.candidate.model_dump(by_alias=True)),
+        scope=_scope_rpc(value.scope),
+        owner_user_id=value.owner_user_id,
+        environment=(
+            capability_pb2.PRT if value.environment is Environment.PRT else capability_pb2.ONLINE
+        ),
+        artifact_digest=value.artifact_digest,
+    )
+
+
 def _describe(value: PublishedApplication) -> a2ui_pb2.DescribeResponse:
     build = value.build
     return a2ui_pb2.DescribeResponse(
@@ -188,7 +250,14 @@ def _response(value: RuntimeResult) -> a2ui_pb2.RuntimeResponse:
             )
             for item in value.composer_draft_effects
         ],
+        definition_source=(
+            a2ui_pb2.GENERATED
+            if value.definition_source is DefinitionSource.GENERATED
+            else a2ui_pb2.PUBLISHED
+        ),
     )
+    if value.generated_definition is not None:
+        response.generated_definition.CopyFrom(_definition_rpc(value.generated_definition))
     if value.action_observation is not None:
         observed = value.action_observation
         response.action_observation.CopyFrom(
@@ -220,6 +289,47 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
             stage="describe",
         )
 
+    def DescribeGenerationSource(
+        self,
+        request: a2ui_pb2.DescribeGenerationSourceRequest,
+        context: grpc.ServicerContext,
+    ) -> a2ui_pb2.GenerationSource:
+        def execute() -> a2ui_pb2.GenerationSource:
+            published, contract = self._service.describe_generation_source(
+                request.origin_app_code, _context(request.context)
+            )
+            return a2ui_pb2.GenerationSource(
+                origin_release=_release(published.release),
+                catalog=a2ui_pb2.CatalogDescriptor(
+                    protocol_version=published.build.protocol_version,
+                    catalog_id=published.build.catalog.catalog_id,
+                    catalog_revision=published.build.catalog.revision,
+                    catalog_digest=published.build.catalog.digest,
+                ),
+                generation_contract_json=_json(contract.model_dump(by_alias=True)),
+            )
+
+        return self._respond(context, execute, stage="describe_generation_source")
+
+    def ActivateGenerated(
+        self,
+        request: a2ui_pb2.ActivateGeneratedRequest,
+        context: grpc.ServicerContext,
+    ) -> a2ui_pb2.RuntimeResponse:
+        return self._respond(
+            context,
+            lambda: _response(
+                self._service.activate_generated(
+                    request.origin_app_code,
+                    _object(request.params_json),
+                    _candidate(request.candidate_json),
+                    _scope(request.scope),
+                    _context(request.context),
+                )
+            ),
+            stage="activate_generated",
+        )
+
     def Activate(
         self, request: a2ui_pb2.ActivateRequest, context: grpc.ServicerContext
     ) -> a2ui_pb2.RuntimeResponse:
@@ -240,9 +350,8 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
     ) -> a2ui_pb2.RuntimeResponse:
         def execute() -> a2ui_pb2.RuntimeResponse:
             card = request.card
-            if (
-                not card.HasField("user_id")
-                or not card.app_code
+            if not card.HasField("user_id") or (
+                not card.app_code and not card.HasField("generated_definition")
             ):
                 raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
             trusted = TrustedCard(
@@ -250,6 +359,10 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
                 card.app_code,
                 _object(card.params_json),
                 _messages(card.snapshot_json),
+                _definition_model(card.generated_definition)
+                if card.HasField("generated_definition")
+                else None,
+                _scope(card.scope) if card.HasField("scope") else None,
             )
             return _response(
                 self._service.act(

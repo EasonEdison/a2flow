@@ -28,7 +28,7 @@ where = ["src"]
 namespaces = true
 
 [tool.setuptools.package-data]
-a2flow_a2ui = ["py.typed"]
+a2flow_a2ui = ["py.typed", "official/*.json", "official/LICENSE"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "../capability-execution/src", "../../packages/rpc-contracts/src"]

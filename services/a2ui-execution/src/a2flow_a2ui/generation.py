@@ -1,0 +1,472 @@
+"""Admission of generated layouts against a published Application and Catalog."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Mapping
+from importlib.resources import files
+from typing import Protocol, cast
+
+from a2flow_capability.models import JsonObject, JsonValue, TrustedContext
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+
+from .jsonutil import reject_authority_keys, require_object, require_size, tokens
+from .ledger import PROTOCOL_VERSION, SurfaceLedger
+from .models import (
+    A2uiError,
+    ActionBinding,
+    ActionDeclaration,
+    GeneratedCandidate,
+    GeneratedDefinition,
+    GenerationAction,
+    GenerationAnchor,
+    GenerationComponent,
+    GenerationContract,
+    GenerationScope,
+    GenerationSurface,
+    PublishedApplication,
+    ShowInputBinding,
+)
+
+_OFFICIAL_ID = "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
+_COMMON_ID = "https://a2ui.org/specification/v0_9/common_types.json"
+_CATALOG_ALIAS = "https://a2ui.org/specification/v0_9/catalog.json"
+_DENIED_COMPONENTS = frozenset({"Image", "Video", "AudioPlayer", "Icon"})
+_MAX_COMPONENTS = 256
+_MAX_BYTES = 256 * 1024
+_MAX_DEPTH = 24
+
+
+class GenerationCatalogReader(Protocol):
+    def generation_catalog(self, catalog_id: str, context: TrustedContext) -> dict[str, str]: ...
+
+
+def _official() -> tuple[JsonObject, JsonObject, Registry]:
+    root = files("a2flow_a2ui").joinpath("official")
+    catalog = cast(JsonObject, json.loads(root.joinpath("catalog.json").read_text()))
+    common = cast(JsonObject, json.loads(root.joinpath("common_types.json").read_text()))
+    alias = {**catalog, "$id": _CATALOG_ALIAS}
+    registry = Registry().with_resources(
+        [
+            (_OFFICIAL_ID, Resource.from_contents(catalog)),
+            (_COMMON_ID, Resource.from_contents(common)),
+            (_CATALOG_ALIAS, Resource.from_contents(alias)),
+        ]
+    )
+    return catalog, common, registry
+
+
+def _components(membership: Mapping[str, str]) -> tuple[GenerationComponent, ...]:
+    catalog, _, _ = _official()
+    definitions = require_object(catalog.get("components"), "A2UI_GENERATION_CATALOG_INVALID")
+    allowed: list[GenerationComponent] = []
+    for name, origin in sorted(membership.items()):
+        if origin != "A2UI_OFFICIAL" or name in _DENIED_COMPONENTS:
+            continue
+        definition = definitions.get(name)
+        if not isinstance(definition, dict):
+            raise A2uiError("A2UI_GENERATION_CATALOG_INVALID")
+        allowed.append(GenerationComponent(type=name, schema=definition))
+    if not allowed:
+        raise A2uiError("A2UI_GENERATION_CATALOG_INVALID")
+    return tuple(allowed)
+
+
+def _walk_paths(value: JsonValue, result: set[str]) -> None:
+    if isinstance(value, dict):
+        if set(value) == {"path"} and isinstance(value["path"], str):
+            result.add(value["path"])
+        for child in value.values():
+            _walk_paths(child, result)
+    elif isinstance(value, list):
+        for child in value:
+            _walk_paths(child, result)
+
+
+def _data_paths(published: PublishedApplication) -> tuple[str, ...]:
+    paths: set[str] = set()
+    for message in published.build.initial_messages:
+        _walk_paths(message, paths)
+        update = message.get("updateDataModel")
+        if isinstance(update, dict):
+            path = update.get("path")
+            if isinstance(path, str):
+                paths.add(path)
+    for binding in published.build.load_bindings:
+        for adapter in (*binding.result_adapters, *binding.failure_result_adapters):
+            template = adapter.message_template
+            if template:
+                update = template.get("updateDataModel")
+                if isinstance(update, dict):
+                    path = update.get("path")
+                    if isinstance(path, str):
+                        paths.add(path)
+    return tuple(sorted(path for path in paths if path.startswith("/") and path != "/"))
+
+
+def _original_components(published: PublishedApplication) -> dict[tuple[str, str], JsonObject]:
+    components: dict[tuple[str, str], JsonObject] = {}
+    for message in published.build.initial_messages:
+        update = message.get("updateComponents")
+        if not isinstance(update, dict):
+            continue
+        raw_components = update.get("components")
+        if not isinstance(raw_components, list):
+            continue
+        surface_id = update.get("surfaceId")
+        for raw in raw_components:
+            if isinstance(surface_id, str) and isinstance(raw, dict):
+                component_id = raw.get("id")
+                if isinstance(component_id, str):
+                    components[(surface_id, component_id)] = raw
+    return components
+
+
+def contract(published: PublishedApplication, membership: Mapping[str, str]) -> GenerationContract:
+    components = _components(membership)
+    for message in published.build.initial_messages:
+        reject_authority_keys(message)
+    source = _original_components(published)
+    # Engineering references remain usable after layout generation.
+    anchors = tuple(sorted({component_id for _, component_id in source}))
+    return GenerationContract(
+        originAppCode=published.release.app_code,
+        paramsSchema=published.build.params_schema,
+        sourceMessages=published.build.initial_messages,
+        allowedComponents=components,
+        allowedDataPaths=_data_paths(published),
+        requiredAnchors=anchors,
+        anchorComponents=tuple(
+            GenerationAnchor(surfaceId=surface_id, componentId=component_id, component=raw)
+            for (surface_id, component_id), raw in sorted(source.items())
+        ),
+        surfaces=tuple(
+            GenerationSurface(surfaceId=item.surface_id, rootComponentId=item.root_component_id)
+            for item in published.build.surface_declarations
+        ),
+        mustPreserve=(
+            "Keep every anchor component ID and component type on its original surface; "
+            "keep each surface root ID. Anchors may move within a valid tree. Copy any approved "
+            "action property exactly; place actions only through approved actionPlacements. "
+            "New IDs and layout are allowed using allowedComponents and allowedDataPaths."
+        ),
+        allowedActions=tuple(
+            GenerationAction(
+                bindingId=item.binding_id,
+                actionName=item.action_code,
+                surfaceId=item.surface_id,
+                contextSchema=item.context_schema,
+            )
+            for item in published.build.action_bindings
+        ),
+        surfaceIds=tuple(item.surface_id for item in published.build.surface_declarations),
+    )
+
+
+def _references(component: JsonObject) -> tuple[str, ...]:
+    refs: list[str] = []
+    children = component.get("children")
+    if isinstance(children, list):
+        refs.extend(item for item in children if isinstance(item, str))
+    elif isinstance(children, dict):
+        child_id = children.get("componentId")
+        if isinstance(child_id, str):
+            refs.append(child_id)
+    for name in ("child", "trigger", "content"):
+        value = component.get(name)
+        if isinstance(value, str):
+            refs.append(value)
+    tabs = component.get("tabs")
+    if isinstance(tabs, list):
+        for tab in tabs:
+            if isinstance(tab, dict):
+                child_id = tab.get("child")
+                if isinstance(child_id, str):
+                    refs.append(child_id)
+    return tuple(refs)
+
+
+def _validate_tree(components: dict[str, JsonObject], root: str) -> None:
+    if root not in components:
+        raise A2uiError("A2UI_GENERATION_ROOT_INVALID")
+    states: dict[str, int] = {}
+
+    def visit(component_id: str, depth: int) -> None:
+        if depth > _MAX_DEPTH or component_id not in components or states.get(component_id) == 1:
+            raise A2uiError("A2UI_GENERATION_TREE_INVALID")
+        if states.get(component_id) == 2:
+            return
+        states[component_id] = 1
+        for child in _references(components[component_id]):
+            visit(child, depth + 1)
+        states[component_id] = 2
+
+    visit(root, 1)
+    if len(states) != len(components):
+        raise A2uiError("A2UI_GENERATION_TREE_INVALID")
+
+
+def _validate_values(value: JsonValue, data_paths: frozenset[str], depth: int = 0) -> None:
+    if depth > 32:
+        raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+    if isinstance(value, dict):
+        if any(key in value for key in ("functionCall", "url", "svgPath", "html", "script")):
+            raise A2uiError("A2UI_GENERATION_AUTHORITY_FORBIDDEN")
+        if "path" in value and value["path"] not in data_paths:
+            raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
+        for child in value.values():
+            _validate_values(child, data_paths, depth + 1)
+    elif isinstance(value, list):
+        for child in value:
+            _validate_values(child, data_paths, depth + 1)
+
+
+def _index_components(
+    messages: tuple[JsonObject, ...],
+) -> dict[tuple[str, str], tuple[int, int, JsonObject]]:
+    result: dict[tuple[str, str], tuple[int, int, JsonObject]] = {}
+    for message_index, message in enumerate(messages):
+        update = message.get("updateComponents")
+        if not isinstance(update, dict):
+            continue
+        raw_components = update.get("components")
+        if not isinstance(raw_components, list):
+            continue
+        surface_id = update.get("surfaceId")
+        for component_index, raw in enumerate(raw_components):
+            if not isinstance(surface_id, str) or not isinstance(raw, dict):
+                raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+            component_id = raw.get("id")
+            if not isinstance(component_id, str) or not component_id:
+                raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+            key = (surface_id, component_id)
+            if key in result:
+                raise A2uiError("A2UI_GENERATION_COMPONENT_DUPLICATE")
+            result[key] = (message_index, component_index, raw)
+    return result
+
+
+def _remap_inputs(
+    published: PublishedApplication,
+    messages: tuple[JsonObject, ...],
+    candidate_components: dict[tuple[str, str], tuple[int, int, JsonObject]],
+    data_index: dict[int, int],
+) -> tuple[ShowInputBinding, ...]:
+    original_components = _index_components(published.build.initial_messages)
+    remapped: list[ShowInputBinding] = []
+    for binding in published.build.input_bindings:
+        path = tokens(binding.target_path, allow_root=False)
+        old_index = binding.target_message_index
+        if old_index >= len(published.build.initial_messages):
+            raise A2uiError("A2UI_GENERATION_SOURCE_INVALID")
+        if path[:2] == ("updateComponents", "components") and len(path) >= 4:
+            old_component_index = int(path[2]) if path[2].isdigit() else -1
+            matches = [
+                (key, value)
+                for key, value in original_components.items()
+                if value[0] == old_index and value[1] == old_component_index
+            ]
+            if len(matches) != 1 or matches[0][0] not in candidate_components:
+                raise A2uiError("A2UI_GENERATION_SOURCE_INVALID")
+            new_index, new_component_index, _ = candidate_components[matches[0][0]]
+            new_path = "/updateComponents/components/" + str(new_component_index)
+            escaped_suffix = "/".join(
+                token.replace("~", "~0").replace("/", "~1") for token in path[3:]
+            )
+            new_path += "/" + escaped_suffix
+            remapped.append(
+                binding.model_copy(
+                    update={
+                        "target_message_index": new_index,
+                        "target_path": new_path,
+                    }
+                )
+            )
+        elif old_index in data_index and path[0] == "updateDataModel":
+            remapped.append(
+                binding.model_copy(update={"target_message_index": data_index[old_index]})
+            )
+        else:
+            raise A2uiError("A2UI_GENERATION_SOURCE_INVALID")
+    return tuple(remapped)
+
+
+def validate_candidate(
+    published: PublishedApplication,
+    membership: Mapping[str, str],
+    candidate: GeneratedCandidate,
+) -> PublishedApplication:
+    policy = contract(published, membership)
+    require_size(candidate.model_dump(by_alias=True), _MAX_BYTES, "A2UI_GENERATION_SIZE_LIMIT")
+    _, _, registry = _official()
+    schemas = {item.type: item.component_schema for item in policy.allowed_components}
+    source = _original_components(published)
+    seen_surfaces: set[str] = set()
+    all_components = _index_components(candidate.messages)
+    if len(all_components) > _MAX_COMPONENTS:
+        raise A2uiError("A2UI_GENERATION_SIZE_LIMIT")
+    for message in candidate.messages:
+        if message.get("version") != PROTOCOL_VERSION or len(message) != 2:
+            raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+        if "createSurface" in message:
+            body = require_object(message["createSurface"], "A2UI_GENERATION_CANDIDATE_INVALID")
+            surface = body.get("surfaceId")
+            if (
+                set(body) - {"surfaceId", "catalogId", "theme", "sendDataModel"}
+                or not isinstance(surface, str)
+                or surface in seen_surfaces
+                or surface not in policy.surface_ids
+                or body.get("catalogId") != published.build.catalog.catalog_id
+            ):
+                raise A2uiError("A2UI_GENERATION_SURFACE_INVALID")
+            seen_surfaces.add(surface)
+        elif "updateComponents" in message:
+            body = require_object(message["updateComponents"], "A2UI_GENERATION_CANDIDATE_INVALID")
+            if (
+                set(body) != {"surfaceId", "components"}
+                or body.get("surfaceId") not in seen_surfaces
+                or not isinstance(body.get("components"), list)
+            ):
+                raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+        else:
+            raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+    if seen_surfaces != set(policy.surface_ids):
+        raise A2uiError("A2UI_GENERATION_SURFACE_INVALID")
+    if len({key[0] for key in all_components}) != len(policy.surface_ids):
+        raise A2uiError("A2UI_GENERATION_ROOT_INVALID")
+    action_targets: dict[str, list[str]] = {}
+    action_declarations: list[ActionDeclaration] = []
+    placed_ids: set[tuple[str, str]] = set()
+    for placement in candidate.action_placements:
+        matches = [
+            item
+            for item in published.build.action_bindings
+            if item.binding_id == placement.binding_id
+        ]
+        key = (placement.surface_id, placement.source_component_id)
+        if (
+            len(matches) != 1
+            or key in placed_ids
+            or placement.surface_id != matches[0].surface_id
+            or key not in all_components
+        ):
+            raise A2uiError("A2UI_GENERATION_ACTION_NOT_ALLOWED")
+        binding = matches[0]
+        original = source.get((binding.surface_id, binding.source_component_id))
+        component = all_components[key][2]
+        if (
+            original is None
+            or component.get("component") != original.get("component")
+            or component.get("action") != original.get("action")
+        ):
+            raise A2uiError("A2UI_GENERATION_ACTION_NOT_ALLOWED")
+        action_targets.setdefault(binding.binding_id, []).append(placement.source_component_id)
+        declarations = [
+            item
+            for item in published.build.action_declarations
+            if item.surface_id == binding.surface_id
+            and item.source_component_id == binding.source_component_id
+            and item.action_code == binding.action_code
+        ]
+        if len(declarations) != 1:
+            raise A2uiError("A2UI_GENERATION_SOURCE_INVALID")
+        action_declarations.append(
+            declarations[0].model_copy(
+                update={
+                    "source_component_id": placement.source_component_id,
+                }
+            )
+        )
+        placed_ids.add(key)
+    action_bindings: list[ActionBinding] = []
+    for binding in published.build.action_bindings:
+        targets = action_targets.get(binding.binding_id)
+        if targets:
+            action_bindings.append(
+                binding.model_copy(
+                    update={
+                        "allowed_source_component_ids": tuple(targets),
+                    }
+                )
+            )
+    for key, (_, _, component) in all_components.items():
+        component_type = component.get("component")
+        if not isinstance(component_type, str) or component_type not in schemas:
+            raise A2uiError("A2UI_GENERATION_COMPONENT_NOT_ALLOWED")
+        schema_ref = {"$ref": _OFFICIAL_ID + "#/components/" + component_type}
+        validator = Draft202012Validator(schema_ref, registry=registry)
+        if next(validator.iter_errors(component), None) is not None:
+            raise A2uiError("A2UI_GENERATION_COMPONENT_INVALID")
+        if "action" in component and key not in placed_ids:
+            raise A2uiError("A2UI_GENERATION_ACTION_NOT_ALLOWED")
+        _validate_values(component, frozenset(policy.allowed_data_paths))
+    for key, original in source.items():
+        if key not in all_components or all_components[key][2].get("component") != original.get(
+            "component"
+        ):
+            raise A2uiError("A2UI_GENERATION_ANCHOR_MISSING")
+    for declaration in published.build.surface_declarations:
+        component_map = {
+            component_id: raw
+            for (surface_id, component_id), (_, _, raw) in all_components.items()
+            if surface_id == declaration.surface_id
+        }
+        _validate_tree(component_map, declaration.root_component_id)
+    SurfaceLedger.empty().reduce(candidate.messages)
+    data_messages: list[JsonObject] = []
+    data_index: dict[int, int] = {}
+    for index, message in enumerate(published.build.initial_messages):
+        if "updateDataModel" in message:
+            data_index[index] = len(candidate.messages) + len(data_messages)
+            data_messages.append(message)
+    messages = candidate.messages + tuple(data_messages)
+    inputs = _remap_inputs(published, messages, all_components, data_index)
+    build = published.build.model_copy(
+        update={
+            "initial_messages": messages,
+            "input_bindings": inputs,
+            "action_bindings": tuple(action_bindings),
+            "action_declarations": tuple(action_declarations),
+            "component_types": tuple(
+                sorted({raw[2]["component"] for raw in all_components.values()})
+            ),
+        }
+    )
+    return PublishedApplication(published.release, build)
+
+
+def definition(
+    origin_app_code: str,
+    candidate: GeneratedCandidate,
+    scope: GenerationScope,
+    context: TrustedContext,
+) -> GeneratedDefinition:
+    body = {
+        "originAppCode": origin_app_code,
+        "candidate": candidate.model_dump(by_alias=True),
+        "scope": scope.model_dump(by_alias=True),
+        "ownerUserId": context.user_id,
+        "environment": context.environment.value,
+    }
+    digest = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
+    return GeneratedDefinition.model_validate({**body, "artifactDigest": digest})
+
+
+def verify_definition(
+    value: GeneratedDefinition, scope: GenerationScope, context: TrustedContext
+) -> None:
+    if (
+        value.owner_user_id != context.user_id
+        or value.environment is not context.environment
+        or value.scope != scope
+        or value.artifact_digest
+        != definition(value.origin_app_code, value.candidate, value.scope, context).artifact_digest
+    ):
+        raise A2uiError("A2UI_GENERATED_CARD_SCOPE_MISMATCH")

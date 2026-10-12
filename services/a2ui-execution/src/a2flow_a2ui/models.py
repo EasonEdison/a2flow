@@ -34,6 +34,85 @@ class InteractionMode(StrEnum):
     INTERACTIVE = "INTERACTIVE"
 
 
+class DefinitionSource(StrEnum):
+    PUBLISHED = "PUBLISHED"
+    GENERATED = "GENERATED"
+
+
+class GenerationScope(_PublishedModel):
+    conversation_id: str = Field(alias="conversationId", min_length=1, max_length=128)
+    workflow_run_id: str = Field(default="", alias="workflowRunId", max_length=128)
+    node_id: str = Field(default="", alias="nodeId", max_length=128)
+
+    @model_validator(mode="after")
+    def validate_node_scope(self) -> GenerationScope:
+        if bool(self.workflow_run_id) != bool(self.node_id):
+            raise ValueError("workflow run and node must be supplied together")
+        return self
+
+
+class ActionPlacement(_PublishedModel):
+    binding_id: str = Field(alias="bindingId", min_length=1)
+    surface_id: str = Field(alias="surfaceId", min_length=1)
+    source_component_id: str = Field(alias="sourceComponentId", min_length=1)
+
+
+class GeneratedCandidate(_PublishedModel):
+    messages: tuple[JsonObject, ...] = Field(min_length=2, max_length=64)
+    action_placements: tuple[ActionPlacement, ...] = Field(
+        default=(), alias="actionPlacements", max_length=32
+    )
+
+
+class GeneratedDefinition(_PublishedModel):
+    origin_app_code: str = Field(alias="originAppCode", min_length=1)
+    candidate: GeneratedCandidate
+    scope: GenerationScope
+    owner_user_id: int = Field(alias="ownerUserId")
+    environment: Environment
+    artifact_digest: str = Field(alias="artifactDigest", min_length=7)
+
+
+class GenerationComponent(_PublishedModel):
+    type: str
+    component_schema: JsonObject = Field(alias="schema")
+
+
+class GenerationAction(_PublishedModel):
+    binding_id: str = Field(alias="bindingId")
+    action_name: str = Field(alias="actionName")
+    surface_id: str = Field(alias="surfaceId")
+    context_schema: JsonObject = Field(alias="contextSchema")
+
+
+class GenerationSurface(_PublishedModel):
+    surface_id: str = Field(alias="surfaceId")
+    root_component_id: str = Field(alias="rootComponentId")
+
+
+class GenerationAnchor(_PublishedModel):
+    surface_id: str = Field(alias="surfaceId")
+    component_id: str = Field(alias="componentId")
+    component: JsonObject
+
+
+class GenerationContract(_PublishedModel):
+    origin_app_code: str = Field(alias="originAppCode")
+    params_schema: JsonObject = Field(alias="paramsSchema")
+    source_messages: tuple[JsonObject, ...] = Field(alias="sourceMessages")
+    allowed_components: tuple[GenerationComponent, ...] = Field(alias="allowedComponents")
+    allowed_data_paths: tuple[str, ...] = Field(alias="allowedDataPaths")
+    required_anchors: tuple[str, ...] = Field(alias="requiredAnchors")
+    anchor_components: tuple[GenerationAnchor, ...] = Field(alias="anchorComponents")
+    surfaces: tuple[GenerationSurface, ...]
+    must_preserve: str = Field(alias="mustPreserve")
+    allowed_actions: tuple[GenerationAction, ...] = Field(alias="allowedActions")
+    surface_ids: tuple[str, ...] = Field(alias="surfaceIds")
+    max_components: int = Field(default=256, alias="maxComponents")
+    max_bytes: int = Field(default=262144, alias="maxBytes")
+    max_depth: int = Field(default=24, alias="maxDepth")
+
+
 class MappingSource(StrEnum):
     ACTION_CONTEXT = "ACTION_CONTEXT"
     APP_PARAMS = "APP_PARAMS"
@@ -86,9 +165,7 @@ class CatalogRef(_PublishedModel):
     digest: str = Field(min_length=1)
     catalog_source_type: str = Field(alias="catalogSourceType", min_length=1)
     component_origins: dict[str, str] = Field(alias="componentOrigins")
-    function_contract: JsonObject | None = Field(
-        default=None, alias="functionContract"
-    )
+    function_contract: JsonObject | None = Field(default=None, alias="functionContract")
 
 
 class SurfaceDeclaration(_PublishedModel):
@@ -132,9 +209,7 @@ class ResultTransform(_PublishedModel):
     page_number: int | float | None = Field(default=None, alias="pageNumber")
     action_page_path: str | None = Field(default=None, alias="actionPagePath")
     value_path: str | None = Field(default=None, alias="valuePath")
-    label_columns: tuple[TextColumn, ...] | None = Field(
-        default=None, alias="labelColumns"
-    )
+    label_columns: tuple[TextColumn, ...] | None = Field(default=None, alias="labelColumns")
     label_separator: str | None = Field(default=None, alias="labelSeparator")
 
 
@@ -354,6 +429,8 @@ class TrustedCard:
     app_code: str
     params: JsonObject
     snapshot: tuple[JsonObject, ...]
+    generated_definition: GeneratedDefinition | None = None
+    scope: GenerationScope | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -402,6 +479,8 @@ class RuntimeResult:
     business_success: bool
     action_observation: ActionExecutionObservation | None = None
     composer_draft_effects: tuple[ComposerDraftEffect, ...] = ()
+    definition_source: DefinitionSource = DefinitionSource.PUBLISHED
+    generated_definition: GeneratedDefinition | None = None
 
 
 class PublishedApplicationReader(Protocol):
