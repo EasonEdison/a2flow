@@ -196,7 +196,7 @@ class DeepSeekChat(BaseChatModel):
         return {"model_name": self.model_name}
 
     def bind_tools(self, tools, *, tool_choice=None, **kwargs):
-        if set(kwargs) - {"parallel_tool_calls", "stream"}:
+        if set(kwargs) - {"parallel_tool_calls", "stream", "response_format"}:
             _reject("UNSUPPORTED_MODEL_OPTIONS")
         if "stream" in kwargs and type(kwargs["stream"]) is not bool:
             _reject("INVALID_STREAM_CONTROL")
@@ -210,8 +210,10 @@ class DeepSeekChat(BaseChatModel):
         transport_stream = kwargs.pop("stream", stream)
         if type(transport_stream) is not bool or transport_stream != stream:
             _reject("INVALID_STREAM_CONTROL")
-        if set(kwargs) - {"tools", "tool_choice", "parallel_tool_calls"}:
+        if set(kwargs) - {"tools", "tool_choice", "parallel_tool_calls", "response_format"}:
             _reject("UNSUPPORTED_MODEL_OPTIONS")
+        if "response_format" in kwargs and kwargs["response_format"] != {"type": "json_object"}:
+            _reject("UNSUPPORTED_RESPONSE_FORMAT")
         if "parallel_tool_calls" in kwargs and type(kwargs["parallel_tool_calls"]) is not bool:
             _reject("INVALID_PARALLEL_TOOL_OPTION")
         tools = kwargs.get("tools")

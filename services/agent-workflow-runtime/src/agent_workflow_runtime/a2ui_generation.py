@@ -53,12 +53,19 @@ class _SingleDesignCall(AgentMiddleware):
         if self._called:
             raise ActionRejected("A2UI_GENERATION_CALL_LIMIT")
         self._called = True
-        return handler(request.override(tools=[]))
+        return handler(request.override(
+            tools=[],
+            model_settings={**request.model_settings, "response_format": {"type": "json_object"}},
+        ))
 
 
 _DESIGN_PROMPT = """You are the isolated A2UI design SubAgent, not the business agent.
 Return exactly one JSON object with keys messages and actionPlacements. No Markdown fences.
 messages contains only createSurface and updateComponents messages, with version v0.9.1.
+Obey messageEnvelopeSchema. Each message has its own top-level version field.
+Envelope example (replace IDs/catalog/components with the supplied contract):
+{"messages":[{"version":"v0.9.1","createSurface":{"surfaceId":"main","catalogId":"catalog"}},
+{"version":"v0.9.1","updateComponents":{"surfaceId":"main","components":[]}}],"actionPlacements":[]}
 Do NOT copy updateDataModel messages: the server adds engineering data initialization.
 Use `component` (not `type`) as each component's official name, and obey its schema.
 Use only the supplied official component schemas and current registered component types.

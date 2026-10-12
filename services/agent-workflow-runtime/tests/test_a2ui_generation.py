@@ -1,5 +1,6 @@
 """Bounded generator and generated source transport gates; no live provider calls."""
 
+import asyncio
 import json
 import unittest
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ from unittest.mock import Mock
 import httpx2
 from agent_workflow_runtime.a2ui_generation import DeepAgentA2uiGenerator
 from agent_workflow_runtime.chat.rpc_assets import trusted_card
+from agent_workflow_runtime.deepseek_model import DeepSeekProtocolError
 from agent_workflow_runtime.finalizer import FinalizationRejected, RequiredToolFinalizerAdmission
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.models import ActionRejected
@@ -127,6 +129,7 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(actual.model_dump(), candidate)
         self.assertEqual(len(self.requests), 1)
         self.assertFalse(self.requests[0].get("tools"))
+        self.assertEqual(self.requests[0]["response_format"], {"type": "json_object"})
         user_messages = [m for m in self.requests[0]["messages"] if m["role"] == "user"]
         self.assertEqual(len(user_messages), 1)
         self.assertEqual(json.loads(user_messages[0]["content"])["intent"], "生成简洁布局")
@@ -142,6 +145,23 @@ class GenerationTests(unittest.TestCase):
         ):
             generator.generate("生成", freeze({}))
         self.assertEqual(len(self.requests), 1)
+
+    def test_json_mode_is_opt_in_and_rejects_unsupported_formats(self) -> None:
+        generator = self.generator("ordinary text")
+        model = generator._create_model()
+        with tracing_context(enabled=False):
+            model.invoke("ordinary request")
+            self.assertNotIn("response_format", self.requests[0])
+            invalid_formats = (None, {}, {"type": "text"}, {"type": "json_object", "extra": True})
+            for response_format in invalid_formats:
+                with (
+                    self.subTest(response_format=response_format),
+                    self.assertRaisesRegex(DeepSeekProtocolError, "UNSUPPORTED_RESPONSE_FORMAT"),
+                ):
+                    model.invoke("JSON request", response_format=response_format)
+        self.assertEqual(len(self.requests), 1)
+        model.client.close()
+        asyncio.run(model.async_client.close())
 
     def test_generated_definition_is_private_and_scope_is_rebuilt_from_card_owner(self) -> None:
         definition = GeneratedDefinition(
