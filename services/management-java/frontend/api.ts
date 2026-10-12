@@ -1706,8 +1706,14 @@ export interface SkillListQuery {
     page: number;
     pageSize: number;
 }
+/** 列表不承载工作区文件和发布历史；进入详情后再读取完整 SkillDraft。 */
+export type SkillListItem = Pick<SkillDraft,
+    'skillCode' | 'skillNameCn' | 'skillNameEn' | 'skillDescription' | 'businessDomain'
+    | 'capabilityDomain' | 'specialistId' | 'specialistName' | 'workspaceId' | 'owner'
+    | 'creator' | 'version' | 'versionLabel' | 'versionStatus' | 'draftStatus'
+    | 'onlineVersionId' | 'preprodVersionId' | 'createTime' | 'updateTime' | 'editable'>;
 export interface SkillListPage {
-    list: SkillDraft[];
+    list: SkillListItem[];
     total: number;
     page: number;
     pageSize: number;

@@ -281,8 +281,7 @@ public class CapabilityActionDraftService {
     public List<CapabilityActionDraft> list(Map<String, String> params) {
         String keyword = value(params, PARAM_KEYWORD);
         log.info("能力中心查询草稿列表, keyword:{}", keyword);
-        return capabilityActionDraftRepository.list(keyword).stream()
-                .map(classificationRelationService::project)
+        return classificationRelationService.projectAll(capabilityActionDraftRepository.list(keyword)).stream()
                 .filter(item -> classificationRelationService.matches(item,
                         value(params, PARAM_LIST_BUSINESS_DOMAIN),
                         value(params, PARAM_LIST_CAPABILITY_DOMAIN),

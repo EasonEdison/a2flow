@@ -49,6 +49,7 @@ import {
   skillBindingCandidateApi,
   skillFactoryApi,
   type SkillListQuery,
+  type SkillListItem,
 } from './api';
 import {
   AnswerLayer,
@@ -1749,7 +1750,7 @@ function skillStatusLabel(status?: string): string {
   return SKILL_STATUS_LABELS[normalizedStatus] || status;
 }
 
-function isSkillOnline(skill: SkillDraft): boolean {
+function isSkillOnline(skill: Pick<SkillDraft, 'onlineVersionId'>): boolean {
   const onlineVersionId = String(skill.onlineVersionId || '').trim();
   return Boolean(onlineVersionId && onlineVersionId !== '0' && onlineVersionId !== '-');
 }
@@ -1766,7 +1767,7 @@ const SkillFactoryPage: React.FC = () => {
   const [capabilityDomainFilter, setCapabilityDomainFilter] = useState('');
   const [specialistFilter, setSpecialistFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [skillList, setSkillList] = useState<SkillDraft[]>([]);
+  const [skillList, setSkillList] = useState<SkillListItem[]>([]);
   const [skillPage, setSkillPage] = useState(1);
   const [skillTotal, setSkillTotal] = useState(0);
   const [skillCounts, setSkillCounts] = useState({ editingCount: 0, onlineCount: 0 });
@@ -2525,7 +2526,7 @@ const SkillFactoryPage: React.FC = () => {
 
 
 
-  const handleSelectSkill = (skill: SkillDraft) => {
+  const handleSelectSkill = (skill: Pick<SkillDraft, 'skillCode'>) => {
     if (isCodingStreamLocked) {
       message.warning('当前 AICoding 流式输出未结束，先停止或等待完成后再切换 Skill');
       return;
@@ -5178,7 +5179,7 @@ const SkillFactoryPage: React.FC = () => {
           )}
         </div>
         <div className="skill-factory-catalog-pagination">
-          <Text type="secondary">按创建时间倒序 · 每页 9 个</Text>
+          <Text type="secondary">按更新时间倒序 · 每页 9 个</Text>
           <Pagination
             current={skillPage}
             pageSize={SKILL_LIST_PAGE_SIZE}

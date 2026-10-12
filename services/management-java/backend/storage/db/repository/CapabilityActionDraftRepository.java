@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -118,12 +117,19 @@ public class CapabilityActionDraftRepository {
     }
 
     private List<CapabilityActionDraft> listDb(String keyword) {
-        List<CapabilityActionDraftDO> records = capabilityActionDraftMapper.selectList(
-                new LambdaQueryWrapper<CapabilityActionDraftDO>()
-                        .eq(CapabilityActionDraftDO::getDeleted, NOT_DELETED)
-                        .orderByDesc(CapabilityActionDraftDO::getUpdateTime));
+        LambdaQueryWrapper<CapabilityActionDraftDO> query = new LambdaQueryWrapper<CapabilityActionDraftDO>()
+                .eq(CapabilityActionDraftDO::getDeleted, NOT_DELETED);
+        if (StringUtils.isNotBlank(keyword)) {
+            // 保留原 literal contains 口径，%/_ 不是通配符；值仍通过 MyBatis 参数绑定。
+            query.and(match -> match
+                    .apply("strpos(lower(coalesce(draft_id, '')), lower({0})) > 0", keyword)
+                    .or().apply("strpos(lower(coalesce(action_code, '')), lower({0})) > 0", keyword)
+                    .or().apply("strpos(lower(coalesce(name_cn, '')), lower({0})) > 0", keyword));
+        }
+        query.orderByDesc(CapabilityActionDraftDO::getUpdateTime)
+                .orderByDesc(CapabilityActionDraftDO::getId);
+        List<CapabilityActionDraftDO> records = capabilityActionDraftMapper.selectList(query);
         return records.stream()
-                .filter(draftDO -> matchesKeyword(draftDO, keyword))
                 .map(this::toDraft)
                 .collect(Collectors.toList());
     }
@@ -159,20 +165,6 @@ public class CapabilityActionDraftRepository {
                 .eq(CapabilityActionDraftDO::getDraftId, draftId)
                 .eq(CapabilityActionDraftDO::getDeleted, NOT_DELETED)
                 .last("LIMIT 1"));
-    }
-
-    private boolean matchesKeyword(CapabilityActionDraftDO draftDO, String keyword) {
-        if (StringUtils.isBlank(keyword)) {
-            return true;
-        }
-        String lowerKeyword = keyword.toLowerCase(Locale.ROOT);
-        return containsIgnoreCase(draftDO.getDraftId(), lowerKeyword)
-                || containsIgnoreCase(draftDO.getActionCode(), lowerKeyword)
-                || containsIgnoreCase(draftDO.getNameCn(), lowerKeyword);
-    }
-
-    private boolean containsIgnoreCase(String value, String lowerKeyword) {
-        return StringUtils.contains(StringUtils.lowerCase(value), lowerKeyword);
     }
 
     private CapabilityActionDraftDO toDO(CapabilityActionDraft draft) {

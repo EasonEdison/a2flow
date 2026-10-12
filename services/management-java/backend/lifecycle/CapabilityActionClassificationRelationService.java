@@ -49,6 +49,7 @@ public class CapabilityActionClassificationRelationService {
     private static final String ERROR_CREATE_SELECTION_PARTIAL =
             "业务能力分类选择必须全部为空或全部填写";
     private static final String ERROR_SNAPSHOT_INVALID = "业务能力分类关系快照格式不合法";
+    private static final int RELATION_BATCH_SIZE = 100;
     private static final Set<String> CLASSIFICATION_RELATION_TYPES = Set.of(
             SkillFactoryEntityRelationConstants.RELATION_TYPE_CAPABILITY_BELONGS_TO_BUSINESS_DOMAIN,
             SkillFactoryEntityRelationConstants.RELATION_TYPE_CAPABILITY_BELONGS_TO_CAPABILITY_DOMAIN,
@@ -131,9 +132,46 @@ public class CapabilityActionClassificationRelationService {
         if (draft == null || StringUtils.isBlank(draft.getDraftId()) || draft.getRevision() == null) {
             return draft;
         }
+        return project(draft, listForRevision(draft.getDraftId(), draft.getRevision()));
+    }
+
+    /** 列表按源 ID/revision 批量读取三类关系，空分类不会触发逐条补查。 */
+    public List<CapabilityActionDraft> projectAll(List<CapabilityActionDraft> drafts) {
+        for (int start = 0; start < drafts.size(); start += RELATION_BATCH_SIZE) {
+            List<CapabilityActionDraft> batch = drafts.subList(start,
+                    Math.min(start + RELATION_BATCH_SIZE, drafts.size()));
+            Map<String, Integer> sourceVersions = new LinkedHashMap<>();
+            for (CapabilityActionDraft draft : batch) {
+                if (draft != null && StringUtils.isNotBlank(draft.getDraftId())
+                        && draft.getRevision() != null && draft.getRevision() > 0) {
+                    sourceVersions.put(draft.getDraftId(), draft.getRevision());
+                }
+            }
+            Map<String, List<EntityRelationDO>> relationsByDraft = new LinkedHashMap<>();
+            if (!sourceVersions.isEmpty()) {
+                for (String relationType : CLASSIFICATION_RELATION_TYPES) {
+                    for (EntityRelationDO relation : entityRelationRepository.listBySourceVersions(
+                            SkillFactoryEntityRelationConstants.NAMESPACE_SKILL_FACTORY,
+                            SkillFactoryEntityRelationConstants.ENTITY_TYPE_CAPABILITY_ACTION,
+                            sourceVersions, relationType)) {
+                        relationsByDraft.computeIfAbsent(relation.getSourceEntityId(), key -> new ArrayList<>())
+                                .add(relation);
+                    }
+                }
+            }
+            for (CapabilityActionDraft draft : batch) {
+                if (draft != null && StringUtils.isNotBlank(draft.getDraftId()) && draft.getRevision() != null) {
+                    project(draft, relationsByDraft.getOrDefault(draft.getDraftId(), List.of()));
+                }
+            }
+        }
+        return drafts;
+    }
+
+    private CapabilityActionDraft project(CapabilityActionDraft draft, List<EntityRelationDO> relations) {
         List<String> specialistIds = new ArrayList<>();
         List<String> specialistNames = new ArrayList<>();
-        for (EntityRelationDO relation : listForRevision(draft.getDraftId(), draft.getRevision())) {
+        for (EntityRelationDO relation : relations) {
             if (StringUtils.equals(relation.getRelationType(),
                     SkillFactoryEntityRelationConstants.RELATION_TYPE_CAPABILITY_BELONGS_TO_BUSINESS_DOMAIN)) {
                 Map<String, Object> snapshot = parseSnapshot(relation);
@@ -156,22 +194,20 @@ public class CapabilityActionClassificationRelationService {
         return draft;
     }
 
-    /** 按 relation 稳定 ID 执行业务域、能力域和专员筛选，三类条件使用 AND 语义。 */
+    /** 对已投影草稿执行纯内存筛选，不把空分类当作尚未查询。三类条件使用 AND 语义。 */
     public boolean matches(CapabilityActionDraft draft, String businessDomain,
             String capabilityDomain, String specialistId) {
         if (draft == null) {
             return false;
         }
-        CapabilityActionDraft projected = StringUtils.isNotBlank(draft.getBusinessDomain())
-                ? draft : project(draft);
         String expectedBusinessDomain = StringUtils.trimToEmpty(businessDomain);
         String expectedCapabilityDomain = StringUtils.trimToEmpty(capabilityDomain);
         String expectedSpecialistId = StringUtils.trimToEmpty(specialistId);
         boolean businessMatches = StringUtils.isBlank(expectedBusinessDomain)
-                || StringUtils.equals(expectedBusinessDomain, projected.getBusinessDomain());
+                || StringUtils.equals(expectedBusinessDomain, draft.getBusinessDomain());
         boolean capabilityMatches = StringUtils.isBlank(expectedCapabilityDomain)
-                || StringUtils.equals(expectedCapabilityDomain, projected.getCapabilityDomain());
-        String specialistIds = "," + StringUtils.defaultString(projected.getSpecialistId()) + ",";
+                || StringUtils.equals(expectedCapabilityDomain, draft.getCapabilityDomain());
+        String specialistIds = "," + StringUtils.defaultString(draft.getSpecialistId()) + ",";
         boolean specialistMatches = StringUtils.isBlank(expectedSpecialistId)
                 || StringUtils.contains(specialistIds, "," + expectedSpecialistId + ",");
         return businessMatches && capabilityMatches && specialistMatches;

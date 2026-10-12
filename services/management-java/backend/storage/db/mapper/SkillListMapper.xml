@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dev.a2flow.management.storage.db.mapper.SkillListMapper">
+  <!-- 源 ID/version 必须与当前草稿一致；保留专员快照优先的既有口径。 -->
+  <sql id="specialistRelations">
+    r.namespace = 'SKILL_FACTORY' AND r.source_entity_type = 'SKILL'
+    AND r.source_entity_id = s.id::text AND r.source_version = s.version
+    AND r.relation_type = 'SKILL_BELONGS_TO_SPECIALIST'
+  </sql>
+  <sql id="specialistId">coalesce(r.snapshot_json::jsonb-&gt;&gt;'specialistId', r.target_entity_id)</sql>
+  <sql id="specialistName">coalesce(r.snapshot_json::jsonb-&gt;&gt;'specialistName', r.target_entity_code)</sql>
+  <sql id="scoped">
+    WITH scoped AS (
+      SELECT s.id, s.skill_code, s.skill_name_cn, s.skill_name_en, s.skill_description,
+             s.business_domain, s.capability_domain, s.workspace_id, s.owner, s.creator,
+             coalesce(s.version, 1) AS version, s.create_time, s.update_time,
+             coalesce(rel.state_json::jsonb #&gt;&gt; '{activeChange,status}', s.status, '') AS version_status,
+             coalesce(rel.state_json::jsonb #&gt;&gt; '{environments,ONLINE,sourceId}', '') AS online_version_id,
+             coalesce(rel.state_json::jsonb #&gt;&gt; '{environments,PRT,sourceId}', '') AS preprod_version_id,
+             CASE
+               WHEN rel.revision IS NULL OR rel.revision &lt;= 0
+                 OR jsonb_typeof(rel.state_json::jsonb-&gt;'versions') IS DISTINCT FROM 'array' THEN NULL
+               WHEN rel.state_json::jsonb #&gt;&gt; '{activeChange,status}' = 'ACTIVE' THEN 'EDITING'
+               WHEN rel.state_json::jsonb #&gt;&gt; '{activeChange,status}' = 'SEALED' THEN 'SEALED'
+               WHEN rel.state_json::jsonb-&gt;'activeChange' IS NULL
+                 OR rel.state_json::jsonb-&gt;'activeChange' = 'null'::jsonb
+                 THEN CASE WHEN jsonb_array_length(rel.state_json::jsonb-&gt;'versions') = 0
+                           THEN 'EDITING' ELSE 'SEALED' END
+               ELSE NULL
+             END AS draft_status
+      FROM skill_draft s
+      LEFT JOIN skill_asset_release_state rel
+        ON rel.asset_type = 'SKILL' AND rel.asset_key = s.workspace_id AND rel.deleted = 0
+      WHERE s.deleted = 0 AND btrim(s.skill_code) &lt;&gt; ''
+        AND s.workspace_id = s.skill_code AND left(s.skill_code, 1) &lt;&gt; '_'
+      <if test="query.businessDomain != ''">AND s.business_domain = #{query.businessDomain}</if>
+      <if test="query.capabilityDomain != ''">AND s.capability_domain = #{query.capabilityDomain}</if>
+      <if test="query.specialistId != ''">
+        AND EXISTS (SELECT 1 FROM entity_relation r WHERE <include refid="specialistRelations"/>
+                    AND btrim(<include refid="specialistId"/>) = #{query.specialistId})
+      </if>
+      <if test="query.keyword != ''">
+        AND (
+          strpos(lower(coalesce(s.skill_code, '')), lower(#{query.keyword})) &gt; 0
+          OR strpos(lower(coalesce(s.skill_name_cn, '')), lower(#{query.keyword})) &gt; 0
+          OR strpos(lower(coalesce(s.skill_name_en, '')), lower(#{query.keyword})) &gt; 0
+          OR strpos(lower(coalesce(s.skill_description, '')), lower(#{query.keyword})) &gt; 0
+          OR strpos(lower(coalesce(s.business_domain, '')), lower(#{query.keyword})) &gt; 0
+          OR strpos(lower(coalesce(s.capability_domain, '')), lower(#{query.keyword})) &gt; 0
+          OR strpos(lower(coalesce(s.owner, '')), lower(#{query.keyword})) &gt; 0
+          OR EXISTS (SELECT 1 FROM entity_relation r WHERE <include refid="specialistRelations"/>
+              AND (strpos(lower(<include refid="specialistId"/>), lower(#{query.keyword})) &gt; 0
+                   OR strpos(lower(<include refid="specialistName"/>), lower(#{query.keyword})) &gt; 0))
+        )
+      </if>
+    )
+  </sql>
+  <sql id="statusFilter">
+    <choose>
+      <when test="query.status == 'EDITING'">draft_status = 'EDITING'</when>
+      <when test="query.status == 'ONLINE'">btrim(online_version_id) &lt;&gt; ''</when>
+      <otherwise>TRUE</otherwise>
+    </choose>
+  </sql>
+  <select id="count" resultType="dev.a2flow.management.storage.db.mapper.SkillListMapper$Counts">
+    <include refid="scoped"/>
+    SELECT count(*) FILTER (WHERE <include refid="statusFilter"/>) AS total,
+           count(*) FILTER (WHERE draft_status = 'EDITING') AS editing_count,
+           count(*) FILTER (WHERE btrim(online_version_id) &lt;&gt; '') AS online_count,
+           count(*) FILTER (WHERE draft_status IS NULL) AS invalid_state_count
+    FROM scoped
+  </select>
+  <select id="selectPage" resultType="dev.a2flow.management.lifecycle.domain.SkillListItem">
+    <include refid="scoped"/>, page AS (
+      SELECT * FROM scoped WHERE <include refid="statusFilter"/>
+      ORDER BY update_time DESC, id DESC LIMIT #{query.pageSize} OFFSET #{query.offset}
+    )
+    SELECT s.*, specialists.specialist_id, specialists.specialist_name
+    FROM page s LEFT JOIN LATERAL (
+      SELECT string_agg(nullif(btrim(<include refid="specialistId"/>), ''), ',' ORDER BY r.sort_no, r.id)
+               AS specialist_id,
+             string_agg(nullif(btrim(<include refid="specialistName"/>), ''), ',' ORDER BY r.sort_no, r.id)
+               AS specialist_name
+      FROM entity_relation r WHERE <include refid="specialistRelations"/>
+    ) specialists ON TRUE
+    ORDER BY s.update_time DESC, s.id DESC
+  </select>
+</mapper>

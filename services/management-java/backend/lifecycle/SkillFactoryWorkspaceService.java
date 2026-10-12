@@ -34,6 +34,7 @@ import dev.a2flow.management.lifecycle.SkillPreprodBuildRestoreService.BuildRest
 import dev.a2flow.management.lifecycle.artifact.SkillPackageArtifactService;
 import dev.a2flow.management.lifecycle.assembler.SkillLifecycleViewAssembler;
 import dev.a2flow.management.lifecycle.domain.SkillDraft;
+import dev.a2flow.management.lifecycle.domain.SkillListQuery;
 import dev.a2flow.management.lifecycle.domain.SkillWorkspaceFile;
 import dev.a2flow.management.lifecycle.publish.SkillDatabasePublishResult;
 import dev.a2flow.management.lifecycle.publish.SkillDatabasePublishService;
@@ -51,6 +52,7 @@ import dev.a2flow.management.storage.db.repository.AssetReleaseStateRepository;
 import dev.a2flow.management.storage.db.repository.EntityRelationRepository;
 import dev.a2flow.management.storage.db.repository.SkillFactoryWorkspaceFileRepository;
 import dev.a2flow.management.storage.db.repository.SkillFactoryWorkspaceRepository;
+import dev.a2flow.management.storage.db.repository.SkillListRepository;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -366,24 +368,14 @@ public class SkillFactoryWorkspaceService {
     @Resource
     private AssetReleaseEditGuard assetReleaseEditGuard;
 
+    @Resource
+    private SkillListRepository skillListRepository;
+
     /**
      * 查询 Skill 草稿列表，供 M 端 workbench 首屏选择 Skill。
      */
-    public List<Map<String, Object>> listSkills(Map<String, String> params) {
-        String keyword = string(params == null ? null : params.get(PARAM_KEYWORD));
-        String businessDomain = string(params == null ? null : params.get(PARAM_BUSINESS_DOMAIN));
-        String capabilityDomain = string(params == null ? null : params.get(PARAM_CAPABILITY_DOMAIN));
-        log.info("SkillFactory查询Skill列表, keyword:{}, businessDomain:{}, capabilityDomain:{}",
-                keyword, businessDomain, capabilityDomain);
-        List<Map<String, Object>> results = workspaceRepository
-                .listDrafts(StringUtils.EMPTY, businessDomain, capabilityDomain)
-                .stream()
-                .filter(draft -> specialistRelationService.matchesKeyword(draft, keyword))
-                .map(this::draftSummaryToMap)
-                .collect(Collectors.toList());
-        log.info("SkillFactory查询Skill列表完成, keyword:{}, businessDomain:{}, capabilityDomain:{}, count:{}",
-                keyword, businessDomain, capabilityDomain, results.size());
-        return results;
+    public SkillListPage listSkills(Map<String, String> params) {
+        return skillListRepository.list(SkillListQuery.from(params));
     }
 
     /**
@@ -1765,10 +1757,6 @@ public class SkillFactoryWorkspaceService {
                 .map(viewAssembler::fileToMap)
                 .collect(Collectors.toList()));
         return result;
-    }
-
-    private Map<String, Object> draftSummaryToMap(SkillDraft draft) {
-        return draftToMap(draft, false);
     }
 
     private Map<String, Object> draftToMap(SkillDraft draft) {
