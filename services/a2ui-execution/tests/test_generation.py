@@ -198,6 +198,93 @@ def test_approved_action_can_be_placed_on_new_component_id() -> None:
     }
 
 
+def test_published_local_functions_copy_but_new_expression_is_rejected() -> None:
+    published = source()
+    build_raw = published.build.model_dump(by_alias=True)
+    local_action = {"functionCall": {"call": "required", "args": {"value": {"path": "/title"}}}}
+    check = {
+        "condition": {"call": "required", "args": {"value": {"path": "/title"}}},
+        "message": "Required",
+    }
+    components = build_raw["initialMessages"][1]["updateComponents"]["components"]
+    components[0]["children"].extend(["local_button", "local_label"])
+    components.extend(
+        [
+            {
+                "id": "local_button",
+                "component": "Button",
+                "child": "local_label",
+                "action": local_action,
+                "checks": [check],
+            },
+            {"id": "local_label", "component": "Text", "text": "Local"},
+        ]
+    )
+    published = PublishedApplication(published.release, ApplicationBuild.model_validate(build_raw))
+    candidate_raw = candidate().model_dump(by_alias=True)
+    generated_components = candidate_raw["messages"][1]["updateComponents"]["components"]
+    generated_components[0]["children"].extend(
+        ["local_button", "local_label", "new_local", "new_label"]
+    )
+    generated_components.extend(
+        [
+            {
+                "id": "local_button",
+                "component": "Button",
+                "child": "local_label",
+                "action": local_action,
+                "checks": [check],
+            },
+            {"id": "local_label", "component": "Text", "text": "Local"},
+            {
+                "id": "new_local",
+                "component": "Button",
+                "child": "new_label",
+                "action": local_action,
+                "checks": [check],
+            },
+            {"id": "new_label", "component": "Text", "text": "New local"},
+        ]
+    )
+    membership = {**MEMBERSHIP, "Button": "A2UI_OFFICIAL"}
+    validate_candidate(published, membership, GeneratedCandidate.model_validate(candidate_raw))
+    candidate_raw["messages"][1]["updateComponents"]["components"][5]["checks"][0]["condition"][
+        "args"
+    ]["value"] = "other"
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_AUTHORITY_FORBIDDEN"):
+        validate_candidate(published, membership, GeneratedCandidate.model_validate(candidate_raw))
+    candidate_raw["messages"][1]["updateComponents"]["components"][5]["checks"][0]["condition"][
+        "args"
+    ]["value"] = {"path": "/title"}
+    del candidate_raw["messages"][1]["updateComponents"]["components"][3]["checks"]
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_AUTHORITY_FORBIDDEN"):
+        validate_candidate(published, membership, GeneratedCandidate.model_validate(candidate_raw))
+
+
+def test_component_input_target_must_remain_present() -> None:
+    published = source()
+    build_raw = published.build.model_dump(by_alias=True)
+    build_raw["initialMessages"][1]["updateComponents"]["components"][0]["justify"] = "start"
+    build_raw["inputBindings"] = (
+        *build_raw["inputBindings"],
+        {
+            "targetMessageIndex": 1,
+            "targetPath": "/updateComponents/components/0/justify",
+            "source": "CONSTANT",
+            "required": True,
+            "constantValue": "start",
+        },
+    )
+    published = PublishedApplication(published.release, ApplicationBuild.model_validate(build_raw))
+    candidate_raw = candidate().model_dump(by_alias=True)
+    root = candidate_raw["messages"][1]["updateComponents"]["components"][0]
+    root["justify"] = "start"
+    validate_candidate(published, MEMBERSHIP, GeneratedCandidate.model_validate(candidate_raw))
+    del root["justify"]
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_INPUT_TARGET_INVALID"):
+        validate_candidate(published, MEMBERSHIP, GeneratedCandidate.model_validate(candidate_raw))
+
+
 @pytest.mark.parametrize(
     "mutation,code",
     [
