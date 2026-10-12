@@ -17,6 +17,12 @@
    工程数据初始化、LoadBinding、能力调用配置不允许模型生成。工程写入锚点必须保留。
 4. 执行服务检查当前 Catalog、官方 Schema、组件引用、数据路径和批准的 Action，再执行
    工程加载。Schema 使用已有官方资源单一来源，不维护另一套 Java/Python字段列表。
+   List 子项的新增只读展示字段须同时满足：字段是 `paramsSchema` 中显式声明的叶子
+   primitive，且已发布的 required `APP_PARAMS` ShowInputBinding 确实把所属数组写入该
+   List 指向的 DataModel 子树。`readOnlyDisplayBindings` 单独列出允许的 `Text.text`
+   相对路径及原 List 模板作用域；它不并入通用数据路径或旧相对绑定规则，不授权输入控件、
+   Action context、新函数或未声明字段。即使 schema 允许 `additionalProperties`，也不推断
+   通配字段；`$ref`/组合 schema 未解析时保守拒绝。生成候选改变 List 模板作用域仍拒绝。
 5. 卡片快照及 GENERATED 定义同一笔卡片存储落库后，才发送可见事件。没有跨服务事务承诺。
 6. Action 从已保存定义恢复布局，并重新检查当前源 Application/能力权限。使用最新已发布
    配置，不恢复旧的版本锁；artifact digest 仅用于生成定义完整性，不是版本准入条件。

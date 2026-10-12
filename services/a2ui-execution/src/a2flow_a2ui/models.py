@@ -133,6 +133,16 @@ class GenerationRelativeBinding(_PublishedModel):
     template_scopes: tuple[GenerationTemplateScope, ...] = Field(alias="templateScopes")
 
 
+class GenerationReadOnlyDisplayBinding(_PublishedModel):
+    surface_id: str = Field(alias="surfaceId")
+    template_scopes: tuple[GenerationTemplateScope, ...] = Field(alias="templateScopes")
+    data_path: str = Field(alias="dataPath")
+    component_type: Literal["Text"] = Field(alias="componentType")
+    property_path: Literal["/text"] = Field(alias="propertyPath")
+    path: str
+    value_type: Literal["string", "number", "integer", "boolean"] = Field(alias="valueType")
+
+
 class GenerationContract(_PublishedModel):
     origin_app_code: str = Field(alias="originAppCode")
     params_schema: JsonObject = Field(alias="paramsSchema")
@@ -142,6 +152,9 @@ class GenerationContract(_PublishedModel):
     allowed_data_paths: tuple[str, ...] = Field(alias="allowedDataPaths")
     relative_data_bindings: tuple[GenerationRelativeBinding, ...] = Field(
         alias="relativeDataBindings"
+    )
+    read_only_display_bindings: tuple[GenerationReadOnlyDisplayBinding, ...] = Field(
+        alias="readOnlyDisplayBindings"
     )
     required_anchors: tuple[str, ...] = Field(alias="requiredAnchors")
     anchor_components: tuple[GenerationAnchor, ...] = Field(alias="anchorComponents")

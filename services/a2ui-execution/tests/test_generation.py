@@ -382,6 +382,134 @@ def test_relative_path_stays_in_its_published_list_template() -> None:
         validate_candidate(published, membership, GeneratedCandidate.model_validate(candidate_raw))
 
 
+def _published_list_display() -> tuple[PublishedApplication, dict[str, str]]:
+    published = source()
+    raw = published.build.model_dump(by_alias=True)
+    raw["paramsSchema"] = {
+        "type": "object",
+        "properties": {
+            "points": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "claim": {"type": "string"},
+                        "evidenceLocator": {"type": "string"},
+                        "modelSuggestion": {"type": "boolean"},
+                        "nested": {"type": "object", "properties": {"inner": {"type": "string"}}},
+                        "indirect": {"$ref": "#/$defs/indirect"},
+                    },
+                    "additionalProperties": True,
+                },
+            }
+        },
+    }
+    raw["initialMessages"][1]["updateComponents"]["components"] = [
+        {"id": "root", "component": "Column", "children": ["listA", "listB"]},
+        {
+            "id": "listA", "component": "List",
+            "children": {"componentId": "itemA", "path": "/points"},
+        },
+        {"id": "itemA", "component": "Column", "children": ["claimText"]},
+        {"id": "claimText", "component": "Text", "text": {"path": "claim"}},
+        {
+            "id": "listB", "component": "List",
+            "children": {"componentId": "itemB", "path": "/other"},
+        },
+        {"id": "itemB", "component": "Column", "children": ["otherText"]},
+        {"id": "otherText", "component": "Text", "text": "Other"},
+    ]
+    raw["initialMessages"][2]["updateDataModel"]["value"] = {"points": [], "other": []}
+    raw["inputBindings"] = [{
+        "targetMessageIndex": 2,
+        "targetPath": "/updateDataModel/value/points",
+        "source": "APP_PARAMS",
+        "sourcePath": "/points",
+        "required": True,
+    }]
+    return (
+        PublishedApplication(published.release, ApplicationBuild.model_validate(raw)),
+        {**MEMBERSHIP, "List": "A2UI_OFFICIAL", "TextField": "A2UI_OFFICIAL"},
+    )
+
+
+def _list_display_candidate(published: PublishedApplication) -> dict[str, JsonObject]:
+    return {
+        "messages": [
+            deepcopy(message)
+            for message in published.build.initial_messages
+            if "updateDataModel" not in message
+        ],
+        "actionPlacements": [],
+    }
+
+
+def test_schema_backed_read_only_display_within_same_list_scope() -> None:
+    published, membership = _published_list_display()
+    policy = contract(published, membership)
+    assert policy.allowed_data_paths == ("/other", "/points")
+    assert {item.path for item in policy.relative_data_bindings} == {"claim"}
+    assert {item.path: item.value_type for item in policy.read_only_display_bindings} == {
+        "claim": "string", "evidenceLocator": "string", "modelSuggestion": "boolean"
+    }
+    assert all(
+        item.component_type == "Text" and item.property_path == "/text"
+        and item.data_path == "/points"
+        and item.template_scopes[-1].template_component_id == "listA"
+        for item in policy.read_only_display_bindings
+    )
+    raw = _list_display_candidate(published)
+    components = raw["messages"][1]["updateComponents"]["components"]
+    components[2]["children"].extend(["locatorText", "suggestionText"])
+    components.extend([
+        {"id": "locatorText", "component": "Text", "text": {"path": "evidenceLocator"}},
+        {"id": "suggestionText", "component": "Text", "text": {"path": "modelSuggestion"}},
+    ])
+    validate_candidate(published, membership, GeneratedCandidate.model_validate(raw))
+
+    components[-1]["text"] = {"path": "unknown"}
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_DATA_PATH_NOT_ALLOWED"):
+        validate_candidate(published, membership, GeneratedCandidate.model_validate(raw))
+    components[-1]["text"] = {"path": "nested"}
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_DATA_PATH_NOT_ALLOWED"):
+        validate_candidate(published, membership, GeneratedCandidate.model_validate(raw))
+    components[-1]["text"] = {"path": "indirect"}
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_DATA_PATH_NOT_ALLOWED"):
+        validate_candidate(published, membership, GeneratedCandidate.model_validate(raw))
+
+    components[-1]["text"] = {"path": "modelSuggestion"}
+    components[2]["children"].remove("suggestionText")
+    components[5]["children"].append("suggestionText")
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_DATA_PATH_NOT_ALLOWED"):
+        validate_candidate(published, membership, GeneratedCandidate.model_validate(raw))
+
+
+def test_schema_backed_display_does_not_authorize_input_or_unmapped_params() -> None:
+    published, membership = _published_list_display()
+    raw = _list_display_candidate(published)
+    components = raw["messages"][1]["updateComponents"]["components"]
+    components[2]["children"].append("editor")
+    components.append({
+        "id": "editor", "component": "TextField", "label": "Evidence",
+        "value": {"path": "evidenceLocator"},
+    })
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_DATA_PATH_NOT_ALLOWED"):
+        validate_candidate(published, membership, GeneratedCandidate.model_validate(raw))
+
+    build_raw = published.build.model_dump(by_alias=True)
+    build_raw["inputBindings"] = []
+    unmapped = PublishedApplication(
+        published.release, ApplicationBuild.model_validate(build_raw)
+    )
+    assert unmapped.build.params_schema["properties"]["points"]
+    assert contract(unmapped, membership).read_only_display_bindings == ()
+    components[-1] = {
+        "id": "editor", "component": "Text", "text": {"path": "evidenceLocator"}
+    }
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_DATA_PATH_NOT_ALLOWED"):
+        validate_candidate(unmapped, membership, GeneratedCandidate.model_validate(raw))
+
+
 @pytest.mark.parametrize(
     "mutation,code",
     [

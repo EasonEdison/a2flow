@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from importlib.resources import files
-from typing import Protocol, TypeAlias, cast
+from typing import Literal, Protocol, TypeAlias, cast
 
 from a2flow_capability.models import JsonObject, JsonValue, TrustedContext
 from jsonschema import Draft202012Validator
@@ -26,6 +27,7 @@ from .models import (
     GenerationComponent,
     GenerationContract,
     GenerationCreateSurfaceEnvelope,
+    GenerationReadOnlyDisplayBinding,
     GenerationRelativeBinding,
     GenerationScope,
     GenerationSurface,
@@ -33,6 +35,7 @@ from .models import (
     GenerationUpdateComponentsEnvelope,
     PublishedApplication,
     ShowInputBinding,
+    ShowInputSource,
 )
 
 _OFFICIAL_ID = "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
@@ -44,6 +47,11 @@ _MAX_BYTES = 256 * 1024
 _MAX_DEPTH = 24
 ScopeLineage: TypeAlias = tuple[tuple[str, str, str], ...]
 RelativeRule: TypeAlias = tuple[str, str, tuple[str, ...], str, ScopeLineage]
+ReadOnlyDisplayRule: TypeAlias = tuple[str, tuple[str, ...], str, ScopeLineage]
+_PLAIN_SCHEMA_TYPES = frozenset({"string", "number", "integer", "boolean"})
+_SCHEMA_INDIRECTION = frozenset(
+    {"$ref", "$dynamicRef", "allOf", "anyOf", "oneOf", "not", "if", "then", "else"}
+)
 
 
 class GenerationCatalogReader(Protocol):
@@ -163,6 +171,7 @@ def contract(published: PublishedApplication, membership: Mapping[str, str]) -> 
         allowedComponents=components,
         allowedDataPaths=_data_paths(published),
         relativeDataBindings=_relative_bindings(published),
+        readOnlyDisplayBindings=_read_only_display_bindings(published),
         requiredAnchors=anchors,
         anchorComponents=tuple(
             GenerationAnchor(surfaceId=surface_id, componentId=component_id, component=raw)
@@ -178,7 +187,10 @@ def contract(published: PublishedApplication, membership: Mapping[str, str]) -> 
             "local function expression exactly at the same component property. Relative data "
             "paths must remain inside the identical templateScopes lineage listed in "
             "relativeDataBindings; never move them to another list template. Place server "
-            "event actions only through approved actionPlacements. Keep input-bound properties. "
+            "event actions only through approved actionPlacements. readOnlyDisplayBindings "
+            "permit only Text.text reads of explicitly declared APP_PARAMS fields in the same "
+            "List template scope; they do not authorize input or action writes. "
+            "Keep input-bound properties. "
             "New IDs and layout are allowed using allowedComponents and allowedDataPaths."
         ),
         allowedActions=tuple(
@@ -324,6 +336,123 @@ def _relative_bindings(published: PublishedApplication) -> tuple[GenerationRelat
     return tuple(bindings)
 
 
+def _plain_schema(schema: JsonValue, expected_type: str) -> bool:
+    return (
+        isinstance(schema, dict)
+        and schema.get("type") == expected_type
+        and not _SCHEMA_INDIRECTION.intersection(schema)
+    )
+
+
+def _read_only_display_bindings(
+    published: PublishedApplication,
+) -> tuple[GenerationReadOnlyDisplayBinding, ...]:
+    """Authorize explicit primitive APP_PARAMS fields already written into a List DataModel."""
+    params_schema = published.build.params_schema
+    if not _plain_schema(params_schema, "object"):
+        return ()
+    params_properties = params_schema.get("properties")
+    if not isinstance(params_properties, dict):
+        return ()
+    bindings: list[GenerationReadOnlyDisplayBinding] = []
+    source = _original_components(published)
+    for declaration in published.build.surface_declarations:
+        surface_id = declaration.surface_id
+        components = {
+            component_id: raw
+            for (item_surface, component_id), raw in source.items()
+            if item_surface == surface_id
+        }
+        contexts = _scope_contexts(components, declaration.root_component_id)
+        for list_id, component in sorted(components.items()):
+            if component.get("component") != "List":
+                continue
+            children = component.get("children")
+            if not isinstance(children, dict):
+                continue
+            item_id = children.get("componentId")
+            data_path = children.get("path")
+            if not isinstance(item_id, str) or not isinstance(data_path, str):
+                continue
+            if len(contexts.get(item_id, frozenset())) != 1:
+                continue
+            scope = next(iter(contexts[item_id]))
+            if not scope or scope[-1] != (list_id, item_id, data_path):
+                continue
+            data_tokens = tokens(data_path, allow_root=False)
+            if len(data_tokens) != 1:
+                continue
+            for input_binding in published.build.input_bindings:
+                if (
+                    input_binding.source is not ShowInputSource.APP_PARAMS
+                    or not input_binding.required
+                    or input_binding.source_path is None
+                ):
+                    continue
+                source_tokens = tokens(input_binding.source_path, allow_root=False)
+                target_tokens = tokens(input_binding.target_path, allow_root=False)
+                if len(source_tokens) != 1 or target_tokens != (
+                    "updateDataModel", "value", data_tokens[0]
+                ):
+                    continue
+                if input_binding.target_message_index >= len(published.build.initial_messages):
+                    continue
+                message = published.build.initial_messages[input_binding.target_message_index]
+                update = message.get("updateDataModel")
+                if not isinstance(update, dict) or update.get("surfaceId") != surface_id:
+                    continue
+                if update.get("path") != "/":
+                    continue
+                array_schema = params_properties.get(source_tokens[0])
+                if not isinstance(array_schema, dict) or not _plain_schema(
+                    array_schema, "array"
+                ):
+                    continue
+                item_schema = array_schema.get("items")
+                if not isinstance(item_schema, dict) or not _plain_schema(
+                    item_schema, "object"
+                ):
+                    continue
+                item_properties = item_schema.get("properties")
+                if not isinstance(item_properties, dict):
+                    continue
+                for field, field_schema in sorted(item_properties.items()):
+                    if not isinstance(field, str) or not re.fullmatch(
+                        r"[A-Za-z_][A-Za-z0-9_]*", field
+                    ):
+                        continue
+                    field_type = (
+                        field_schema.get("type") if isinstance(field_schema, dict) else None
+                    )
+                    if (
+                        not isinstance(field_type, str)
+                        or field_type not in _PLAIN_SCHEMA_TYPES
+                        or not _plain_schema(field_schema, field_type)
+                    ):
+                        continue
+                    bindings.append(
+                        GenerationReadOnlyDisplayBinding(
+                            surfaceId=surface_id,
+                            templateScopes=tuple(
+                                GenerationTemplateScope(
+                                    templateComponentId=item[0],
+                                    itemComponentId=item[1],
+                                    dataPath=item[2],
+                                )
+                                for item in scope
+                            ),
+                            dataPath=data_path,
+                            componentType="Text",
+                            propertyPath="/text",
+                            path=field,
+                            valueType=cast(
+                                Literal["string", "number", "integer", "boolean"], field_type
+                            ),
+                        )
+                    )
+    return tuple(bindings)
+
+
 def _canonical(value: JsonValue) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
@@ -363,6 +492,7 @@ def _validate_values(
     value: JsonValue,
     data_paths: frozenset[str],
     relative_rules: frozenset[RelativeRule],
+    read_only_display_rules: frozenset[ReadOnlyDisplayRule],
     surface_id: str,
     scopes: frozenset[ScopeLineage],
     expressions: frozenset[tuple[str, tuple[str, ...], str]],
@@ -388,17 +518,24 @@ def _validate_values(
             if path.startswith("/"):
                 if path not in data_paths:
                     raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
-            elif (
-                len(scopes) != 1
-                or (surface_id, component_type, location, path, next(iter(scopes)))
-                not in relative_rules
-            ):
-                raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
+            else:
+                if len(scopes) != 1:
+                    raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
+                scope = next(iter(scopes))
+                if (
+                    (surface_id, component_type, location, path, scope) not in relative_rules
+                    and not (
+                        component_type == "Text"
+                        and (surface_id, location, path, scope) in read_only_display_rules
+                    )
+                ):
+                    raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
         for key, child in value.items():
             _validate_values(
                 child,
                 data_paths,
                 relative_rules,
+                read_only_display_rules,
                 surface_id,
                 scopes,
                 expressions,
@@ -412,6 +549,7 @@ def _validate_values(
                 child,
                 data_paths,
                 relative_rules,
+                read_only_display_rules,
                 surface_id,
                 scopes,
                 expressions,
@@ -577,6 +715,18 @@ def validate_candidate(
         )
         for item in policy.relative_data_bindings
     )
+    read_only_display_rules: frozenset[ReadOnlyDisplayRule] = frozenset(
+        (
+            item.surface_id,
+            tokens(item.property_path, allow_root=False),
+            item.path,
+            tuple(
+                (scope.template_component_id, scope.item_component_id, scope.data_path)
+                for scope in item.template_scopes
+            ),
+        )
+        for item in policy.read_only_display_bindings
+    )
     action_targets: dict[str, list[str]] = {}
     action_declarations: list[ActionDeclaration] = []
     placed_ids: set[tuple[str, str]] = set()
@@ -651,6 +801,7 @@ def validate_candidate(
             component,
             frozenset(policy.allowed_data_paths),
             relative_rules,
+            read_only_display_rules,
             key[0],
             candidate_scopes.get(key, frozenset()),
             expressions,
