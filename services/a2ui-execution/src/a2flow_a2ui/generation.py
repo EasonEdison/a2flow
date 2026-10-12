@@ -12,7 +12,7 @@ from a2flow_capability.models import JsonObject, JsonValue, TrustedContext
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
-from .jsonutil import reject_authority_keys, require_object, require_size, tokens
+from .jsonutil import read, reject_authority_keys, require_object, require_size, tokens
 from .ledger import PROTOCOL_VERSION, SurfaceLedger
 from .models import (
     A2uiError,
@@ -149,7 +149,8 @@ def contract(published: PublishedApplication, membership: Mapping[str, str]) -> 
         mustPreserve=(
             "Keep every anchor component ID and component type on its original surface; "
             "keep each surface root ID. Anchors may move within a valid tree. Copy any approved "
-            "action property exactly; place actions only through approved actionPlacements. "
+            "local function expression exactly at the same component property. Place server "
+            "event actions only through approved actionPlacements. Keep input-bound properties. "
             "New IDs and layout are allowed using allowedComponents and allowedDataPaths."
         ),
         allowedActions=tuple(
@@ -208,19 +209,71 @@ def _validate_tree(components: dict[str, JsonObject], root: str) -> None:
         raise A2uiError("A2UI_GENERATION_TREE_INVALID")
 
 
-def _validate_values(value: JsonValue, data_paths: frozenset[str], depth: int = 0) -> None:
+def _canonical(value: JsonValue) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def _function_expressions(value: JsonValue) -> frozenset[tuple[tuple[str, ...], str]]:
+    expressions: set[tuple[tuple[str, ...], str]] = set()
+
+    def walk(node: JsonValue, location: tuple[str, ...]) -> None:
+        if isinstance(node, dict):
+            if "functionCall" in node or "call" in node:
+                expressions.add((location, _canonical(node)))
+            for key, child in node.items():
+                walk(child, (*location, key))
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, (*location, str(index)))
+
+    walk(value, ())
+    return frozenset(expressions)
+
+
+def _approved_expressions(
+    source: Mapping[tuple[str, str], JsonObject],
+) -> frozenset[tuple[str, tuple[str, ...], str]]:
+    approved: set[tuple[str, tuple[str, ...], str]] = set()
+    for component in source.values():
+        component_type = component.get("component")
+        if isinstance(component_type, str):
+            approved.update(
+                (component_type, location, expression)
+                for location, expression in _function_expressions(component)
+            )
+    return frozenset(approved)
+
+
+def _validate_values(
+    value: JsonValue,
+    data_paths: frozenset[str],
+    expressions: frozenset[tuple[str, tuple[str, ...], str]],
+    component_type: str,
+    location: tuple[str, ...] = (),
+    depth: int = 0,
+) -> None:
     if depth > 32:
         raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
     if isinstance(value, dict):
-        if any(key in value for key in ("functionCall", "url", "svgPath", "html", "script")):
+        if any(key in value for key in ("url", "svgPath", "html", "script")):
+            raise A2uiError("A2UI_GENERATION_AUTHORITY_FORBIDDEN")
+        if ("functionCall" in value or "call" in value) and (
+            component_type,
+            location,
+            _canonical(value),
+        ) not in expressions:
             raise A2uiError("A2UI_GENERATION_AUTHORITY_FORBIDDEN")
         if "path" in value and value["path"] not in data_paths:
             raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
-        for child in value.values():
-            _validate_values(child, data_paths, depth + 1)
+        for key, child in value.items():
+            _validate_values(
+                child, data_paths, expressions, component_type, (*location, key), depth + 1
+            )
     elif isinstance(value, list):
-        for child in value:
-            _validate_values(child, data_paths, depth + 1)
+        for index, child in enumerate(value):
+            _validate_values(
+                child, data_paths, expressions, component_type, (*location, str(index)), depth + 1
+            )
 
 
 def _index_components(
@@ -276,6 +329,14 @@ def _remap_inputs(
                 token.replace("~", "~0").replace("/", "~1") for token in path[3:]
             )
             new_path += "/" + escaped_suffix
+            original_value = read(published.build.initial_messages[old_index], binding.target_path)
+            candidate_value = read(messages[new_index], new_path)
+            if not original_value.found:
+                raise A2uiError("A2UI_GENERATION_SOURCE_INVALID")
+            if not candidate_value.found or type(candidate_value.value) is not type(
+                original_value.value
+            ):
+                raise A2uiError("A2UI_GENERATION_INPUT_TARGET_INVALID")
             remapped.append(
                 binding.model_copy(
                     update={
@@ -303,6 +364,7 @@ def validate_candidate(
     _, _, registry = _official()
     schemas = {item.type: item.component_schema for item in policy.allowed_components}
     source = _original_components(published)
+    expressions = _approved_expressions(source)
     seen_surfaces: set[str] = set()
     all_components = _index_components(candidate.messages)
     if len(all_components) > _MAX_COMPONENTS:
@@ -399,14 +461,25 @@ def validate_candidate(
         validator = Draft202012Validator(schema_ref, registry=registry)
         if next(validator.iter_errors(component), None) is not None:
             raise A2uiError("A2UI_GENERATION_COMPONENT_INVALID")
-        if "action" in component and key not in placed_ids:
+        action = component.get("action")
+        if (
+            action is not None
+            and key not in placed_ids
+            and (not isinstance(action, dict) or "functionCall" not in action)
+        ):
             raise A2uiError("A2UI_GENERATION_ACTION_NOT_ALLOWED")
-        _validate_values(component, frozenset(policy.allowed_data_paths))
+        _validate_values(
+            component, frozenset(policy.allowed_data_paths), expressions, component_type
+        )
     for key, original in source.items():
         if key not in all_components or all_components[key][2].get("component") != original.get(
             "component"
         ):
             raise A2uiError("A2UI_GENERATION_ANCHOR_MISSING")
+        if not _function_expressions(original).issubset(
+            _function_expressions(all_components[key][2])
+        ):
+            raise A2uiError("A2UI_GENERATION_AUTHORITY_FORBIDDEN")
     for declaration in published.build.surface_declarations:
         component_map = {
             component_id: raw
