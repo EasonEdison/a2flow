@@ -15,6 +15,17 @@ from zoneinfo import ZoneInfo
 
 from a2flow_capability.models import ExecutionResult, JsonObject, JsonValue, TrustedContext
 
+from .generation import (
+    GenerationCatalogReader,
+    validate_candidate,
+    verify_definition,
+)
+from .generation import (
+    contract as generation_contract,
+)
+from .generation import (
+    definition as generated_definition,
+)
 from .jsonutil import (
     Lookup,
     read,
@@ -37,8 +48,13 @@ from .models import (
     CapabilityInvoker,
     ComposerDraftEffect,
     ComposerDraftEffectSpec,
+    DefinitionSource,
     EmittedActionDeclaration,
     ExecutionSummary,
+    GeneratedCandidate,
+    GeneratedDefinition,
+    GenerationContract,
+    GenerationScope,
     MappingSource,
     PublishedApplication,
     PublishedApplicationReader,
@@ -56,10 +72,18 @@ from .models import (
     TrustedCard,
 )
 
-_OBSERVATION_PRIVATE_KEYS = frozenset({
-    "authorization", "cookie", "credential", "credentials",
-    "credentialhandle", "runtimesessiontoken", "transportauthority", "targetendpoint",
-})
+_OBSERVATION_PRIVATE_KEYS = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "credential",
+        "credentials",
+        "credentialhandle",
+        "runtimesessiontoken",
+        "transportauthority",
+        "targetendpoint",
+    }
+)
 _KEY_VALUE_SEPARATOR = "\N{FULLWIDTH COLON}"
 _COLUMN_SEPARATOR = "\N{FULLWIDTH COMMA}"
 _ARRAY_ITEM_SEPARATOR = "\N{IDEOGRAPHIC COMMA}"
@@ -198,13 +222,21 @@ def observable_request(
     """Return exact mapped business values, without trusted/internal mappings."""
 
     visible = tuple(
-        item for item in mappings
-        if item.source in {
-            MappingSource.ACTION_CONTEXT, MappingSource.APP_PARAMS, MappingSource.CONSTANT,
+        item
+        for item in mappings
+        if item.source
+        in {
+            MappingSource.ACTION_CONTEXT,
+            MappingSource.APP_PARAMS,
+            MappingSource.CONSTANT,
         }
     )
     mapped = map_request(
-        visible, action=action, params=params, trusted=trusted, previous=None,
+        visible,
+        action=action,
+        params=params,
+        trusted=trusted,
+        previous=None,
     )
 
     return require_object(_observable_value(mapped), "A2UI_ACTION_OBSERVATION_INVALID")
@@ -215,8 +247,7 @@ def _observable_value(value: JsonValue) -> JsonValue:
         return {
             key: _observable_value(child)
             for key, child in value.items()
-            if key.replace("_", "").replace("-", "").lower()
-            not in _OBSERVATION_PRIVATE_KEYS
+            if key.replace("_", "").replace("-", "").lower() not in _OBSERVATION_PRIVATE_KEYS
         }
     if isinstance(value, list):
         return [_observable_value(child) for child in value]
@@ -343,13 +374,13 @@ def _transform(
                 lookup = read(item, column.source_path)
                 if not lookup.found:
                     raise A2uiError("A2UI_ADAPTER_RESULT_INVALID")
-                labels.append(
-                    f"{column.label}{_KEY_VALUE_SEPARATOR}{_label_value(lookup.value)}"
-                )
-            options.append({
-                "label": transform.label_separator.join(labels),
-                "value": value_lookup.value,
-            })
+                labels.append(f"{column.label}{_KEY_VALUE_SEPARATOR}{_label_value(lookup.value)}")
+            options.append(
+                {
+                    "label": transform.label_separator.join(labels),
+                    "value": value_lookup.value,
+                }
+            )
         return options
     total = _pagination_total(value)
     raw_page: JsonValue = transform.page_number
@@ -604,14 +635,51 @@ def _session(build: ApplicationBuild) -> RuntimeSession:
 
 class A2uiRuntimeService:
     def __init__(
-        self, releases: PublishedApplicationReader, capabilities: CapabilityInvoker
+        self,
+        releases: PublishedApplicationReader,
+        capabilities: CapabilityInvoker,
+        generation_catalogs: GenerationCatalogReader | None = None,
     ) -> None:
         self._releases = releases
         self._capabilities = capabilities
+        self._generation_catalogs = generation_catalogs
 
     def describe(self, app_code: str, context: TrustedContext) -> PublishedApplication:
         self._check_context(context)
         return self._releases.current(app_code, context)
+
+    def describe_generation_source(
+        self,
+        origin_app_code: str,
+        context: TrustedContext,
+    ) -> tuple[PublishedApplication, GenerationContract]:
+        self._check_context(context)
+        if self._generation_catalogs is None:
+            raise A2uiError("A2UI_GENERATION_CATALOG_NOT_AVAILABLE")
+        published = self._releases.current(origin_app_code, context)
+        membership = self._generation_catalogs.generation_catalog(
+            published.build.catalog.catalog_id, context
+        )
+        return published, generation_contract(published, membership)
+
+    def activate_generated(
+        self,
+        origin_app_code: str,
+        params: JsonObject,
+        candidate: GeneratedCandidate,
+        scope: GenerationScope,
+        context: TrustedContext,
+    ) -> RuntimeResult:
+        self._check_context(context)
+        if self._generation_catalogs is None:
+            raise A2uiError("A2UI_GENERATION_CATALOG_NOT_AVAILABLE")
+        published = self._releases.current(origin_app_code, context)
+        membership = self._generation_catalogs.generation_catalog(
+            published.build.catalog.catalog_id, context
+        )
+        generated = validate_candidate(published, membership, candidate)
+        artifact = generated_definition(origin_app_code, candidate, scope, context)
+        return self._activate_published(generated, params, context, artifact)
 
     def activate(
         self,
@@ -621,6 +689,15 @@ class A2uiRuntimeService:
     ) -> RuntimeResult:
         self._check_context(context)
         published = self._releases.current(app_code, context)
+        return self._activate_published(published, params, context)
+
+    def _activate_published(
+        self,
+        published: PublishedApplication,
+        params: JsonObject,
+        context: TrustedContext,
+        artifact: GeneratedDefinition | None = None,
+    ) -> RuntimeResult:
         trusted = _trusted(context)
         messages, ledger = _show(published.build, params, trusted)
         all_messages = list(messages)
@@ -660,7 +737,15 @@ class A2uiRuntimeService:
                 break
         session = _session(published.build)
         return self._response(
-            published, params, tuple(all_messages), ledger, tuple(executions), False, None, session
+            published,
+            params,
+            tuple(all_messages),
+            ledger,
+            tuple(executions),
+            False,
+            None,
+            session,
+            generated_definition=artifact,
         )
 
     def act(
@@ -672,22 +757,30 @@ class A2uiRuntimeService:
         context: TrustedContext,
     ) -> RuntimeResult:
         self._check_context(context)
-        if (
-            card.user_id != context.user_id
-            or not card.app_code.strip()
-            or context.request_id != idempotency_key
-        ):
+        if card.user_id != context.user_id or context.request_id != idempotency_key:
             raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
-        published = self._releases.current(card.app_code, context)
+        artifact = card.generated_definition
+        if artifact is None:
+            if not card.app_code.strip():
+                raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
+            published = self._releases.current(card.app_code, context)
+        else:
+            if card.app_code or card.scope is None or self._generation_catalogs is None:
+                raise A2uiError("A2UI_GENERATED_CARD_SCOPE_MISMATCH")
+            verify_definition(artifact, card.scope, context)
+            origin = self._releases.current(artifact.origin_app_code, context)
+            membership = self._generation_catalogs.generation_catalog(
+                origin.build.catalog.catalog_id, context
+            )
+            published = validate_candidate(origin, membership, artifact.candidate)
         build = published.build
-        if (
-            not correlation_id.strip()
-            or not idempotency_key.strip()
-        ):
+        if not correlation_id.strip() or not idempotency_key.strip():
             raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
         validate_schema(build.params_schema, card.params, "A2UI_PARAMS_INVALID")
         ledger = SurfaceLedger.replay(card.snapshot)
-        binding, action_context = self._resolve_action(build, ledger, action_message)
+        binding, action_context = self._resolve_action(
+            build, ledger, action_message, generated=artifact is not None
+        )
         trusted = _trusted(context)
         arguments = map_request(
             binding.request_mappings,
@@ -712,48 +805,82 @@ class A2uiRuntimeService:
             selected = _select(binding, result)
         except A2uiError as error:
             observation = ActionExecutionObservation(
-                binding.binding_id, result.action_code, observable_arguments,
-                _observable_value(result.data), result.success, None,
-                capability_error, error.code,
+                binding.binding_id,
+                result.action_code,
+                observable_arguments,
+                _observable_value(result.data),
+                result.success,
+                None,
+                capability_error,
+                error.code,
             )
             summary = ExecutionSummary(
-                binding.binding_id, result.action_code, result.success,
-                result.capability_version, capability_error,
+                binding.binding_id,
+                result.action_code,
+                result.success,
+                result.capability_version,
+                capability_error,
             )
             return self._response(
-                published, card.params, (), ledger, (summary,), False, None, _session(build),
+                published,
+                card.params,
+                (),
+                ledger,
+                (summary,),
+                False,
+                None,
+                _session(build),
                 action_observation=observation,
+                generated_definition=artifact,
             )
         try:
             messages, next_ledger = adapt(
                 ledger, selected.outcome, selected.adapters, result, trusted, action_context
             )
             composer_draft_effects = (
-                _composer_draft_effect(
-                    binding.composer_draft_effect, result, idempotency_key
-                )
+                _composer_draft_effect(binding.composer_draft_effect, result, idempotency_key)
                 if selected.succeeded
                 else ()
             )
         except A2uiError as error:
             observation = ActionExecutionObservation(
-                binding.binding_id, result.action_code, observable_arguments,
-                _observable_value(result.data), result.success, selected.succeeded,
-                capability_error, error.code,
+                binding.binding_id,
+                result.action_code,
+                observable_arguments,
+                _observable_value(result.data),
+                result.success,
+                selected.succeeded,
+                capability_error,
+                error.code,
             )
             summary = ExecutionSummary(
-                binding.binding_id, result.action_code, selected.succeeded,
+                binding.binding_id,
+                result.action_code,
+                selected.succeeded,
                 result.capability_version,
                 None if selected.succeeded else capability_error,
             )
             return self._response(
-                published, card.params, (), ledger, (summary,), False, None, _session(build),
+                published,
+                card.params,
+                (),
+                ledger,
+                (summary,),
+                False,
+                None,
+                _session(build),
                 action_observation=observation,
+                generated_definition=artifact,
             )
         observation = ActionExecutionObservation(
-            binding.binding_id, result.action_code, observable_arguments,
-            _observable_value(result.data), result.success, selected.succeeded,
-            capability_error, None,
+            binding.binding_id,
+            result.action_code,
+            observable_arguments,
+            _observable_value(result.data),
+            result.success,
+            selected.succeeded,
+            capability_error,
+            None,
         )
         summary = ExecutionSummary(
             binding.binding_id,
@@ -775,10 +902,16 @@ class A2uiRuntimeService:
             _session(build),
             action_observation=observation,
             composer_draft_effects=composer_draft_effects,
+            generated_definition=artifact,
         )
 
     def _resolve_action(
-        self, build: ApplicationBuild, ledger: SurfaceLedger, message: JsonObject
+        self,
+        build: ApplicationBuild,
+        ledger: SurfaceLedger,
+        message: JsonObject,
+        *,
+        generated: bool = False,
     ) -> tuple[ActionBinding, JsonObject]:
         if set(message) != {"version", "action"} or message.get("version") != PROTOCOL_VERSION:
             raise A2uiError("A2UI_ACTION_INVALID")
@@ -816,9 +949,9 @@ class A2uiRuntimeService:
         binding = matches[0]
         if not ledger.has_surface(surface_id):
             raise A2uiError("A2UI_SURFACE_NOT_FOUND")
-        if component_id != binding.source_component_id or component_id not in (
-            binding.allowed_source_component_ids
-        ):
+        if (
+            not generated and component_id != binding.source_component_id
+        ) or component_id not in binding.allowed_source_component_ids:
             raise A2uiError("A2UI_ACTION_SOURCE_INVALID")
         declarations = [
             item
@@ -851,6 +984,7 @@ class A2uiRuntimeService:
         *,
         action_observation: ActionExecutionObservation | None = None,
         composer_draft_effects: tuple[ComposerDraftEffect, ...] = (),
+        generated_definition: GeneratedDefinition | None = None,
     ) -> RuntimeResult:
         actions = tuple(
             EmittedActionDeclaration(
@@ -880,6 +1014,8 @@ class A2uiRuntimeService:
             ),
             action_observation,
             composer_draft_effects,
+            (DefinitionSource.GENERATED if generated_definition else DefinitionSource.PUBLISHED),
+            generated_definition,
         )
 
     def _check_context(self, context: TrustedContext) -> None:

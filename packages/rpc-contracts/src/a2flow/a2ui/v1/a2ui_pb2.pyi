@@ -8,6 +8,7 @@ import builtins
 import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import sys
 import typing
@@ -18,6 +19,21 @@ else:
     import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class _DefinitionSource:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _DefinitionSourceEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_DefinitionSource.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    PUBLISHED: _DefinitionSource.ValueType  # 0
+    GENERATED: _DefinitionSource.ValueType  # 1
+
+class DefinitionSource(_DefinitionSource, metaclass=_DefinitionSourceEnumTypeWrapper): ...
+
+PUBLISHED: DefinitionSource.ValueType  # 0
+GENERATED: DefinitionSource.ValueType  # 1
+Global___DefinitionSource: typing_extensions.TypeAlias = DefinitionSource
 
 @typing.final
 class ApplicationRelease(google.protobuf.message.Message):
@@ -86,10 +102,16 @@ class TrustedCard(google.protobuf.message.Message):
     PARAMS_JSON_FIELD_NUMBER: builtins.int
     SNAPSHOT_JSON_FIELD_NUMBER: builtins.int
     APP_CODE_FIELD_NUMBER: builtins.int
+    GENERATED_DEFINITION_FIELD_NUMBER: builtins.int
+    SCOPE_FIELD_NUMBER: builtins.int
     user_id: builtins.int
     params_json: builtins.bytes
     snapshot_json: builtins.bytes
     app_code: builtins.str
+    @property
+    def generated_definition(self) -> Global___GeneratedDefinition: ...
+    @property
+    def scope(self) -> Global___GenerationScope: ...
     def __init__(
         self,
         *,
@@ -97,12 +119,142 @@ class TrustedCard(google.protobuf.message.Message):
         params_json: builtins.bytes = ...,
         snapshot_json: builtins.bytes = ...,
         app_code: builtins.str = ...,
+        generated_definition: Global___GeneratedDefinition | None = ...,
+        scope: Global___GenerationScope | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_user_id", b"_user_id", "user_id", b"user_id"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_user_id", b"_user_id", "app_code", b"app_code", "params_json", b"params_json", "snapshot_json", b"snapshot_json", "user_id", b"user_id"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_user_id", b"_user_id", "generated_definition", b"generated_definition", "scope", b"scope", "user_id", b"user_id"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_user_id", b"_user_id", "app_code", b"app_code", "generated_definition", b"generated_definition", "params_json", b"params_json", "scope", b"scope", "snapshot_json", b"snapshot_json", "user_id", b"user_id"]) -> None: ...
     def WhichOneof(self, oneof_group: typing.Literal["_user_id", b"_user_id"]) -> typing.Literal["user_id"] | None: ...
 
 Global___TrustedCard: typing_extensions.TypeAlias = TrustedCard
+
+@typing.final
+class GenerationScope(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONVERSATION_ID_FIELD_NUMBER: builtins.int
+    WORKFLOW_RUN_ID_FIELD_NUMBER: builtins.int
+    NODE_ID_FIELD_NUMBER: builtins.int
+    conversation_id: builtins.str
+    workflow_run_id: builtins.str
+    node_id: builtins.str
+    def __init__(
+        self,
+        *,
+        conversation_id: builtins.str = ...,
+        workflow_run_id: builtins.str = ...,
+        node_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["conversation_id", b"conversation_id", "node_id", b"node_id", "workflow_run_id", b"workflow_run_id"]) -> None: ...
+
+Global___GenerationScope: typing_extensions.TypeAlias = GenerationScope
+
+@typing.final
+class GeneratedDefinition(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ORIGIN_APP_CODE_FIELD_NUMBER: builtins.int
+    CANDIDATE_JSON_FIELD_NUMBER: builtins.int
+    SCOPE_FIELD_NUMBER: builtins.int
+    OWNER_USER_ID_FIELD_NUMBER: builtins.int
+    ENVIRONMENT_FIELD_NUMBER: builtins.int
+    ARTIFACT_DIGEST_FIELD_NUMBER: builtins.int
+    origin_app_code: builtins.str
+    candidate_json: builtins.bytes
+    owner_user_id: builtins.int
+    environment: a2flow.capability.v1.capability_pb2.Environment.ValueType
+    artifact_digest: builtins.str
+    @property
+    def scope(self) -> Global___GenerationScope: ...
+    def __init__(
+        self,
+        *,
+        origin_app_code: builtins.str = ...,
+        candidate_json: builtins.bytes = ...,
+        scope: Global___GenerationScope | None = ...,
+        owner_user_id: builtins.int | None = ...,
+        environment: a2flow.capability.v1.capability_pb2.Environment.ValueType = ...,
+        artifact_digest: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_owner_user_id", b"_owner_user_id", "owner_user_id", b"owner_user_id", "scope", b"scope"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_owner_user_id", b"_owner_user_id", "artifact_digest", b"artifact_digest", "candidate_json", b"candidate_json", "environment", b"environment", "origin_app_code", b"origin_app_code", "owner_user_id", b"owner_user_id", "scope", b"scope"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_owner_user_id", b"_owner_user_id"]) -> typing.Literal["owner_user_id"] | None: ...
+
+Global___GeneratedDefinition: typing_extensions.TypeAlias = GeneratedDefinition
+
+@typing.final
+class DescribeGenerationSourceRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTEXT_FIELD_NUMBER: builtins.int
+    ORIGIN_APP_CODE_FIELD_NUMBER: builtins.int
+    origin_app_code: builtins.str
+    @property
+    def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
+    def __init__(
+        self,
+        *,
+        context: a2flow.capability.v1.capability_pb2.ExecutionContext | None = ...,
+        origin_app_code: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["context", b"context", "origin_app_code", b"origin_app_code"]) -> None: ...
+
+Global___DescribeGenerationSourceRequest: typing_extensions.TypeAlias = DescribeGenerationSourceRequest
+
+@typing.final
+class GenerationSource(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ORIGIN_RELEASE_FIELD_NUMBER: builtins.int
+    CATALOG_FIELD_NUMBER: builtins.int
+    GENERATION_CONTRACT_JSON_FIELD_NUMBER: builtins.int
+    generation_contract_json: builtins.bytes
+    @property
+    def origin_release(self) -> Global___ApplicationRelease: ...
+    @property
+    def catalog(self) -> Global___CatalogDescriptor: ...
+    def __init__(
+        self,
+        *,
+        origin_release: Global___ApplicationRelease | None = ...,
+        catalog: Global___CatalogDescriptor | None = ...,
+        generation_contract_json: builtins.bytes = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["catalog", b"catalog", "origin_release", b"origin_release"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["catalog", b"catalog", "generation_contract_json", b"generation_contract_json", "origin_release", b"origin_release"]) -> None: ...
+
+Global___GenerationSource: typing_extensions.TypeAlias = GenerationSource
+
+@typing.final
+class ActivateGeneratedRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTEXT_FIELD_NUMBER: builtins.int
+    ORIGIN_APP_CODE_FIELD_NUMBER: builtins.int
+    PARAMS_JSON_FIELD_NUMBER: builtins.int
+    CANDIDATE_JSON_FIELD_NUMBER: builtins.int
+    SCOPE_FIELD_NUMBER: builtins.int
+    origin_app_code: builtins.str
+    params_json: builtins.bytes
+    candidate_json: builtins.bytes
+    @property
+    def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
+    @property
+    def scope(self) -> Global___GenerationScope: ...
+    def __init__(
+        self,
+        *,
+        context: a2flow.capability.v1.capability_pb2.ExecutionContext | None = ...,
+        origin_app_code: builtins.str = ...,
+        params_json: builtins.bytes = ...,
+        candidate_json: builtins.bytes = ...,
+        scope: Global___GenerationScope | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["context", b"context", "scope", b"scope"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["candidate_json", b"candidate_json", "context", b"context", "origin_app_code", b"origin_app_code", "params_json", b"params_json", "scope", b"scope"]) -> None: ...
+
+Global___ActivateGeneratedRequest: typing_extensions.TypeAlias = ActivateGeneratedRequest
 
 @typing.final
 class ActivateRequest(google.protobuf.message.Message):
@@ -367,6 +519,8 @@ class RuntimeResponse(google.protobuf.message.Message):
     BUSINESS_SUCCESS_FIELD_NUMBER: builtins.int
     ACTION_OBSERVATION_FIELD_NUMBER: builtins.int
     COMPOSER_DRAFT_EFFECTS_FIELD_NUMBER: builtins.int
+    DEFINITION_SOURCE_FIELD_NUMBER: builtins.int
+    GENERATED_DEFINITION_FIELD_NUMBER: builtins.int
     params_json: builtins.bytes
     messages_json: builtins.bytes
     snapshot_json: builtins.bytes
@@ -375,6 +529,7 @@ class RuntimeResponse(google.protobuf.message.Message):
     error_code: builtins.str
     interaction_mode: builtins.str
     business_success: builtins.bool
+    definition_source: Global___DefinitionSource.ValueType
     @property
     def release(self) -> Global___ApplicationRelease: ...
     @property
@@ -389,6 +544,8 @@ class RuntimeResponse(google.protobuf.message.Message):
     def action_observation(self) -> Global___ActionExecutionObservation: ...
     @property
     def composer_draft_effects(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___ComposerDraftEffect]: ...
+    @property
+    def generated_definition(self) -> Global___GeneratedDefinition: ...
     def __init__(
         self,
         *,
@@ -407,8 +564,10 @@ class RuntimeResponse(google.protobuf.message.Message):
         business_success: builtins.bool = ...,
         action_observation: Global___ActionExecutionObservation | None = ...,
         composer_draft_effects: collections.abc.Iterable[Global___ComposerDraftEffect] | None = ...,
+        definition_source: Global___DefinitionSource.ValueType = ...,
+        generated_definition: Global___GeneratedDefinition | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["action_observation", b"action_observation", "catalog", b"catalog", "release", b"release", "session", b"session"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["action_observation", b"action_observation", "actions", b"actions", "business_success", b"business_success", "catalog", b"catalog", "complete_interaction", b"complete_interaction", "composer_draft_effects", b"composer_draft_effects", "error_code", b"error_code", "executions", b"executions", "interaction_mode", b"interaction_mode", "messages_json", b"messages_json", "params_json", b"params_json", "release", b"release", "selected_branch_id", b"selected_branch_id", "session", b"session", "snapshot_json", b"snapshot_json"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["action_observation", b"action_observation", "catalog", b"catalog", "generated_definition", b"generated_definition", "release", b"release", "session", b"session"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["action_observation", b"action_observation", "actions", b"actions", "business_success", b"business_success", "catalog", b"catalog", "complete_interaction", b"complete_interaction", "composer_draft_effects", b"composer_draft_effects", "definition_source", b"definition_source", "error_code", b"error_code", "executions", b"executions", "generated_definition", b"generated_definition", "interaction_mode", b"interaction_mode", "messages_json", b"messages_json", "params_json", b"params_json", "release", b"release", "selected_branch_id", b"selected_branch_id", "session", b"session", "snapshot_json", b"snapshot_json"]) -> None: ...
 
 Global___RuntimeResponse: typing_extensions.TypeAlias = RuntimeResponse

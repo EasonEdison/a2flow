@@ -27,6 +27,41 @@ message TrustedCard {
   bytes params_json = 5;
   bytes snapshot_json = 6;
   string app_code = 7;
+  GeneratedDefinition generated_definition = 8;
+  GenerationScope scope = 9;
+}
+message GenerationScope {
+  string conversation_id = 1;
+  string workflow_run_id = 2;
+  string node_id = 3;
+}
+message GeneratedDefinition {
+  string origin_app_code = 1;
+  bytes candidate_json = 2;
+  GenerationScope scope = 3;
+  optional int64 owner_user_id = 4;
+  a2flow.capability.v1.Environment environment = 5;
+  string artifact_digest = 6;
+}
+enum DefinitionSource {
+  PUBLISHED = 0;
+  GENERATED = 1;
+}
+message DescribeGenerationSourceRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string origin_app_code = 2;
+}
+message GenerationSource {
+  ApplicationRelease origin_release = 1;
+  CatalogDescriptor catalog = 2;
+  bytes generation_contract_json = 3;
+}
+message ActivateGeneratedRequest {
+  a2flow.capability.v1.ExecutionContext context = 1;
+  string origin_app_code = 2;
+  bytes params_json = 3;
+  bytes candidate_json = 4;
+  GenerationScope scope = 5;
 }
 message ActivateRequest {
   a2flow.capability.v1.ExecutionContext context = 1;
@@ -107,9 +142,13 @@ message RuntimeResponse {
   bool business_success = 13;
   ActionExecutionObservation action_observation = 14;
   repeated ComposerDraftEffect composer_draft_effects = 15;
+  DefinitionSource definition_source = 16;
+  GeneratedDefinition generated_definition = 17;
 }
 service A2uiExecution {
   rpc Describe(DescribeRequest) returns (DescribeResponse);
   rpc Activate(ActivateRequest) returns (RuntimeResponse);
   rpc Act(ActRequest) returns (RuntimeResponse);
+  rpc DescribeGenerationSource(DescribeGenerationSourceRequest) returns (GenerationSource);
+  rpc ActivateGenerated(ActivateGeneratedRequest) returns (RuntimeResponse);
 }
