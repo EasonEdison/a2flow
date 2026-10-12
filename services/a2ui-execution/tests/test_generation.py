@@ -285,6 +285,49 @@ def test_component_input_target_must_remain_present() -> None:
         validate_candidate(published, MEMBERSHIP, GeneratedCandidate.model_validate(candidate_raw))
 
 
+def test_relative_path_stays_in_its_published_list_template() -> None:
+    published = source()
+    build_raw = published.build.model_dump(by_alias=True)
+    build_raw["initialMessages"][1]["updateComponents"]["components"] = [
+        {"id": "root", "component": "Column", "children": ["listA", "listB"]},
+        {"id": "listA", "component": "List", "children": {"componentId": "cardA", "path": "/a"}},
+        {"id": "cardA", "component": "Column", "children": ["claimText"]},
+        {"id": "claimText", "component": "Text", "text": {"path": "claim"}},
+        {"id": "listB", "component": "List", "children": {"componentId": "cardB", "path": "/b"}},
+        {"id": "cardB", "component": "Column", "children": ["other"]},
+        {"id": "other", "component": "Text", "text": "Other"},
+    ]
+    published = PublishedApplication(published.release, ApplicationBuild.model_validate(build_raw))
+    membership = {**MEMBERSHIP, "List": "A2UI_OFFICIAL"}
+    policy = contract(published, membership)
+    assert policy.allowed_data_paths == ("/a", "/b")
+    assert len(policy.relative_data_bindings) == 1
+    binding = policy.relative_data_bindings[0]
+    assert (binding.source_component_id, binding.path, binding.property_path) == (
+        "claimText",
+        "claim",
+        "/text",
+    )
+    assert binding.template_scopes[0].template_component_id == "listA"
+    candidate_raw = {
+        "messages": [
+            deepcopy(message)
+            for message in published.build.initial_messages
+            if "updateDataModel" not in message
+        ],
+        "actionPlacements": [],
+    }
+    validate_candidate(published, membership, GeneratedCandidate.model_validate(candidate_raw))
+    components = candidate_raw["messages"][1]["updateComponents"]["components"]
+    components.append({"id": "extra", "component": "Text", "text": {"path": "claim"}})
+    components[2]["children"] = ["claimText", "extra"]
+    validate_candidate(published, membership, GeneratedCandidate.model_validate(candidate_raw))
+    components[2]["children"] = ["other", "extra"]
+    components[5]["children"] = ["claimText"]
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_DATA_PATH_NOT_ALLOWED"):
+        validate_candidate(published, membership, GeneratedCandidate.model_validate(candidate_raw))
+
+
 @pytest.mark.parametrize(
     "mutation,code",
     [

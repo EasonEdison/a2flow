@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from importlib.resources import files
-from typing import Protocol, cast
+from typing import Protocol, TypeAlias, cast
 
 from a2flow_capability.models import JsonObject, JsonValue, TrustedContext
 from jsonschema import Draft202012Validator
@@ -24,8 +24,10 @@ from .models import (
     GenerationAnchor,
     GenerationComponent,
     GenerationContract,
+    GenerationRelativeBinding,
     GenerationScope,
     GenerationSurface,
+    GenerationTemplateScope,
     PublishedApplication,
     ShowInputBinding,
 )
@@ -37,6 +39,8 @@ _DENIED_COMPONENTS = frozenset({"Image", "Video", "AudioPlayer", "Icon"})
 _MAX_COMPONENTS = 256
 _MAX_BYTES = 256 * 1024
 _MAX_DEPTH = 24
+ScopeLineage: TypeAlias = tuple[tuple[str, str, str], ...]
+RelativeRule: TypeAlias = tuple[str, str, tuple[str, ...], str, ScopeLineage]
 
 
 class GenerationCatalogReader(Protocol):
@@ -76,8 +80,9 @@ def _components(membership: Mapping[str, str]) -> tuple[GenerationComponent, ...
 
 def _walk_paths(value: JsonValue, result: set[str]) -> None:
     if isinstance(value, dict):
-        if set(value) == {"path"} and isinstance(value["path"], str):
-            result.add(value["path"])
+        path = value.get("path")
+        if isinstance(path, str):
+            result.add(path)
         for child in value.values():
             _walk_paths(child, result)
     elif isinstance(value, list):
@@ -87,12 +92,13 @@ def _walk_paths(value: JsonValue, result: set[str]) -> None:
 
 def _data_paths(published: PublishedApplication) -> tuple[str, ...]:
     paths: set[str] = set()
+    for component in _original_components(published).values():
+        _walk_paths(component, paths)
     for message in published.build.initial_messages:
-        _walk_paths(message, paths)
         update = message.get("updateDataModel")
         if isinstance(update, dict):
             path = update.get("path")
-            if isinstance(path, str):
+            if isinstance(path, str) and path.startswith("/"):
                 paths.add(path)
     for binding in published.build.load_bindings:
         for adapter in (*binding.result_adapters, *binding.failure_result_adapters):
@@ -101,7 +107,7 @@ def _data_paths(published: PublishedApplication) -> tuple[str, ...]:
                 update = template.get("updateDataModel")
                 if isinstance(update, dict):
                     path = update.get("path")
-                    if isinstance(path, str):
+                    if isinstance(path, str) and path.startswith("/"):
                         paths.add(path)
     return tuple(sorted(path for path in paths if path.startswith("/") and path != "/"))
 
@@ -137,6 +143,7 @@ def contract(published: PublishedApplication, membership: Mapping[str, str]) -> 
         sourceMessages=published.build.initial_messages,
         allowedComponents=components,
         allowedDataPaths=_data_paths(published),
+        relativeDataBindings=_relative_bindings(published),
         requiredAnchors=anchors,
         anchorComponents=tuple(
             GenerationAnchor(surfaceId=surface_id, componentId=component_id, component=raw)
@@ -149,7 +156,9 @@ def contract(published: PublishedApplication, membership: Mapping[str, str]) -> 
         mustPreserve=(
             "Keep every anchor component ID and component type on its original surface; "
             "keep each surface root ID. Anchors may move within a valid tree. Copy any approved "
-            "local function expression exactly at the same component property. Place server "
+            "local function expression exactly at the same component property. Relative data "
+            "paths must remain inside the identical templateScopes lineage listed in "
+            "relativeDataBindings; never move them to another list template. Place server "
             "event actions only through approved actionPlacements. Keep input-bound properties. "
             "New IDs and layout are allowed using allowedComponents and allowedDataPaths."
         ),
@@ -209,6 +218,93 @@ def _validate_tree(components: dict[str, JsonObject], root: str) -> None:
         raise A2uiError("A2UI_GENERATION_TREE_INVALID")
 
 
+def _path_occurrences(
+    value: JsonValue, location: tuple[str, ...] = ()
+) -> tuple[tuple[tuple[str, ...], str], ...]:
+    found: list[tuple[tuple[str, ...], str]] = []
+    if isinstance(value, dict):
+        path = value.get("path")
+        if isinstance(path, str):
+            found.append((location, path))
+        for key, child in value.items():
+            found.extend(_path_occurrences(child, (*location, key)))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            found.extend(_path_occurrences(child, (*location, str(index))))
+    return tuple(found)
+
+
+def _scope_contexts(
+    components: dict[str, JsonObject], root: str
+) -> dict[str, frozenset[ScopeLineage]]:
+    contexts: dict[str, set[ScopeLineage]] = {}
+    visited: set[tuple[str, ScopeLineage]] = set()
+
+    def visit(component_id: str, scope: ScopeLineage, depth: int) -> None:
+        if depth > _MAX_DEPTH or component_id not in components:
+            raise A2uiError("A2UI_GENERATION_TREE_INVALID")
+        state = (component_id, scope)
+        if state in visited:
+            return
+        visited.add(state)
+        contexts.setdefault(component_id, set()).add(scope)
+        component = components[component_id]
+        children = component.get("children")
+        template_id = children.get("componentId") if isinstance(children, dict) else None
+        template_path = children.get("path") if isinstance(children, dict) else None
+        for child_id in _references(component):
+            next_scope = scope
+            if child_id == template_id and isinstance(template_path, str):
+                next_scope = (*scope, (component_id, child_id, template_path))
+            visit(child_id, next_scope, depth + 1)
+
+    visit(root, (), 1)
+    return {component_id: frozenset(scopes) for component_id, scopes in contexts.items()}
+
+
+def _relative_bindings(published: PublishedApplication) -> tuple[GenerationRelativeBinding, ...]:
+    source = _original_components(published)
+    bindings: list[GenerationRelativeBinding] = []
+    for declaration in published.build.surface_declarations:
+        surface_id = declaration.surface_id
+        components = {
+            component_id: raw
+            for (item_surface, component_id), raw in source.items()
+            if item_surface == surface_id
+        }
+        contexts = _scope_contexts(components, declaration.root_component_id)
+        for component_id, component in sorted(components.items()):
+            component_type = component.get("component")
+            if not isinstance(component_type, str):
+                raise A2uiError("A2UI_GENERATION_SOURCE_INVALID")
+            for location, path in _path_occurrences(component):
+                if not path or path.startswith("/"):
+                    continue
+                scopes = contexts.get(component_id, frozenset())
+                if len(scopes) != 1:
+                    raise A2uiError("A2UI_GENERATION_SOURCE_INVALID")
+                scope = next(iter(scopes))
+                bindings.append(
+                    GenerationRelativeBinding(
+                        surfaceId=surface_id,
+                        sourceComponentId=component_id,
+                        componentType=component_type,
+                        propertyPath="/"
+                        + "/".join(part.replace("~", "~0").replace("/", "~1") for part in location),
+                        path=path,
+                        templateScopes=tuple(
+                            GenerationTemplateScope(
+                                templateComponentId=item[0],
+                                itemComponentId=item[1],
+                                dataPath=item[2],
+                            )
+                            for item in scope
+                        ),
+                    )
+                )
+    return tuple(bindings)
+
+
 def _canonical(value: JsonValue) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
@@ -247,6 +343,9 @@ def _approved_expressions(
 def _validate_values(
     value: JsonValue,
     data_paths: frozenset[str],
+    relative_rules: frozenset[RelativeRule],
+    surface_id: str,
+    scopes: frozenset[ScopeLineage],
     expressions: frozenset[tuple[str, tuple[str, ...], str]],
     component_type: str,
     location: tuple[str, ...] = (),
@@ -263,16 +362,43 @@ def _validate_values(
             _canonical(value),
         ) not in expressions:
             raise A2uiError("A2UI_GENERATION_AUTHORITY_FORBIDDEN")
-        if "path" in value and value["path"] not in data_paths:
-            raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
+        if "path" in value:
+            path = value["path"]
+            if not isinstance(path, str):
+                raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
+            if path.startswith("/"):
+                if path not in data_paths:
+                    raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
+            elif (
+                len(scopes) != 1
+                or (surface_id, component_type, location, path, next(iter(scopes)))
+                not in relative_rules
+            ):
+                raise A2uiError("A2UI_GENERATION_DATA_PATH_NOT_ALLOWED")
         for key, child in value.items():
             _validate_values(
-                child, data_paths, expressions, component_type, (*location, key), depth + 1
+                child,
+                data_paths,
+                relative_rules,
+                surface_id,
+                scopes,
+                expressions,
+                component_type,
+                (*location, key),
+                depth + 1,
             )
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _validate_values(
-                child, data_paths, expressions, component_type, (*location, str(index)), depth + 1
+                child,
+                data_paths,
+                relative_rules,
+                surface_id,
+                scopes,
+                expressions,
+                component_type,
+                (*location, str(index)),
+                depth + 1,
             )
 
 
@@ -398,6 +524,33 @@ def validate_candidate(
         raise A2uiError("A2UI_GENERATION_SURFACE_INVALID")
     if len({key[0] for key in all_components}) != len(policy.surface_ids):
         raise A2uiError("A2UI_GENERATION_ROOT_INVALID")
+    candidate_scopes: dict[tuple[str, str], frozenset[ScopeLineage]] = {}
+    for declaration in published.build.surface_declarations:
+        component_map = {
+            component_id: raw
+            for (surface_id, component_id), (_, _, raw) in all_components.items()
+            if surface_id == declaration.surface_id
+        }
+        _validate_tree(component_map, declaration.root_component_id)
+        candidate_scopes.update(
+            ((declaration.surface_id, component_id), scopes)
+            for component_id, scopes in _scope_contexts(
+                component_map, declaration.root_component_id
+            ).items()
+        )
+    relative_rules: frozenset[RelativeRule] = frozenset(
+        (
+            item.surface_id,
+            item.component_type,
+            tokens(item.property_path, allow_root=False),
+            item.path,
+            tuple(
+                (scope.template_component_id, scope.item_component_id, scope.data_path)
+                for scope in item.template_scopes
+            ),
+        )
+        for item in policy.relative_data_bindings
+    )
     action_targets: dict[str, list[str]] = {}
     action_declarations: list[ActionDeclaration] = []
     placed_ids: set[tuple[str, str]] = set()
@@ -469,7 +622,13 @@ def validate_candidate(
         ):
             raise A2uiError("A2UI_GENERATION_ACTION_NOT_ALLOWED")
         _validate_values(
-            component, frozenset(policy.allowed_data_paths), expressions, component_type
+            component,
+            frozenset(policy.allowed_data_paths),
+            relative_rules,
+            key[0],
+            candidate_scopes.get(key, frozenset()),
+            expressions,
+            component_type,
         )
     for key, original in source.items():
         if key not in all_components or all_components[key][2].get("component") != original.get(
@@ -480,13 +639,6 @@ def validate_candidate(
             _function_expressions(all_components[key][2])
         ):
             raise A2uiError("A2UI_GENERATION_AUTHORITY_FORBIDDEN")
-    for declaration in published.build.surface_declarations:
-        component_map = {
-            component_id: raw
-            for (surface_id, component_id), (_, _, raw) in all_components.items()
-            if surface_id == declaration.surface_id
-        }
-        _validate_tree(component_map, declaration.root_component_id)
     SurfaceLedger.empty().reduce(candidate.messages)
     data_messages: list[JsonObject] = []
     data_index: dict[int, int] = {}

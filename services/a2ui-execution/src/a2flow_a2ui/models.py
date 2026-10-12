@@ -96,12 +96,30 @@ class GenerationAnchor(_PublishedModel):
     component: JsonObject
 
 
+class GenerationTemplateScope(_PublishedModel):
+    template_component_id: str = Field(alias="templateComponentId")
+    item_component_id: str = Field(alias="itemComponentId")
+    data_path: str = Field(alias="dataPath")
+
+
+class GenerationRelativeBinding(_PublishedModel):
+    surface_id: str = Field(alias="surfaceId")
+    source_component_id: str = Field(alias="sourceComponentId")
+    component_type: str = Field(alias="componentType")
+    property_path: str = Field(alias="propertyPath")
+    path: str
+    template_scopes: tuple[GenerationTemplateScope, ...] = Field(alias="templateScopes")
+
+
 class GenerationContract(_PublishedModel):
     origin_app_code: str = Field(alias="originAppCode")
     params_schema: JsonObject = Field(alias="paramsSchema")
     source_messages: tuple[JsonObject, ...] = Field(alias="sourceMessages")
     allowed_components: tuple[GenerationComponent, ...] = Field(alias="allowedComponents")
     allowed_data_paths: tuple[str, ...] = Field(alias="allowedDataPaths")
+    relative_data_bindings: tuple[GenerationRelativeBinding, ...] = Field(
+        alias="relativeDataBindings"
+    )
     required_anchors: tuple[str, ...] = Field(alias="requiredAnchors")
     anchor_components: tuple[GenerationAnchor, ...] = Field(alias="anchorComponents")
     surfaces: tuple[GenerationSurface, ...]
