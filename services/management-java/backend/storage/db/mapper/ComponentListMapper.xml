@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dev.a2flow.management.storage.db.mapper.ComponentListMapper">
+  <sql id="filters">
+    <where>
+      <if test="query.assetType != ''">AND asset_type = #{query.assetType}</if>
+      <if test="query.dslType != ''">AND dsl_type = #{query.dslType}</if>
+      <if test="query.enabledOnly">AND enabled = 1</if>
+      <!-- 保留组件中心原有 LIKE 大小写及通配符语义，所有输入均为绑定参数。 -->
+      <if test="query.keyword != ''">
+        AND (component_name LIKE '%' || #{query.keyword} || '%'
+          OR component_name_cn LIKE '%' || #{query.keyword} || '%'
+          OR agent_ui_dsl LIKE '%' || #{query.keyword} || '%'
+          OR owner LIKE '%' || #{query.keyword} || '%'
+          OR scene LIKE '%' || #{query.keyword} || '%')
+      </if>
+    </where>
+  </sql>
+  <select id="count" resultType="long">
+    SELECT count(*) FROM skill_component_registry <include refid="filters"/>
+  </select>
+  <select id="selectPage" resultType="dev.a2flow.management.lifecycle.domain.ComponentListItem">
+    SELECT id, asset_type, component_name, component_name_cn, dsl_type, protocol_version,
+           owner, scene, coalesce(enabled, 0) = 1 AS enabled, update_time
+    FROM skill_component_registry <include refid="filters"/>
+    ORDER BY update_time DESC, id DESC
+    LIMIT #{query.pageSize} OFFSET #{query.offset}
+  </select>
+</mapper>

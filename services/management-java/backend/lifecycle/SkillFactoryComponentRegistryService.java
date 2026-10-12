@@ -22,6 +22,9 @@ import dev.a2flow.management.access.AssetAction;
 import dev.a2flow.management.access.AssetAuthorizationService;
 import dev.a2flow.management.access.AssetCreationTransactionService;
 import dev.a2flow.management.lifecycle.domain.ComponentAsset;
+import dev.a2flow.management.lifecycle.domain.ComponentListItem;
+import dev.a2flow.management.lifecycle.domain.ComponentListQuery;
+import dev.a2flow.management.storage.db.repository.ComponentListRepository;
 import dev.a2flow.management.model.SkillFactoryComponentAsset;
 import dev.a2flow.management.model.SkillFactoryComponentPreviewResult;
 import dev.a2flow.management.model.SkillFactoryRenderPreviewResult;
@@ -183,17 +186,22 @@ public class SkillFactoryComponentRegistryService {
     @Resource
     private AssetCreationTransactionService assetCreationTransactionService;
 
+    @Resource
+    private ComponentListRepository componentListRepository;
+
     /**
      * 查询组件资产列表，支持关键字、资产类型、协议族和 enabledOnly 筛选。
      */
+    public ManagementListPage<ComponentListItem> listPage(Map<String, String> params) {
+        boolean enabledOnly = booleanValue(params.get(PARAM_ENABLED_ONLY), false);
+        return componentListRepository.list(ComponentListQuery.from(params, enabledOnly));
+    }
+
+    /** 内部 Authoring 候选仍使用完整契约，不与管理列表分页混用。 */
     public List<SkillFactoryComponentAsset> list(Map<String, String> params) {
         boolean enabledOnly = booleanValue(params.get(PARAM_ENABLED_ONLY), false);
-        SkillFactoryComponentAssetRepository.ComponentAssetQuery query = buildQuery(params);
-        log.info("SkillFactory组件中心查询列表, keyword:{}, assetType:{}, dslType:{}, enabledOnly:{}",
-                query.getKeyword(), query.getAssetType(), query.getDslType(), enabledOnly);
-        return componentAssetRepository.list(query, enabledOnly).stream()
-                .map(this::toApiAsset)
-                .toList();
+        return componentAssetRepository.list(buildQuery(params), enabledOnly).stream()
+                .map(this::toApiAsset).toList();
     }
 
     /**

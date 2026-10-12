@@ -33,10 +33,21 @@ export interface SkillFactoryComponentAsset {
     updateTime?: number;
 }
 export interface ComponentAssetQuery {
+    page?: number;
+    pageSize?: number;
     keyword?: string;
     assetType?: ComponentAssetType | 'ALL';
     dslType?: ComponentDslType | 'ALL';
     enabledOnly?: boolean;
+}
+export type ComponentListItem = Pick<SkillFactoryComponentAsset,
+    'id' | 'assetType' | 'componentName' | 'componentNameCn' | 'dslType' |
+    'protocolVersion' | 'owner' | 'scene' | 'enabled' | 'updateTime'>;
+export interface ManagementListPage<T> {
+    list: T[];
+    total: number;
+    page: number;
+    pageSize: number;
 }
 export interface ComponentPreviewResult {
     valid: boolean;

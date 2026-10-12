@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -37,6 +37,7 @@ import JsonFormatTextArea from './shared/JsonFormatTextArea';
 import { isAssetReleaseEditable } from './shared/useAssetReleaseEditability';
 import type {
   ComponentAssetQuery,
+  ComponentListItem,
   ComponentAssetType,
   ComponentDslType,
   SkillFactoryComponentAsset,
@@ -119,6 +120,8 @@ function normalizeQuery(query: ComponentAssetQuery): ComponentAssetQuery {
     keyword: query.keyword?.trim?.(),
     assetType: query.assetType,
     dslType: query.dslType,
+    page: query.page,
+    pageSize: query.pageSize,
   };
 }
 
@@ -153,13 +156,18 @@ const ComponentCenterPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [form] = Form.useForm();
-  const [assets, setAssets] = useState<SkillFactoryComponentAsset[]>([]);
+  const [assets, setAssets] = useState<ComponentListItem[]>([]);
+  const [assetTotal, setAssetTotal] = useState(0);
+  const listRequestSequence = useRef(0);
+  const editRequestSequence = useRef(0);
   const [applications, setApplications] = useState<A2uiApplicationRecord[]>([]);
   const [activeAssetViewKey, setActiveAssetViewKey] =
     useState<ComponentCenterAssetViewKey>('A2UI_ATOM');
   const [query, setQuery] = useState<ComponentAssetQuery>({
     assetType: 'A2UI_ATOM',
     dslType: 'ALL',
+    page: 1,
+    pageSize: 20,
   });
   const [applicationQuery, setApplicationQuery] = useState<A2uiApplicationQuery>({
     status: 'ALL',
@@ -172,7 +180,7 @@ const ComponentCenterPage: React.FC = () => {
 
   const isApplicationView = activeAssetViewKey === 'A2UI_APPLICATION';
 
-  const currentListCount = isApplicationView ? applications.length : assets.length;
+  const currentListCount = isApplicationView ? applications.length : assetTotal;
 
   const enabledCount = useMemo(
     () =>
@@ -207,25 +215,31 @@ const ComponentCenterPage: React.FC = () => {
 
   const loadAssets = useCallback(
     async (nextQuery?: ComponentAssetQuery) => {
+      const requestId = ++listRequestSequence.current;
       setLoading(true);
       setError('');
       try {
         const requestQuery = nextQuery || query;
-        const list = await componentCenterApi.list(normalizeQuery(requestQuery));
-        setAssets(list);
+        const result = await componentCenterApi.list(normalizeQuery(requestQuery));
+        if (requestId !== listRequestSequence.current) return;
+        setAssets(result.list);
+        setAssetTotal(result.total);
         setApplications([]);
       } catch (e) {
+        if (requestId !== listRequestSequence.current) return;
         const msg = e instanceof Error ? e.message : '组件资产加载失败';
         setError(msg);
         setAssets([]);
+        setAssetTotal(0);
       } finally {
-        setLoading(false);
+        if (requestId === listRequestSequence.current) setLoading(false);
       }
     },
     [query],
   );
 
   const loadApplications = useCallback(async () => {
+    const requestId = ++listRequestSequence.current;
     setLoading(true);
     setError('');
     try {
@@ -233,14 +247,16 @@ const ComponentCenterPage: React.FC = () => {
         keyword: applicationQuery.keyword?.trim(),
         status: applicationQuery.status,
       });
+      if (requestId !== listRequestSequence.current) return;
       setApplications(list);
       setAssets([]);
     } catch (e) {
+      if (requestId !== listRequestSequence.current) return;
       const msg = e instanceof Error ? e.message : 'A2UI 编排列表加载失败';
       setError(msg);
       setApplications([]);
     } finally {
-      setLoading(false);
+      if (requestId === listRequestSequence.current) setLoading(false);
     }
   }, [applicationQuery]);
 
@@ -255,6 +271,11 @@ const ComponentCenterPage: React.FC = () => {
     });
   }, [activeAssetViewKey, loadApplications, loadAssets, query]);
 
+  useEffect(() => () => {
+    listRequestSequence.current += 1;
+    editRequestSequence.current += 1;
+  }, []);
+
   const switchAssetView = (assetType: ComponentCenterAssetViewKey) => {
     setActiveAssetViewKey(assetType);
     if (assetType !== 'A2UI_APPLICATION') {
@@ -262,6 +283,7 @@ const ComponentCenterPage: React.FC = () => {
         ...prev,
         assetType,
         dslType: 'ALL',
+        page: 1,
       }));
     }
   };
@@ -278,27 +300,39 @@ const ComponentCenterPage: React.FC = () => {
     return false;
   };
 
-  const openEditDrawer = async (asset: SkillFactoryComponentAsset) => {
-    if (!(await ensureAssetEditable(asset))) return;
-    if (isCardContainerAsset(asset) && asset.id) {
-      navigate(buildCardAuthoringPath(asset));
-      return;
+  const openEditDrawer = async (item: ComponentListItem) => {
+    if (!item.id) return;
+    const requestId = ++editRequestSequence.current;
+    try {
+      const asset = await componentCenterApi.detail(item.id);
+      if (requestId !== editRequestSequence.current) return;
+      if (!(await ensureAssetEditable(asset))) return;
+      if (requestId !== editRequestSequence.current) return;
+      if (isCardContainerAsset(asset)) {
+        navigate(buildCardAuthoringPath(asset));
+        return;
+      }
+      setEditingAsset(asset);
+      form.resetFields();
+      form.setFieldsValue({
+        ...toFormAsset(asset),
+        paramsSchemaJson: formatJsonText(asset.paramsSchemaJson),
+        renderTemplateJson: asset.renderTemplateJson || '',
+        officialDemoJson: formatJsonText(asset.officialDemoJson),
+        messageDemoJson: formatJsonText(asset.messageDemoJson),
+        allowedActionsJson: formatJsonText(asset.allowedActionsJson),
+        runtimeConfigJson: formatJsonText(asset.runtimeConfigJson),
+        attribute: formatJsonText(asset.attribute),
+      });
+      setDrawerOpen(true);
+    } catch (reason) {
+      if (requestId === editRequestSequence.current) {
+        message.error(reason instanceof Error ? reason.message : '组件详情加载失败');
+      }
     }
-    setEditingAsset(asset);
-    form.setFieldsValue({
-      ...toFormAsset(asset),
-      paramsSchemaJson: formatJsonText(asset.paramsSchemaJson),
-      renderTemplateJson: asset.renderTemplateJson || '',
-      officialDemoJson: formatJsonText(asset.officialDemoJson),
-      messageDemoJson: formatJsonText(asset.messageDemoJson),
-      allowedActionsJson: formatJsonText(asset.allowedActionsJson),
-      runtimeConfigJson: formatJsonText(asset.runtimeConfigJson),
-      attribute: formatJsonText(asset.attribute),
-    });
-    setDrawerOpen(true);
   };
 
-  const openDetailPage = (asset: SkillFactoryComponentAsset) => {
+  const openDetailPage = (asset: ComponentListItem) => {
     if (!asset.id) return;
     navigate(`/management/components/detail?id=${asset.id}`);
   };
@@ -339,7 +373,6 @@ const ComponentCenterPage: React.FC = () => {
         assetType: saved.assetType || payload.assetType || query.assetType,
       };
       setQuery(nextQuery);
-      await loadAssets(nextQuery);
     } catch (e) {
       message.error(e instanceof Error ? e.message : '保存失败');
     } finally {
@@ -391,11 +424,11 @@ const ComponentCenterPage: React.FC = () => {
           <strong>{currentListCount}</strong>
         </div>
         <div>
-          <Text type="secondary">{isApplicationView ? '当前已验证' : '当前可引用'}</Text>
+          <Text type="secondary">{isApplicationView ? '当前已验证' : '本页可引用'}</Text>
           <strong>{enabledCount}</strong>
         </div>
         <div>
-          <Text type="secondary">当前协议数</Text>
+          <Text type="secondary">{isApplicationView ? '当前协议数' : '本页协议数'}</Text>
           <strong>{protocolCount}</strong>
         </div>
       </div>
@@ -436,6 +469,7 @@ const ComponentCenterPage: React.FC = () => {
                   setQuery((prev) => ({
                     ...prev,
                     dslType: value as ComponentAssetQuery['dslType'],
+                    page: 1,
                   }))
                 }
                 options={dslTypeOptions}
@@ -448,6 +482,7 @@ const ComponentCenterPage: React.FC = () => {
                   setQuery((prev) => ({
                     ...prev,
                     keyword: event.target.value,
+                    page: 1,
                   }))
                 }
                 style={{ width: 320 }}
@@ -533,7 +568,16 @@ const ComponentCenterPage: React.FC = () => {
             <Table
               rowKey="id"
               dataSource={assets}
-              pagination={false}
+              pagination={{
+                current: query.page || 1,
+                pageSize: query.pageSize || 20,
+                total: assetTotal,
+                showSizeChanger: true,
+                pageSizeOptions: [10, 20, 50, 100],
+                locale: { items_per_page: '条/页', prev_page: '上一页', next_page: '下一页' },
+                showTotal: (total) => `共 ${total} 个资产`,
+                onChange: (page, pageSize) => setQuery((prev) => ({ ...prev, page, pageSize })),
+              }}
               locale={{ emptyText: <Empty description={listEmptyText} /> }}
               onRow={(record) => ({
                 onClick: () => openDetailPage(record),
@@ -542,7 +586,7 @@ const ComponentCenterPage: React.FC = () => {
                 {
                   title: '组件',
                   dataIndex: 'componentName',
-                  render: (value: string, record: SkillFactoryComponentAsset) => (
+                  render: (value: string, record: ComponentListItem) => (
                     <div className="component-center-name-cell">
                       <strong>{record.componentNameCn || value}</strong>
                       <span>{value}</span>
@@ -577,17 +621,16 @@ const ComponentCenterPage: React.FC = () => {
                   title: '状态',
                   dataIndex: 'enabled',
                   width: 116,
-                  render: (value: boolean, record: SkillFactoryComponentAsset) => (
+                  render: (value: boolean) => (
                     <Space wrap>
                       <Tag color={value ? 'success' : undefined}>{value ? '可引用' : '未启用'}</Tag>
-                      {record.published ? <Tag color="blue">v{record.publishedVersion}</Tag> : null}
                     </Space>
                   ),
                 },
                 {
                   title: '操作',
                   width: 164,
-                  render: (_: unknown, record: SkillFactoryComponentAsset) => (
+                  render: (_: unknown, record: ComponentListItem) => (
                     <Space>
                       <Button
                         type="link"

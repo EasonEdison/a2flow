@@ -334,7 +334,7 @@ public class SkillFactoryMethodDispatcher {
                     required(params, PARAM_WORKSPACE_ID), string(params.get(PARAM_PACKAGE_URL)), params), false);
         }
         if (method == SkillFactoryMethodEnum.COMPONENT_LIST) {
-            return success(componentRegistryService.list(params), true);
+            return success(componentRegistryService.listPage(params), false);
         }
         if (method == SkillFactoryMethodEnum.COMPONENT_ENABLED_LIST) {
             return success(componentRegistryService.listEnabled(params), true);

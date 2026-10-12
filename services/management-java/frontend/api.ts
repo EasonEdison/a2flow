@@ -1,7 +1,7 @@
 import { jsonParse, jsonStringify } from './shared/safeJson';
 import { assertManualManagementMethod } from './shared/managementAuthoringPolicy';
 import { managementFetch } from './shared/managementSession';
-import type { ComponentAssetQuery, ComponentPreviewResult, ComponentRenderPreviewParams, ComponentRenderPreviewResult, AssetReleaseEnvironmentFacts, AssetAccessResult, AssetReleaseOperationResult, AssetReleaseOverview, ReleaseDiffDocument, ReleaseDiffQuery, ReleaseAssetType, ReleaseEnvironment, SkillFactoryComponentAsset, } from './types';
+import type { ComponentListItem, ManagementListPage, ComponentAssetQuery, ComponentPreviewResult, ComponentRenderPreviewParams, ComponentRenderPreviewResult, AssetReleaseEnvironmentFacts, AssetAccessResult, AssetReleaseOperationResult, AssetReleaseOverview, ReleaseDiffDocument, ReleaseDiffQuery, ReleaseAssetType, ReleaseEnvironment, SkillFactoryComponentAsset, } from './types';
 import type { A2uiCatalogAuthoringJson, A2uiCatalogComponentContract, A2uiCatalogComponentQuery, A2uiCatalogComponentRecord, A2uiManagedCatalogImportResult, A2uiCatalogQuery, A2uiCatalogRecord, } from './a2uiCatalogContracts';
 import { parseA2uiCatalogAuthoringJson } from './a2uiCatalogContracts';
 import type { A2uiApplicationBlueprintCode, A2uiApplicationBlueprintWireSource, A2uiApplicationDraft, A2uiApplicationQuery, A2uiApplicationRecord, A2uiMessage, } from './a2uiApplicationContracts';
@@ -1973,7 +1973,7 @@ function componentBasicInfoWriteParams(asset: SkillFactoryComponentAsset): Recor
     };
 }
 export const componentCenterApi = {
-    list: (query: ComponentAssetQuery) => callSkillFactory<SkillFactoryComponentAsset[]>(SkillFactoryMethod.COMPONENT_LIST, compact(query)),
+    list: (query: ComponentAssetQuery) => callSkillFactory<ManagementListPage<ComponentListItem>>(SkillFactoryMethod.COMPONENT_LIST, compact(query)),
     enabledList: (query: ComponentAssetQuery = {}) => callSkillFactory<SkillFactoryComponentAsset[]>(SkillFactoryMethod.COMPONENT_ENABLED_LIST, compact(query)),
     publishedList: (query: ComponentAssetQuery = {}) => callSkillFactory<SkillFactoryComponentAsset[]>(SkillFactoryMethod.COMPONENT_PUBLISHED_LIST, compact(query)),
     detail: (id: number) => callSkillFactory<SkillFactoryComponentAsset>(SkillFactoryMethod.COMPONENT_DETAIL, { id }),

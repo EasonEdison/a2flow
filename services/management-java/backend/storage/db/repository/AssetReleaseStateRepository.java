@@ -12,7 +12,6 @@ import org.springframework.stereotype.Repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import dev.a2flow.management.support.JsonSupport;
 import dev.a2flow.management.release.ReleaseAssetType;
 import dev.a2flow.management.release.ReleaseModels.AssetReleaseState;
@@ -84,7 +83,7 @@ public class AssetReleaseStateRepository {
 
     /**
      * 按稳定 assetKey 有界扫描并逐个消费发布聚合，避免列表调用方持有全部历史快照。
-     * 每页使用 keyset 和 MyBatis 分页插件，不做 count；跨页继续扫描直到读尽，不截断合法资产。
+     * 每页使用 keyset 和显式 LIMIT，不依赖分页插件；跨页继续扫描直到读尽，不截断合法资产。
      */
     public void scanByAssetType(ReleaseAssetType assetType, Consumer<AssetReleaseState> consumer) {
         String cursor = null;
@@ -94,9 +93,9 @@ public class AssetReleaseStateRepository {
                     .eq(AssetReleaseStateDO::getAssetType, assetType.name())
                     .eq(AssetReleaseStateDO::getDeleted, NOT_DELETED)
                     .gt(cursor != null, AssetReleaseStateDO::getAssetKey, cursor)
-                    .orderByAsc(AssetReleaseStateDO::getAssetKey);
-            List<AssetReleaseStateDO> page = assetReleaseStateMapper.selectPage(
-                    new Page<AssetReleaseStateDO>(1, ASSET_SCAN_PAGE_SIZE, false), wrapper).getRecords();
+                    .orderByAsc(AssetReleaseStateDO::getAssetKey)
+                    .last("LIMIT " + ASSET_SCAN_PAGE_SIZE);
+            List<AssetReleaseStateDO> page = assetReleaseStateMapper.selectList(wrapper);
             for (AssetReleaseStateDO row : page) {
                 consumer.accept(toState(row));
             }
