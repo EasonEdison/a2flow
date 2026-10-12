@@ -149,7 +149,7 @@ def _candidate(value: bytes) -> GeneratedCandidate:
     try:
         return GeneratedCandidate.model_validate(_object(value))
     except ValidationError:
-        raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID") from None
+        raise A2uiError("A2UI_GENERATION_CANDIDATE_SHAPE_INVALID") from None
 
 
 def _definition_model(value: a2ui_pb2.GeneratedDefinition) -> GeneratedDefinition:

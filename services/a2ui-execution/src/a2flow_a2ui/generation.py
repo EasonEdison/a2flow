@@ -10,6 +10,7 @@ from typing import Protocol, TypeAlias, cast
 
 from a2flow_capability.models import JsonObject, JsonValue, TrustedContext
 from jsonschema import Draft202012Validator
+from pydantic import TypeAdapter
 from referencing import Registry, Resource
 
 from .jsonutil import read, reject_authority_keys, require_object, require_size, tokens
@@ -24,10 +25,12 @@ from .models import (
     GenerationAnchor,
     GenerationComponent,
     GenerationContract,
+    GenerationCreateSurfaceEnvelope,
     GenerationRelativeBinding,
     GenerationScope,
     GenerationSurface,
     GenerationTemplateScope,
+    GenerationUpdateComponentsEnvelope,
     PublishedApplication,
     ShowInputBinding,
 )
@@ -130,6 +133,21 @@ def _original_components(published: PublishedApplication) -> dict[tuple[str, str
     return components
 
 
+def _message_envelope_schema() -> JsonObject:
+    schema = TypeAdapter(
+        tuple[GenerationCreateSurfaceEnvelope | GenerationUpdateComponentsEnvelope, ...]
+    ).json_schema(by_alias=True)
+    schema["minItems"] = 2
+    schema["maxItems"] = 64
+    schema["prefixItems"] = [{"$ref": "#/$defs/GenerationCreateSurfaceEnvelope"}]
+    schema["description"] = (
+        "A2UI v0.9.1 message envelopes: first createSurface, followed by "
+        "createSurface or updateComponents. Each update must refer to a previously "
+        "created surface; the runtime appends trusted updateDataModel messages."
+    )
+    return schema
+
+
 def contract(published: PublishedApplication, membership: Mapping[str, str]) -> GenerationContract:
     components = _components(membership)
     for message in published.build.initial_messages:
@@ -141,6 +159,7 @@ def contract(published: PublishedApplication, membership: Mapping[str, str]) -> 
         originAppCode=published.release.app_code,
         paramsSchema=published.build.params_schema,
         sourceMessages=published.build.initial_messages,
+        messageEnvelopeSchema=_message_envelope_schema(),
         allowedComponents=components,
         allowedDataPaths=_data_paths(published),
         relativeDataBindings=_relative_bindings(published),
@@ -352,7 +371,7 @@ def _validate_values(
     depth: int = 0,
 ) -> None:
     if depth > 32:
-        raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+        raise A2uiError("A2UI_GENERATION_VALUE_DEPTH_INVALID")
     if isinstance(value, dict):
         if any(key in value for key in ("url", "svgPath", "html", "script")):
             raise A2uiError("A2UI_GENERATION_AUTHORITY_FORBIDDEN")
@@ -416,10 +435,10 @@ def _index_components(
         surface_id = update.get("surfaceId")
         for component_index, raw in enumerate(raw_components):
             if not isinstance(surface_id, str) or not isinstance(raw, dict):
-                raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+                raise A2uiError("A2UI_GENERATION_COMPONENT_SHAPE_INVALID")
             component_id = raw.get("id")
             if not isinstance(component_id, str) or not component_id:
-                raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+                raise A2uiError("A2UI_GENERATION_COMPONENT_SHAPE_INVALID")
             key = (surface_id, component_id)
             if key in result:
                 raise A2uiError("A2UI_GENERATION_COMPONENT_DUPLICATE")
@@ -492,18 +511,20 @@ def validate_candidate(
     source = _original_components(published)
     expressions = _approved_expressions(source)
     seen_surfaces: set[str] = set()
-    all_components = _index_components(candidate.messages)
-    if len(all_components) > _MAX_COMPONENTS:
-        raise A2uiError("A2UI_GENERATION_SIZE_LIMIT")
     for message in candidate.messages:
-        if message.get("version") != PROTOCOL_VERSION or len(message) != 2:
-            raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+        if message.get("version") != PROTOCOL_VERSION:
+            raise A2uiError("A2UI_GENERATION_MESSAGE_VERSION_INVALID")
+        if len(message) != 2:
+            raise A2uiError("A2UI_GENERATION_MESSAGE_ENVELOPE_INVALID")
         if "createSurface" in message:
-            body = require_object(message["createSurface"], "A2UI_GENERATION_CANDIDATE_INVALID")
+            body = require_object(
+                message["createSurface"], "A2UI_GENERATION_CREATE_SURFACE_SHAPE_INVALID"
+            )
+            if set(body) - {"surfaceId", "catalogId", "theme", "sendDataModel"}:
+                raise A2uiError("A2UI_GENERATION_CREATE_SURFACE_SHAPE_INVALID")
             surface = body.get("surfaceId")
             if (
-                set(body) - {"surfaceId", "catalogId", "theme", "sendDataModel"}
-                or not isinstance(surface, str)
+                not isinstance(surface, str)
                 or surface in seen_surfaces
                 or surface not in policy.surface_ids
                 or body.get("catalogId") != published.build.catalog.catalog_id
@@ -511,15 +532,20 @@ def validate_candidate(
                 raise A2uiError("A2UI_GENERATION_SURFACE_INVALID")
             seen_surfaces.add(surface)
         elif "updateComponents" in message:
-            body = require_object(message["updateComponents"], "A2UI_GENERATION_CANDIDATE_INVALID")
-            if (
-                set(body) != {"surfaceId", "components"}
-                or body.get("surfaceId") not in seen_surfaces
-                or not isinstance(body.get("components"), list)
+            body = require_object(
+                message["updateComponents"], "A2UI_GENERATION_UPDATE_COMPONENTS_SHAPE_INVALID"
+            )
+            if set(body) != {"surfaceId", "components"} or not isinstance(
+                body.get("components"), list
             ):
-                raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+                raise A2uiError("A2UI_GENERATION_UPDATE_COMPONENTS_SHAPE_INVALID")
+            if body.get("surfaceId") not in seen_surfaces:
+                raise A2uiError("A2UI_GENERATION_MESSAGE_ORDER_INVALID")
         else:
-            raise A2uiError("A2UI_GENERATION_CANDIDATE_INVALID")
+            raise A2uiError("A2UI_GENERATION_MESSAGE_ENVELOPE_INVALID")
+    all_components = _index_components(candidate.messages)
+    if len(all_components) > _MAX_COMPONENTS:
+        raise A2uiError("A2UI_GENERATION_SIZE_LIMIT")
     if seen_surfaces != set(policy.surface_ids):
         raise A2uiError("A2UI_GENERATION_SURFACE_INVALID")
     if len({key[0] for key in all_components}) != len(policy.surface_ids):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
+from typing import Literal, Protocol
 
 from a2flow_capability.models import (
     Environment,
@@ -64,6 +64,28 @@ class GeneratedCandidate(_PublishedModel):
     )
 
 
+class GenerationCreateSurfaceBody(_PublishedModel):
+    surface_id: str = Field(alias="surfaceId", min_length=1)
+    catalog_id: str = Field(alias="catalogId", min_length=1)
+    theme: JsonValue = None
+    send_data_model: JsonValue = Field(default=None, alias="sendDataModel")
+
+
+class GenerationCreateSurfaceEnvelope(_PublishedModel):
+    version: Literal["v0.9.1"]
+    create_surface: GenerationCreateSurfaceBody = Field(alias="createSurface")
+
+
+class GenerationUpdateComponentsBody(_PublishedModel):
+    surface_id: str = Field(alias="surfaceId", min_length=1)
+    components: tuple[JsonObject, ...]
+
+
+class GenerationUpdateComponentsEnvelope(_PublishedModel):
+    version: Literal["v0.9.1"]
+    update_components: GenerationUpdateComponentsBody = Field(alias="updateComponents")
+
+
 class GeneratedDefinition(_PublishedModel):
     origin_app_code: str = Field(alias="originAppCode", min_length=1)
     candidate: GeneratedCandidate
@@ -115,6 +137,7 @@ class GenerationContract(_PublishedModel):
     origin_app_code: str = Field(alias="originAppCode")
     params_schema: JsonObject = Field(alias="paramsSchema")
     source_messages: tuple[JsonObject, ...] = Field(alias="sourceMessages")
+    message_envelope_schema: JsonObject = Field(alias="messageEnvelopeSchema")
     allowed_components: tuple[GenerationComponent, ...] = Field(alias="allowedComponents")
     allowed_data_paths: tuple[str, ...] = Field(alias="allowedDataPaths")
     relative_data_bindings: tuple[GenerationRelativeBinding, ...] = Field(

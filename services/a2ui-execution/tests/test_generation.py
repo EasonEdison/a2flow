@@ -5,6 +5,7 @@ from copy import deepcopy
 
 import pytest
 from a2flow_capability.models import Environment, ExecutionResult, JsonObject, TrustedContext
+from jsonschema import Draft202012Validator
 from test_runtime import build_json
 
 from a2flow_a2ui.generation import contract, definition, validate_candidate, verify_definition
@@ -17,6 +18,7 @@ from a2flow_a2ui.models import (
     GenerationScope,
     PublishedApplication,
 )
+from a2flow_a2ui.rpc import _candidate
 from a2flow_a2ui.runtime import A2uiRuntimeService
 
 CATALOG_ID = "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
@@ -97,6 +99,58 @@ def test_new_component_id_and_layout_are_accepted() -> None:
     assert {item.type for item in described.allowed_components} == {"Column", "Text"}
     assert described.allowed_data_paths == ("/title",)
     assert result.build.input_bindings[0].target_message_index == 2
+
+
+def test_describe_exposes_v091_message_envelope_schema() -> None:
+    schema = contract(source(), MEMBERSHIP).message_envelope_schema
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema)
+    messages = list(candidate().messages)
+    assert validator.is_valid(messages)
+    without_version = deepcopy(messages)
+    del without_version[0]["version"]
+    assert not validator.is_valid(without_version)
+    reordered = list(reversed(messages))
+    assert not validator.is_valid(reordered)
+
+
+def test_rpc_candidate_shape_has_distinct_safe_error_code() -> None:
+    with pytest.raises(A2uiError, match="A2UI_GENERATION_CANDIDATE_SHAPE_INVALID"):
+        _candidate(b'{"messages":[],"actionPlacements":[]}')
+
+
+@pytest.mark.parametrize(
+    "mutation,code",
+    [
+        (lambda raw: raw["messages"][0].pop("version"), "A2UI_GENERATION_MESSAGE_VERSION_INVALID"),
+        (
+            lambda raw: raw["messages"][0].update({"extra": True}),
+            "A2UI_GENERATION_MESSAGE_ENVELOPE_INVALID",
+        ),
+        (
+            lambda raw: raw["messages"][0]["createSurface"].update({"extra": True}),
+            "A2UI_GENERATION_CREATE_SURFACE_SHAPE_INVALID",
+        ),
+        (
+            lambda raw: raw["messages"][1]["updateComponents"].pop("components"),
+            "A2UI_GENERATION_UPDATE_COMPONENTS_SHAPE_INVALID",
+        ),
+        (lambda raw: raw["messages"].reverse(), "A2UI_GENERATION_MESSAGE_ORDER_INVALID"),
+        (
+            lambda raw: raw["messages"][1]["updateComponents"]["components"][0].pop("id"),
+            "A2UI_GENERATION_COMPONENT_SHAPE_INVALID",
+        ),
+    ],
+)
+def test_candidate_error_codes_distinguish_envelopes_without_content(
+    mutation: Callable[[JsonObject], object], code: str
+) -> None:
+    raw = candidate().model_dump(by_alias=True)
+    raw["messages"] = list(raw["messages"])
+    mutation(raw)
+    with pytest.raises(A2uiError) as error:
+        validate_candidate(source(), MEMBERSHIP, GeneratedCandidate.model_validate(raw))
+    assert error.value.code == code
 
 
 def test_generated_activation_uses_origin_load_and_persists_definition() -> None:
