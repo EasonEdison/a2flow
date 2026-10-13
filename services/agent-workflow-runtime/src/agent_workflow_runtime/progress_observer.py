@@ -1,6 +1,6 @@
 """Public SDK observation hooks; no persistence/control decisions in callbacks."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -13,6 +13,7 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
 from .deepseek_model import DeepSeekChat
+from .a2ui_generation_progress import GenerationProgress, observe_generation
 from .progress_tool_details import emit_tool_arguments, emit_tool_result
 from .models import ActionRejected
 from .service import require_owner
@@ -95,6 +96,20 @@ class ProgressMiddleware(AgentMiddleware):
     def __init__(self, node_context=None):
         self.node_context = node_context
 
+    @staticmethod
+    def _generation_observer(
+        scope: ProgressScope, operation: str, call: Mapping[str, object],
+    ) -> Callable[[GenerationProgress], None]:
+        def emit(progress: GenerationProgress) -> None:
+            if call["name"] == "generate_a2ui":
+                scope.emit("TOOL_GENERATION_PROGRESS", {
+                    "toolOperationId": operation, "toolName": call["name"],
+                    "toolCallId": str(call.get("id") or ""),
+                    "stage": progress.stage, "elapsedMs": str(progress.elapsed_ms),
+                    "errorCode": progress.error_code,
+                })
+        return emit
+
     @contextmanager
     def _capture(self):
         parent = _SCOPE.get()
@@ -145,7 +160,8 @@ class ProgressMiddleware(AgentMiddleware):
             scope.emit("TOOL_STARTED", payload)
             emit_tool_arguments(scope, operation, request.tool_call)
             try:
-                result = handler(request)
+                with observe_generation(self._generation_observer(scope, operation, request.tool_call)):
+                    result = handler(request)
             except BaseException as error:
                 from langgraph.errors import GraphInterrupt
                 scope.emit("TOOL_INTERRUPTED" if isinstance(error, GraphInterrupt)
@@ -169,7 +185,8 @@ class ProgressMiddleware(AgentMiddleware):
             scope.emit("TOOL_STARTED", payload)
             emit_tool_arguments(scope, operation, request.tool_call)
             try:
-                result = await handler(request)
+                with observe_generation(self._generation_observer(scope, operation, request.tool_call)):
+                    result = await handler(request)
             except BaseException as error:
                 from langgraph.errors import GraphInterrupt
                 scope.emit("TOOL_INTERRUPTED" if isinstance(error, GraphInterrupt)

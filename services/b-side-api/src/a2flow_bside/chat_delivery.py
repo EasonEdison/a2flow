@@ -28,6 +28,19 @@ class ModelMessageRecord(TypedDict):
     phase: Literal["process", "final"]
 
 
+GenerationStage = Literal[
+    "preparing", "generating", "validating_loading", "saving", "completed", "failed"
+]
+
+
+class GenerationProgressRecord(TypedDict):
+    toolCallId: str
+    name: Literal["generate_a2ui"]
+    stage: GenerationStage
+    elapsedMs: int
+    errorCode: str
+
+
 class ToolCallRecord(TypedDict, total=False):
     toolCallId: str
     sequence: int
@@ -41,6 +54,7 @@ class ToolCallRecord(TypedDict, total=False):
     result: JsonValue
     businessSuccess: bool | None
     errorCode: str
+    generationProgress: list[GenerationProgressRecord]
 
 
 class ExecutionProjection(TypedDict):
@@ -242,6 +256,39 @@ class ChatDelivery:
         if error_code is not None:
             record["errorCode"] = error_code
 
+    def _generation_progress(self, event: dict[str, Any]) -> GenerationProgressRecord | None:
+        tool_call_id = _identifier(event.get("toolCallId"))
+        record = self._tool_calls.get(tool_call_id or "")
+        stage = event.get("stage")
+        elapsed = event.get("elapsedMs")
+        code = event.get("errorCode", "")
+        if (
+            record is None or record["name"] != "generate_a2ui"
+            or event.get("name") != "generate_a2ui"
+            or not isinstance(stage, str)
+            or stage not in {"preparing", "generating", "validating_loading",
+                             "saving", "completed", "failed"}
+            or type(elapsed) is not int or elapsed < 0
+            or not isinstance(code, str) or len(code) > 128
+            or (code and not all(char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for char in code))
+        ):
+            return None
+        progress = record.setdefault("generationProgress", [])
+        order = {"preparing": 0, "generating": 1, "validating_loading": 2,
+                 "saving": 3, "completed": 4, "failed": 4}
+        if len(progress) >= 5 or (progress and (
+            order[stage] <= order[progress[-1]["stage"]]
+            or elapsed < progress[-1]["elapsedMs"]
+        )):
+            return None
+        value: GenerationProgressRecord = {
+            "toolCallId": record["toolCallId"], "name": "generate_a2ui",
+            "stage": cast(GenerationStage, stage), "elapsedMs": elapsed, "errorCode": code,
+        }
+        if not progress or progress[-1] != value:
+            progress.append(value)
+        return value
+
     def _finalize_model_messages(self, event: dict[str, Any]) -> None:
         final_id = _identifier(event.get("finalModelMessageId"))
         self.final_model_message_id = final_id
@@ -340,6 +387,11 @@ class ChatDelivery:
                     self._tool_started(event, self.sequence + 1)
                 elif kind == "tool_call_finished":
                     self._tool_finished(event, self.sequence + 1)
+                elif kind == "a2ui_generation_progress":
+                    progress = self._generation_progress(event)
+                    if progress is None:
+                        continue
+                    event = {"type": kind, **progress}
                 elif kind == "application_rendered":
                     event = {**event, "turnId": self.turn_id,
                              "inputMessageId": str(self.input_id),

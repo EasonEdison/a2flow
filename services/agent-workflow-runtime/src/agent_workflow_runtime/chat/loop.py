@@ -32,6 +32,8 @@ from skillweave_contracts.models import (
 
 from ..assembly import build_agent
 from ..a2ui_generation import DeepAgentA2uiGenerator, GENERATOR_TAG
+from ..a2ui_generation_progress import GenerationProgress, observe_generation
+from ..a2ui_selection_policy import A2UI_SELECTION_POLICY
 from ..deepseek_model import DeepSeekProtocolError
 from ..models import ActionRejected
 from ..mvp_tools import AbilityModelArgs
@@ -76,8 +78,7 @@ _TURN_LOCAL_SKILL_PROMPT: Final[str] = (
     "Ability or Application tools. For an admitted Application, call "
     "query_skill_dependencies with a2uiApplicationCodeList, then call "
     "render_application with appCode and params matching paramsSchema."
-    " If the user explicitly requests an AI-designed layout, use generate_a2ui with "
-    "the same admitted appCode/params plus intent. It retains approved business bindings."
+    + "\n" + A2UI_SELECTION_POLICY
 )
 _SKILL_TOOL_NAMES: Final[frozenset[str]] = frozenset({
     "execute_ability",
@@ -535,6 +536,19 @@ class _ToolExecutionEvents(AgentMiddleware):
     def __init__(self, emitter: ChatEmitter) -> None:
         self._emitter = emitter
 
+    def _generation_observer(
+        self, started: tuple[str, float, str, str],
+    ) -> Callable[[GenerationProgress], None]:
+        def emit(progress: GenerationProgress) -> None:
+            tool_call_id, _, _, name = started
+            if name == "generate_a2ui":
+                self._emitter.emit("a2ui_generation_progress", {
+                    "toolCallId": tool_call_id, "name": name,
+                    "stage": progress.stage, "elapsedMs": progress.elapsed_ms,
+                    "errorCode": progress.error_code,
+                })
+        return emit
+
     def _started(self, request: ToolCallRequest) -> tuple[str, float, str, str]:
         call = request.tool_call
         tool_call_id = call["id"] or ""
@@ -587,7 +601,8 @@ class _ToolExecutionEvents(AgentMiddleware):
     ) -> ToolMessage | Command[Any]:
         started = self._started(request)
         try:
-            result = handler(request)
+            with observe_generation(self._generation_observer(started)):
+                result = handler(request)
         except BaseException:
             self._finished(started, None, raised=True)
             raise
@@ -603,7 +618,8 @@ class _ToolExecutionEvents(AgentMiddleware):
     ) -> ToolMessage | Command[Any]:
         started = self._started(request)
         try:
-            result = await handler(request)
+            with observe_generation(self._generation_observer(started)):
+                result = await handler(request)
         except BaseException:
             self._finished(started, None, raised=True)
             raise

@@ -1,4 +1,5 @@
 import type { ThreadMessageLike } from '@assistant-ui/react';
+import { parseGenerationProgress } from './generationProgress';
 
 import type {
   ChatExecution,
@@ -181,6 +182,7 @@ const finishTool = (items: ChatToolCall[], event: Extract<ChatStreamEvent, { typ
   const current = items.find((item) => item.toolCallId === event.toolCallId);
   if (!current && !event.startedAt) return items;
   const next: ChatToolCall = {
+    generationProgress: current?.generationProgress,
     sequence: current?.sequence ?? event.sequence,
     toolCallId: event.toolCallId,
     name: event.name,
@@ -243,6 +245,20 @@ export const applyChatStreamEvent = (
       execution: {
         ...message.execution,
         toolCalls: startTool(message.execution.toolCalls, event),
+      },
+    };
+  }
+  if (event.type === 'a2ui_generation_progress' && message.execution) {
+    const current = message.execution.toolCalls.find(tool => tool.toolCallId === event.toolCallId);
+    const progress = current && parseGenerationProgress(event, current.toolCallId, current.name);
+    if (!progress) return message;
+    return {
+      ...message,
+      execution: {
+        ...message.execution,
+        toolCalls: message.execution.toolCalls.map(tool => tool === current
+          ? { ...tool, generationProgress: [...(tool.generationProgress ?? []), progress] }
+          : tool),
       },
     };
   }

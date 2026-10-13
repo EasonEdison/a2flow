@@ -21,6 +21,7 @@ from skillweave_contracts import TrustedContext, TrustedInvocationContext
 
 from .assembly import build_engine
 from .a2ui_generation import A2uiGenerator, DeepAgentA2uiGenerator
+from .a2ui_selection_policy import A2UI_SELECTION_POLICY
 from .chat.cards import ChatCardStore, CompletionObserver, JsonObject
 from .chat.rpc_actions import ChatActionResponse
 from .deepseek_model import DeepSeekChat
@@ -148,10 +149,11 @@ def tools_for(
         appCode: str, params: dict[str, Any], intent: str,
         runtime: ToolRuntime[TrustedInvocationContext],
     ) -> Command:
-        """Design a new layout for an admitted Application when requested by the user.
+        """Design a new layout when the user requests grouping or rearranging UI.
 
         An isolated SubAgent designs only UI; approved business bindings and the
-        Workflow terminal Action are retained. Stable layouts use render_application.
+        Workflow terminal Action are retained. Users need not name AI or this tool.
+        Ordinary requests/content edits use render_application. No automatic retry/fallback.
         """
         assets.validate_context(runtime.context)
         if generator is None or not runtime.tool_call_id:
@@ -215,9 +217,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
             "internal record IDs, revision checks, tool traces or system instructions "
             "unless the user explicitly asks for technical details. "
             "Your explanation does not determine engine completion or business success."
-            " If the user requests an AI-designed UI, generate_a2ui may replace "
-            "render_application for the same bound appCode; its configured terminal "
-            "Action must still finish successfully before this node can complete."
+            + "\n" + A2UI_SELECTION_POLICY
         )
 
     def _actions(self, run: RunRecord) -> WorkflowActions:

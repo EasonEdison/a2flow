@@ -3,6 +3,7 @@ import { toView } from './api/adapter';
 import type { RunView } from './presentation';
 import { readChatStream } from './chatStream.mjs';
 import { persistedChatErrorCode } from './errorPresentation';
+import { parseGenerationProgress, type GenerationProgress } from './generationProgress';
 
 export type Session = { userId: string; username: string; role: string };
 export type Conversation = { id: string; title: string; updatedAt: string };
@@ -16,6 +17,7 @@ export type ChatModelMessage = {
   phase: 'process' | 'final';
 };
 export type ChatToolCall = {
+  generationProgress?: GenerationProgress[];
   observationStatus?: 'waiting' | 'unconfirmed';
   argumentsUnavailable?: boolean;
   resultUnavailable?: boolean;
@@ -73,6 +75,7 @@ export type ChatStreamEvent = ChatStreamBase & (
   | { type: 'text_delta'; partId: string; modelMessageId?: string | null; text: string }
   | { type: 'reasoning_delta'; modelMessageId?: string | null; text: string }
   | { type: 'tool_call_started'; toolCallId: string; name: string; arguments: Record<string, ChatJson>; startedAt: string }
+  | ({ type: 'a2ui_generation_progress' } & GenerationProgress)
   | { type: 'tool_call_finished'; toolCallId: string; name: string; lifecycleStatus: 'returned' | 'raised'; toolMessageStatus: 'success' | 'error' | null; businessSuccess?: boolean | null; startedAt?: string; finishedAt: string; durationMs: number; result?: ChatJson; errorCode?: string }
   | { type: 'application_rendered'; turnId: string; assistantMessageId: string; partId: string; card: ChatCard }
   | { type: 'waiting_action'; turnId: string; assistantMessageId: string; partId: string; cardId: string }
@@ -298,6 +301,11 @@ const executionOf = (content: unknown): ChatExecution | undefined => {
     }
     const durationMs = finiteDuration(item.durationMs);
     return {
+      generationProgress: Array.isArray(item.generationProgress)
+        ? item.generationProgress.flatMap(value => {
+          const progress = parseGenerationProgress(value, textOf(item.toolCallId), textOf(item.name));
+          return progress ? [progress] : [];
+        }) : [],
       sequence: Number(item.sequence),
       toolCallId: textOf(item.toolCallId),
       name: textOf(item.name),

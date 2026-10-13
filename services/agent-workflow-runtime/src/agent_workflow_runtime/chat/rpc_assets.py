@@ -15,7 +15,8 @@ from a2flow_asset_store.java_runtime import (
 from skillweave_contracts import TrustedContext
 
 from ..application_runtime import PreparedApplication
-from ..a2ui_generation import A2uiGenerator
+from ..a2ui_generation import A2uiGenerator, require_supported_source
+from ..a2ui_generation_progress import generation_trace
 from ..models import ActionRejected
 from ..rpc_client import (
     ApplicationDescription,
@@ -128,21 +129,27 @@ class RpcChatAssets(ChatAssets):
     ) -> dict[str, Any]:
         if not tool_call_id:
             raise ActionRejected("TOOL_CALL_ID_REQUIRED")
-        with self._render_lock:
+        with self._render_lock, generation_trace() as trace:
             if self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
             self.application_description(application_key)
             contract = self.rpc.describe_generation_source(
                 self.owner, application_key, "generation-contract:" + uuid4().hex,
             )
+            require_supported_source(contract.contract)
+            trace.emit("generating")
             candidate = generator.generate(intent, contract.contract)
             # Recheck admission after the model call; no business work has run yet.
             self.application_description(application_key)
+            trace.emit("validating_loading")
             result = self.rpc.activate_generated(
                 self.owner, application_key, data, candidate.model_dump(mode="json"),
                 self.generation_scope(), "generated-render:" + uuid4().hex,
             )
-            return self._save_render_result(application_key, result, tool_call_id, intent=intent)
+            trace.emit("saving")
+            saved = self._save_render_result(application_key, result, tool_call_id, intent=intent)
+            trace.emit("completed")
+            return saved
 
     def admit_skill(self, skill_key: str) -> dict[str, Any]:
         value = super().admit_skill(skill_key)

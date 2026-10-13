@@ -297,11 +297,13 @@ def build_chat_tools(
         appCode: str, params: dict[str, Any], intent: str,
         runtime: ToolRuntime[TrustedInvocationContext],
     ) -> tuple[str, dict[str, str]]:
-        """Design a new A2UI layout with an isolated SubAgent when the user requests it.
+        """Design a new layout when the user asks for grouping, rearranging or redesign.
 
         appCode supplies this Skill's approved data/actions; params follow its queried
         contract. intent describes the desired layout. Does not publish or change assets.
-        Use render_application for the stable published layout.
+        Users need not name this tool or AI. Ordinary business requests and edits to
+        business content use the stable render_application, not layout generation.
+        Do not retry or silently fall back after failure.
         """
         chat_assets.validate_context(runtime.context)
         if a2ui_generator is None:

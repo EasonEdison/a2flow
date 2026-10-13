@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Protocol, cast
 
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
@@ -92,6 +92,25 @@ There are no tools, delegated tasks, filesystem, retries or publication privileg
 """
 
 
+def require_supported_source(contract: JsonObject) -> None:
+    """Reject impossible anchor/type combinations before spending a model call."""
+    allowed = contract.get("allowedComponents")
+    anchors = contract.get("anchorComponents")
+    if not isinstance(allowed, (tuple, list)) or not isinstance(anchors, (tuple, list)):
+        raise ActionRejected("A2UI_GENERATION_SOURCE_INVALID")
+    types: set[str] = set()
+    for item in allowed:
+        if not isinstance(item, Mapping) or not isinstance(item.get("type"), str):
+            raise ActionRejected("A2UI_GENERATION_SOURCE_INVALID")
+        types.add(item["type"])
+    for anchor in anchors:
+        component = anchor.get("component") if isinstance(anchor, Mapping) else None
+        if not isinstance(component, Mapping) or not isinstance(component.get("component"), str):
+            raise ActionRejected("A2UI_GENERATION_SOURCE_INVALID")
+        if component["component"] not in types:
+            raise ActionRejected("A2UI_GENERATION_SOURCE_COMPONENT_UNSUPPORTED")
+
+
 class DeepAgentA2uiGenerator:
     """A separately constructed, short-lived Deep Agent with an isolated message list."""
 
@@ -101,6 +120,7 @@ class DeepAgentA2uiGenerator:
     def generate(self, intent: str, contract: JsonObject) -> GeneratedCandidate:
         if not intent.strip() or len(intent) > 4000:
             raise ActionRejected("A2UI_GENERATION_INTENT_INVALID")
+        require_supported_source(contract)
         model = self._create_model()
         try:
             graph = build_agent(

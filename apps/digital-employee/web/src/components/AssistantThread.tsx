@@ -26,6 +26,7 @@ import {
   UnassignedApplications,
 } from './ChatApplications';
 import { MarkdownContent } from './MarkdownContent';
+import { GenerationProcess } from './GenerationProcess';
 
 type AssistantThreadProps = {
   messages: Message[];
@@ -202,7 +203,9 @@ export function ExecutionPanel({ message }: { message: Message }) {
           message={item.value}
           showProcessText={!hasOrderedText}
         />
-        : <ToolProcess
+        : item.value.name === 'generate_a2ui' ? <GenerationProcess
+          key={`tool:${item.value.toolCallId}`} tool={item.value} active={running}
+        /> : <ToolProcess
           key={`tool:${item.value.toolCallId}`}
           tool={item.value}
           index={items.slice(0, index + 1).filter(candidate => candidate.kind === 'tool').length}

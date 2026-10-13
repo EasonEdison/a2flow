@@ -30,6 +30,8 @@ FIELDS = {
     "TOOL_RETURNED": {"toolOperationId", "toolName"},
     "TOOL_INTERRUPTED": {"toolOperationId", "toolName"},
     "TOOL_UNCONFIRMED": {"toolOperationId", "toolName"},
+    "TOOL_GENERATION_PROGRESS": {"toolOperationId", "toolName", "toolCallId",
+                                 "stage", "elapsedMs", "errorCode"},
     "TOOL_DETAIL": {"toolOperationId", "toolName", "toolCallId", "detailKind",
                     "chunkIndex", "chunkCount", "text"},
     "NODE_STARTED": {"nodeOperationId"}, "NODE_RETURNED": {"nodeOperationId"},

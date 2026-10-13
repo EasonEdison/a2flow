@@ -1,3 +1,4 @@
+import { parseGenerationProgress } from './generationProgress';
 import type { NodeView } from './presentation';
 import type { ChatJson, ChatModelMessage, ChatToolCall, Message } from './productApi';
 
@@ -32,6 +33,18 @@ export function workflowMessage(node: NodeView): Message {
     }
     if (!record.eventKind?.startsWith('TOOL_') || !record.operationId || record.eventKind === 'TOOL_DETAIL') return;
     const id = record.operationId;
+    if (record.eventKind === 'TOOL_GENERATION_PROGRESS') {
+      const tool = tools.get(id);
+      const payload = record.payload;
+      const callId = payload?.toolCallId;
+      const origin = node.records.find(item => item.operationId === id && item.eventKind === 'TOOL_DETAIL');
+      if (!tool || typeof callId !== 'string' || (origin && origin.payload?.toolCallId !== callId)
+        || typeof payload?.elapsedMs !== 'string' || !/^\d+$/.test(payload.elapsedMs)) return;
+      const progress = parseGenerationProgress({ ...payload, name: payload.toolName,
+        elapsedMs: Number(payload.elapsedMs) }, callId, tool.name);
+      if (progress) tool.generationProgress = [...(tool.generationProgress ?? []), progress];
+      return;
+    }
     const tool = tools.get(id) ?? {
       sequence, toolCallId: id, name: record.toolName ?? '工具调用', arguments: {},
       lifecycleStatus: 'running' as const, startedAt: record.observedAt ?? '',
