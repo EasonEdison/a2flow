@@ -114,3 +114,59 @@ startup completion was followed by HTTP 200 and running/restart=0/OOM=false.
 After refresh, conversation 45 retained the completed form and automatic answer without
 the internal user bubble. Browser screenshot captured the form directly followed by
 the assistant response.
+
+
+## Public Workflow acceptance, 2026-10-13
+
+Normal management UI created and published two synthetic Skills and one linear Flow;
+no prebuilt Application or business Ability was added, and the existing reading demo
+was not modified. Workflow publication build `build_2ffdb3412485412fab248030bc1f2202`
+materialized `wf_78a28b7295a845f98357bf63b54cdcdd` with both node prompts, a summary
+prompt and exactly the two Skill dependencies. Runtime read-back version was
+`java-123a29d076a6ae337b57e2cc42e5df6a5cfe74f31f8c6f4ff59155dfe647b449`.
+
+The actual public run was started exactly once:
+
+- Control ID: `be555892919f4d139f9b682a04c80357`.
+- Run ID: `b84ee95ffefb42bf9bb9f72703005afb`.
+- Nodes: `SKILL_01` (collect), `SKILL_02` (receipt), `workflow-summary`.
+- One real generated `TEMPORARY` / `a2flow.temporary.v1` card waited for a required
+  comments value. Waiting persisted while the page was reloaded and the same run reopened.
+- The browser submitted one synthetic sentence, with no extra message or resume click.
+  The original node completed, the second model node reproduced the exact saved sentence,
+  and the summary said both nodes were complete. The run reached `SUCCEEDED`.
+- The completed card contained the saved text and disabled controls. Reloading and reopening
+  the same run preserved all three completed nodes, the read-only card and the downstream answer.
+
+Backend evidence: one card, one FINISHED submission receipt, one successful ACTION
+observation carrying `{status: SUBMITTED, values: ...}`, and one completed resume outbox
+command targeting `SKILL_01`. The interaction had resume_started and resume_consumed
+set true. The action did not declare business success. MODEL operation counts were
+SKILL_01=4, SKILL_02=2 and summary=1 (7 total); the summary used no tool. There was one
+RENDERED observation. Interrupt/replay history is retained, not counted as a fresh card.
+
+Acceptance exposed and corrected these real integration gaps before completing the run:
+
+1. Management previously checked a frozen Workflow snapshot without writing runtime
+   material. It now uses the existing transactional asset publisher and environment pointer.
+2. Optional prompt support required the shared validator on both Runtime and B. Updating
+   only Runtime initially caused the employee catalog to reject the new bundle; deploying
+   the matching B validator restored the catalog. The scheduler does not parse asset bundles.
+3. The frontend run-view parser and adapter still required legacy card fields. They now
+   validate temporary snapshots through the shared parser, preserve card identities for
+   the existing card renderer, and retain strict legacy validation. The same waiting run
+   was recovered after the frontend fix; no new run or model retry was used.
+
+JDK 17 package build, Python import/SDK checks, actual returned view/cards parser probes,
+TypeScript/Vite build, diff checks and secret/company-material scans passed. No unit tests
+were run under the user's instruction. Browser logs retained the earlier catalog failure;
+no new warning/error appeared during the corrected submit/completion/refresh sequence.
+The three relevant containers were running with restart count zero and OOM false.
+
+This closes the previously open public Workflow gate. The earlier isolated probes remain
+separate evidence and are not substituted for this public run.
+
+Final read-only comparison after the public refresh found identical operation IDs/statuses,
+node outputs, card/result, observations, submit receipt, interaction flags and outbox rows.
+MODEL remained 7, successful ACTION remained 1, and completed resume outbox remained 1.
+Refresh did not trigger another execution.

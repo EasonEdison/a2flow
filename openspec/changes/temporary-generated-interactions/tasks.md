@@ -9,7 +9,8 @@
 - [x] Source integration and deployment receipts.
 - [x] Public Chat form, choice-with-notes and display-only acceptance, continuation and refresh.
 - [x] Flow isolated integration with exactly one real model candidate at deployed revision.
-- [ ] Public Workflow with real model acceptance; isolated engine proof is recorded separately.
+- [x] Public Workflow with real model generation, one UI submission, automatic original-node resume, downstream result and refresh recovery; isolated engine proof remains recorded separately.
+- [x] Normal management Workflow publication material, optional node/summary prompts and shared temporary snapshot parsing.
 
 No unit test run is required by the user's instruction. Applicable integration and
 runtime checks remain necessary; tasks completion is not runtime readiness.

@@ -34,3 +34,21 @@
   input record is retained for turn identity/deduplication but omitted from the conversation
   display API; it must not appear as a user-authored chat bubble. Assistant progress and
   answers remain visible, including after history reload. This also covers existing records.
+
+## Normal Workflow publication and execution
+
+The management release adapter publishes validated linear Workflow material through the
+existing transactional asset publisher, receipts and environment-pointer CAS. Native
+definitions retain each nodePrompt, the summaryPrompt and the exact Skill dependencies.
+Unsupported branch/parallel/skip and other execution options are rejected explicitly.
+A successful release is no longer only a control-plane snapshot check.
+
+The Runtime appends the optional tool-free summary as a normal LangGraph node with a
+trusted run context. The reserved internal identifier is workflow-summary; publication
+and loading reject collisions. Summary uses one model call and rejects tool requests.
+Definitions without the optional prompts retain their existing execution behavior.
+
+The shared asset-store validator must ship to both Runtime and B because both read
+the published bundle. The scheduler only transports durable outbox/resume commands.
+Temporary card snapshots use their profile-specific parser; legacy card fields must
+not be fabricated to satisfy the old render protocol.
