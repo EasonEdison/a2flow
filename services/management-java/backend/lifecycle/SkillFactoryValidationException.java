@@ -48,4 +48,11 @@ public class SkillFactoryValidationException extends IllegalArgumentException {
                 "filePath must be a relative path inside the workspace", "filePath");
     }
 
+    /** Reject an identity that the existing Runtime publication contract cannot accept. */
+    public static SkillFactoryValidationException invalidSkillKey() {
+        return new SkillFactoryValidationException("INVALID_ASSET_KEY",
+                "Skill code must use lowercase letters, digits and hyphens; slash-separated namespaces are allowed; maximum 128 characters",
+                "skillCode");
+    }
+
 }
