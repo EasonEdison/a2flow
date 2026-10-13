@@ -1,0 +1,224 @@
+/* Shared B-side workspace theme. Components keep their existing behavior. */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #172b4d;
+  background: #f5f7fb;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --title: #172b4d;
+  --text: #172b4d;
+  --muted: #52647a;
+  --border: #dce3ed;
+  --surface: #fff;
+  --canvas: #f5f7fb;
+  --success: #187449;
+  --warning: #8a5b00;
+  --danger: #b42318;
+  --teal: var(--primary);
+  --line: var(--border);
+  --ink: var(--text);
+  --accent: var(--primary);
+  --code: var(--canvas);
+}
+
+button, summary, input, textarea, select { scroll-margin: 80px 16px; }
+button, summary { min-height: 44px; }
+button { min-width: 44px; transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease; }
+summary { cursor: pointer; }
+button:focus-visible, a:focus-visible, summary:focus-visible,
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
+input, textarea, select { color: var(--text); }
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { min-height: 44px; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
+.primary:hover:not(:disabled), .aui-send:hover:not(:disabled) { background: var(--primary-hover); }
+.secondary:hover:not(:disabled), .quiet:hover:not(:disabled), .text-button:hover { background: #edf2f9; }
+.primary, .secondary, .quiet { line-height: 1.5; }
+.secondary { border-color: var(--border); color: var(--text); }
+.inline-error { font-size: 13px; line-height: 1.6; }
+
+/* Navigation remains compact, with one predictable visual selection. */
+.product-shell { grid-template-columns: 208px minmax(0, 1fr); background: var(--canvas); }
+.topbar { gap: 16px; padding-inline: 24px; }
+.top-brand { font-size: 24px; letter-spacing: -.6px; padding: 0 8px; }
+.top-user { gap: 8px; min-width: 0; }
+.top-user b { font-size: 13px; font-weight: 500; }
+.top-user em { border-radius: 6px; background: var(--canvas); color: var(--muted); }
+.notification-button, .mobile-menu { display: inline-flex; justify-content: center; align-items: center; border-radius: 8px; }
+.notification-button:hover, .mobile-menu:hover { background: var(--canvas); }
+.notification-button span { top: 1px; right: 1px; border: 2px solid var(--surface); min-width: 20px; height: 20px; }
+.mobile-menu { display: none; }
+.product-nav { padding: 24px 12px; }
+.product-nav button { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; padding: 12px; color: var(--muted); border-radius: 8px; }
+.product-nav button > svg { flex: none; }
+.product-nav button > span:not(.nav-count) { flex: 1; }
+.product-nav button:hover { background: var(--canvas); color: var(--text); }
+.product-nav button.active { background: #eaf0ff; color: #1d4ed8; }
+.nav-count { float: none; }
+.product-content { padding: 24px; }
+.page-title { margin-bottom: 24px; }
+.page-title h1 { font-size: 24px; font-weight: 650; letter-spacing: -.4px; }
+.page-title p { font-size: 14px; }
+
+/* The conversation is the primary surface; process details stay secondary. */
+.chat-layout { height: calc(100dvh - 112px); grid-template-columns: 216px minmax(0, 1fr); box-shadow: none; }
+.conversation-list { padding: 16px 12px; background: #fafbfd; }
+.panel-heading { gap: 8px; margin-bottom: 16px; padding-left: 8px; }
+.panel-heading h2 { font-size: 14px; font-weight: 650; }
+.panel-heading button { display: grid; place-items: center; width: 44px; height: 44px; color: var(--primary); background: #eaf0ff; }
+.panel-heading button:hover { background: #dce7ff; }
+.conversation-list > button { line-height: 1.5; color: var(--muted); padding: 12px; overflow-wrap: anywhere; }
+.conversation-list > button:hover { background: #eff3f9; }
+.conversation-list > button.selected { background: #eaf0ff; color: #1d4ed8; font-weight: 600; }
+.conversation-list small { font-size: 12px; font-weight: 400; }
+.chat-main > header { padding: 16px 24px; }
+.chat-main > header h1 { font-size: 18px; font-weight: 650; }
+.chat-main > header p { font-size: 13px; margin-top: 4px; }
+.aui-thread-viewport { padding: 24px 24px 0; }
+.aui-message { max-width: 880px; margin-bottom: 32px; color: var(--text); }
+.aui-user-bubble { background: #edf3ff; border: 0; padding: 12px 16px; border-radius: 12px 12px 4px 12px; }
+.aui-assistant-avatar { background: var(--canvas); border: 1px solid var(--border); color: var(--primary); width: 32px; height: 32px; }
+.aui-assistant-content { flex: 1; }
+.assistant-answer { color: var(--text); line-height: 1.75; }
+.assistant-answer p + p { margin-top: 12px; }
+.assistant-delivery { display: flex; align-items: center; gap: 8px; min-height: 24px; color: var(--muted); font-size: 13px; }
+.assistant-delivery::before { content: ''; width: 6px; height: 6px; flex: none; background: currentColor; border-radius: 50%; }
+.assistant-delivery.waiting_action { color: #8a5b00; font-weight: 650; }
+.assistant-delivery.completed { color: var(--success); }
+.assistant-delivery.running { color: var(--primary); }
+.execution-panel { border: 0; border-radius: 0; background: transparent; margin: 0 0 16px; }
+.execution-panel > summary { padding: 8px 0; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 500; }
+.execution-panel > summary span:last-child { margin-left: auto; color: var(--muted); }
+.execution-panel-body { border-top: 0; border-left: 2px solid var(--border); padding: 0 0 0 16px; }
+.model-process { padding: 8px 0; background: transparent; color: var(--muted); }
+.tool-process { background: transparent; border: 0; border-top: 1px solid var(--border); border-radius: 0; }
+.tool-process > summary { grid-template-columns: 24px minmax(0, 1fr) auto auto; padding: 8px 0; min-height: 44px; }
+.tool-process-index { border: 0; background: var(--canvas); color: var(--muted); }
+.tool-process strong { font-weight: 500; }
+.tool-process .tool-name { color: var(--muted); overflow-wrap: anywhere; font-size: 12px; }
+.tool-process-grid { background: var(--canvas); border: 0; border-radius: 8px; }
+.tool-identity { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; margin-bottom: 16px; }
+.tool-identity span { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.generation-process { padding: 8px 0; border: 0; background: transparent; }
+.generation-process-summary strong { font-size: 13px; font-weight: 600; }
+.generation-process summary { display: flex; align-items: center; color: var(--muted); }
+.generation-process details { margin-top: 0; }
+.aui-thread-footer { background: var(--surface); padding-top: 16px; padding-bottom: 16px; }
+.aui-composer { border-color: var(--border); box-shadow: 0 2px 8px #172b4d08; padding: 8px; border-radius: 12px; }
+.aui-composer:focus-within { border-color: var(--primary); box-shadow: 0 0 0 2px #2563eb1a; }
+.aui-composer textarea { min-height: 44px; font-size: 16px; line-height: 1.5; }
+.aui-composer textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.aui-send { min-width: 64px; height: 44px; background: var(--primary); }
+
+/* One border per meaningful card, clear headings, and explicit waiting states. */
+.snapshot-card { padding: 0; overflow: hidden; }
+.snapshot-card > .snapshot-card-heading { display: flex; align-items: center; gap: 16px; padding: 16px; list-style: none; }
+.snapshot-card > .snapshot-card-heading::-webkit-details-marker { display: none; }
+.snapshot-card-heading::after { content: ''; width: 8px; height: 8px; flex: none; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); margin-right: 4px; }
+.snapshot-card[open] > .snapshot-card-heading::after { transform: rotate(225deg); }
+.snapshot-card-title { flex: 1; min-width: 0; font-weight: 650; font-size: 15px; overflow-wrap: anywhere; }
+.snapshot-card-title small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 4px; }
+.snapshot-card-status { color: var(--muted); background: var(--canvas); padding: 4px 8px; border-radius: 6px; font-size: 12px; }
+.snapshot-card.state-waiting_action { border-color: #a9bff2; }
+.snapshot-card.state-waiting_action .snapshot-card-status { color: #8a5b00; background: #fff4d9; }
+.snapshot-card.state-completed .snapshot-card-status { color: var(--success); background: #eaf6ee; }
+.snapshot-card .a2ui-card-content { padding: 0 16px 16px; }
+.snapshot-card > p, .snapshot-card > details { margin: 0 16px 16px; }
+.snapshot-card > p[role="alert"] { color: var(--danger); padding: 12px; border-radius: 8px; background: #fff1ef; }
+.snapshot-card .a2ui-surface { --a2ui-color-primary: var(--primary); --a2ui-spacing-m: 16px; }
+.snapshot-card .a2ui-surface input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.snapshot-card .a2ui-surface textarea, .snapshot-card .a2ui-surface select { min-height: 44px; border-color: #a8b6c8; border-radius: 8px; padding: 10px 12px; font-size: 16px; }
+.snapshot-card.is-readonly .snapshot-card-status { color: var(--muted); background: var(--canvas); }
+.snapshot-card .a2ui-surface label[for] { display: block; margin-bottom: 8px; }
+.snapshot-card .a2ui-surface input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { width: 100%; }
+.snapshot-card .a2ui-surface button { min-height: 44px; border-radius: 8px; padding: 10px 16px; }
+.snapshot-card .a2ui-surface label:has(input[type="checkbox"]),
+.snapshot-card .a2ui-surface label:has(input[type="radio"]) { display: inline-flex; gap: 8px; min-height: 44px; align-items: center; padding: 8px; }
+.temporary-card.state-waiting_action:not(.is-readonly) .a2ui-surface button:not(:disabled) { color: #fff; background: var(--primary); border-color: var(--primary); }
+.temporary-card.state-waiting_action:not(.is-readonly) .a2ui-surface button:hover:not(:disabled) { background: var(--primary-hover); }
+.temporary-submission { border-top: 1px solid var(--border); padding-top: 8px; }
+.temporary-submission summary, .workflow-debug summary { display: flex; align-items: center; }
+
+/* Workflow steps share the same quiet process / prominent result hierarchy. */
+.nodes { gap: 16px; }
+.node-card, .card, .workflow-catalog-card { box-shadow: none; }
+.node-card { padding: 0 16px 16px; }
+.node-header { padding: 16px 0; gap: 12px; }
+.node-title { min-width: 0; }
+.node-title h2 { font-size: 16px; line-height: 1.5; }
+.node-title p { font-size: 13px; }
+.node-number { border-radius: 8px; background: var(--canvas); width: 32px; height: 32px; font-size: 13px; }
+.node-card.state-waiting { border-color: #a9bff2; }
+.node-card.state-succeeded .node-number { background: #eaf6ee; color: var(--success); }
+.workflow-business-surface { border: 0; padding: 0; margin: 16px 0 0; }
+.workflow-execution { margin: 8px 0; }
+.workflow-assistant-note { border: 0; border-top: 1px solid var(--border); border-radius: 0; margin-top: 16px; }
+.workflow-assistant-note .result-disclosure { padding: 16px 0; }
+.workflow-assistant-note h3 { color: var(--text); font-size: 15px; }
+.workflow-assistant-note .result-body { padding: 0 0 8px; font-size: 15px; }
+.workflow-debug { color: var(--muted); }
+.workflow-debug summary { font-size: 12px; }
+.section-heading { gap: 16px; margin-bottom: 24px; }
+.section-heading h2 { font-size: 22px; line-height: 1.4; }
+.status, .badge { border-radius: 6px; white-space: nowrap; }
+.catalog-grid { gap: 16px; }
+.workflow-catalog-card { padding: 24px; }
+.run-list > button:hover { border-color: #a9bff2; background: #fafbfd; }
+.auth-page { background: var(--canvas); }
+.auth-brand .brand-mark { box-shadow: none; border-radius: 12px; }
+.auth-card { box-shadow: 0 4px 16px #172b4d08; border-radius: 12px; }
+.auth-brand h1 { font-size: 40px; }
+
+@media (max-width: 1100px) and (min-width: 701px) {
+  .product-shell { grid-template-columns: 184px minmax(0, 1fr); }
+  .product-content { padding: 16px; }
+  .chat-layout { grid-template-columns: 180px minmax(0, 1fr); height: calc(100dvh - 96px); }
+  .product-nav button { gap: 8px; padding-inline: 8px; }
+  .aui-thread-viewport { padding-inline: 16px; }
+}
+@media (max-width: 700px) {
+  .product-shell { grid-template-columns: minmax(0, 1fr); }
+  .topbar { gap: 4px; padding-inline: 8px; }
+  .top-user { gap: 0; }
+  .top-brand { font-size: 21px; }
+  .mobile-menu { display: inline-flex; }
+  .notification-button::before { content: none; }
+  .product-nav { width: min(280px, calc(100vw - 48px)); box-shadow: 8px 0 24px #172b4d12; }
+  .product-content { padding: 8px; }
+  .chat-layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: calc(100dvh - 72px); overflow: hidden; border-radius: 8px; }
+  .conversation-list { display: flex; align-items: center; gap: 8px; padding: 8px; max-height: none; overflow-x: auto; border-bottom: 1px solid var(--border); }
+  .conversation-list .panel-heading { flex: none; margin: 0; padding: 0; }
+  .conversation-list .panel-heading h2 { display: none; }
+  .conversation-list > button { flex: 0 0 auto; width: 160px; max-width: 160px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 12px; }
+  .conversation-list small { margin-top: 2px; }
+  .chat-main { min-height: 0; }
+  .chat-main > header { padding: 12px 16px; }
+  .chat-main > header h1 { font-size: 16px; }
+  .chat-main > header p { font-size: 12px; }
+  .aui-thread-viewport { padding: 16px 12px 0; }
+  .aui-message { margin-bottom: 24px; font-size: 15px; }
+  .aui-assistant-message { gap: 8px; }
+  .aui-assistant-avatar { width: 24px; height: 24px; font-size: 10px; border-radius: 6px; }
+  .aui-thread-footer { margin-inline: -12px; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
+  .aui-user-bubble { max-width: 92%; }
+  .snapshot-card > .snapshot-card-heading { padding: 12px; flex-wrap: wrap; gap: 8px; }
+  .snapshot-card-title { flex-basis: calc(100% - 24px); }
+  .snapshot-card-heading::after { order: -1; }
+  .snapshot-card-status { margin-left: 20px; }
+  .snapshot-card .a2ui-card-content { padding: 0 12px 12px; }
+  .snapshot-card > p, .snapshot-card > details { margin-inline: 12px; }
+  .node-card { padding: 0 12px 12px; }
+  .node-header { flex-wrap: wrap; gap: 8px; }
+  .node-header .badge { margin-left: 40px; }
+  .section-heading h2 { font-size: 20px; }
+  .workflow-catalog-card { padding: 16px; }
+  .workflow-catalog-card > div, .workflow-confirm > div { flex-wrap: wrap; }
+  .tool-process > summary { gap: 8px; grid-template-columns: 24px minmax(0, 1fr) auto; }
+  .execution-panel-body { padding-left: 8px; }
+  .auth-brand { padding: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button, .execution-panel > summary::before { transition: none; }
+}

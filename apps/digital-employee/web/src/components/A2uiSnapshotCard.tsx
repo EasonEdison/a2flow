@@ -141,8 +141,13 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
     return () => { disposed = true; subscriptions.forEach(item => item.unsubscribe()); next?.model.dispose(); };
   }, [displayKey, snapshotKey, draftKey]);
   const operable = cardIsOperable(card) && !busy && !error && !disabled;
-  return <details className="display-card" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
-    <summary>{title ?? card.display.title ?? card.display.applicationKey}{temporary ? (card.display.mode === 'DISPLAY_ONLY' ? ' · 临时展示' : ' · 临时交互') : card.display.definitionSource === 'GENERATED' ? ' · AI 生成布局' : ''} · {disabled ? '只读历史' : labels[card.status] ?? '只读卡片'}</summary>
+  return <details className={`display-card snapshot-card state-${card.status.toLowerCase()}${temporary ? ' temporary-card' : ''}${disabled ? ' is-readonly' : ''}`} open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
+    <summary className="snapshot-card-heading">
+      <span className="snapshot-card-title">{card.display.title ?? title ?? '交互卡片'}
+        <small>{temporary ? (card.display.mode === 'DISPLAY_ONLY' ? '临时展示' : '临时交互') : card.display.definitionSource === 'GENERATED' ? 'AI 生成布局' : '交互卡片'}</small>
+      </span>
+      <span className="snapshot-card-status">{disabled ? '只读历史' : labels[card.status] ?? '只读卡片'}</span>
+    </summary>
     <RendererBoundary key={snapshotKey}>
       {processor ? <MarkdownContext.Provider value={renderMarkdown}><fieldset className="a2ui-card-content" disabled={!operable} aria-busy={busy}>
         {Array.from(processor.model.surfacesMap.values()).map(surface =>
@@ -153,7 +158,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
     {draftNotice && card.status !== 'COMPLETED' ? <p className="muted" role="status">{draftNotice}</p> : null}
     {temporary && card.status === 'COMPLETED' ? <TemporarySubmission card={card} />
       : card.result !== undefined ? <details><summary>操作结果</summary><pre>{JSON.stringify(card.result, null, 2)}</pre></details> : null}
-    {title ? <details className="workflow-debug"><summary>卡片技术信息</summary><p>Application：{card.display.applicationKey}</p><p>卡片 ID：{card.cardId}</p></details> : null}
+    <details className="workflow-debug"><summary>卡片技术信息</summary><p>Application：{card.display.applicationKey}</p><p>卡片 ID：{card.cardId}</p></details>
     {validationError ? <p role="alert">{validationError}</p> : null}
     {error ? <p role="alert">{error}</p> : null}
   </details>;

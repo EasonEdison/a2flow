@@ -66,12 +66,12 @@ export function NodeCard({
             aria-controls={'result-' + node.id}
             onClick={() => setResultOpen((value) => !value)}
           >
-            <h3>助手说明</h3>
+            <h3>步骤结果</h3>
             <Icon name="chevron" />
           </button>
           {resultOpen ? (
             <div id={'result-' + node.id} className="result-body">
-              <p className="muted">以下为模型总结；业务内容以卡片为准，步骤状态由运行引擎确定。</p>
+              <p className="muted">以下为助手整理的说明，操作结果请以卡片为准。</p>
               {completedInteractive ? (
                 <ApplicationCard
                   key={completedInteractive.id}

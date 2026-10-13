@@ -65,6 +65,13 @@ const toolStateLabel = (tool: ChatToolCall) => {
   return '调用已返回';
 };
 
+const toolLabels: Record<string, string> = {
+  use_skill: '执行技能',
+  render_application: '展示交互卡片',
+  generate_interaction: '生成临时交互',
+  generate_a2ui: '生成界面布局',
+};
+
 function ToolProcess({ tool, index }: { tool: ChatToolCall; index: number }) {
   const [open, setOpen] = useState(false);
   return <details
@@ -76,8 +83,7 @@ function ToolProcess({ tool, index }: { tool: ChatToolCall; index: number }) {
       setOpen(value => !value);
     }}>
       <span className="tool-process-index">{index}</span>
-      <strong>{tool.name}</strong>
-      <span className="tool-process-id">{tool.toolCallId}</span>
+      <strong className={toolLabels[tool.name] ? undefined : 'tool-name'}>{toolLabels[tool.name] ?? tool.name}</strong>
       <span className="tool-process-state">{toolStateLabel(tool)}</span>
       {tool.durationMs !== undefined ? <span>{(tool.durationMs / 1000).toFixed(1)}s</span> : null}
     </summary>
@@ -115,7 +121,7 @@ function ToolProcessBody({ tool }: { tool: ChatToolCall }) {
     : 'idle';
 
   return <div className="tool-process-grid">
-    <section><h4>输入参数</h4><pre>{tool.argumentsUnavailable ? '该次调用未保存完整参数，不能从历史恢复。' : prettyJson(tool.arguments)}</pre></section>
+    <section><p className="tool-identity">{tool.name}<br /><span>{tool.toolCallId}</span></p><h4>输入参数</h4><pre>{tool.argumentsUnavailable ? '该次调用未保存完整参数，不能从历史恢复。' : prettyJson(tool.arguments)}</pre></section>
     <section className="tool-result">
       <header>
         <h4>返回结果</h4>
@@ -181,7 +187,7 @@ export function ExecutionPanel({ message }: { message: Message }) {
       event.preventDefault();
       setManualOpen(!(manualOpen ?? running));
     }}>
-      <span>{running ? '执行中' : '执行过程'}</span>
+      <span>{running ? '正在处理' : '处理过程'}</span>
       <span>{execution?.toolCalls.length ?? message.tools?.length ?? 0} 次工具调用</span>
     </summary>
     <div className="execution-panel-body">

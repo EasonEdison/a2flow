@@ -15,7 +15,7 @@ export function WorkflowApplications({ runId, entries, disabled, onUpdate, onSet
     {entries.map(entry => <A2uiSnapshotCard
       key={entry.card.cardId}
       card={entry.card}
-      title={title ? `${title} · 业务卡片` : '业务卡片'}
+      title={title ? `${title} · 交互卡片` : '交互卡片'}
       initiallyExpanded={!disabled}
       disabled={disabled}
       onUpdate={onUpdate}
