@@ -190,11 +190,16 @@ def _card_id(owner, conversation_id, control_request_id, tool_call_id):
 
 def _validate_metadata(value, conversation_id):
     copied, _ = _json_copy(value, "INVALID_CARD_METADATA", _MAX_METADATA_BYTES)
-    required = {"skillKey", "conversationId",
-                "controlRequestId", "toolCallId"}
+    temporary = type(copied) is dict and copied.get("definitionSource") == "TEMPORARY"
+    required = {"conversationId", "controlRequestId", "toolCallId"}
+    if not temporary:
+        required.add("skillKey")
     if type(copied) is not dict or not required.issubset(copied):
         _reject("INVALID_CARD_METADATA")
-    _identifier(copied["skillKey"], "INVALID_CARD_METADATA")
+    if not temporary:
+        _identifier(copied["skillKey"], "INVALID_CARD_METADATA")
+    elif "skillKey" in copied or "rpc" in copied:
+        _reject("INVALID_CARD_METADATA")
     _identifier(copied["controlRequestId"], "INVALID_CARD_METADATA", limit=256)
     _identifier(copied["toolCallId"], "INVALID_CARD_METADATA", limit=256)
     if copied["conversationId"] != conversation_id:
@@ -211,7 +216,7 @@ def _validate_prepared(prepared):
             or type(display.get("actions")) is not list):
         _reject("INVALID_CARD_DISPLAY")
     names = []
-    rpc_profile = display.get("protocolProfile") == "a2flow.java-rpc.v1"
+    rpc_profile = display.get("protocolProfile") in {"a2flow.java-rpc.v1", "a2flow.temporary.v1"}
     for action in display["actions"]:
         if (type(action) is not dict or type(action.get("actionName")) is not str
                 or not action["actionName"] or len(action["actionName"]) > 128):
@@ -343,6 +348,9 @@ class ChatCardStore:
         conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
         display, status = _validate_prepared(prepared)
         metadata = _validate_metadata(binding_metadata, conversation_id)
+        if ((metadata.get("definitionSource") == "TEMPORARY")
+                != (display.get("protocolProfile") == "a2flow.temporary.v1")):
+            _reject("CARD_BINDING_MISMATCH")
         card_id = _card_id(owner, conversation_id, metadata["controlRequestId"],
                            metadata["toolCallId"])
         fingerprint_source = {"display": display, "metadata": metadata,
@@ -591,6 +599,76 @@ class ChatCardStore:
                 ),
             )
             if card["status"] == "COMPLETED" and self._completion_observer is not None:
+                self._completion_observer(
+                    transaction._connection,
+                    CardCompletion(owner, conversation_id, card_id, request_id,
+                                   cast(JsonObject, deepcopy(card["binding_metadata"]))),
+                )
+            return _public(card)
+
+    def submit_interaction(
+        self, owner: TrustedContext, conversation_id: str, card_id: str,
+        request_id: str, action_name: str, inputs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Persist user input, terminal card and receipt in one local transaction.
+
+        No business call or model invocation occurs while the card is locked.
+        """
+        from ..temporary_interaction import validate_submission, completed_interaction
+
+        owner = _owner(owner, self._environment)
+        conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
+        card_id = _identifier(card_id, "INVALID_CARD_ID", limit=128)
+        request_id = _identifier(request_id, "INVALID_REQUEST_ID", limit=256)
+        action_name = _identifier(action_name, "INVALID_ACTION_NAME")
+        inputs, _ = _json_copy(inputs, "INVALID_ACTION_INPUT", _MAX_INPUT_BYTES)
+        payload = {"actionName": action_name, "inputs": inputs}
+        scope = _scope(owner, conversation_id)
+        with self._storage.transaction() as transaction:
+            card = transaction.get_card(scope, card_id, lock=True)
+            if card is None:
+                _reject("CARD_NOT_FOUND")
+            if (card["display"].get("protocolProfile") != "a2flow.temporary.v1"
+                    or card["binding_metadata"].get("definitionSource") != "TEMPORARY"):
+                _reject("CARD_BINDING_MISMATCH")
+            prior = transaction.get_request(scope, card_id, request_id, lock=True)
+            if prior is not None:
+                if prior["payload"] != payload:
+                    _reject("ACTION_REQUEST_CONFLICT")
+                if prior["state"] != "FINISHED":
+                    _reject("ACTION_OUTCOME_UNKNOWN")
+                return deepcopy(prior["card_snapshot"])
+            if card["status"] != "WAITING_ACTION":
+                _reject("CARD_TERMINAL")
+            result = validate_submission(card["display"], action_name, inputs)
+            prepared = completed_interaction(card["display"], result)
+            display, _ = _validate_prepared(prepared)
+            card["display"] = display
+            card["status"] = "COMPLETED"
+            card["revision"] += 1
+            card["result"], card["has_result"] = result, True
+            card["active_request_id"] = None
+            if "workflow" in card["binding_metadata"]:
+                card["binding_metadata"]["workflowCompletionRequestId"] = request_id
+            request = {
+                "environment": owner.environment, "user_id": owner.user_id,
+                "conversation_id": conversation_id, "card_id": card_id,
+                "request_id": request_id, "payload": payload, "state": "FINISHED",
+                "result": result, "error_code": None,
+                "finish_payload": {"result": result, "businessSuccess": True,
+                                   "completes": True},
+                "card_snapshot": _public(card),
+            }
+            transaction.insert_request(request)
+            transaction.update_card(card)
+            transaction.append_observation(
+                scope, "action:" + card_id + ":" + request_id,
+                _event_payload(card, kind="ACTION", request_id=request_id,
+                               action_name=action_name,
+                               description="用户提交临时交互结果；未执行业务操作",
+                               arguments=inputs, status="SUCCEEDED", result=result),
+            )
+            if self._completion_observer is not None:
                 self._completion_observer(
                     transaction._connection,
                     CardCompletion(owner, conversation_id, card_id, request_id,

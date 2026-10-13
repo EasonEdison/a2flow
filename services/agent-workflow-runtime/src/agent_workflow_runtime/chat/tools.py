@@ -33,6 +33,7 @@ from .events import WORKFLOW_CONFIRM
 from ..mvp_tools import AbilityArgs
 from ..models import ActionRejected, json_copy
 from ..a2ui_generation import A2uiGenerator
+from ..temporary_generation import InteractionGenerator
 
 _EMITTER: ContextVar[Any] = ContextVar("a2flow_chat_emitter", default=None)
 
@@ -116,6 +117,16 @@ class RenderArgs(RenderModelArgs):
     runtime: ToolRuntime[TrustedInvocationContext]
 
 
+class GenerateInteractionModelArgs(_Closed):
+    intent: str = Field(min_length=1, max_length=4000)
+    data: dict[str, Any]
+
+
+class GenerateInteractionArgs(GenerateInteractionModelArgs):
+    model_config = ConfigDict(extra="forbid", strict=True, arbitrary_types_allowed=True)
+    runtime: ToolRuntime[TrustedInvocationContext]
+
+
 class GenerateModelArgs(RenderModelArgs):
     intent: str = Field(min_length=1, max_length=4000)
 
@@ -133,6 +144,7 @@ def build_chat_tools(
     control_request_id: str,
     chat_assets=None,
     a2ui_generator: A2uiGenerator | None = None,
+    interaction_generator: InteractionGenerator | None = None,
 ):
     """Build the legacy pair or the Skill-enabled four-tool tuple."""
 
@@ -313,6 +325,28 @@ def build_chat_tools(
         )
         return _rendered(saved, appCode)
 
+    @tool("generate_interaction", args_schema=GenerateInteractionArgs,
+          response_format="content_and_artifact")
+    def generate_interaction_tool(
+        intent: str, data: dict[str, Any], runtime: ToolRuntime[TrustedInvocationContext],
+    ) -> tuple[str, dict[str, str]]:
+        """Generate a temporary display, comparison, selection or form for this task.
+
+        No prebuilt Application or Skill is required. intent describes the interface
+        and desired user input. data contains only facts/options supplied by the user
+        or obtained through authorized tools; never invent business records. The
+        platform validates and saves the UI. Submit returns user input to the task,
+        not business success. Existing business operations still require Skill tools.
+        Do not automatically retry, repair or substitute a template after failure.
+        """
+        chat_assets.validate_context(runtime.context)
+        if interaction_generator is None:
+            raise ActionRejected("A2UI_GENERATOR_UNAVAILABLE")
+        saved = chat_assets.generate_interaction(
+            data, intent, runtime.tool_call_id, interaction_generator,
+        )
+        return _rendered(saved, saved["display"]["applicationKey"])
+
     tools = (
         use_skill_tool,
         propose_tool,
@@ -320,4 +354,6 @@ def build_chat_tools(
         query_skill_dependencies_tool,
         render_application_tool,
     )
-    return (*tools, generate_a2ui_tool) if a2ui_generator is not None else tools
+    if a2ui_generator is not None:
+        tools = (*tools, generate_a2ui_tool)
+    return (*tools, generate_interaction_tool) if interaction_generator is not None else tools

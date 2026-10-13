@@ -17,6 +17,9 @@ from skillweave_contracts import TrustedContext
 from ..application_runtime import PreparedApplication
 from ..a2ui_generation import A2uiGenerator, require_supported_source
 from ..a2ui_generation_progress import generation_trace
+from ..temporary_generation import InteractionGenerator
+from ..temporary_interaction import prepare_interaction
+from ..models import json_copy
 from ..models import ActionRejected
 from ..rpc_client import (
     ApplicationDescription,
@@ -148,6 +151,43 @@ class RpcChatAssets(ChatAssets):
             )
             trace.emit("saving")
             saved = self._save_render_result(application_key, result, tool_call_id, intent=intent)
+            trace.emit("completed")
+            return saved
+
+    def generate_interaction(
+        self, data: dict[str, Any], intent: str, tool_call_id: str,
+        generator: InteractionGenerator,
+    ) -> dict[str, Any]:
+        """Generate task-local UI without resolving a published Application."""
+        with generation_trace() as trace:
+            trace.emit("generating")
+            candidate = generator.generate(intent, data)
+            trace.emit("validating_loading")
+            prepared = prepare_interaction(candidate, data)
+            display = prepared.display()
+            observation = {
+                "description": "临时交互；提交仅代表用户输入，不代表业务操作成功",
+                "arguments": {"intent": intent, "data": json_copy(data)},
+                "preparedContent": project_rendered_content(display["snapshotMessages"]),
+            }
+            metadata = {
+                "definitionSource": "TEMPORARY",
+                "conversationId": self.conversation_id,
+                "controlRequestId": self.control_request_id,
+                "toolCallId": tool_call_id,
+                "applicationKey": prepared.application_key,
+                "applicationVersion": prepared.application_version,
+                "observation": observation,
+            }
+            trace.emit("saving")
+            saved = self._card_sink(prepared, metadata)
+            self._render_observations[saved["cardId"]] = {
+                "cardId": saved["cardId"], "applicationKey": prepared.application_key,
+                "arguments": observation["arguments"],
+                "preparedContent": observation["preparedContent"],
+            }
+            if prepared.interactive:
+                self._waiting_action = saved
             trace.emit("completed")
             return saved
 

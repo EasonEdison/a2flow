@@ -5,7 +5,7 @@ import logging
 from contextlib import AbstractContextManager, nullcontext
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
-from typing import Any, TypedDict, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 from skillweave_contracts import TrustedContext
 
@@ -27,6 +27,7 @@ class ComposerDraftEffectPayload(TypedDict):
 class ChatActionResponse(TypedDict):
     card: dict[str, Any]
     effects: list[ComposerDraftEffectPayload]
+    continuation: NotRequired[dict[str, str]]
 
 
 def _response(
@@ -65,6 +66,15 @@ class RpcChatActionService:
                 ) -> ChatActionResponse:
         saved = self.store.get_binding(owner, conversation_id, card_id)
         card, metadata = saved["card"], saved["metadata"]
+        if card["display"].get("protocolProfile") == "a2flow.temporary.v1":
+            with dispatch_admission() if dispatch_admission is not None else nullcontext():
+                completed = self.store.submit_interaction(
+                    owner, conversation_id, card_id, request_id, action_name, inputs,
+                )
+            response = _response(completed, request_id)
+            if "workflow" not in metadata:
+                response["continuation"] = {"cardId": card_id, "requestId": request_id}
+            return response
         if card["display"].get("protocolProfile") != "a2flow.java-rpc.v1":
             raise ActionRejected("RPC_PUBLICATION_REQUIRED")
         if (type(inputs) is not dict or set(inputs) != {"surfaceId", "sourceComponentId", "context"}
