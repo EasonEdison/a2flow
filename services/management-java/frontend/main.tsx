@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Alert, Spin } from 'antd';
+import { ApartmentOutlined, ApiOutlined, AppstoreOutlined, LayoutOutlined } from '@ant-design/icons';
 import 'antd/dist/antd.css';
 import './management.less';
 import { A2UI_APPLICATION_ROUTES } from './a2uiCatalogContracts';
@@ -28,19 +29,19 @@ function ManagementShell() {
   const currentPath = pathname.replace(/\/+$/, '');
   const isSection = (path: string) => currentPath === path || currentPath.startsWith(`${path}/`);
   const navigation = [
-    { to: '/management', label: 'Skill', active: currentPath === '/management' || currentPath === '/management/detail' },
-    { to: '/management/capabilities', label: '业务能力', active: isSection('/management/capabilities') },
-    { to: '/management/components', label: 'A2UI / 组件', active: isSection('/management/components') },
-    { to: '/management/workflows', label: 'Workflow', active: isSection('/management/workflows') },
+    { to: '/management', label: 'Skill', icon: AppstoreOutlined, active: currentPath === '/management' || currentPath === '/management/detail' },
+    { to: '/management/capabilities', label: '业务能力', icon: ApiOutlined, active: isSection('/management/capabilities') },
+    { to: '/management/components', label: 'A2UI / 组件', icon: LayoutOutlined, active: isSection('/management/components') },
+    { to: '/management/workflows', label: 'Workflow', icon: ApartmentOutlined, active: isSection('/management/workflows') },
   ];
   return <>
     <a className="management-skip-link" href="#management-main">跳转到主内容</a>
     <header className="management-header">
       <div className="management-brand"><strong>A2Flow</strong><span>管理工作台</span></div>
       <nav className="management-navigation" aria-label="管理台导航">
-        {navigation.map(({ to, label, active }) => (
+        {navigation.map(({ to, label, active, icon: Icon }) => (
           <Link key={to} to={to} className={active ? 'is-current' : undefined}
-            aria-current={active ? 'page' : undefined}>{label}</Link>
+            aria-current={active ? 'page' : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>
         ))}
       </nav>
       <div className="management-account-actions">

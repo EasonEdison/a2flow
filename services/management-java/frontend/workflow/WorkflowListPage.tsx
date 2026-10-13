@@ -276,70 +276,39 @@ const WorkflowListPage: React.FC = () => {
           </Space>
         </Card>
 
-        <section className="workflow-list-card-grid">
+        <section className="management-asset-list" aria-label="Workflow 资产列表">
           {visibleItems.length ? (
             visibleItems.map((item) => {
               const workflow = item.workflow;
               return (
-                <Card hoverable className="workflow-list-card" key={workflow.workflowCode}>
-                  <div className="workflow-list-card-head">
-                    <div>
-                      <strong>{workflow.displayName || workflow.workflowCode}</strong>
-                      <span>{workflow.workflowCode}</span>
+                <article className="management-asset-row" key={workflow.workflowCode}>
+                  <div className="management-asset-summary">
+                    <div className="management-asset-title">
+                      <strong>{workflow.displayName || workflow.workflowCode}</strong><code>{workflow.workflowCode}</code>
                     </div>
-                    <div className="workflow-list-card-tags">
+                    <p>{workflow.description || '暂无 Workflow 描述'}</p>
+                  </div>
+                  <dl className="management-asset-meta">
+                    <div><dt>状态</dt><dd className="management-asset-status">
                       <Tag>{workflow.status}</Tag>
                       <Tag color={item.environmentPointers?.ONLINE ? 'success' : undefined}>
                         {item.environmentPointers?.ONLINE ? '已上线' : '未上线'}
                       </Tag>
-                    </div>
+                    </dd></div>
+                    <div><dt>所属专员</dt><dd>{specialistByCode.get(workflow.specialistCode) || workflow.specialistCode}</dd></div>
+                    <div><dt>草稿版本</dt><dd>revision {workflow.draftRevision}</dd></div>
+                    <div><dt>PRT</dt><dd>{pointerLabel(item, 'PRT')}</dd></div>
+                    <div><dt>ONLINE</dt><dd>{pointerLabel(item, 'ONLINE')}</dd></div>
+                    <div><dt>更新人</dt><dd>{workflow.updatedBy || workflow.createdBy || '-'}</dd></div>
+                    <div><dt>更新时间</dt><dd>{formatTime(workflow.updateTime)}</dd></div>
+                  </dl>
+                  <div className="management-asset-actions">
+                    <Button onClick={() => navigate(workflowDetailPath(workflow.workflowCode))}>查看详情</Button>
                   </div>
-                  <p>{workflow.description || '暂无 Workflow 描述'}</p>
-                  <div className="workflow-list-kv-grid">
-                    <div>
-                      <span>所属专员</span>
-                      <b>
-                        {specialistByCode.get(workflow.specialistCode) || workflow.specialistCode}
-                      </b>
-                    </div>
-                    <div>
-                      <span>草稿版本</span>
-                      <b>revision {workflow.draftRevision}</b>
-                    </div>
-                    <div>
-                      <span>PRT</span>
-                      <b>{pointerLabel(item, 'PRT')}</b>
-                    </div>
-                    <div>
-                      <span>ONLINE</span>
-                      <b>{pointerLabel(item, 'ONLINE')}</b>
-                    </div>
-                    <div>
-                      <span>更新人</span>
-                      <b>{workflow.updatedBy || workflow.createdBy || '-'}</b>
-                    </div>
-                    <div>
-                      <span>更新时间</span>
-                      <b>{formatTime(workflow.updateTime)}</b>
-                    </div>
-                  </div>
-                  <div className="workflow-list-card-footer">
-                    <Tag>{workflow.workflowCode}</Tag>
-                    <Button
-                      type="primary"
-                      onClick={() => navigate(workflowDetailPath(workflow.workflowCode))}
-                    >
-                      查看详情
-                    </Button>
-                  </div>
-                </Card>
+                </article>
               );
             })
-          ) : (
-            <Card className="workflow-list-empty-card">
-              <Empty description="暂无符合条件的 Workflow" />
-            </Card>
-          )}
+          ) : <div className="management-asset-empty"><Empty description="暂无符合条件的 Workflow" /></div>}
         </section>
 
         {nextPageToken ? (
