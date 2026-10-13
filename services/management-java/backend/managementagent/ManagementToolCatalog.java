@@ -10,7 +10,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.ByteString;
 import dev.a2flow.management.managementagent.proto.ManagementTool;
 
-/** Explicit authoring surface. No execution, online, owner replacement, deletion or legacy coding tools. */
+/** Explicit authoring surface. No business mutations, online, owner replacement, deletion or legacy coding tools. */
 public final class ManagementToolCatalog {
     private final ObjectMapper mapper;
     private final Map<String, Definition> definitions = new LinkedHashMap<>();
@@ -36,6 +36,7 @@ public final class ManagementToolCatalog {
         add("CAPABILITY_DRAFT_DETAIL", false, "Read full canonical capability draft and current revision.", "draftId", "");
         add("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED", true, "Preferred way to create a new capability for an existing registered interface: sourceDraftId must identify a capability currently published in PRT. Server copies its immutable complete contract and binary gRPC descriptor exactly, overriding only actionCode/name/description. actionCode needs at least 3 dot-separated alphanumeric segments, each starting with a letter; hyphens and underscores are forbidden (for example demo.people.list). Do NOT copy or regenerate descriptorSetBase64. Classification defaults to source; to change it provide all businessDomain, capabilityDomain, specialistIds from real config. Then CAPABILITY_VALIDATE and normal RELEASE_* publication; creation alone is not publication.", "sourceDraftId,actionCode,name,description", "businessDomain,capabilityDomain,specialistIds");
         add("CAPABILITY_DRAFT_UPDATE_METADATA", true, "Update an EXISTING capability using draftId and current baseRevision from CAPABILITY_DRAFT_DETAIL. Provide at least one of actionCode/name/description; all other configuration and binary gRPC descriptor are preserved server-side. actionCode requires at least 3 dot-separated alphanumeric segments, each starting with a letter, no hyphens or underscores. Use this to fix metadata validation errors on an already-created asset; do not delete/recreate it. Existing permission, editable-change and revision guards apply; validate and publish normally afterwards.", "draftId,baseRevision", "actionCode,name,description");
+        add("CAPABILITY_DRY_RUN_READ_ONLY", true, "Required real PRT verification before capability publication. Read current draft revision and supportedClients, then invoke once per supported client. Server permits only READ capabilities matching an existing registered PRT interface. Calls the normal dry-run with the saved inputExampleJson, trusted identity and fixed PRT; persists real digest-bound validation evidence. This tool never accepts arbitrary arguments, credentials or environment. A failed toolResult is a failed verification, not publication; read RELEASE_OVERVIEW evidence before deploying. Do not blindly retry UNKNOWN.", "draftId,revision,clientType", "");
         add("CAPABILITY_VALIDATE", true, "Run and persist the real capability static validation; valid=false is not success. Publication uses RELEASE_* not legacy CAPABILITY_PUBLISH.", "draftId", "");
         add("COMPONENT_LIST", false, "Read current registered component assets.", "", "keyword,page,pageSize");
         add("COMPONENT_DETAIL", false, "Read component source and configuration.", "id", "");
@@ -75,9 +76,12 @@ public final class ManagementToolCatalog {
             var property = properties.putObject(field);
             if (Set.of("draftJson", "applicationJson", "draftPayloadJson").contains(field)) property.putArray("type").add("object").add("string");
             else if (field.endsWith("Json") || Set.of("capabilityBindings", "componentBindings", "supportClients", "attribute").contains(field)) property.putArray("type").add("object").add("array").add("string");
-            else if (Set.of("protocolVersion", "baseRevision", "expectedDraftRevision", "page", "pageSize", "limit", "contextLines", "version", "baseVersion").contains(field)) property.putArray("type").add("integer").add("string");
+            else if (Set.of("protocolVersion", "revision", "baseRevision", "expectedDraftRevision", "page", "pageSize", "limit", "contextLines", "version", "baseVersion").contains(field)) property.putArray("type").add("integer").add("string");
             else if (field.equals("enabled")) property.putArray("type").add("boolean").add("string");
             else property.put("type", "string");
+            if (name.equals("CAPABILITY_DRY_RUN_READ_ONLY") && field.equals("clientType")) {
+                property.putArray("enum").add("PC").add("APP").add("COMMON");
+            }
             if (field.equals("actionCode")) property.put("pattern", ManagementCapabilityGuard.ACTION_CODE_PATTERN);
             if (Set.of("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED", "CAPABILITY_DRAFT_UPDATE_METADATA").contains(name)
                     && Set.of("sourceDraftId", "draftId", "name", "description").contains(field)) property.put("minLength", 1);
@@ -112,6 +116,11 @@ public final class ManagementToolCatalog {
             }
             if (!accepted) throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_TYPE_INVALID");
             JsonNode property = definition.schema().path("properties").path(field);
+            if (property.has("enum")) {
+                boolean matches = false;
+                for (JsonNode allowed : property.path("enum")) matches |= allowed.equals(value);
+                if (!matches) throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_VALUE_INVALID");
+            }
             if (value.isTextual() && property.has("pattern") && !value.asText().matches(property.path("pattern").asText())) {
                 throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_ACTION_CODE_INVALID");
             }
