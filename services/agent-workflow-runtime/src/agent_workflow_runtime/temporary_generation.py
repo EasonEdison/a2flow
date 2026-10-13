@@ -25,7 +25,7 @@ _PROMPT = """Design a temporary A2UI interaction inside A2Flow. You do not execu
 Return exactly one JSON object: title, mode, components, inputSchema. No Markdown fences.
 mode is INTERACTIVE for collecting a user's choice/form, otherwise DISPLAY_ONLY.
 Use only the supplied official component schemas, with component (not type) and unique IDs.
-Create exactly one tree rooted at id root, a Column or Row. Every component must be reachable
+Create exactly one tree rooted at id root, a Column, Row or Card. Every component must be reachable
 once, no shared children, cycles or unused nodes. No createSurface/updateDataModel messages.
 The trusted server supplies surface main and initializes {data: suppliedData, inputs: emptyValues}.
 Read existing data through absolute /data/<field> JSON pointers; do not copy or fabricate business
