@@ -14,6 +14,7 @@ import dev.a2flow.management.release.ReleaseEnvironment;
 
 /** Agent authoring reuses a real PRT business interface; it cannot register a new target or change execution semantics. */
 public final class ManagementCapabilityGuard {
+    static final String ACTION_CODE_PATTERN = "^[A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*){2,}$";
     private final CapabilityActionDraftService drafts;
     private final PublishedAssetQueryService published;
     private final ObjectMapper mapper;
@@ -50,7 +51,7 @@ public final class ManagementCapabilityGuard {
     /** Copy the immutable PRT interface server-side; model arguments never carry binary descriptors. */
     public JsonNode registeredCreateArguments(JsonNode arguments) {
         String sourceId = requiredText(arguments, "sourceDraftId");
-        String actionCode = requiredText(arguments, "actionCode");
+        String actionCode = requiredActionCode(arguments);
         String name = requiredText(arguments, "name");
         String description = requiredText(arguments, "description");
         try {
@@ -73,19 +74,53 @@ public final class ManagementCapabilityGuard {
                 }
             } else {
                 // The regular Create path requires full classification to retain a complete authoring draft.
-                if (frozen.getBusinessDomain() == null || frozen.getBusinessDomain().isBlank()
-                        || frozen.getCapabilityDomain() == null || frozen.getCapabilityDomain().isBlank()
-                        || frozen.getSpecialistId() == null || frozen.getSpecialistId().isBlank()) {
-                    throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CLASSIFICATION_REQUIRED");
-                }
-                result.put("businessDomain", frozen.getBusinessDomain());
-                result.put("capabilityDomain", frozen.getCapabilityDomain());
-                result.put("specialistIds", frozen.getSpecialistId());
+                copyClassification(result, frozen);
             }
             return result;
         } catch (java.io.IOException error) {
             throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CONTRACT_INVALID");
         }
+    }
+    /** Edit only requested metadata while keeping the current draft contract and classification intact. */
+    public JsonNode metadataUpdateArguments(JsonNode arguments) {
+        if (!arguments.has("actionCode") && !arguments.has("name") && !arguments.has("description")) {
+            throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_METADATA_REQUIRED");
+        }
+        String actionCode = arguments.has("actionCode") ? requiredActionCode(arguments) : null;
+        String name = arguments.has("name") ? requiredText(arguments, "name") : null;
+        String description = arguments.has("description") ? requiredText(arguments, "description") : null;
+        String draftId = requiredText(arguments, "draftId");
+        CapabilityActionDraft current = drafts.detail(draftId);
+        var draft = mapper.valueToTree(current.getDraft());
+        if (!draft.isObject() || !draft.path("basicInfo").isObject()) {
+            throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CONTRACT_INVALID");
+        }
+        var basicInfo = (com.fasterxml.jackson.databind.node.ObjectNode) draft.path("basicInfo");
+        if (actionCode != null) basicInfo.put("actionCode", actionCode);
+        if (name != null) basicInfo.put("nameCn", name);
+        if (description != null) basicInfo.put("description", description);
+        var result = mapper.createObjectNode().put("draftId", draftId);
+        result.set("baseRevision", arguments.get("baseRevision"));
+        result.set("draftJson", draft);
+        copyClassification(result, current);
+        return result;
+    }
+    private static String requiredActionCode(JsonNode arguments) {
+        String actionCode = requiredText(arguments, "actionCode");
+        if (!actionCode.matches(ACTION_CODE_PATTERN)) {
+            throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_ACTION_CODE_INVALID");
+        }
+        return actionCode;
+    }
+    private static void copyClassification(com.fasterxml.jackson.databind.node.ObjectNode result, CapabilityActionDraft source) {
+        if (source.getBusinessDomain() == null || source.getBusinessDomain().isBlank()
+                || source.getCapabilityDomain() == null || source.getCapabilityDomain().isBlank()
+                || source.getSpecialistId() == null || source.getSpecialistId().isBlank()) {
+            throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CLASSIFICATION_REQUIRED");
+        }
+        result.put("businessDomain", source.getBusinessDomain());
+        result.put("capabilityDomain", source.getCapabilityDomain());
+        result.put("specialistIds", source.getSpecialistId());
     }
     private static String requiredText(JsonNode arguments, String field) {
         JsonNode value = arguments.path(field);
