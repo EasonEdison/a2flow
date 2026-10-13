@@ -378,7 +378,7 @@ def _admit(candidate: TemporaryCandidate | dict[str, Any], data: dict[str, Any])
             submit = name
     if set(bound) != set(properties) or (value.mode == "INTERACTIVE") != (submit is not None):
         _reject("INPUT_BINDING_INVALID")
-    if "root" not in indexed or indexed["root"]["component"] not in {"Column", "Row"}:
+    if "root" not in indexed or indexed["root"]["component"] not in {"Column", "Row", "Card"}:
         _reject("ROOT_INVALID")
     visited: set[str] = set()
 
