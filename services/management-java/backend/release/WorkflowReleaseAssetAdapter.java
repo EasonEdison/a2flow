@@ -16,6 +16,7 @@ import dev.a2flow.management.support.JsonSupport;
 import dev.a2flow.management.access.AssetAction;
 import dev.a2flow.management.access.AssetAuthorizationService;
 import dev.a2flow.management.lifecycle.WorkflowDefinitionService;
+import dev.a2flow.management.lifecycle.publish.RuntimeAssetPublisher;
 import dev.a2flow.management.lifecycle.domain.WorkflowReleaseSourceView;
 import dev.a2flow.management.lifecycle.domain.graph.WorkflowEdge;
 import dev.a2flow.management.lifecycle.domain.graph.WorkflowForkNode;
@@ -126,7 +127,7 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
     private static final String MESSAGE_WORKFLOW_COMPILED = "Workflow graph与compiledPlan契约一致";
     private static final String MESSAGE_DEPENDENCIES_READY = "Workflow全部Skill递归依赖已在目标环境就绪";
     private static final String MESSAGE_SNAPSHOT_VALIDATED =
-            "冻结Workflow发布快照已验证，环境指针由publish-center-common-v2推进";
+            "冻结Workflow发布快照及运行材料已验证，环境指针由publish-center-common-v2推进";
     private static final String ERROR_TRUSTED_CONTEXT_REQUIRED = "Workflow发布操作缺少可信operator上下文";
     private static final String ERROR_SNAPSHOT_PAIR_IDENTITY_INVALID =
             "Workflow Diff快照assetKey不一致";
@@ -141,6 +142,9 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
 
     @Resource
     private WorkflowReleasePayloadAdapter payloadAdapter;
+
+    @Resource
+    private RuntimeAssetPublisher runtimeAssetPublisher;
 
     @Resource
     private AssetDependencyReleaseValidator dependencyReleaseValidator;
@@ -250,6 +254,7 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
                     payloadAdapter.requireWorkflowGraph(snapshot, assetKey));
         }
         WorkflowReleasePayload payload = payloadAdapter.requirePayload(snapshot, assetKey);
+        runtimeAssetPublisher.validateWorkflow(payload);
         DependencyReleaseReport report = dependencyReleaseValidator.validate(
                 new DependencyValidationRequest()
                         .setRootAssetType(ReleaseAssetType.ORCHESTRATION_CONFIG.name())
@@ -329,7 +334,8 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
         requirePermission(operator, context.getAssetKey(), AssetAction.PUBLISH);
         WorkflowReleasePayload payload = payloadAdapter.requirePayload(
                 context.getSnapshot(), context.getAssetKey());
-        log.info("冻结Workflow发布快照已验证，环境指针由publish-center-common-v2推进, workflowCode:{}, "
+        runtimeAssetPublisher.publishWorkflow(payload, context);
+        log.info("冻结Workflow发布快照已写入运行材料，环境指针由publish-center-common-v2推进, workflowCode:{}, "
                         + "environment:{}, sourceType:{}, sourceVersion:{}, requestId:{}, operator:{}",
                 context.getAssetKey(), context.getEnvironment(), context.getSourceType(),
                 context.getSourceVersion(), context.getRequestId(), operator);

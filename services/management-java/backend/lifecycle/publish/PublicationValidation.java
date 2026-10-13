@@ -57,9 +57,9 @@ final class PublicationValidation {
                             || !snapshot.assets().containsKey(identity("ABILITY", reference[0]) + "@" + reference[1])) throw failure("MISSING_ABILITY_RELEASE");
                 }
             } else if ("WORKFLOW".equals(kind)) {
-                if (!key.equals(definition.path("definitionKey").asText()) || !definition.path("nodes").isArray()
-                        || definition.path("nodes").size() < 2 || definition.path("nodes").size() > 8) throw failure("UNSUPPORTED_WORKFLOW");
-                for (JsonNode node : definition.path("nodes")) if (!declared.contains(identity("SKILL", text(node, "skillKey")))) throw failure("MISSING_SKILL_BINDING");
+                for (JsonNode dependency : WorkflowPublicationMaterial.dependencies(key, definition)) {
+                    if (!declared.contains(identity(dependency))) throw failure("MISSING_SKILL_BINDING");
+                }
             }
         }
         if (!identities.equals(snapshot.states().keySet())) throw failure("MISSING_SERVING_STATE");

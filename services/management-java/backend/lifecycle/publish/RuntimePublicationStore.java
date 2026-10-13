@@ -75,7 +75,7 @@ public final class RuntimePublicationStore {
     ObjectNode publish(String kind, String key, String environment, String receiptId, ObjectNode request,
             String version, ObjectNode definition, ArrayNode dependencies, String expectedServing) throws IOException {
         PublicationMaterial.key(kind, key); Destination target = destination(environment);
-        if (!Set.of("SKILL", "ABILITY", "APPLICATION").contains(kind)) throw failure("UNKNOWN_ASSET_KIND");
+        if (!Set.of("SKILL", "ABILITY", "APPLICATION", "WORKFLOW").contains(kind)) throw failure("UNKNOWN_ASSET_KIND");
         for (String field : new String[]{"sourceId", "sourceDigest", "requestId"}) {
             if (text(request, field).length() > 256) throw failure("PUBLICATION_FIELD_TYPE_INVALID");
         }

@@ -3,6 +3,7 @@ package dev.a2flow.management.lifecycle.publish;
 import java.io.IOException;
 import org.springframework.stereotype.Service;
 import dev.a2flow.management.release.ReleaseModels.ReleasePublishContext;
+import dev.a2flow.management.release.WorkflowReleasePayload;
 
 /** Retains complete compiler artifacts in the selected environment database. */
 @Service
@@ -13,6 +14,17 @@ public final class RuntimeAssetPublisher {
     private final RuntimePublicationStore store;
     public RuntimeAssetPublisher(RuntimePublicationStore store) { this.store = store; }
     public Receipt publish(String kind, String key, ReleasePublishContext context) {
+        return publish(kind, key, context, null);
+    }
+    public void validateWorkflow(WorkflowReleasePayload payload) {
+        try { WorkflowPublicationMaterial.definition(payload); }
+        catch (IOException exception) { throw new IllegalArgumentException(exception.getMessage(), exception); }
+    }
+    public Receipt publishWorkflow(WorkflowReleasePayload payload, ReleasePublishContext context) {
+        return publish("WORKFLOW", payload.getWorkflowCode(), context, payload);
+    }
+    private Receipt publish(String kind, String key, ReleasePublishContext context,
+            WorkflowReleasePayload workflow) {
         if (context == null || context.getSnapshot() == null || context.getEnvironment() == null) {
             throw new IllegalArgumentException("RUNTIME_PUBLICATION_CONTEXT_REQUIRED");
         }
@@ -23,11 +35,15 @@ public final class RuntimeAssetPublisher {
                     "sourceDigest", context.getSnapshot().getDigest(), "payloadDigest",
                     PublicationJson.digest(context.getSnapshot().getPayloadJson().getBytes(java.nio.charset.StandardCharsets.UTF_8)),
                     "payloadJson", context.getSnapshot().getPayloadJson(), "requestId", context.getRequestId());
-            var definition = PublicationJson.object("runtimeProfile", "a2flow.java-rpc.v1");
-            for (String field : new String[]{"assetKey", "sourceId", "sourceDigest", "payloadDigest", "payloadJson"}) {
-                definition.set(field, request.get(field));
+            var definition = workflow == null ? PublicationJson.object("runtimeProfile", "a2flow.java-rpc.v1")
+                    : WorkflowPublicationMaterial.definition(workflow);
+            if (workflow == null) {
+                for (String field : new String[]{"assetKey", "sourceId", "sourceDigest", "payloadDigest", "payloadJson"}) {
+                    definition.set(field, request.get(field));
+                }
             }
-            var deps = PublicationMaterial.javaDependencies(kind, key, definition);
+            var deps = workflow == null ? PublicationMaterial.javaDependencies(kind, key, definition)
+                    : WorkflowPublicationMaterial.dependencies(key, definition);
             String version = "java-" + PublicationJson.hash(PublicationJson.bytes(
                     PublicationJson.array(context.getSourceId(), context.getSnapshot().getDigest())));
             String receiptId = "runtime:" + PublicationJson.hash(PublicationJson.bytes(
