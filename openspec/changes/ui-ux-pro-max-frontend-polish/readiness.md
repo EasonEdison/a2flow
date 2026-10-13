@@ -1,15 +1,15 @@
 # Readiness
 
-SOURCE AND LOCAL UI VALIDATION PASSED. New static deployment is pending.
+SOURCE, LOCAL UI AND PUBLIC STATIC DEPLOYMENT PASSED.
+AUTHENTICATED PUBLIC UI VERIFICATION IS PENDING LOGIN.
 
-The second pass adopts the user-selected clean modern structural layout. Both frontends
-compile; representative desktop/mobile rendered checks and independent source review passed.
-See structural-design.md and structural-regression.md for direction, evidence and intentional
-concept deviations. The earlier regression.md remains a record of the first pass.
+The user-selected clean modern redesign is deployed from source `4531f77` after explicit
+authorization. Both frontends built and passed the scoped local rendered checks. Public
+HTML and every new static asset match the validated builds; M/B containers are healthy.
+See deployment.md for hashes, rollback and exact verification boundaries.
 
-Source-only presentation changes preserve existing generation, submission and continuation
-contracts. Public temporary-interaction acceptance predates this redesign and does not prove
-that this new static UI has been deployed.
-
-After deployment authorization, deploy only the M/B static artifacts matching integrated main,
-retain rollback mounts and verify public pages. Do not archive the pending deployment gate.
+Both public sessions had expired on reload. The new management shell and employee login
+page render; login is required to finish authenticated public layout/history acceptance.
+Do not equate this static deployment with a newly exercised Chat/Flow model run or archive
+the remaining authenticated verification gate. Existing generation and continuation contracts
+were not changed. See structural-design.md and structural-regression.md for visual evidence.
