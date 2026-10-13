@@ -1,8 +1,11 @@
 /** Only documented, safe progress fields enter presentation state. */
 export type GenerationStage = 'preparing' | 'generating' | 'validating_loading' | 'saving' | 'completed' | 'failed';
+export type GenerationToolName = 'generate_a2ui' | 'generate_interaction';
+export const isGenerationTool = (name: string): name is GenerationToolName =>
+  name === 'generate_a2ui' || name === 'generate_interaction';
 export type GenerationProgress = {
   toolCallId: string;
-  name: 'generate_a2ui';
+  name: GenerationToolName;
   stage: GenerationStage;
   elapsedMs: number;
   errorCode?: string;
@@ -18,7 +21,7 @@ export const generationStageLabels: Record<GenerationStage, string> = {
 };
 
 export function parseGenerationProgress(raw: unknown, toolCallId: string, name: string): GenerationProgress | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || name !== 'generate_a2ui') return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !isGenerationTool(name)) return undefined;
   const value = raw as Record<string, unknown>;
   if (value.toolCallId !== toolCallId || value.name !== name
     || typeof value.stage !== 'string' || !Object.hasOwn(generationStageLabels, value.stage)

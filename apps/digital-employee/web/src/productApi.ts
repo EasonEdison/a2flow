@@ -63,6 +63,7 @@ export type Message = {
   event?: ChatEvent;
   delivery?: string;
   errorCode?: string;
+  continuation?: { cardId: string; requestId: string };
   reasoning?: string;
   tools?: string[];
   execution?: ChatExecution;
@@ -93,13 +94,16 @@ export type MemoryEntry = { id: string; text: string };
 export type MemorySettings = { revision: number; enabled: boolean; entries: MemoryEntry[] };
 export type ChatCard = { cardId: string; conversationId: string; turnId: string; status: string; result?: unknown;
   display: { applicationKey: string; applicationVersion?: string | number; protocolProfile: string;
-    definitionSource?: 'PUBLISHED' | 'GENERATED';
+    definitionSource?: 'PUBLISHED' | 'GENERATED' | 'TEMPORARY';
+    title?: string; mode?: 'DISPLAY_ONLY' | 'INTERACTIVE'; inputSchema?: Record<string, unknown>;
     snapshotMessages: Record<string, unknown>[];
     catalog: { protocolVersion: string; catalogId: string; catalogRevision: string | number; catalogDigest: string };
     rootId?: string; components?: Record<string, unknown>[]; data?: Record<string, unknown>;
     actions: { actionName: string; surfaceId: string; componentId: string; inputSchema: Record<string, unknown> }[] } };
 export type ComposerDraftEffect = { type: 'COMPOSER_DRAFT'; mode: 'APPEND'; requestId: string; text: string };
-export type ChatActionResponse = { card: ChatCard; effects: ComposerDraftEffect[] };
+export type ChatContinuation = { cardId: string; requestId: string;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'UNKNOWN'; inputMessageId: string; assistantMessageId: string };
+export type ChatActionResponse = { card: ChatCard; effects: ComposerDraftEffect[]; continuation?: ChatContinuation };
 export type WorkflowCard = { nodeId: string; interactionId: string; toolCallId?: string; card: ChatCard };
 
 const friendlyMessages: Record<string, string> = {
@@ -212,8 +216,11 @@ const chatCardOf = (value: unknown): ChatCard => {
       ...(typeof display.applicationVersion === 'string' || typeof display.applicationVersion === 'number'
         ? { applicationVersion: display.applicationVersion } : {}),
       protocolProfile: textOf(display.protocolProfile),
-      ...(display.definitionSource === 'GENERATED' || display.definitionSource === 'PUBLISHED'
+      ...(display.definitionSource === 'GENERATED' || display.definitionSource === 'PUBLISHED' || display.definitionSource === 'TEMPORARY'
         ? { definitionSource: display.definitionSource } : {}),
+      ...(typeof display.title === 'string' ? { title: display.title } : {}),
+      ...(display.mode === 'DISPLAY_ONLY' || display.mode === 'INTERACTIVE' ? { mode: display.mode } : {}),
+      ...(display.inputSchema ? { inputSchema: recordOf(display.inputSchema) } : {}),
       snapshotMessages: display.snapshotMessages.map(recordOf),
       catalog: {
         protocolVersion: textOf(catalog.protocolVersion),
@@ -341,6 +348,7 @@ export const messageFromContent = (
   const errorCode = persistedChatErrorCode(content);
   const execution = executionOf(content);
   const parts = contentPartsOf(content);
+  const continuation = (content as Row)?.continuation;
   const legacyCards = parts === undefined && Array.isArray((content as Row)?.legacyCards)
     ? ((content as Row).legacyCards as unknown[]).map(chatCardOf)
     : undefined;
@@ -355,6 +363,10 @@ export const messageFromContent = (
       ? ((content as Row).tools as unknown[]).filter((value): value is string => typeof value === 'string')
       : [],
     createdAt,
+    ...(continuation && typeof continuation === 'object' && !Array.isArray(continuation)
+      && typeof recordOf(continuation).cardId === 'string'
+      ? { continuation: { cardId: textOf(recordOf(continuation).cardId),
+        requestId: textOf(recordOf(continuation).requestId) } } : {}),
     ...(execution ? { execution } : {}),
     ...(parts !== undefined ? { parts } : {}),
     ...(legacyCards?.length ? { legacyCards } : {}),

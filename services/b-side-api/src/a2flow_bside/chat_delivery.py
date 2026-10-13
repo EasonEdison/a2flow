@@ -35,7 +35,7 @@ GenerationStage = Literal[
 
 class GenerationProgressRecord(TypedDict):
     toolCallId: str
-    name: Literal["generate_a2ui"]
+    name: Literal["generate_a2ui", "generate_interaction"]
     stage: GenerationStage
     elapsedMs: int
     errorCode: str
@@ -106,6 +106,8 @@ class ChatDelivery:
             "text": "", "reasoning": "", "tools": [], "events": [],
             "delivery": "running", "execution": self.execution, "parts": [],
         }
+        if isinstance(assistant_message.get("content", {}).get("continuation"), dict):
+            self.content["continuation"] = copy.deepcopy(assistant_message["content"]["continuation"])
         self.parts: list[ContentPart] = self.content["parts"]
         self._live_cards: dict[str, JsonObject] = {}
         self._text_part_count = 0
@@ -263,8 +265,8 @@ class ChatDelivery:
         elapsed = event.get("elapsedMs")
         code = event.get("errorCode", "")
         if (
-            record is None or record["name"] != "generate_a2ui"
-            or event.get("name") != "generate_a2ui"
+            record is None or record["name"] not in {"generate_a2ui", "generate_interaction"}
+            or event.get("name") != record["name"]
             or not isinstance(stage, str)
             or stage not in {"preparing", "generating", "validating_loading",
                              "saving", "completed", "failed"}
@@ -282,7 +284,8 @@ class ChatDelivery:
         )):
             return None
         value: GenerationProgressRecord = {
-            "toolCallId": record["toolCallId"], "name": "generate_a2ui",
+            "toolCallId": record["toolCallId"],
+            "name": cast(Literal["generate_a2ui", "generate_interaction"], record["name"]),
             "stage": cast(GenerationStage, stage), "elapsedMs": elapsed, "errorCode": code,
         }
         if not progress or progress[-1] != value:

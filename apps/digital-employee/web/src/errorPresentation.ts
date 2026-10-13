@@ -7,6 +7,12 @@ export function persistedChatErrorCode(content: unknown): string | undefined {
 
 export function chatErrorPresentation(code: string | undefined): string {
   switch (code) {
+    case 'CONVERSATION_BUSY':
+      return '会话中已有执行，本次执行未启动；不会自动重试';
+    case 'CONVERSATION_REQUIRES_REVIEW':
+      return '上次执行结果尚未确认，本次未继续；不会自动重试';
+    case 'CHAT_CONTINUATION_UNCONFIRMED':
+      return '交互已保存，助手续轮状态未确认；不会自动重试';
     case 'ARGUMENT_INVALID':
       return '工具执行被拒：参数无效';
     case 'TRANSPORT_ERROR':

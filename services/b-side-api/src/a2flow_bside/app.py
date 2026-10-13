@@ -263,11 +263,76 @@ def create_app(
     async def lifespan(app):
         yield
         # Graceful shutdown waits for owned turns, not HTTP subscribers.
-        if app.state.chat_tasks:
-            await asyncio.gather(*app.state.chat_tasks, return_exceptions=True)
+        while app.state.chat_tasks:
+            await asyncio.gather(*tuple(app.state.chat_tasks), return_exceptions=True)
 
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.chat_tasks = set()
+    app.state.chat_turns = {}
+
+    def retain_task(task: asyncio.Task, conversation_id: int | None = None) -> None:
+        app.state.chat_tasks.add(task)
+        def finished(completed: asyncio.Task) -> None:
+            app.state.chat_tasks.discard(completed)
+            if conversation_id is not None:
+                turns = app.state.chat_turns.get(conversation_id)
+                if turns is not None:
+                    turns.discard(completed)
+                    if not turns:
+                        app.state.chat_turns.pop(conversation_id, None)
+            # Detached HTTP requests still have an owner that observes failures.
+            if not completed.cancelled():
+                completed.exception()
+        task.add_done_callback(finished)
+        if conversation_id is not None:
+            app.state.chat_turns.setdefault(conversation_id, set()).add(task)
+
+    async def continue_interaction(delivery: ChatDelivery, prior: tuple[asyncio.Task, ...]) -> None:
+        # A visible card can be submitted before its producing turn releases the
+        # Runtime conversation lock. Wait only for already-owned local turns;
+        # cross-process admission remains the Runtime's existing authority.
+        if prior:
+            await asyncio.gather(*(asyncio.shield(task) for task in prior), return_exceptions=True)
+        await delivery.produce()
+
+    async def execute_chat_card_action(user_id: int, conversation_id: int,
+                                       card_id: str, body: ChatCardAction) -> dict:
+        response = await asyncio.to_thread(
+            chat_action, user_id, str(conversation_id), card_id, body.model_dump())
+        marker = response.get("continuation")
+        if marker is None:
+            return response
+        card = response.get("card", {})
+        display = card.get("display", {})
+        result = card.get("result", {})
+        if (not isinstance(marker, dict) or marker.get("cardId") != card_id
+                or not isinstance(marker.get("requestId"), str) or not marker["requestId"]
+                or card.get("cardId") != card_id or card.get("conversationId") != str(conversation_id)
+                or card.get("status") != "COMPLETED" or not isinstance(result, dict)
+                or result.get("status") != "SUBMITTED" or not isinstance(result.get("values"), dict)
+                or display.get("protocolProfile") != "a2flow.temporary.v1"
+                or display.get("definitionSource") != "TEMPORARY"):
+            raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
+        created, input_message, assistant_message = await asyncio.to_thread(
+            messages.claim_interaction_continuation, user_id=user_id,
+            conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"])
+        if created:
+            delivery = ChatDelivery(
+                messages=messages, runner=chat_runner, user_id=user_id,
+                conversation_id=conversation_id, text=input_message["content"]["text"],
+                input_message=input_message, assistant_message=assistant_message)
+            delivery.detach()  # History polling consumes this turn; no unused SSE queue.
+            prior = tuple(app.state.chat_turns.get(conversation_id, ()))
+            task = asyncio.create_task(continue_interaction(delivery, prior))
+            retain_task(task, conversation_id)
+        state = assistant_message["content"].get("delivery")
+        status = {"running": "RUNNING", "completed": "COMPLETED",
+                  "waiting_action": "COMPLETED", "failed": "FAILED"}.get(state, "UNKNOWN")
+        return {**response, "continuation": {
+            "cardId": card_id, "requestId": marker["requestId"], "status": status,
+            "inputMessageId": str(input_message["id"]),
+            "assistantMessageId": str(assistant_message["id"]),
+        }}
 
     def identity(request: Request) -> RequestIdentity:
         value = request.scope.get("a2flow.bside.identity")
@@ -464,8 +529,7 @@ def create_app(
             conversation_id=conversation_id, text=body.text,
             input_message=input_message, assistant_message=assistant_message)
         task = asyncio.create_task(delivery.produce())
-        app.state.chat_tasks.add(task)
-        task.add_done_callback(app.state.chat_tasks.discard)
+        retain_task(task, conversation_id)
         return ChatStreamingResponse(delivery)
 
     @app.get("/api/conversations/{conversation_id}/cards")
@@ -486,8 +550,10 @@ def create_app(
             raise BsideError("CONVERSATION_NOT_FOUND", 404)
         if chat_action is None:
             raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
-        return await asyncio.to_thread(chat_action, identity.userId,
-            str(conversation_id), card_id, body.model_dump())
+        task = asyncio.create_task(execute_chat_card_action(
+            identity.userId, conversation_id, card_id, body))
+        retain_task(task)
+        return await asyncio.shield(task)
 
     @app.post("/api/conversations/{conversation_id}/run-refs")
     async def attach_run(

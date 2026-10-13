@@ -130,6 +130,51 @@ class MessagesRepository:
                  ref_id)).fetchone()
         return dict(row)
 
+    def claim_interaction_continuation(
+        self, *, user_id: int, conversation_id: int, card_id: str, request_id: str,
+    ) -> tuple[bool, dict[str, Any], dict[str, Any]]:
+        """Create one follow-up pair per submitted card under the conversation lock.
+
+        Only the transaction that inserts may dispatch. Reading an existing pair
+        never resumes an incomplete model turn, including after a process crash.
+        """
+        require_user_id(user_id)
+        with self._factory() as connection:
+            owner = connection.execute(
+                "SELECT user_id FROM conversations WHERE id=%s FOR UPDATE",
+                (conversation_id,),
+            ).fetchone()
+            if owner is None or owner["user_id"] != user_id:
+                raise BsideError("CONVERSATION_NOT_FOUND", 404)
+            rows = connection.execute(
+                "SELECT id,role,content,ref_kind,ref_id,created_at FROM messages "
+                "WHERE conversation_id=%s AND ref_kind='temporary_interaction' "
+                "AND ref_id=%s ORDER BY id",
+                (conversation_id, card_id),
+            ).fetchall()
+            if rows:
+                by_role = {row["role"]: dict(row) for row in rows}
+                if len(rows) != 2 or set(by_role) != {"user", "assistant"}:
+                    raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
+                return False, by_role["user"], by_role["assistant"]
+            marker = {"cardId": card_id, "requestId": request_id}
+            contents = (
+                ("user", {"text": "临时交互已提交，请根据已保存的交互结果继续。",
+                          "delivery": "submitted"}),
+                ("assistant", {"text": "", "delivery": "running", "parts": [],
+                               "continuation": marker}),
+            )
+            created = []
+            for role, content in contents:
+                row = connection.execute(
+                    "INSERT INTO messages (conversation_id,role,content,ref_kind,ref_id) "
+                    "VALUES (%s,%s,%s::jsonb,'temporary_interaction',%s) "
+                    "RETURNING id,role,content,ref_kind,ref_id,created_at",
+                    (conversation_id, role, json.dumps(content), card_id),
+                ).fetchone()
+                created.append(dict(row))
+            return True, created[0], created[1]
+
     def list_for(self, conversation_id: int, limit: int = 200) -> list[dict]:
         with self._factory() as connection:
             rows = connection.execute(

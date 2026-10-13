@@ -8,6 +8,7 @@ import { useProgress } from './hooks/useProgress';
 import { MemorySettingsPage } from './components/MemorySettingsPage';
 import { AssistantThread } from './components/AssistantThread';
 import './chat.css';
+import { TemporaryDraftOwner } from './temporaryDraft';
 import { FixturePreview } from './FixturePreview';
 import { applyChatStreamEvent, preserveUpdatedCards } from './assistantChat';
 import { apiErrorMessage, messageFromContent, productApi, type ChatCard, type Conversation, type Message, type Notification, type RunItem, type Schedule, type Session, type Workflow } from './productApi';
@@ -220,7 +221,7 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
   }, []);
   const send = useCallback(async (rawText: string) => {
     const text = rawText.trim();
-    if (!text || sending.current || pending || !loaded) return;
+    if (!text || sending.current || pending || !loaded || activeCardActions.current.size) return;
     sending.current = true;
     epoch.current++; // In-flight history reads cannot overwrite live deltas.
     const abort = new AbortController();
@@ -272,7 +273,7 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
       messages={messages}
       unassignedCards={unassignedCards}
       isRunning={busy || pending}
-      isSendDisabled={!loaded || pending}
+      isSendDisabled={!loaded || pending || activeCardActionCount > 0}
       error={historyError || error}
       onSend={send}
       onCardUpdate={updateCard}
@@ -382,9 +383,9 @@ function Product() {
   const unread = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
   if (checking) return <div className="loading-screen">正在加载 A2Flow…</div>;
   if (!session) return <Login onSession={setSession} />;
-  return <Shell session={session} page={page} unread={unread} onPage={(next) => { setNotificationRun(''); setPage(next); }} onLogout={async () => { await productApi.logout(); setPage('chat'); setSession(null); }}>
+  return <TemporaryDraftOwner.Provider value={session.userId}><Shell session={session} page={page} unread={unread} onPage={(next) => { setNotificationRun(''); setPage(next); }} onLogout={async () => { await productApi.logout(); setPage('chat'); setSession(null); }}>
     {notificationRun ? <RunDetail runId={notificationRun} onBack={() => setNotificationRun('')} /> : page === 'memory' ? <MemorySettingsPage key={session.userId} /> : page === 'chat' ? <ChatPage /> : page === 'workflows' ? <WorkflowCenter onSchedule={(key) => { setScheduleWorkflow(key); setPage('schedules'); }} /> : page === 'schedules' ? <SchedulePage initialWorkflow={scheduleWorkflow} /> : <NotificationPage items={notifications} refresh={refreshNotifications} onRun={(id) => setNotificationRun(id)} />}
-  </Shell>;
+  </Shell></TemporaryDraftOwner.Provider>;
 }
 
 export function App() {
