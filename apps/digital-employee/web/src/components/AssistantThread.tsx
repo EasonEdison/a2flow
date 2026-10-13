@@ -354,11 +354,11 @@ function ThreadBody({
           onCardActionStateChange={onCardActionStateChange}
           onComposerDraft={applyComposerDraft}
         />
-        <ThreadPrimitive.ViewportFooter className="aui-thread-footer">
+      </ThreadPrimitive.Viewport>
+        <div className="aui-thread-footer">
           {error ? <p className="chat-error" role="alert">{error}</p> : null}
           <ChatComposer />
-        </ThreadPrimitive.ViewportFooter>
-      </ThreadPrimitive.Viewport>
+        </div>
     </ThreadPrimitive.Root>;
 }
 

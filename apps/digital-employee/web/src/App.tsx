@@ -47,13 +47,21 @@ function Shell({ session, page, unread, onPage, onLogout, children }: { session:
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = (next: Page) => { onPage(next); setMobileOpen(false); };
   return <div className="product-shell">
-    <header className="topbar"><button className="mobile-menu" aria-label={mobileOpen ? '关闭导航' : '打开导航'} aria-expanded={mobileOpen} aria-controls="product-navigation" onClick={() => setMobileOpen((value) => !value)}><Icon name={mobileOpen ? 'close' : 'menu'} /></button><button className="top-brand" onClick={() => navigate('chat')}><strong>A2</strong>Flow</button><div className="top-user"><button className="notification-button" aria-label={`通知中心，${unread} 条未读`} onClick={() => navigate('notifications')}><Icon name="bell" />{unread ? <span>{unread}</span> : null}</button><b>{session.username}</b><em>{session.role}</em><button className="text-button" aria-label="退出登录" onClick={onLogout}>退出</button></div></header>
-    <aside id="product-navigation" className={`product-nav ${mobileOpen ? 'open' : ''}`} aria-label="主导航">
-      <button className={page === 'chat' ? 'active' : ''} aria-current={page === 'chat' ? 'page' : undefined} onClick={() => navigate('chat')}><Icon name="chat" /><span>对话工作台</span></button>
-      <button className={page === 'workflows' ? 'active' : ''} aria-current={page === 'workflows' ? 'page' : undefined} onClick={() => navigate('workflows')}><Icon name="workflow" /><span>工作流中心</span></button>
-      <button className={page === 'schedules' ? 'active' : ''} aria-current={page === 'schedules' ? 'page' : undefined} onClick={() => navigate('schedules')}><Icon name="clock" /><span>定时管理</span></button>
-      <button className={page === 'notifications' ? 'active' : ''} aria-current={page === 'notifications' ? 'page' : undefined} onClick={() => navigate('notifications')}><Icon name="bell" /><span>通知中心</span>{unread ? <span className="nav-count">{unread}</span> : null}</button>
-      <button className={page === 'memory' ? 'active' : ''} aria-current={page === 'memory' ? 'page' : undefined} onClick={() => navigate('memory')}><Icon name="settings" /><span>设置 · 个人记忆</span></button>
+    <header className="mobile-app-header">
+      <button className="mobile-menu" aria-label={mobileOpen ? '关闭导航' : '打开导航'} aria-expanded={mobileOpen} aria-controls="product-navigation" onClick={() => setMobileOpen(value => !value)}><Icon name={mobileOpen ? 'close' : 'menu'} /></button>
+      <button className="top-brand" aria-label="A2Flow 对话工作台" onClick={() => navigate('chat')}><strong>A2</strong>Flow</button>
+      <button className="notification-button" aria-label={`通知中心，${unread} 条未读`} onClick={() => navigate('notifications')}><Icon name="bell" />{unread ? <span>{unread}</span> : null}</button>
+    </header>
+    <aside id="product-navigation" className={`app-rail ${mobileOpen ? 'open' : ''}`} aria-label="主导航">
+      <button className="rail-brand" aria-label="A2Flow 对话工作台" onClick={() => navigate('chat')}><strong>A2</strong><span>Flow</span></button>
+      <nav className="rail-links" aria-label="应用">
+        <button className={page === 'chat' ? 'active' : ''} aria-label="对话工作台" aria-current={page === 'chat' ? 'page' : undefined} onClick={() => navigate('chat')}><Icon name="chat" /><span>对话</span></button>
+        <button className={page === 'workflows' ? 'active' : ''} aria-label="工作流中心" aria-current={page === 'workflows' ? 'page' : undefined} onClick={() => navigate('workflows')}><Icon name="workflow" /><span>工作流</span></button>
+        <button className={page === 'schedules' ? 'active' : ''} aria-label="定时管理" aria-current={page === 'schedules' ? 'page' : undefined} onClick={() => navigate('schedules')}><Icon name="clock" /><span>定时</span></button>
+        <button className={page === 'notifications' ? 'active' : ''} aria-label={`通知中心，${unread} 条未读`} aria-current={page === 'notifications' ? 'page' : undefined} onClick={() => navigate('notifications')}><Icon name="bell" /><span>通知</span>{unread ? <span className="rail-count">{unread}</span> : null}</button>
+        <button className={page === 'memory' ? 'active' : ''} aria-label="设置 · 个人记忆" aria-current={page === 'memory' ? 'page' : undefined} onClick={() => navigate('memory')}><Icon name="settings" /><span>设置</span></button>
+      </nav>
+      <div className="rail-account"><Icon name="user" /><span>{session.username}</span><small>{session.role}</small><button aria-label="退出登录" onClick={onLogout}><Icon name="logout" size={18} /><span>退出</span></button></div>
     </aside>
     <section className="product-content">{children}</section>
   </div>;
