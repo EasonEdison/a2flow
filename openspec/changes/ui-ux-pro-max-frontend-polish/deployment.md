@@ -32,8 +32,24 @@ Built-file scanning found no employee leaks. Two management generic-api-key matc
 reviewed as minified dependency expressions: `columnsKey/onColumnResize` and `metaKey/shiftKey`.
 They are JavaScript variables, not credentials. Outgoing project-sensitive patterns were absent.
 
-Public browser reload visibly loaded the new management shell and employee login page.
-Both previous login sessions had expired. Authenticated public layout/history verification
-is pending user login; this is not a claim that a new Chat/Flow model run was exercised.
-The user has been asked to sign in without sharing passwords. Deployment is complete;
-authenticated rendered acceptance remains distinct from resource-byte verification.
+## Authenticated browser follow-up
+
+The user signed in through Chrome; the in-app browser had a separate expired session.
+Reused the existing Chrome login without reading credentials, transferring cookies,
+resetting passwords or altering authentication. No database credential query was needed.
+
+- Management: all seven real Skill rows rendered with metadata; the Workflow list showed
+  its existing published-to-preview asset, inline metrics and labeled row. Its detail
+  editor loaded all three nodes and configuration. No edits or publication were made.
+- Employee: existing Chat messages and two existing cards rendered. Page reload preserved
+  login, history, cards and the separate composer. The workflow catalog showed three
+  available definitions. This account's My runs view had no records, so completed Flow
+  history was not re-exercised in this follow-up; earlier public Flow acceptance remains
+  the execution evidence, and local read-only history evidence is recorded separately.
+- Both pages fit the actual 1678px viewport without horizontal overflow. Product console
+  error counts were zero; unrelated Chrome extension errors were excluded explicitly.
+- Captured final authenticated screenshots privately. No new Chat message, action submit,
+  model execution, workflow start, data change or permission change occurred.
+
+Authenticated presentation acceptance is complete within the above observed states.
+This does not claim a new end-to-end temporary-interaction execution test.

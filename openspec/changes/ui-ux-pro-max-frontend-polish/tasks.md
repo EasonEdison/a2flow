@@ -10,6 +10,6 @@
 - [x] Apply the user-selected structural redesign and compare concepts with real renders.
 - [x] Deploy M/B static artifacts after explicit authorization; retain rollback.
 - [x] Verify public HTML, all static assets, mounts and container state.
-- [ ] Finish authenticated public rendered verification after user login.
+- [x] Finish scoped authenticated public rendered verification using the existing Chrome login.
 
 No unit tests were requested or run. Direct builds and local rendered interaction checks passed.
