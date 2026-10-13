@@ -160,6 +160,7 @@ def generation_contract() -> dict[str, Any]:
     catalog, _ = _official()
     return {
         "profile": PROFILE,
+        "candidateSchema": TemporaryCandidate.model_json_schema(),
         "surfaceId": "main",
         "rootId": "root",
         "allowedComponents": {
