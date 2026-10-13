@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Input } from 'antd';
 import { PlusOutlined, ReloadOutlined, SendOutlined } from '@ant-design/icons';
@@ -23,9 +23,10 @@ const errorLabels: Record<string, string> = {
 const failureText = (code: string) => errorLabels[code] ?? '本轮未能完成，请查看已保存的处理结果；未自动重试。';
 const statusLabels = { RUNNING: '正在执行', COMPLETED: '本轮已完成', FAILED: '执行失败', UNKNOWN: '结果待确认' };
 const asText = (value: unknown) => typeof value === 'string' ? value : '';
+const safeErrorCode = (value: unknown) => /^[A-Z][A-Z0-9_]{0,95}$/.test(asText(value)) ? asText(value) : '';
 
 const toolLabels: Record<string, string> = {
-  SKILL_FACTORY_CONFIG: '读取创建配置', SKILL_LIST: '查找 Skill', SKILL_DETAIL: '读取 Skill',
+  AUTHORING_CONTRACT: '读取资产创建规范', SKILL_FACTORY_CONFIG: '读取创建配置', SKILL_LIST: '查找 Skill', SKILL_DETAIL: '读取 Skill',
   WORKSPACE_CREATE: '创建 Skill 草稿', SKILL_UPDATE: '更新 Skill 信息', WORKSPACE_TREE: '读取文件列表',
   WORKSPACE_FILE_CONTENT: '读取草稿文件', WORKSPACE_FILE_SAVE: '保存草稿文件', WORKSPACE_SAVE: '保存 Skill 草稿',
   WORKSPACE_DIFF: '查看草稿变更', SKILL_COMPONENT_CANDIDATE_LIST: '查找可用组件', SKILL_CAPABILITY_CANDIDATE_LIST: '查找可用业务能力',
@@ -35,7 +36,7 @@ const toolLabels: Record<string, string> = {
   COMPONENT_LIST: '查找组件', COMPONENT_DETAIL: '读取组件', COMPONENT_REGISTER: '注册组件', COMPONENT_UPDATE: '更新组件',
   A2UI_CATALOG_LIST: '读取组件目录', A2UI_CATALOG_DETAIL: '读取目录定义', A2UI_CATALOG_COMPONENT_LIST: '查找目录组件',
   A2UI_CATALOG_COMPONENT_DETAIL: '读取组件定义', A2UI_APPLICATION_LIST: '查找 A2UI Application',
-  A2UI_APPLICATION_DETAIL: '读取 A2UI Application', A2UI_APPLICATION_BLUEPRINT_LIST: '读取可用应用模板',
+  A2UI_APPLICATION_BLUEPRINT_IMPORT: '读取完整应用模板', A2UI_APPLICATION_DETAIL: '读取 A2UI Application', A2UI_APPLICATION_BLUEPRINT_LIST: '读取可用应用模板',
   A2UI_APPLICATION_CREATE: '创建 A2UI Application', A2UI_APPLICATION_UPDATE: '更新 A2UI Application',
   A2UI_APPLICATION_ACTION_SCAN: '校验应用动作', WORKFLOW_LIST: '查找 Workflow', WORKFLOW_DETAIL: '读取 Workflow',
   WORKFLOW_CREATE: '创建 Workflow 草稿', WORKFLOW_BASIC_INFO_UPDATE: '更新 Workflow 信息',
@@ -45,7 +46,7 @@ const toolLabels: Record<string, string> = {
   RELEASE_PREPROD_DEPLOY: '发布到 PRT', RELEASE_DEPLOYMENT_DETAIL: '读取发布结果',
 };
 
-function ProcessEvents({ events, running }: { events: AgentEvent[]; running: boolean }) {
+function ProcessEvents({ events, running, receipts }: { events: AgentEvent[]; running: boolean; receipts: Map<string, AgentEvent> }) {
   const tools = new Map<string, { started?: AgentEvent; completed?: AgentEvent }>();
   for (const event of events) {
     if (event.type !== 'TOOL_STARTED' && event.type !== 'TOOL_COMPLETED') continue;
@@ -54,13 +55,20 @@ function ProcessEvents({ events, running }: { events: AgentEvent[]; running: boo
     const current = tools.get(id) ?? {};
     tools.set(id, { ...current, [event.type === 'TOOL_STARTED' ? 'started' : 'completed']: event });
   }
+  for (const [id, tool] of tools) {
+    const previous = tool.completed ?? tool.started!;
+    const requestId = asText(tool.started?.payload.requestId) || asText(previous.payload.requestId);
+    const receipt = receipts.get(requestId);
+    if (receipt && receipt.sequence > previous.sequence) tools.set(id, { ...tool, completed: receipt });
+  }
   if (!tools.size) return null;
   return <details className="management-chat-process"><summary>处理过程 · {tools.size} 次工具调用</summary>
     <ol>{Array.from(tools.entries()).map(([id, tool]) => {
       const event = tool.completed ?? tool.started!;
       const status = asText(tool.completed?.payload.status);
+      const errorCode = safeErrorCode(tool.completed?.payload.errorCode);
       return <li key={id}><span>{toolLabels[asText(event.payload.name)] ?? asText(event.payload.name)}</span><span>{tool.completed ? status === 'UNKNOWN' ? '结果待确认' : status === 'FAILED' || status === 'REJECTED' ? '未完成' : status === 'NOT_FOUND' ? '未找到回执' : '已返回' : running ? '执行中' : '未收到结果'}</span>
-        <details><summary>查看步骤信息</summary><dl><dt>工具</dt><dd>{asText(event.payload.name)}</dd><dt>请求标识</dt><dd>{asText(event.payload.requestId)}</dd></dl></details>
+        <details><summary>查看步骤信息</summary><dl><dt>工具</dt><dd>{asText(event.payload.name)}</dd><dt>请求标识</dt><dd>{asText(event.payload.requestId)}</dd>{errorCode ? <><dt>错误标识</dt><dd><code>{errorCode}</code></dd></> : null}</dl></details>
       </li>;
     })}</ol>
   </details>;
@@ -98,16 +106,16 @@ function AssetResults({ events }: { events: AgentEvent[] }) {
   })}</section>;
 }
 
-function Turn({ turn, events }: { turn: AgentTurn; events: AgentEvent[] }) {
+function Turn({ turn, events, receipts }: { turn: AgentTurn; events: AgentEvent[]; receipts: Map<string, AgentEvent> }) {
   const text = turn.finalText || asText(events.filter(event => event.type === 'ASSISTANT_MESSAGE').at(-1)?.payload.text);
   return <article className="management-chat-turn">
     <div className="management-chat-user">{turn.message}</div>
     <div className="management-chat-answer">
       <p className={`management-chat-status status-${turn.status.toLowerCase()}`} role={turn.status === 'RUNNING' ? 'status' : undefined}>{statusLabels[turn.status]}</p>
-      <ProcessEvents events={events} running={turn.status === 'RUNNING'} />
+      <ProcessEvents events={events} running={turn.status === 'RUNNING'} receipts={receipts} />
       <AssetResults events={events} />
       {text ? <div className="management-chat-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown></div> : null}
-      {turn.status === 'FAILED' ? <Alert type="error" showIcon message={failureText(turn.errorCode)} /> : null}
+      {turn.status === 'FAILED' ? <Alert type="error" showIcon message={failureText(turn.errorCode)} description={safeErrorCode(turn.errorCode) ? <details><summary>查看错误标识</summary><code>{safeErrorCode(turn.errorCode)}</code></details> : undefined} /> : null}
       {turn.status === 'UNKNOWN' ? <Alert type="warning" showIcon message="上一轮结果尚未确认，已保存的操作不会自动重放。" description="可继续查询已保存的状态；新消息不会重新执行未确认的变更。" /> : null}
     </div>
   </article>;
@@ -123,6 +131,14 @@ export default function ManagementChatPage() {
   const [listError, setListError] = useState('');
   const [history, setHistory] = useState<AgentHistory | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  const receipts = useMemo(() => {
+    const result = new Map<string, AgentEvent>();
+    for (const event of events) {
+      const requestId = asText(event.payload.requestId);
+      if (event.type === 'TOOL_COMPLETED' && !asText(event.payload.toolCallId) && requestId) result.set(requestId, event);
+    }
+    return result;
+  }, [events]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [readError, setReadError] = useState('');
@@ -243,7 +259,7 @@ export default function ManagementChatPage() {
         <div className="management-chat-messages" ref={viewport} onScroll={event => { const el = event.currentTarget; followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
           {selected && !history ? <p role="status">正在读取已保存的对话…</p> : null}
           {!selected || history?.turns.length === 0 ? <div className="management-chat-empty"><h2>从你的需求开始</h2><p>说明要创建什么、用于什么场景，以及已有的资产或接口信息。</p><p>支持 Skill、业务能力、组件、A2UI Application 和 Workflow，已有手工编辑入口保持可用。</p></div> : null}
-          {history?.turns.map(turn => <Turn key={turn.turnId} turn={turn} events={events.filter(event => event.turnId === turn.turnId)} />)}
+          {history?.turns.map(turn => <Turn key={turn.turnId} turn={turn} receipts={receipts} events={events.filter(event => event.turnId === turn.turnId)} />)}
         </div>
         <div className="management-chat-footer">
           {readError ? <Alert type="warning" showIcon message={readError} /> : null}
