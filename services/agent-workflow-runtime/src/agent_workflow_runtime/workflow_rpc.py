@@ -19,6 +19,7 @@ from skillweave_contracts import CONTRACT_REVISION, TrustedInvocationContext
 from .actions import ActionService
 from .application_runtime import PreparedApplication
 from .a2ui_generation import A2uiGenerator
+from .temporary_generation import InteractionGenerator
 from .chat.cards import ChatCardStore, JsonObject, _card_id
 from .chat.loop import _action_observation_message, _read_observations
 from .chat.render_projection import project_rendered_content
@@ -99,6 +100,26 @@ class WorkflowAssets(RpcChatAssets):
                 or metadata.get("workflow") != {"runId": self.run.run_id, "nodeId": self.node_id}):
             raise ActionRejected("CARD_REPLAY_CONFLICT")
         # Native interrupt replay reuses the saved artifact; never reruns generation/load.
+        return cast(dict[str, Any], saved)
+
+    def generate_interaction(
+        self, data: dict[str, Any], intent: str,
+        tool_call_id: str, generator: InteractionGenerator,
+    ) -> dict[str, Any]:
+        self.current()
+        card_id = _card_id(self.owner, self.conversation_id, self.control_request_id, tool_call_id)
+        saved = self.store.read(self.owner, self.conversation_id, card_id)
+        if saved is None:
+            return super().generate_interaction(data, intent, tool_call_id, generator)
+        metadata = self.store.get_binding(self.owner, self.conversation_id, card_id)["metadata"]
+        if (
+            metadata.get("definitionSource") != "TEMPORARY"
+            or metadata.get("applicationKey") != "temporary-interaction"
+            or metadata.get("observation", {}).get("arguments") != {"intent": intent, "data": data}
+            or metadata.get("workflow") != {"runId": self.run.run_id, "nodeId": self.node_id}
+        ):
+            raise ActionRejected("CARD_REPLAY_CONFLICT")
+        # Resume uses the saved interaction and submission; generation is never replayed.
         return cast(dict[str, Any], saved)
 
     def _registry_context(self) -> RegistryContext:
@@ -405,6 +426,21 @@ class WorkflowActions(ActionService):
                 raise ActionRejected("A2UI_GENERATION_INTENT_INVALID")
             card = assets.generate_application(app_code, params, intent, tool_call_id, generator)
             tool_name = "generate_a2ui"
+        return self._render_card(assets, card, app_code, tool_call_id, tool_name)
+
+    def render_interaction(
+        self, assets: WorkflowAssets, data: dict[str, Any], intent: str,
+        tool_call_id: str, generator: InteractionGenerator,
+    ) -> Command:
+        card = assets.generate_interaction(data, intent, tool_call_id, generator)
+        return self._render_card(
+            assets, card, card["display"]["applicationKey"], tool_call_id, "generate_interaction",
+        )
+
+    def _render_card(
+        self, assets: WorkflowAssets, card: dict[str, Any], app_code: str,
+        tool_call_id: str, tool_name: str,
+    ) -> Command:
         context = assets.run.context(assets.node_id)
         key = (self.run.run_id, assets.node_id, card["cardId"])
         with self.repository.scope(self.run.owner, self.run.run_id):

@@ -101,7 +101,7 @@ class ProgressMiddleware(AgentMiddleware):
         scope: ProgressScope, operation: str, call: Mapping[str, object],
     ) -> Callable[[GenerationProgress], None]:
         def emit(progress: GenerationProgress) -> None:
-            if call["name"] == "generate_a2ui":
+            if call["name"] in {"generate_a2ui", "generate_interaction"}:
                 scope.emit("TOOL_GENERATION_PROGRESS", {
                     "toolOperationId": operation, "toolName": call["name"],
                     "toolCallId": str(call.get("id") or ""),

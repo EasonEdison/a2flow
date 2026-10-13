@@ -22,6 +22,7 @@ from skillweave_contracts import TrustedContext, TrustedInvocationContext
 from .assembly import build_engine
 from .a2ui_generation import A2uiGenerator, DeepAgentA2uiGenerator
 from .a2ui_selection_policy import A2UI_SELECTION_POLICY
+from .temporary_generation import DeepAgentInteractionGenerator, InteractionGenerator
 from .chat.cards import ChatCardStore, CompletionObserver, JsonObject
 from .chat.rpc_actions import ChatActionResponse
 from .deepseek_model import DeepSeekChat
@@ -37,6 +38,8 @@ from .chat.tools import (
     RenderModelArgs,
     GenerateArgs,
     GenerateModelArgs,
+    GenerateInteractionArgs,
+    GenerateInteractionModelArgs,
     UseSkillArgs,
     UseSkillModelArgs,
 )
@@ -102,6 +105,7 @@ class CardResumeBody(BaseModel):
 def tools_for(
     assets: WorkflowAssets, actions: WorkflowActions,
     generator: A2uiGenerator | None = None,
+    interaction_generator: InteractionGenerator | None = None,
 ) -> tuple[BaseTool, ...]:
     @tool("use_skill", args_schema=UseSkillArgs, response_format="content_and_artifact")
     def use_skill(skillKey: str, runtime: ToolRuntime[TrustedInvocationContext]) -> tuple[str, Any]:
@@ -161,8 +165,30 @@ def tools_for(
         return actions.render(assets, appCode, params, runtime.tool_call_id,
                               generator=generator, intent=intent)
 
+    @tool("generate_interaction", args_schema=GenerateInteractionArgs)
+    def generate_interaction(
+        intent: str, data: dict[str, Any],
+        runtime: ToolRuntime[TrustedInvocationContext],
+    ) -> Command:
+        """Generate a temporary display or input UI from the current node's supplied data.
+
+        No prebuilt Application is needed. Submission returns user-provided results;
+        it does not execute a business action or replace required Skill tools.
+        Interactive cards wait for the user before this tool returns.
+        """
+        assets.validate_context(runtime.context)
+        if interaction_generator is None or not runtime.tool_call_id:
+            raise ActionRejected("A2UI_GENERATOR_UNAVAILABLE")
+        return actions.render_interaction(
+            assets, data, intent, runtime.tool_call_id, interaction_generator,
+        )
+
     tools = (use_skill, execute_ability, query_skill_dependencies, render_application)
-    return (*tools, generate_a2ui) if generator is not None else tools
+    if generator is not None:
+        tools = (*tools, generate_a2ui)
+    if interaction_generator is not None:
+        tools = (*tools, generate_interaction)
+    return tools
 
 
 class RpcWorkflowHost(MvpRuntimeHost):
@@ -218,6 +244,13 @@ class RpcWorkflowHost(MvpRuntimeHost):
             "unless the user explicitly asks for technical details. "
             "Your explanation does not determine engine completion or business success."
             + "\n" + A2UI_SELECTION_POLICY
+            + "\n当当前节点需要临时展示数据、让用户选择或填写信息，且没有对应的预编排界面时，"
+            "使用平台工具 generate_interaction，传入明确的 intent 和已有真实 data；无需绑定 Application。"
+            "该工具可独立于 Skill 的业务工具列表使用，但仅服务于当前节点，不能新增业务权限。"
+            "用户提交是交互输入，不是业务执行成功；后续仍须调用原 Skill 要求的业务工具。"
+            "它不能替代 required render_application，也不能使后继节点提前运行。"
+            "仅展示的界面不会等待提交；需要输入的界面应在 intent 中明确等待目标。"
+            "失败明确报告，不自动重试或降级。"
         )
 
     def _actions(self, run: RunRecord) -> WorkflowActions:
@@ -250,19 +283,27 @@ class RpcWorkflowHost(MvpRuntimeHost):
                     "query_skill_dependencies": QuerySkillDependenciesModelArgs,
                     "render_application": RenderModelArgs,
                     "generate_a2ui": GenerateModelArgs,
+                    "generate_interaction": GenerateInteractionModelArgs,
                 }
                 for node in definition["nodes"]:
                     assets = actions.assets(node["nodeId"])
                     material = self.reader.load_skill(node["skillKey"], run.context(node["nodeId"]))
                     required = tuple(dict.fromkeys(("use_skill", *material.required_tool_names)))
-                    allowed = set(required)
+                    allowed = {*required, "generate_interaction"}
                     if "render_application" in allowed:
                         allowed.add("query_skill_dependencies")
                         allowed.add("generate_a2ui")
                     generator = DeepAgentA2uiGenerator(
                         lambda: self.model_factory.create(self.model_reference, run.owner),
                     )
-                    available = {item.name: item for item in tools_for(assets, actions, generator)}
+                    interaction_generator = DeepAgentInteractionGenerator(
+                        lambda: self.model_factory.create(self.model_reference, run.owner),
+                    )
+                    available = {
+                        item.name: item for item in tools_for(
+                            assets, actions, generator, interaction_generator,
+                        )
+                    }
                     if not allowed <= available.keys():
                         raise ActionRejected("SKILL_TOOL_BINDING_MISMATCH")
                     model = self.model_factory.create(self.model_reference, run.owner)
