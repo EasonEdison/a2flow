@@ -24,6 +24,13 @@ class InteractionGenerator(Protocol):
 
 _PROMPT = """Design a temporary A2UI interaction inside A2Flow. You do not execute business work.
 Return exactly one JSON object: title, mode, components, inputSchema. No Markdown fences.
+Obey candidateSchema. components MUST be a JSON ARRAY of component objects, never an object
+keyed by IDs. Each array element has its own id and component fields. Envelope example:
+{"title":"信息展示","mode":"DISPLAY_ONLY","components":[
+ {"id":"root","component":"Column","children":["heading"]},
+ {"id":"heading","component":"Text","text":"信息展示"}],
+ "inputSchema":{"type":"object","properties":{},"required":[],"additionalProperties":false}}
+This example explains the envelope only; design the requested layout using supplied data.
 mode is INTERACTIVE for collecting a user's choice/form, otherwise DISPLAY_ONLY.
 Use only the supplied official component schemas, with component (not type) and unique IDs.
 Create exactly one tree rooted at id root, a Column, Row or Card. Every component must be reachable
