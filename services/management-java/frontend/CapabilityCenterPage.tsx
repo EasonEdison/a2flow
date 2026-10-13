@@ -231,46 +231,31 @@ const CapabilityCenterPage: React.FC = () => {
 
       <Spin spinning={loading}>
         {items.length ? (
-          <div className="capability-center-grid">
+          <div className="management-asset-list" aria-label="业务能力资产列表">
             {items.map((item) => (
-              <Card className="capability-center-item" key={item.draftId}>
-                <div className="capability-center-item-head">
-                  <div>
-                    <strong>{nameOf(item)}</strong>
-                    <div className="capability-center-action-code">{actionCodeOf(item)}</div>
+              <article className="management-asset-row" key={item.draftId}>
+                <div className="management-asset-summary">
+                  <div className="management-asset-title">
+                    <strong>{nameOf(item)}</strong><code>{actionCodeOf(item)}</code>
                   </div>
-                  <Space>
+                  <p>{item.description || '等待补充业务目标和模型调用边界。'}</p>
+                </div>
+                <dl className="management-asset-meta">
+                  <div><dt>状态</dt><dd className="management-asset-status">
                     {item.editing ? <Tag color="processing">编辑中</Tag> : null}
                     {item.online ? <Tag color="success">已上线</Tag> : null}
-                  </Space>
+                    {!item.editing && !item.online ? '—' : null}
+                  </dd></div>
+                  <div><dt>业务域</dt><dd>{item.businessDomainName || item.businessDomain || '未设置业务域'}</dd></div>
+                  <div><dt>能力域</dt><dd>{item.capabilityDomainName || item.capabilityDomain || '未设置能力域'}</dd></div>
+                  <div><dt>所属专员</dt><dd>{item.specialistName || '未设置所属专员'}</dd></div>
+                  <div><dt>来源</dt><dd>{capabilitySourceText(item.sourceType || CAPABILITY_API_SOURCE_TYPE)}</dd></div>
+                  <div><dt>副作用</dt><dd>{capabilitySideEffectText(item.sideEffectLevel)}</dd></div>
+                </dl>
+                <div className="management-asset-actions">
+                  <Button onClick={() => navigate(`/management/capabilities/edit?draftId=${item.draftId}`)}>打开编辑</Button>
                 </div>
-                <p>{item.description || '等待补充业务目标和模型调用边界。'}</p>
-                <div className="capability-center-item-meta">
-                  <span>{item.businessDomainName || item.businessDomain || '未设置业务域'}</span>
-                  <span>
-                    {item.capabilityDomainName || item.capabilityDomain || '未设置能力域'}
-                  </span>
-                  <span>{item.specialistName || '未设置所属专员'}</span>
-                  <span>
-                    {capabilitySourceText(
-                      item.sourceType || CAPABILITY_API_SOURCE_TYPE,
-                    )}
-                  </span>
-                  <span>{capabilitySideEffectText(item.sideEffectLevel)}</span>
-                </div>
-                <div className="capability-center-item-footer">
-                  <Button
-                    type="link"
-                    onClick={() =>
-                      navigate(
-                        `/management/capabilities/edit?draftId=${item.draftId}`,
-                      )
-                    }
-                  >
-                    打开编辑
-                  </Button>
-                </div>
-              </Card>
+              </article>
             ))}
           </div>
         ) : (

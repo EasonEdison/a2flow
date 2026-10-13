@@ -1,15 +1,16 @@
-/* Shared workbench presentation; page-specific authoring and release behavior stays local. */
+/* Shared management layout: one canvas, persistent navigation and readable asset rows. */
 :root {
   --management-primary: #2563eb;
   --management-primary-hover: #1d4ed8;
   --management-text: #172b4d;
   --management-muted: #52647a;
-  --management-canvas: #f5f7fb;
+  --management-canvas: #fff;
+  --management-sidebar: #f5f7fb;
   --management-surface: #fff;
-  --management-border: #dce3ed;
+  --management-border: #e5e9ef;
   --management-selected: #edf3ff;
-  --management-radius: 10px;
-  --management-shadow: 0 2px 8px rgb(23 43 77 / 4%);
+  --management-radius: 8px;
+  --management-sidebar-width: 208px;
 }
 body {
   margin: 0;
@@ -19,248 +20,194 @@ body {
   font-size: 14px;
   line-height: 1.6;
 }
-body :is(a, button, input, textarea, select, [tabindex]):focus-visible {
-  outline: 3px solid var(--management-primary);
-  outline-offset: 3px;
-}
-body :is(.ant-select-focused .ant-select-selector, .ant-input-affix-wrapper-focused) {
-  border-color: var(--management-primary);
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 18%);
-}
-.management-skip-link {
-  position: fixed;
-  top: 8px;
-  left: 16px;
-  z-index: 1100;
-  padding: 12px 16px;
-  transform: translateY(-160%);
-  border-radius: 8px;
-  background: var(--management-primary);
-  color: white;
-}
+body :is(a, button, input, textarea, select, [tabindex]):focus-visible { outline: 3px solid var(--management-primary); outline-offset: 3px; }
+body :is(.ant-select-focused .ant-select-selector, .ant-input-affix-wrapper-focused) { border-color: var(--management-primary); box-shadow: 0 0 0 3px rgb(37 99 235 / 18%); }
+.management-skip-link { position: fixed; top: 8px; left: 16px; z-index: 1100; padding: 12px 16px; transform: translateY(-160%); border-radius: 8px; background: var(--management-primary); color: white; }
 .management-skip-link:focus { transform: translateY(0); color: white; }
 .management-header {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 20;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 32px;
-  min-height: 80px;
-  padding: 12px 32px;
-  border-bottom: 1px solid var(--management-border);
-  background: var(--management-surface);
+  width: var(--management-sidebar-width);
+  height: 100vh;
+  height: 100dvh;
+  padding: 28px 16px 20px;
+  overflow-y: auto;
+  border-right: 1px solid var(--management-border);
+  background: var(--management-sidebar);
 }
-.management-brand { display: flex; flex-direction: column; flex: none; line-height: 1.3; }
-.management-brand strong { color: var(--management-text); font-size: 22px; letter-spacing: -0.5px; }
-.management-brand span { margin-top: 4px; color: var(--management-muted); font-size: 12px; }
-.management-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.management-brand { display: flex; flex-direction: column; flex: none; padding-inline: 12px; line-height: 1.4; }
+.management-brand strong { color: var(--management-text); font-size: 24px; font-weight: 650; letter-spacing: -0.5px; }
+.management-brand span { margin-top: 4px; color: var(--management-muted); font-size: 13px; }
+.management-navigation { display: flex; flex-direction: column; gap: 8px; }
 .management-navigation a {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 8px 16px;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px;
   border-radius: 8px;
-  color: var(--management-muted);
+  color: var(--management-text);
   font-weight: 500;
   transition: color 160ms ease, background-color 160ms ease;
 }
-.management-navigation a:hover { background: var(--management-canvas); color: var(--management-primary); }
-.management-navigation a.is-current {
-  color: var(--management-primary-hover);
-  background: var(--management-selected);
-  box-shadow: inset 0 -3px var(--management-primary);
-  font-weight: 600;
-}
-.management-account-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.management-navigation a > .anticon { flex: none; font-size: 18px; }
+.management-navigation a:hover { background: #e9eef6; color: var(--management-primary); }
+.management-navigation a.is-current { background: var(--management-primary); color: white; font-weight: 600; }
+.management-account-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--management-border); }
 .management-account-actions form { margin: 0; }
 .management-account-actions a, .management-account-actions button {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
   min-height: 44px;
+  width: 100%;
   padding: 8px 12px;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--management-muted);
   font: inherit;
-  white-space: nowrap;
+  text-align: left;
   cursor: pointer;
 }
-.management-account-actions button { border-color: var(--management-border); }
-.management-account-actions a:hover, .management-account-actions button:hover {
-  color: var(--management-primary);
-  background: var(--management-canvas);
-}
-.management-content { max-width: 1760px; min-width: 0; margin: 0 auto; padding: 24px 32px 40px; }
+.management-account-actions a:hover, .management-account-actions button:hover { color: var(--management-primary); background: #e9eef6; }
+.management-content { width: calc(100% - var(--management-sidebar-width)); min-width: 0; min-height: 100vh; margin-left: var(--management-sidebar-width); padding: 32px; }
 .management-loading { display: grid; place-items: center; min-height: 240px; }
-.management-content .page-container {
-  min-width: 0;
-  min-height: calc(100vh - 144px);
-  padding: 0;
-  background: transparent;
+.management-content .page-container { min-width: 0; min-height: 0; padding: 0; background: transparent; }
+.management-content :is(.page-header, .skill-factory-topbar, .workflow-list-header, .workflow-page-header),
+.management-content .workflow-list-page .workflow-list-header,
+.management-content .workflow-orchestration-page .workflow-page-header {
+  flex-wrap: wrap; align-items: flex-start; gap: 16px; margin-bottom: 24px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
 }
-.management-content :is(.page-header, .skill-factory-topbar, .workflow-list-header, .workflow-page-header) {
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.management-content :is(.page-title, .workflow-list-title-block h3, .workflow-page-title-row h3) {
-  margin: 0;
-  color: var(--management-text);
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.4;
-}
+.management-content :is(.page-title, .workflow-list-title-block h3, .workflow-page-title-row h3) { margin: 0; color: var(--management-text); font-size: 28px; font-weight: 650; line-height: 1.4; }
 .management-content .page-subtitle { margin: 8px 0 0; color: var(--management-muted); line-height: 1.6; }
-.management-content :is(.ant-typography-secondary, .skill-factory-skill-card p, .capability-center-item p) {
-  color: var(--management-muted);
-}
-.management-content .ant-card { border-color: var(--management-border); border-radius: var(--management-radius); box-shadow: var(--management-shadow); }
+.management-content :is(.ant-typography-secondary, .skill-factory-list-code, .skill-factory-list-meta, .capability-center-action-code) { color: var(--management-muted); }
+.management-content .ant-card { border-color: var(--management-border); border-radius: var(--management-radius); box-shadow: none; }
 .management-content .ant-card-head { border-color: var(--management-border); color: var(--management-text); }
 .management-content .ant-card-body { min-width: 0; }
 body .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous) { background: var(--management-primary); border-color: var(--management-primary); }
 body .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous):hover { background: var(--management-primary-hover); border-color: var(--management-primary-hover); }
-.management-content :is(.page-header, .skill-factory-topbar, .workflow-list-header, .workflow-page-header) .ant-btn { min-height: 44px; border-radius: 8px; }
-.management-content :is(.skill-factory-catalog-filter, .capability-center-filter-card, .component-center-filter-card, .workflow-list-filter-card) {
-  margin-bottom: 24px;
-  box-shadow: none;
-}
-.management-filter-controls { width: 100%; align-items: flex-end; }
+.management-content :is(.page-header, .skill-factory-topbar, .workflow-list-header, .workflow-page-header) .ant-btn { min-height: 44px; border-radius: 6px; }
+/* Compact, labelled filters; retain all current controls and query behavior. */
+.management-content :is(.skill-factory-catalog-filter, .capability-center-filter-card, .component-center-filter-card, .workflow-list-filter-card) { margin-bottom: 24px; border: 0; background: transparent; box-shadow: none; }
+.management-content :is(.skill-factory-catalog-filter, .capability-center-filter-card, .component-center-filter-card, .workflow-list-filter-card) > .ant-card-body { padding: 0; }
+.management-filter-controls { width: 100%; align-items: flex-end; gap: 12px !important; }
 .management-filter-controls > .ant-space-item { min-width: 0; max-width: 100%; }
-.management-filter-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; max-width: 100%; }
+.management-filter-controls > .ant-space-item:has(.management-filter-field) { flex: 1 1 136px; }
+.management-filter-controls > .ant-space-item:has(.ant-input-affix-wrapper) { flex: 1.6 1 224px; }
+.management-filter-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .management-filter-field > span { color: var(--management-muted); font-size: 13px; font-weight: 500; }
-.management-filter-field :is(.ant-input-affix-wrapper, .ant-select) { max-width: 100%; }
-.management-filter-controls > .ant-space-item > .ant-btn { min-height: 40px; border-radius: 8px; }
-.management-filter-field .ant-input-affix-wrapper { min-height: 40px; border-radius: 8px; }
-.management-filter-field .ant-select-single:not(.ant-select-customize-input) .ant-select-selector { height: 40px; border-radius: 8px; }
+.management-filter-field :is(.ant-input-affix-wrapper, .ant-input, .ant-select) { width: 100% !important; max-width: 100%; }
+.management-filter-controls > .ant-space-item > .ant-btn { min-height: 40px; border-radius: 6px; }
+.management-filter-field .ant-input-affix-wrapper { min-height: 40px; border-radius: 6px; }
+.management-filter-field .ant-select-single:not(.ant-select-customize-input) .ant-select-selector { height: 40px; border-radius: 6px; }
 .management-filter-field .ant-select-single .ant-select-selector :is(.ant-select-selection-item, .ant-select-selection-placeholder) { line-height: 38px; }
-.management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) { gap: 16px; margin-bottom: 24px; }
-.management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) > div {
-  padding: 16px 20px;
-  border-color: var(--management-border);
-  border-radius: var(--management-radius);
-  background: var(--management-surface);
-}
-.management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) strong { color: var(--management-text); font-size: 24px; font-variant-numeric: tabular-nums; }
-.management-content :is(.skill-factory-skill-card-grid, .capability-center-grid, .workflow-list-card-grid) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
-.management-content :is(.skill-factory-skill-card, .capability-center-item, .workflow-list-card) { min-width: 0; transition: border-color 180ms ease, box-shadow 180ms ease; }
-.management-content :is(.skill-factory-skill-card, .capability-center-item, .workflow-list-card):focus-within { border-color: var(--management-primary); }
-.management-content :is(.skill-factory-skill-card, .capability-center-item, .workflow-list-card) .ant-card-body { display: flex; flex-direction: column; gap: 16px; height: 100%; padding: 24px; }
-.management-content :is(.skill-factory-skill-card-head, .capability-center-item-head, .workflow-list-card-head) { gap: 12px; flex-wrap: wrap; }
-.management-content :is(.skill-factory-skill-card-head, .capability-center-item-head, .workflow-list-card-head) strong { color: var(--management-text); line-height: 1.5; }
-.management-content :is(.skill-factory-skill-card-footer, .capability-center-item-footer, .workflow-list-card-footer) {
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid var(--management-border);
-}
-.management-content .skill-factory-skill-card p { font-family: inherit; }
+/* Summary is a single strip, not an extra layer of cards. */
+.management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-bottom: 24px; padding: 16px 0; border-block: 1px solid var(--management-border); }
+.management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) > div { display: flex; align-items: baseline; gap: 12px; padding: 0 24px 0 0; border: 0; border-right: 1px solid var(--management-border); border-radius: 0; background: transparent; }
+.management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) > div:last-child { padding-right: 0; border-right: 0; }
+.management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) strong { color: var(--management-text); font-size: 20px; font-weight: 650; line-height: 1.4; font-variant-numeric: tabular-nums; }
+/* One shared asset-row structure for Skill, capability and Workflow catalogs. */
+.management-asset-list { border-top: 1px solid var(--management-border); }
+.management-asset-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.4fr) auto; align-items: center; gap: 24px; padding: 24px 0; border-bottom: 1px solid var(--management-border); }
+.management-asset-summary, .management-asset-meta, .management-asset-meta > div { min-width: 0; }
+.management-asset-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.management-asset-title strong { color: var(--management-text); font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.management-asset-title code, .management-asset-technical { color: var(--management-muted); font-size: 12px; overflow-wrap: anywhere; }
+.management-asset-title code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.management-asset-summary p { margin: 8px 0; color: var(--management-muted); line-height: 1.6; overflow-wrap: anywhere; }
+.management-asset-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
+.management-asset-meta dt { margin-bottom: 4px; color: var(--management-muted); font-size: 12px; font-weight: 400; }
+.management-asset-meta dd { margin: 0; color: var(--management-text); font-size: 13px; overflow-wrap: anywhere; }
+.management-asset-status { display: flex; flex-wrap: wrap; gap: 4px; }
+.management-asset-status .ant-tag { margin: 0; }
+.management-asset-actions .ant-btn { min-height: 44px; border-color: #b7c9eb; border-radius: 6px; color: var(--management-primary); }
+.management-asset-empty { padding: 40px 16px; color: var(--management-muted); text-align: center; }
+.management-content .skill-factory-catalog-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; }
 .management-content .component-center-asset-tabs { flex-wrap: wrap; gap: 8px; }
 .management-content .component-center-asset-tabs button { min-height: 52px; border-radius: 8px; }
 .management-content .component-center-asset-tabs button.active { border-color: var(--management-primary); background: var(--management-selected); box-shadow: inset 0 -3px var(--management-primary); }
 .management-content .ant-table-content { max-width: 100%; overflow-x: auto; }
 .management-content :is(.skill-factory-file-tree, .skill-factory-file-editor, .skill-factory-main, .component-center-detail) { min-width: 0; }
-.management-content .workflow-orchestration-page :is(.workflow-workbench-grid, .workflow-release-workbench, .workflow-metadata-editor) { border-color: var(--management-border); border-radius: var(--management-radius); box-shadow: var(--management-shadow); }
-.management-content .workflow-orchestration-page .workflow-page-header {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.management-content .workflow-orchestration-page .workflow-workbench-grid { grid-template-columns: 240px minmax(0, 1fr) 320px; }
-.management-content .workflow-orchestration-page .workflow-workbench-grid.detail-only { grid-template-columns: minmax(0, 1fr) 320px; }
+/* Keep complex editors bounded within the narrower workspace, including lazy route CSS. */
+.management-content .workflow-orchestration-page :is(.workflow-workbench-grid, .workflow-release-workbench, .workflow-metadata-editor) { border-color: var(--management-border); border-radius: var(--management-radius); box-shadow: none; }
+.management-content .workflow-orchestration-page .workflow-workbench-grid { grid-template-columns: 200px minmax(0, 1fr) 280px; }
+.management-content .workflow-orchestration-page .workflow-workbench-grid.detail-only { grid-template-columns: minmax(0, 1fr) 280px; }
 .management-content .workflow-orchestration-page :is(.workflow-catalog-item, .workflow-graph-node, .workflow-summary-node) { background: var(--management-surface); }
-.management-content .workflow-orchestration-page :is(.workflow-node-icon, .workflow-summary-icon) { background: var(--management-primary); }
-.management-content .workflow-orchestration-page :is(.workflow-node-index, .workflow-node-index.router) { background: var(--management-primary); }
-.management-content .workflow-orchestration-page :is(.workflow-graph-node.active, .workflow-graph-node:hover, .workflow-summary-node.active, .workflow-summary-node:hover) {
-  border-color: var(--management-primary);
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 12%);
-}
+.management-content .workflow-orchestration-page :is(.workflow-node-index, .workflow-node-index.router, .workflow-summary-icon) { background: var(--management-primary); }
+.management-content .workflow-orchestration-page :is(.workflow-graph-node.active, .workflow-graph-node:hover, .workflow-summary-node.active, .workflow-summary-node:hover) { border-color: var(--management-primary); box-shadow: 0 0 0 3px rgb(37 99 235 / 12%); }
 .management-content .workflow-orchestration-page .workflow-summary-node > span:last-child { min-width: 0; overflow-wrap: anywhere; }
-.management-content :is(.skill-factory-list-code, .skill-factory-list-meta, .capability-center-action-code) { color: var(--management-muted); }
 body .ant-drawer-content-wrapper { max-width: 100vw; }
 body .ant-drawer-body { min-width: 0; }
 body .ant-modal { max-width: calc(100vw - 32px); }
 body :is(.ant-drawer-header-title, .ant-drawer-extra, .ant-modal-title) { min-width: 0; }
 body .ant-drawer-extra .ant-space, .component-center-drawer-footer { flex-wrap: wrap; }
 @media (max-width: 1100px) {
-  .management-header { flex-wrap: wrap; gap: 16px 24px; padding: 16px 24px; }
-  .management-navigation { order: 3; flex-basis: 100%; }
   .management-content { padding: 24px; }
+  .management-asset-row { grid-template-columns: minmax(0, 1fr) auto; gap: 16px 24px; }
+  .management-asset-summary { grid-column: 1; grid-row: 1; }
+  .management-asset-actions { grid-column: 2; grid-row: 1; }
+  .management-asset-meta { grid-column: 1 / -1; grid-row: 2; }
   .management-content :is(.skill-factory-shell, .skill-factory-section-grid, .skill-factory-workspace-layout, .component-center-preview-grid, .component-center-card-detail-grid, .capability-basic-layout) { grid-template-columns: minmax(0, 1fr); }
   .management-content .skill-factory-sidebar-card { min-height: 0; }
   .management-content .workflow-orchestration-page :is(.workflow-workbench-grid, .workflow-workbench-grid.detail-only) { grid-template-columns: minmax(0, 1fr); }
   .management-content .workflow-orchestration-page :is(.workflow-catalog-panel, .workflow-inspector-panel) { border: 0; }
   .management-content .workflow-orchestration-page .workflow-inspector-panel { border-top: 1px solid var(--management-border); }
+  .management-content .workflow-orchestration-page .workflow-page-title-block { flex-wrap: wrap; gap: 16px; }
+  .management-content .workflow-orchestration-page .workflow-metadata-fields { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 767px) {
-  .management-header { padding: 12px 16px; gap: 16px; }
-  .management-brand strong { font-size: 20px; }
-  .management-account-actions { gap: 4px; }
-  .management-account-actions a, .management-account-actions button { padding-inline: 8px; }
-  .management-navigation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
-  .management-navigation a { padding-inline: 8px; }
-  .management-content { padding: 24px 16px; }
-  .management-content :is(.page-title, .workflow-list-title-block h3, .workflow-page-title-row h3) { font-size: 22px; }
+@media (max-width: 700px) {
+  .management-header { position: static; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; width: 100%; height: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--management-border); overflow: visible; }
+  .management-brand { padding: 0; }
+  .management-brand strong { font-size: 22px; }
+  .management-brand span { font-size: 12px; }
+  .management-account-actions { flex-direction: row; gap: 4px; margin: 0; padding: 0; border: 0; }
+  .management-account-actions a, .management-account-actions button { padding-inline: 8px; white-space: nowrap; }
+  .management-navigation { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .management-navigation a { min-height: 44px; padding: 10px 12px; }
+  .management-content { width: 100%; margin-left: 0; padding: 24px 16px; }
+  .management-content :is(.page-title, .workflow-list-title-block h3, .workflow-page-title-row h3) { font-size: 24px; }
   .management-content :is(.page-header, .skill-factory-topbar, .skill-factory-detail-head, .workflow-list-header, .workflow-page-header) { flex-direction: column; align-items: stretch; }
   .management-content :is(.page-header, .skill-factory-topbar, .workflow-list-header, .workflow-page-header) > .ant-space { flex-wrap: wrap; }
   .management-content .ant-card-body { padding: 16px; }
-  .management-filter-controls { display: flex; flex-wrap: wrap; gap: 16px !important; }
-  .management-filter-controls > .ant-space-item { flex: 1 1 100%; }
-  .management-filter-field :is(.ant-input-affix-wrapper, .ant-input, .ant-select) { width: 100% !important; }
+  .management-filter-controls { gap: 12px 8px !important; }
+  .management-filter-controls > .ant-space-item:has(.management-filter-field) { flex-basis: calc(50% - 8px); }
+  .management-filter-controls > .ant-space-item:has(.ant-input-affix-wrapper) { flex-basis: 100%; }
+  .management-filter-controls > .ant-space-item:has(> .ant-btn) { flex: 1 1 auto; }
   .management-filter-controls > .ant-space-item > .ant-btn { width: 100%; min-height: 44px; }
-  .management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  .management-content :is(.skill-factory-skill-card-head, .capability-center-item-head, .workflow-list-card-head) { display: flex; flex-direction: column; }
-  .management-content :is(.skill-factory-file-layout, .skill-factory-card-layout, .skill-factory-reference-asset-grid, .skill-factory-capability-grid, .component-center-form-grid, .component-center-preview-grid, .component-center-card-detail-grid, .capability-form-grid, .capability-schema-property-row, .capability-enum-row) { grid-template-columns: minmax(0, 1fr); }
+  .management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) { gap: 12px 16px; }
+  .management-content :is(.skill-factory-catalog-metrics, .component-center-metrics, .workflow-list-metrics) > div { gap: 8px; padding-right: 16px; }
+  .management-asset-row { display: flex; flex-direction: column; align-items: stretch; gap: 16px; }
+  .management-asset-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .management-asset-actions { display: flex; justify-content: flex-end; }
+  .management-content :is(.skill-factory-file-layout, .skill-factory-card-layout, .skill-factory-reference-asset-grid, .skill-factory-capability-grid, .component-center-form-grid, .component-center-preview-grid, .component-center-card-detail-grid, .capability-form-grid, .capability-schema-property-row, .capability-enum-row, .skill-factory-debug-workbench, .skill-factory-form-grid) { grid-template-columns: minmax(0, 1fr); }
   .management-content .skill-factory-file-tree { max-height: 240px; border-right: 0; border-bottom: 1px solid var(--management-border); }
   .management-content .skill-factory-tabs { display: flex; flex-wrap: wrap; }
   .management-content .skill-factory-tabs button { min-height: 44px; }
   .management-content .component-center-asset-tabs button { flex: 1 1 100%; text-align: left; }
   .management-content :is(.component-authoring-workbench, .capability-authoring-workbench, .a2ui-application-authoring-workbench) { display: flex; flex-direction: column; }
-  .management-content .workflow-orchestration-page .workflow-page-title-block {
-    flex-direction: column;
-    align-items: flex-start;
-    width: 100%;
-    min-width: 0;
-    gap: 16px;
-  }
+  .management-content .workflow-orchestration-page .workflow-page-title-block { flex-direction: column; align-items: flex-start; width: 100%; min-width: 0; gap: 16px; }
   .management-content .workflow-orchestration-page .workflow-page-title-block > div { width: 100%; min-width: 0; }
   .management-content .workflow-orchestration-page .workflow-page-title-row { flex-wrap: wrap; align-items: center; gap: 8px; }
-  .management-content .workflow-orchestration-page .workflow-page-title-row h3 { flex: none; max-width: 100%; font-size: 22px; }
-  .management-content .workflow-orchestration-page .workflow-metadata-fields { grid-template-columns: minmax(0, 1fr); }
+  .management-content .workflow-orchestration-page .workflow-page-title-row h3 { flex: none; max-width: 100%; font-size: 24px; }
   .management-content .workflow-orchestration-page .workflow-metadata-fields > label { min-width: 0; }
   .management-content .workflow-orchestration-page .workflow-metadata-title { flex-wrap: wrap; align-items: flex-start; }
   .management-content .workflow-orchestration-page .workflow-metadata-title > div { min-width: 0; overflow-wrap: anywhere; }
   .management-content .workflow-orchestration-page .workflow-metadata-title .ant-space { flex-wrap: wrap; }
   .management-content .workflow-orchestration-page .workflow-canvas-toolbar { flex-wrap: wrap; padding: 16px; }
   .management-content .workflow-orchestration-page .workflow-canvas-scroll { padding: 24px 16px; }
-  .management-content :is(.skill-factory-debug-workbench, .skill-factory-form-grid) { grid-template-columns: minmax(0, 1fr); }
-  .management-content .skill-authoring-workbench .authoring-workbench-rail {
-    position: static;
-    width: 100%;
-    max-width: 100%;
-    height: 640px;
-    max-height: 85vh;
-  }
+  .management-content .skill-authoring-workbench .authoring-workbench-rail { position: static; width: 100%; max-width: 100%; height: 640px; max-height: 85vh; }
   .management-content .skill-factory-file-header { flex-wrap: wrap; padding: 16px; }
   .management-content .skill-factory-file-header .ant-space { flex-wrap: wrap; }
   .management-content .ant-btn-primary { min-height: 44px; }
-  body .ant-drawer-body { padding: 16px; }
-  body .ant-drawer-header { padding: 16px; }
+  body .ant-drawer-body, body .ant-drawer-header { padding: 16px; }
   body .ant-drawer .component-center-form-grid { grid-template-columns: minmax(0, 1fr); }
   body .ant-drawer :is(.ant-input, .ant-select, .ant-input-affix-wrapper, .ant-input-number) { max-width: 100%; }
   body .ant-drawer :is(.ant-btn, .ant-drawer-close), body .ant-modal-footer .ant-btn { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .management-navigation a,
-  .management-content :is(.skill-factory-skill-card, .capability-center-item, .workflow-list-card) { transition: none; }
+  .management-navigation a { transition: none; }
 }

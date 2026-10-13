@@ -5132,71 +5132,33 @@ const SkillFactoryPage: React.FC = () => {
           </Space>
         </Card>
 
-        <div className="skill-factory-skill-card-grid">
-          {skillList.length ? (
-            skillList.map((item) => (
-              <Card
-                hoverable
-                className="skill-factory-skill-card"
-                key={item.skillCode}
-              >
-                <div className="skill-factory-skill-card-head">
-                  <div>
-                    <strong>{item.skillNameCn || item.skillCode}</strong>
-                    <span>{item.skillCode}</span>
-                  </div>
-                  <div className="skill-factory-skill-status-tags">
-                    <Tag color={skillStatusColor(item.versionStatus)}>
-                      {skillStatusLabel(item.versionStatus)}
-                    </Tag>
-                    <Tag color={isSkillOnline(item) ? 'success' : undefined}>
-                      {isSkillOnline(item) ? '已上线' : '未上线'}
-                    </Tag>
-                  </div>
+        <div className="management-asset-list" aria-label="Skill 资产列表">
+          {skillList.length ? skillList.map((item) => (
+            <article className="management-asset-row" key={item.skillCode}>
+              <div className="management-asset-summary">
+                <div className="management-asset-title">
+                  <strong>{item.skillNameCn || item.skillCode}</strong>
+                  <code>{item.skillCode}</code>
                 </div>
-                <p>
-                  {item.skillDescription ||
-                    item.skillNameEn ||
-                    item.workspaceId ||
-                    'Skill 工作台草稿'}
-                </p>
-                <div className="skill-factory-skill-kv-grid">
-                  <div>
-                    <span>所属专员</span>
-                    <b>{item.specialistName || '-'}</b>
-                  </div>
-                  <div>
-                    <span>业务场域</span>
-                    <b>{domainDisplayText(businessDomains, item.businessDomain)}</b>
-                  </div>
-                  <div>
-                    <span>能力域</span>
-                    <b>{domainDisplayText(capabilityDomains, item.capabilityDomain)}</b>
-                  </div>
-                  <div>
-                    <span>负责人</span>
-                    <b>{item.owner || item.creator || '-'}</b>
-                  </div>
-                  <div>
-                    <span>版本</span>
-                    <b>{item.versionLabel || '-'}</b>
-                  </div>
-                  <div>
-                    <span>工作区</span>
-                    <b>{item.workspaceId || item.skillCode}</b>
-                  </div>
-                </div>
-                <div className="skill-factory-skill-card-footer">
-                  <Tag>{item.workspaceId || item.skillCode}</Tag>
-                  <Button type="primary" onClick={() => handleSelectSkill(item)}>
-                    查看详情
-                  </Button>
-                </div>
-              </Card>
-            ))
-          ) : (
-            <Card className="skill-factory-empty-card">暂无符合条件的 Skill</Card>
-          )}
+                <p>{item.skillDescription || item.skillNameEn || item.workspaceId || 'Skill 工作台草稿'}</p>
+                <div className="management-asset-technical">工作区：{item.workspaceId || item.skillCode}</div>
+              </div>
+              <dl className="management-asset-meta">
+                <div><dt>状态</dt><dd className="management-asset-status">
+                  <Tag color={skillStatusColor(item.versionStatus)}>{skillStatusLabel(item.versionStatus)}</Tag>
+                  <Tag color={isSkillOnline(item) ? 'success' : undefined}>{isSkillOnline(item) ? '已上线' : '未上线'}</Tag>
+                </dd></div>
+                <div><dt>所属专员</dt><dd>{item.specialistName || '-'}</dd></div>
+                <div><dt>业务场域</dt><dd>{domainDisplayText(businessDomains, item.businessDomain)}</dd></div>
+                <div><dt>能力域</dt><dd>{domainDisplayText(capabilityDomains, item.capabilityDomain)}</dd></div>
+                <div><dt>负责人</dt><dd>{item.owner || item.creator || '-'}</dd></div>
+                <div><dt>版本</dt><dd>{item.versionLabel || '-'}</dd></div>
+              </dl>
+              <div className="management-asset-actions">
+                <Button onClick={() => handleSelectSkill(item)}>查看详情</Button>
+              </div>
+            </article>
+          )) : <div className="management-asset-empty">暂无符合条件的 Skill</div>}
         </div>
         <div className="skill-factory-catalog-pagination">
           <Text type="secondary">按更新时间倒序 · 每页 9 个</Text>
