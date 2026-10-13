@@ -62,7 +62,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
 .conversation-list { background: var(--canvas); border-right: 1px solid var(--border); padding: 24px 12px; }
 .panel-heading { gap: 8px; margin-bottom: 24px; padding-left: 12px; }
 .panel-heading h2 { font-size: 18px; font-weight: 650; }
-.panel-heading button { display: grid; place-items: center; width: 44px; height: 44px; background: var(--primary); color: #fff; }
+.panel-heading button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; height: 44px; padding: 8px 12px; background: var(--primary); color: #fff; white-space: nowrap; }
 .panel-heading button:hover { background: var(--primary-hover); }
 .conversation-list > button { color: var(--text); padding: 16px 12px; margin-bottom: 8px; line-height: 1.5; overflow-wrap: anywhere; }
 .conversation-list > button:hover { background: #edf1f7; }
@@ -201,7 +201,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   .chat-layout { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); }
   .conversation-list { display: flex; align-items: center; gap: 8px; padding: 8px 12px; max-height: none; overflow-x: auto; border: 0; }
   .conversation-list .panel-heading { flex: none; margin: 0; padding: 0; }
-  .conversation-list .panel-heading h2 { display: none; }
+  .conversation-list .panel-heading h2, .conversation-list .panel-heading button span { display: none; }
+  .conversation-list .panel-heading button { width: 44px; padding: 8px; }
   .conversation-list > button { flex: 0 0 auto; width: 180px; max-width: 180px; margin: 0; padding: 8px 12px; white-space: normal; }
   .conversation-list small { margin-top: 2px; }
   .chat-main { min-height: 0; }
