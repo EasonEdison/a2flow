@@ -460,6 +460,15 @@ class WorkflowActions(ActionService):
             saved = self.repository.get(key, self.run.owner)
         if saved is None:
             interactive = card["status"] == "WAITING_ACTION"
+            display = {
+                **card["display"],
+                "cardId": card["cardId"],
+                "interactionId": card["cardId"],
+                "nodeId": assets.node_id,
+            }
+            if not interactive and display.get("protocolProfile") == "a2flow.temporary.v1":
+                # Native persistence requires an explicit read-only completion snapshot.
+                display.update(state="READ_ONLY", actionEligibility="NOT_OPERABLE", actions=[])
             saved = Interaction(
                 context,
                 card["cardId"],
@@ -467,15 +476,7 @@ class WorkflowActions(ActionService):
                 card["display"]["applicationVersion"],
                 self.run.thread_id,
                 self.run.versions,
-                display_json=json.dumps(
-                    {
-                        **card["display"],
-                        "cardId": card["cardId"],
-                        "interactionId": card["cardId"],
-                        "nodeId": assets.node_id,
-                    },
-                    ensure_ascii=False,
-                ),
+                display_json=json.dumps(display, ensure_ascii=False),
                 phase="WAITING" if interactive else "COMPLETED",
                 node_waiting=interactive,
                 resume_consumed=not interactive,
