@@ -1,3 +1,5 @@
+import { generationFailureDescription } from './generationProgress';
+
 /** Safe user-facing descriptions for persisted Chat failure codes. */
 export function persistedChatErrorCode(content: unknown): string | undefined {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return undefined;
@@ -6,6 +8,9 @@ export function persistedChatErrorCode(content: unknown): string | undefined {
 }
 
 export function chatErrorPresentation(code: string | undefined): string {
+  if (code && /^TEMPORARY_INTERACTION_[A-Z0-9_]+$/.test(code)) {
+    return generationFailureDescription(code);
+  }
   switch (code) {
     case 'CONVERSATION_BUSY':
       return '会话中已有执行，本次执行未启动；不会自动重试';
