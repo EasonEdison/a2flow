@@ -130,7 +130,7 @@ class BundleValidator:
                     or len(node["nodePrompt"]) > 4096
                 ):
                     raise AssetError("INVALID_WORKFLOW_NODE_PROMPT")
-                if summary_prompt is not None and node["nodeId"] == "__summary__":
+                if summary_prompt is not None and node["nodeId"] == "workflow-summary":
                     raise AssetError("INVALID_WORKFLOW_SUMMARY_NODE")
                 parse_identifier(node["nodeId"])
                 parse_skill_key(node["skillKey"])

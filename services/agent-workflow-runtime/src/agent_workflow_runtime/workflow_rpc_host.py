@@ -355,7 +355,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                         model, [], {}, (),
                         harness_profile_key=model.configuration.harness_profile_key,
                         run_lifecycle=lifecycle, progress=self.progress,
-                        node_context=run.context("__summary__"),
+                        node_context=run.context("workflow-summary"),
                         model_middleware=[_SingleSummaryCall()], allow_tool_free=True,
                         system_prompt=(
                             "Summarize only the saved results of the completed Workflow nodes. "
