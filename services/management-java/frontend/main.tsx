@@ -2,12 +2,13 @@ import React, { lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Alert, Spin } from 'antd';
-import { ApartmentOutlined, ApiOutlined, AppstoreOutlined, LayoutOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, ApiOutlined, AppstoreOutlined, LayoutOutlined, MessageOutlined } from '@ant-design/icons';
 import 'antd/dist/antd.css';
 import './management.less';
 import { A2UI_APPLICATION_ROUTES } from './a2uiCatalogContracts';
 import ManagementSessionNotice from './ManagementSessionNotice';
 
+const ManagementChat = lazy(() => import('./ManagementChatPage'));
 const SkillPage = lazy(() => import('./index'));
 const ComponentCenter = lazy(() => import('./ComponentCenterPage'));
 const ComponentDetail = lazy(() => import('./ComponentAssetDetailPage'));
@@ -29,6 +30,7 @@ function ManagementShell() {
   const currentPath = pathname.replace(/\/+$/, '');
   const isSection = (path: string) => currentPath === path || currentPath.startsWith(`${path}/`);
   const navigation = [
+    { to: '/management/chat', label: '对话创建', icon: MessageOutlined, active: isSection('/management/chat') },
     { to: '/management', label: 'Skill', icon: AppstoreOutlined, active: currentPath === '/management' || currentPath === '/management/detail' },
     { to: '/management/capabilities', label: '业务能力', icon: ApiOutlined, active: isSection('/management/capabilities') },
     { to: '/management/components', label: 'A2UI / 组件', icon: LayoutOutlined, active: isSection('/management/components') },
@@ -55,6 +57,7 @@ function ManagementShell() {
       <Routes>
         <Route path="/" element={<Navigate to="/management" replace />} />
         <Route path="/management" element={<SkillPage />} />
+        <Route path="/management/chat" element={<ManagementChat />} />
         <Route path="/management/detail" element={<SkillPage />} />
         <Route path="/management/components" element={<ComponentCenter />} />
         <Route path="/management/components/detail" element={<ComponentDetail />} />

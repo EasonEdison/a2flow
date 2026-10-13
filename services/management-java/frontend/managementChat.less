@@ -1,0 +1,85 @@
+.management-content:has(.management-global-chat) { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.management-global-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; color: var(--management-text); }
+.management-chat-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.management-chat-heading h1 { margin: 0 0 8px; font-size: 28px; font-weight: 650; color: var(--management-text); }
+.management-chat-heading p { margin: 0; max-width: 720px; color: var(--management-muted); }
+.management-chat-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 224px minmax(0, 1fr); border-top: 1px solid var(--management-border); }
+.management-chat-conversations { min-width: 0; padding: 24px 16px 16px 0; border-right: 1px solid var(--management-border); overflow-y: auto; }
+.management-chat-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.management-chat-list-heading h2 { margin: 0; font-size: 16px; }
+.management-chat-conversations > button { display: block; width: 100%; min-height: 60px; margin-bottom: 8px; padding: 12px; border: 0; border-radius: 8px; background: transparent; color: var(--management-text); text-align: left; cursor: pointer; }
+.management-chat-conversations > button:hover { background: var(--management-sidebar); }
+.management-chat-conversations > button.is-selected { background: var(--management-selected); }
+.management-chat-conversations strong { display: block; overflow-wrap: anywhere; font-weight: 550; }
+.management-chat-conversations small { display: block; margin-top: 4px; color: var(--management-muted); font-size: 12px; }
+.management-chat-main { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.management-chat-messages { overflow-y: auto; min-height: 0; padding: 24px 32px; }
+.management-chat-messages > * { max-width: 760px; margin-inline: auto; }
+.management-chat-empty { padding: 48px 0; }
+.management-chat-empty h2 { font-size: 22px; font-weight: 600; }
+.management-chat-empty p { color: var(--management-muted); max-width: 560px; line-height: 1.8; }
+.management-chat-turn { margin-bottom: 32px; }
+.management-chat-user { width: fit-content; max-width: 90%; margin: 0 0 24px auto; padding: 12px 16px; border-radius: 10px; background: var(--management-sidebar); white-space: pre-wrap; overflow-wrap: anywhere; }
+.management-chat-answer { min-width: 0; }
+.management-chat-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--management-muted); margin-bottom: 8px; }
+.management-chat-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.management-chat-status.status-running { color: var(--management-primary); }
+.management-chat-status.status-completed { color: #187449; }
+.management-chat-status.status-failed { color: #b42318; }
+.management-chat-status.status-unknown { color: #8a5b00; }
+.management-chat-markdown { font-size: 15px; line-height: 1.8; overflow-wrap: anywhere; }
+.management-chat-markdown pre { overflow: auto; padding: 16px; border-radius: 8px; background: var(--management-sidebar); }
+.management-chat-markdown table { display: block; max-width: 100%; overflow-x: auto; }
+.management-chat-markdown th, .management-chat-markdown td { padding: 8px; border-bottom: 1px solid var(--management-border); }
+.management-chat-process { color: var(--management-muted); margin-bottom: 16px; font-size: 13px; }
+.management-chat-process summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; }
+.management-chat-process summary::before { content: '›'; margin-right: 8px; }
+.management-chat-process[open] > summary::before, .management-chat-process details[open] > summary::before { transform: rotate(90deg); }
+.management-chat-process ol { margin: 0; padding-left: 24px; }
+.management-chat-process li { padding-block: 8px; }
+.management-chat-process li > span + span { margin-left: 16px; }
+.management-chat-process dl { margin: 0; font-size: 12px; }
+.management-chat-process dd { overflow-wrap: anywhere; margin-bottom: 8px; }
+.management-chat-footer { padding: 16px 32px 0; border-top: 1px solid var(--management-border); }
+.management-chat-footer > * { max-width: 760px; margin-inline: auto; }
+.management-chat-footer .ant-alert { margin-bottom: 12px; }
+.management-chat-input-label { display: block; font-weight: 500; margin-bottom: 8px; }
+.management-chat-compose-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 12px; }
+.management-chat-compose-actions > span { font-size: 12px; color: var(--management-muted); }
+.management-chat-muted { font-size: 13px; color: var(--management-muted); }
+.management-global-chat .ant-btn { min-height: 44px; }
+.management-global-chat .ant-input { font-size: 16px; }
+.management-global-chat summary:focus-visible { outline: 3px solid var(--management-primary); outline-offset: 3px; }
+@media (max-width: 1100px) {
+  .management-chat-layout { grid-template-columns: 180px minmax(0, 1fr); }
+  .management-chat-messages { padding: 24px 16px; }
+  .management-chat-footer { padding: 16px 16px 0; }
+  .management-chat-heading { gap: 16px; }
+}
+@media (max-width: 700px) {
+  .management-content:has(.management-global-chat) { height: auto; min-height: 650px; overflow: visible; }
+  .management-global-chat { min-height: 650px; }
+  .management-chat-heading { flex-wrap: wrap; }
+  .management-chat-heading h1 { font-size: 24px; }
+  .management-chat-layout { display: flex; flex-direction: column; }
+  .management-chat-conversations { display: flex; align-items: center; gap: 8px; overflow-x: auto; border: 0; border-bottom: 1px solid var(--management-border); padding: 12px 0; }
+  .management-chat-list-heading { flex: none; margin: 0; }
+  .management-chat-list-heading h2 { display: none; }
+  .management-chat-conversations > button { width: 180px; min-width: 180px; margin: 0; }
+  .management-chat-main { min-height: 540px; }
+  .management-chat-messages { padding-inline: 0; max-height: 60dvh; }
+  .management-chat-footer { padding: 16px 0 0; }
+  .management-chat-compose-actions { align-items: flex-start; }
+}
+
+.management-chat-assets { margin-block: 16px 24px; display: grid; gap: 12px; }
+.management-chat-asset { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; padding: 16px; border: 1px solid var(--management-border); border-radius: 8px; }
+.management-chat-asset h3 { margin: 4px 0 0; font-size: 16px; overflow-wrap: anywhere; }
+.management-chat-asset > a { display: flex; align-items: center; min-height: 44px; }
+.management-chat-publication { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; }
+.management-chat-asset details { grid-column: 1 / -1; font-size: 12px; color: var(--management-muted); }
+.management-chat-asset summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.management-chat-asset summary::before { content: '›'; margin-right: 8px; }
+.management-chat-asset details[open] summary::before { transform: rotate(90deg); }
+.management-chat-asset dl { margin: 0; }
+.management-chat-asset dd { overflow-wrap: anywhere; margin-bottom: 8px; }
