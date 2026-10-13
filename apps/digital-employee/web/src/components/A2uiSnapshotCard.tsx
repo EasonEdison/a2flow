@@ -34,6 +34,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
   const [expanded, setExpanded] = useState(initiallyExpanded ?? ['WAITING_ACTION', 'DISPLAY_ONLY', 'UNKNOWN'].includes(card.status));
   const [processor, setProcessor] = useState<ReturnType<typeof createSnapshotProcessor>>();
   const [error, setError] = useState('');
+  const [validationError, setValidationError] = useState('');
   const [draftNotice, setDraftNotice] = useState('');
   const draftOwner = useContext(TemporaryDraftOwner);
   const draftKey = temporaryDraftKey(draftOwner, card);
@@ -98,7 +99,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
           inFlight.current = true;
           const actionStateCallback = current.current.onActionStateChange;
           actionStateCallback?.(true);
-          setBusy(true); setError('');
+          setBusy(true); setError(''); setValidationError('');
           try {
             const response = current.current.submitAction
               ? await current.current.submitAction(latest, requestId, request.actionName, request.inputs)
@@ -114,15 +115,25 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
               inFlight.current = pending;
               setBusy(pending);
             }
-          } catch {
-            if (!disposed) setError('操作结果未确认，请等待状态自动同步；不会自动重试。');
+          } catch (reason) {
+            if (!disposed) {
+              if ((reason as { code?: unknown } | null)?.code === 'TEMPORARY_INTERACTION_SUBMISSION_INVALID'
+                && current.current.card.display.protocolProfile === 'a2flow.temporary.v1'
+                && current.current.card.status === 'WAITING_ACTION') {
+                inFlight.current = false;
+                setBusy(false);
+                setValidationError('请检查必填项或字段格式，修改后可再次提交。');
+              } else {
+                setError('操作结果未确认，请等待状态自动同步；不会自动重试。');
+              }
+            }
           } finally {
             actionStateCallback?.(false);
           }
           // Transport failures remain locked because the outcome is unknown.
         }));
       }
-      setError(''); setProcessor(next);
+      setError(''); setValidationError(''); setProcessor(next);
     } catch (reason) {
       setProcessor(undefined);
       setError(reason instanceof Error ? reason.message : 'A2UI 快照无效');
@@ -143,6 +154,7 @@ export function A2uiSnapshotCard({ card, onUpdate, onComposerDraft, onActionStat
     {temporary && card.status === 'COMPLETED' ? <TemporarySubmission card={card} />
       : card.result !== undefined ? <details><summary>操作结果</summary><pre>{JSON.stringify(card.result, null, 2)}</pre></details> : null}
     {title ? <details className="workflow-debug"><summary>卡片技术信息</summary><p>Application：{card.display.applicationKey}</p><p>卡片 ID：{card.cardId}</p></details> : null}
+    {validationError ? <p role="alert">{validationError}</p> : null}
     {error ? <p role="alert">{error}</p> : null}
   </details>;
 }
