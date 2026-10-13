@@ -32,7 +32,7 @@ from skillweave_contracts.models import (
 
 from ..assembly import build_agent
 from ..a2ui_generation import DeepAgentA2uiGenerator, GENERATOR_TAG
-from ..a2ui_generation_progress import GenerationProgress, observe_generation
+from ..a2ui_generation_progress import GenerationProgress, generation_error_code, observe_generation
 from ..a2ui_selection_policy import A2UI_SELECTION_POLICY
 from ..temporary_generation import DeepAgentInteractionGenerator
 from ..deepseek_model import DeepSeekProtocolError
@@ -124,7 +124,9 @@ def _classify_turn_failure(error: Exception) -> _TurnFailure:
 
     if (
         isinstance(error, ActionRejected)
-        and error.code in _SAFE_ACTION_REJECTION_CODES
+        and (error.code in _SAFE_ACTION_REJECTION_CODES
+             or (error.code.startswith("TEMPORARY_INTERACTION_")
+                 and generation_error_code(error) == error.code))
     ):
         return _TurnFailure(error.code, "ActionRejected")
     if isinstance(error, DeepSeekProtocolError):
