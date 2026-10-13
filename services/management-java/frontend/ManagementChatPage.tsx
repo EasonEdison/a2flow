@@ -15,15 +15,16 @@ const errorLabels: Record<string, string> = {
   ACCOUNT_ORIGIN_REQUIRED: '请求来源验证未通过，请重新打开管理台。',
   CLIENT_IDENTITY_FIELDS_NOT_ALLOWED: '请求未通过身份验证，请刷新页面后重试。',
   CONVERSATION_NOT_FOUND: '未找到可访问的会话，请重新选择会话。',
+  MANAGEMENT_AGENT_BUSY: '服务当前正在处理其他请求，本次未受理，请稍后主动发送。',
   CONVERSATION_BUSY: '这段会话仍在执行，已保存的进度会继续同步。',
   REQUEST_ID_CONFLICT: '请求标识冲突，未重复执行，请读取已保存的状态。',
-  TURN_LIMIT_REACHED: '本会话已达到轮数上限，请新建会话。',
+  CONVERSATION_TURN_LIMIT: '本会话已达到轮数上限，请新建会话。',
   MANAGEMENT_AGENT_ROUTE_NOT_FOUND: '对话创建服务尚不可用。',
 };
 const failureText = (code: string) => errorLabels[code] ?? '本轮未能完成，请查看已保存的处理结果；未自动重试。';
 const statusLabels = { RUNNING: '正在执行', COMPLETED: '本轮已完成', FAILED: '执行失败', UNKNOWN: '结果待确认' };
 const asText = (value: unknown) => typeof value === 'string' ? value : '';
-const safeErrorCode = (value: unknown) => /^[A-Z][A-Z0-9_]{0,95}$/.test(asText(value)) ? asText(value) : '';
+const safeErrorCode = (value: unknown) => /^[A-Z][A-Z0-9_]{0,159}$/.test(asText(value)) ? asText(value) : '';
 
 const toolLabels: Record<string, string> = {
   AUTHORING_CONTRACT: '读取资产创建规范', SKILL_FACTORY_CONFIG: '读取创建配置', SKILL_LIST: '查找 Skill', SKILL_DETAIL: '读取 Skill',
@@ -67,7 +68,7 @@ function ProcessEvents({ events, running, receipts }: { events: AgentEvent[]; ru
       const event = tool.completed ?? tool.started!;
       const status = asText(tool.completed?.payload.status);
       const errorCode = safeErrorCode(tool.completed?.payload.errorCode);
-      return <li key={id}><span>{toolLabels[asText(event.payload.name)] ?? asText(event.payload.name)}</span><span>{tool.completed ? status === 'UNKNOWN' ? '结果待确认' : status === 'FAILED' || status === 'REJECTED' ? '未完成' : status === 'NOT_FOUND' ? '未找到回执' : '已返回' : running ? '执行中' : '未收到结果'}</span>
+      return <li key={id}><span>{toolLabels[asText(event.payload.name)] ?? asText(event.payload.name)}</span><span>{tool.completed ? status === 'UNKNOWN' ? '结果待确认' : status === 'RUNNING' ? '回执尚未终结' : status === 'FAILED' || status === 'REJECTED' ? '未完成' : status === 'NOT_FOUND' ? '未找到回执' : '已返回' : running ? '执行中' : '未收到结果'}</span>
         <details><summary>查看步骤信息</summary><dl><dt>工具</dt><dd>{asText(event.payload.name)}</dd><dt>请求标识</dt><dd>{asText(event.payload.requestId)}</dd>{errorCode ? <><dt>错误标识</dt><dd><code>{errorCode}</code></dd></> : null}</dl></details>
       </li>;
     })}</ol>
@@ -268,7 +269,7 @@ export default function ManagementChatPage() {
           <form onSubmit={event => { event.preventDefault(); void send(); }}>
             <label className="management-chat-input-label" htmlFor="management-chat-message">创建需求</label>
             <Input.TextArea id="management-chat-message" value={draft} onChange={event => setDraft(event.target.value)} placeholder="描述你的需求、目标资产及已有信息" autoSize={{ minRows: 2, maxRows: 6 }} disabled={busy || !ready} />
-            <div className="management-chat-compose-actions"><span>{busy ? '正在发送…' : history && !history.canSend ? '当前会话仍在执行，请等待保存结果。' : '默认创建并发布到 PRT'}</span><Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={busy} disabled={!draft.trim() || !ready}>发送需求</Button></div>
+            <div className="management-chat-compose-actions"><span>{busy ? '正在发送…' : history && !history.canSend ? history.turns.some(turn => turn.status === 'RUNNING') ? '当前会话仍在执行，请等待保存结果。' : '本会话已达到轮数上限，请新建会话。' : '默认创建并发布到 PRT'}</span><Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={busy} disabled={!draft.trim() || !ready}>发送需求</Button></div>
           </form>
         </div>
       </div>
