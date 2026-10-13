@@ -133,8 +133,14 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
                     ? dev.a2flow.management.model.SkillFactoryExecutionResult.success(contracts.describe(), false)
                     : dispatcher.execute(user, dispatchMethod(request.getName()), params);
             JsonNode data = mapper.valueToTree(reply.getData());
+            boolean dryRun = request.getName().equals("CAPABILITY_DRY_RUN_READ_ONLY");
+            boolean dryRunPassed = data.path("toolResult").path("success").asBoolean(false);
+            if (reply.isSuccess() && dryRun) data = dryRunSummary(data, params, dryRunPassed);
             String code = reply.isSuccess() ? "" : safeCode(data.path("errorCode").asText(), "MANAGEMENT_TOOL_VALIDATION_REJECTED");
             String outcome = reply.isSuccess() ? "SUCCEEDED" : code.equals("INTERNAL_SERVER_ERROR") ? "UNKNOWN" : "REJECTED";
+            if (reply.isSuccess() && dryRun && !dryRunPassed) {
+                outcome = "REJECTED"; code = "MANAGEMENT_CAPABILITY_DRY_RUN_FAILED";
+            }
             if (reply.isSuccess() && (request.getName().equals("CAPABILITY_VALIDATE") || request.getName().equals("RUNTIME_VALIDATE"))
                     && data.has("valid") && !data.path("valid").asBoolean()) {
                 outcome = "REJECTED"; code = "MANAGEMENT_ASSET_VALIDATION_FAILED";
@@ -152,10 +158,23 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
                     .setErrorCode(code).setResultJson(ByteString.copyFromUtf8(body.toString())).build();
         } catch (Exception error) { throw new IllegalStateException("MANAGEMENT_TOOL_DISPATCH_FAILED", error); }
     }
+    private JsonNode dryRunSummary(JsonNode data, Map<String, String> params, boolean passed) {
+        // The existing service persists real evidence. Do not retain its transient request or business response.
+        var summary = mapper.createObjectNode().put("draftId", params.get("draftId"))
+                .put("revision", params.get("revision")).put("environment", "PRT")
+                .put("clientType", params.get("clientType")).put("verificationStatus", passed ? "PASSED" : "FAILED");
+        var result = summary.putObject("toolResult").put("success", passed);
+        JsonNode source = data.path("toolResult");
+        String code = safeCode(source.path("errorCode").asText(), "");
+        if (!code.isEmpty()) result.put("errorCode", code);
+        if (source.path("httpStatus").isIntegralNumber()) result.set("httpStatus", source.path("httpStatus"));
+        return summary;
+    }
     private static String dispatchMethod(String toolName) {
         return switch (toolName) {
             case "CAPABILITY_DRAFT_CREATE_FROM_REGISTERED" -> "CAPABILITY_DRAFT_CREATE";
             case "CAPABILITY_DRAFT_UPDATE_METADATA" -> "CAPABILITY_DRAFT_SAVE";
+            case "CAPABILITY_DRY_RUN_READ_ONLY" -> "CAPABILITY_DRY_RUN";
             default -> toolName;
         };
     }

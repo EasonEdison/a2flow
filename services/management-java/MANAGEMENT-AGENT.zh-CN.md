@@ -14,9 +14,11 @@
 
 ## 工具与发布
 
-`ManagementToolCatalog` 是唯一 Agent 工具白名单。不开放 ONLINE、灰度、回滚、负责人替换、删除、业务执行/dry-run、任意网络目标或旧 coding 入口。`AUTHORING_CONTRACT` 返回实际能力 canonical 默认结构、当前 Workflow Schema、Skill bindings 合同和发布顺序；完整 A2UI 示例通过既有只读 blueprint import 返回。
+`ManagementToolCatalog` 是唯一 Agent 工具白名单。不开放 ONLINE、灰度、回滚、负责人替换、删除、写业务执行、任意网络目标或旧 coding 入口。`AUTHORING_CONTRACT` 返回实际能力 canonical 默认结构、当前 Workflow Schema、Skill bindings 合同和发布顺序；完整 A2UI 示例通过既有只读 blueprint import 返回。
 
-能力 create/save/PRT deploy 还经过 `ManagementCapabilityGuard`：执行 binding（包括 descriptor、target 和 mappings）与 sideEffectLevel 必须匹配已有 PRT 发布快照。HTTP/未知 target 字段继续由现有 GRPC binding validator 拒绝。此额外限定只作用于新 Agent，不改手工管理端注册规则。
+能力仅通过 `CAPABILITY_DRAFT_CREATE_FROM_REGISTERED` 服务端复制已发布合同和 `CAPABILITY_DRAFT_UPDATE_METADATA` 保留合同的元信息更新；Agent 不开放完整 create/save，手工 API 不变。actionCode 在调用创建服务前按既有点分正则校验。能力 create/save/PRT deploy 还经过 `ManagementCapabilityGuard`：执行 binding（包括 descriptor、target 和 mappings）与 sideEffectLevel 必须匹配已有 PRT 发布快照。HTTP/未知 target 字段继续由现有 GRPC binding validator 拒绝。此额外限定只作用于新 Agent，不改手工管理端注册规则。
+
+`CAPABILITY_DRY_RUN_READ_ONLY` 是真实预发验证的薄入口：只接受 draftId/revision/clientType，固定 PRT，服务端要求精确 revision、READ 副作用等级和已注册接口合同。原 dry-run 使用保存的 inputExampleJson、可信身份执行真实 RPC，并记录与当前 digest 绑定的证据。请求失败或内层 toolResult.success=false 均不算验证通过；失败证据仍由原服务保存。Agent 回执仅保留验证状态与安全统计，不持久化瞬时请求或业务响应正文。
 
 四类资产使用现有 `RELEASE_OVERVIEW → RELEASE_CHANGE_CREATE（需要时）→ RELEASE_PREPROD_DEPLOY → RELEASE_DEPLOYMENT_DETAIL + RELEASE_OVERVIEW`，保留真实编译和依赖门禁。原 `CAPABILITY_PUBLISH` 与无冻结材料的 `PACKAGE_PUBLISH_PREPROD` 不开放。当前 native Workflow 仅支持 2–8 个线性 Skill 和一个 Summary；不静默丢弃其他执行语义。
 

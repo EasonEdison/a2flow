@@ -31,6 +31,16 @@ public final class ManagementCapabilityGuard {
                 if (value == null || !value.isObject()) throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CONTRACT_INVALID");
                 candidate = mapper.valueToTree(drafts.canonicalizeAuthoringDraft(mapper.convertValue(value,
                         new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { })));
+            } else if (method.equals("CAPABILITY_DRY_RUN")) {
+                CapabilityActionDraft current = drafts.detail(requiredText(arguments, "draftId"));
+                int revision;
+                try { revision = Integer.parseInt(arguments.path("revision").asText()); }
+                catch (NumberFormatException error) { throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_REVISION_INVALID"); }
+                if (revision <= 0 || !java.util.Objects.equals(current.getRevision(), revision)) {
+                    throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_REVISION_CHANGED");
+                }
+                candidate = mapper.valueToTree(current.getDraft());
+                requireReadOnly(candidate);
             } else if (method.equals("RELEASE_PREPROD_DEPLOY") && arguments.path("assetType").asText().equals("CAPABILITY_ACTION")) {
                 candidate = mapper.valueToTree(drafts.detail(arguments.path("assetKey").asText()).getDraft());
             } else return;
@@ -47,6 +57,11 @@ public final class ManagementCapabilityGuard {
             }
             if (requested.isEmpty() || !registered.containsAll(requested)) throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_INTERFACE_NOT_REGISTERED");
         } catch (java.io.IOException error) { throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CONTRACT_INVALID"); }
+    }
+    static void requireReadOnly(JsonNode candidate) {
+        if (!candidate.path("governance").path("sideEffectLevel").asText().equals("READ")) {
+            throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_READ_ONLY_REQUIRED");
+        }
     }
     /** Copy the immutable PRT interface server-side; model arguments never carry binary descriptors. */
     public JsonNode registeredCreateArguments(JsonNode arguments) {
