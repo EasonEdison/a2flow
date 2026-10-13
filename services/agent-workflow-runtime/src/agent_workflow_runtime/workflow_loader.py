@@ -119,14 +119,14 @@ def compose_workflow(
         if (type(definition["summaryPrompt"]) is not str
                 or not definition["summaryPrompt"].strip()
                 or len(definition["summaryPrompt"]) > 4096
-                or "__summary__" in agents
+                or "workflow-summary" in agents
                 or not isinstance(summary_agent, RunGraphBinding)
                 or summary_agent.lifecycle is not lifecycle
                 or summary_agent.progress is not progress):
             raise ActionRejected("INVALID_WORKFLOW_SUMMARY_BINDING")
-        nodes = [*nodes, {"nodeId": "__summary__", "skillKey": "__summary__",
+        nodes = [*nodes, {"nodeId": "workflow-summary", "skillKey": "workflow-summary",
                          "displayName": "流程总结"}]
-        agents = {**agents, "__summary__": summary_agent}
+        agents = {**agents, "workflow-summary": summary_agent}
         definition = {**definition, "nodes": nodes}
     elif summary_agent is not None:
         raise ActionRejected("INVALID_WORKFLOW_SUMMARY_BINDING")
