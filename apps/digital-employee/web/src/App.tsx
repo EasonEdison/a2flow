@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { Icon } from './components/Icon';
 import { NodeCard } from './components/NodeCard';
 import { WorkflowTimeline } from './components/WorkflowTimeline';
 import { WorkflowApplications } from './components/WorkflowApplications';
@@ -46,13 +47,13 @@ function Shell({ session, page, unread, onPage, onLogout, children }: { session:
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = (next: Page) => { onPage(next); setMobileOpen(false); };
   return <div className="product-shell">
-    <header className="topbar"><button className="mobile-menu" aria-label="打开导航" onClick={() => setMobileOpen((value) => !value)}>☰</button><button className="top-brand" onClick={() => navigate('chat')}><strong>A2</strong>Flow</button><div className="top-user"><button className="notification-button" aria-label={`通知中心，${unread} 条未读`} onClick={() => navigate('notifications')}>铃铛{unread ? <span>{unread}</span> : null}</button><b>{session.username}</b><em>{session.role}</em><button className="text-button" aria-label="退出登录" onClick={onLogout}>退出</button></div></header>
-    <aside className={`product-nav ${mobileOpen ? 'open' : ''}`} aria-label="主导航">
-      <button className={page === 'chat' ? 'active' : ''} onClick={() => navigate('chat')}>对话工作台</button>
-      <button className={page === 'workflows' ? 'active' : ''} onClick={() => navigate('workflows')}>工作流中心</button>
-      <button className={page === 'schedules' ? 'active' : ''} onClick={() => navigate('schedules')}>定时管理</button>
-      <button className={page === 'notifications' ? 'active' : ''} onClick={() => navigate('notifications')}>通知中心{unread ? <span className="nav-count">{unread}</span> : null}</button>
-      <button className={page === 'memory' ? 'active' : ''} onClick={() => navigate('memory')}>设置 · 个人记忆</button>
+    <header className="topbar"><button className="mobile-menu" aria-label={mobileOpen ? '关闭导航' : '打开导航'} aria-expanded={mobileOpen} aria-controls="product-navigation" onClick={() => setMobileOpen((value) => !value)}><Icon name={mobileOpen ? 'close' : 'menu'} /></button><button className="top-brand" onClick={() => navigate('chat')}><strong>A2</strong>Flow</button><div className="top-user"><button className="notification-button" aria-label={`通知中心，${unread} 条未读`} onClick={() => navigate('notifications')}><Icon name="bell" />{unread ? <span>{unread}</span> : null}</button><b>{session.username}</b><em>{session.role}</em><button className="text-button" aria-label="退出登录" onClick={onLogout}>退出</button></div></header>
+    <aside id="product-navigation" className={`product-nav ${mobileOpen ? 'open' : ''}`} aria-label="主导航">
+      <button className={page === 'chat' ? 'active' : ''} aria-current={page === 'chat' ? 'page' : undefined} onClick={() => navigate('chat')}><Icon name="chat" /><span>对话工作台</span></button>
+      <button className={page === 'workflows' ? 'active' : ''} aria-current={page === 'workflows' ? 'page' : undefined} onClick={() => navigate('workflows')}><Icon name="workflow" /><span>工作流中心</span></button>
+      <button className={page === 'schedules' ? 'active' : ''} aria-current={page === 'schedules' ? 'page' : undefined} onClick={() => navigate('schedules')}><Icon name="clock" /><span>定时管理</span></button>
+      <button className={page === 'notifications' ? 'active' : ''} aria-current={page === 'notifications' ? 'page' : undefined} onClick={() => navigate('notifications')}><Icon name="bell" /><span>通知中心</span>{unread ? <span className="nav-count">{unread}</span> : null}</button>
+      <button className={page === 'memory' ? 'active' : ''} aria-current={page === 'memory' ? 'page' : undefined} onClick={() => navigate('memory')}><Icon name="settings" /><span>设置 · 个人记忆</span></button>
     </aside>
     <section className="product-content">{children}</section>
   </div>;
@@ -146,7 +147,7 @@ function ChatPage() {
     <aside className="conversation-list"><div className="panel-heading"><h2>会话</h2><button aria-label="新建会话" onClick={async () => {
       try { const item = await productApi.createConversation(); setConversations(items => [item, ...items]); setConversationId(item.id); }
       catch { setError('新建会话失败'); }
-    }}>＋</button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => setConversationId(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
+    }}><Icon name="plus" /></button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => setConversationId(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
     {conversationId ? <ChatConversation key={conversationId} conversationId={conversationId} /> : null}
   </div>;
 }
@@ -270,7 +271,7 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
     }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
     {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
   </>, [conversationId]);
-  return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述目标，数字员工会调用已发布能力并展示交互卡片</p></div></header>
+  return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述你的目标，在对话中查看结果并完成确认</p></div></header>
     <AssistantThread
       messages={messages}
       unassignedCards={unassignedCards}
@@ -295,7 +296,7 @@ function WorkflowCenter({ onSchedule }: { onSchedule: (workflowKey: string) => v
   const [inputs, setInputs] = useState<Record<string, string>>({});
   useEffect(() => { void Promise.all([productApi.workflows(), productApi.runs()]).then(([catalog, mine]) => { setWorkflows(catalog.items); setRuns(mine.items); }); }, []);
   if (selected) return <RunDetail runId={selected} onBack={() => setSelected('')} />;
-  return <section><div className="page-title"><h1>工作流中心</h1><p>选择工作流立即运行，或查看我的运行记录。</p></div><div className="tabs" role="tablist"><button role="tab" aria-selected={tab === 'catalog'} onClick={() => setTab('catalog')}>可执行工作流</button><button role="tab" aria-selected={tab === 'runs'} onClick={() => setTab('runs')}>我的运行</button></div>{tab === 'catalog' ? <div className="catalog-grid">{workflows.map((workflow) => <article className="workflow-catalog-card" key={workflow.key}><span className="card-icon">◇</span><h2>{workflow.name}</h2><p>{workflow.description}</p><label htmlFor={`input-${workflow.key}`}>执行输入</label><textarea id={`input-${workflow.key}`} placeholder={workflow.inputHint} value={inputs[workflow.key] ?? ''} onChange={(event) => setInputs((value) => ({ ...value, [workflow.key]: event.target.value }))} /><div><button className="primary" onClick={async () => setSelected((await productApi.startRun(workflow.key, inputs[workflow.key] ?? '')).runId)}>立即运行</button><button className="secondary" onClick={() => onSchedule(workflow.key)}>设置定时</button></div></article>)}</div> : <div className="run-list">{runs.map((run) => <button key={run.id} onClick={() => setSelected(run.id)}><div><strong>{run.title}</strong><p>{run.input}</p></div><span className={`status ${run.status.toLowerCase()}`}>{runLabels[run.status] ?? run.status}</span></button>)}</div>}</section>;
+  return <section><div className="page-title"><h1>工作流中心</h1><p>选择工作流立即运行，或查看我的运行记录。</p></div><div className="tabs" role="tablist"><button role="tab" aria-selected={tab === 'catalog'} onClick={() => setTab('catalog')}>可执行工作流</button><button role="tab" aria-selected={tab === 'runs'} onClick={() => setTab('runs')}>我的运行</button></div>{tab === 'catalog' ? <div className="catalog-grid">{workflows.map((workflow) => <article className="workflow-catalog-card" key={workflow.key}><span className="card-icon"><Icon name="workflow" /></span><h2>{workflow.name}</h2><p>{workflow.description}</p><label htmlFor={`input-${workflow.key}`}>执行输入</label><textarea id={`input-${workflow.key}`} placeholder={workflow.inputHint} value={inputs[workflow.key] ?? ''} onChange={(event) => setInputs((value) => ({ ...value, [workflow.key]: event.target.value }))} /><div><button className="primary" onClick={async () => setSelected((await productApi.startRun(workflow.key, inputs[workflow.key] ?? '')).runId)}>立即运行</button><button className="secondary" onClick={() => onSchedule(workflow.key)}>设置定时</button></div></article>)}</div> : <div className="run-list">{runs.map((run) => <button key={run.id} onClick={() => setSelected(run.id)}><div><strong>{run.title}</strong><p>{run.input}</p></div><span className={`status ${run.status.toLowerCase()}`}>{runLabels[run.status] ?? run.status}</span></button>)}</div>}</section>;
 }
 
 function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
