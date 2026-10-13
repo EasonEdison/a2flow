@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Alert, Spin } from 'antd';
 import 'antd/dist/antd.css';
 import './management.less';
@@ -23,14 +23,34 @@ const WorkflowEditor = lazy(() => import('./workflow/WorkflowOrchestrationPage')
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('缺少管理台 root 挂载节点');
 
-createRoot(rootElement).render(
-  <BrowserRouter>
-    <nav className="management-navigation" aria-label="管理台导航">
-      <strong>A2Flow</strong><Link to="/management">Skill</Link><Link to="/management/capabilities">能力</Link><Link to="/management/components">A2UI / 组件</Link><Link to="/management/workflows">Workflow</Link>
-      <a href="/login">登录</a>
-      <form action="/logout" method="post" style={{ margin: 0 }}><button type="submit">退出登录</button></form>
-    </nav>
-    <main className="management-content"><ManagementSessionNotice /><Suspense fallback={<Spin tip="加载页面" />}>
+function ManagementShell() {
+  const { pathname } = useLocation();
+  const currentPath = pathname.replace(/\/+$/, '');
+  const isSection = (path: string) => currentPath === path || currentPath.startsWith(`${path}/`);
+  const navigation = [
+    { to: '/management', label: 'Skill', active: currentPath === '/management' || currentPath === '/management/detail' },
+    { to: '/management/capabilities', label: '业务能力', active: isSection('/management/capabilities') },
+    { to: '/management/components', label: 'A2UI / 组件', active: isSection('/management/components') },
+    { to: '/management/workflows', label: 'Workflow', active: isSection('/management/workflows') },
+  ];
+  return <>
+    <a className="management-skip-link" href="#management-main">跳转到主内容</a>
+    <header className="management-header">
+      <div className="management-brand"><strong>A2Flow</strong><span>管理工作台</span></div>
+      <nav className="management-navigation" aria-label="管理台导航">
+        {navigation.map(({ to, label, active }) => (
+          <Link key={to} to={to} className={active ? 'is-current' : undefined}
+            aria-current={active ? 'page' : undefined}>{label}</Link>
+        ))}
+      </nav>
+      <div className="management-account-actions">
+        <a href="/login">登录</a>
+        <form action="/logout" method="post"><button type="submit">退出登录</button></form>
+      </div>
+    </header>
+    <main id="management-main" className="management-content" tabIndex={-1}>
+      <ManagementSessionNotice />
+      <Suspense fallback={<div className="management-loading" role="status"><Spin tip="正在加载页面" /></div>}>
       <Routes>
         <Route path="/" element={<Navigate to="/management" replace />} />
         <Route path="/management" element={<SkillPage />} />
@@ -52,6 +72,9 @@ createRoot(rootElement).render(
         <Route path="/management/workflows/:workflowCode" element={<WorkflowEditor />} />
         <Route path="*" element={<Alert type="error" message="页面不存在" />} />
       </Routes>
-    </Suspense></main>
-  </BrowserRouter>,
-);
+      </Suspense>
+    </main>
+  </>;
+}
+
+createRoot(rootElement).render(<BrowserRouter><ManagementShell /></BrowserRouter>);

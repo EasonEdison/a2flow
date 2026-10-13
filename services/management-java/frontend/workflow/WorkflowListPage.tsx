@@ -212,52 +212,64 @@ const WorkflowListPage: React.FC = () => {
       <Spin spinning={loading}>
         <section className="workflow-list-metrics">
           <div>
-            <Text type="secondary">Workflow 总数</Text>
+            <Text type="secondary">已加载 Workflow</Text>
             <strong>{items.length}</strong>
           </div>
           <div>
-            <Text type="secondary">编辑中</Text>
+            <Text type="secondary">已加载 · 编辑中</Text>
             <strong>{editingCount}</strong>
           </div>
           <div>
-            <Text type="secondary">已上线</Text>
+            <Text type="secondary">已加载 · 已上线</Text>
             <strong>{onlineCount}</strong>
           </div>
         </section>
 
         <Card className="workflow-list-filter-card">
-          <Space wrap>
-            <Input
-              allowClear
-              className="workflow-list-search"
-              prefix={<SearchOutlined />}
-              placeholder="搜索 Workflow / 专员"
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-            />
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              className="workflow-list-select"
-              placeholder="所属专员"
-              value={specialistFilter}
-              options={specialists.map((item) => ({
-                value: specialistOptionId(item),
-                label: specialistOptionName(item),
-              }))}
-              onChange={(value) =>
-                setSpecialistFilter(typeof value === 'string' ? value : undefined)
-              }
-            />
-            <Select
-              allowClear
-              className="workflow-list-select"
-              placeholder="状态"
-              value={statusFilter}
-              options={statusOptions}
-              onChange={(value) => setStatusFilter(typeof value === 'string' ? value : undefined)}
-            />
+          <Space wrap className="management-filter-controls">
+            <label className="management-filter-field">
+              <span>搜索 Workflow</span>
+              <Input
+                aria-label="搜索 Workflow"
+                allowClear
+                className="workflow-list-search"
+                prefix={<SearchOutlined />}
+                placeholder="搜索 Workflow / 专员"
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+              />
+            </label>
+            <label className="management-filter-field">
+              <span>所属专员</span>
+              <Select
+                aria-label="所属专员"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                className="workflow-list-select"
+                placeholder="所属专员"
+                value={specialistFilter}
+                options={specialists.map((item) => ({
+                  value: specialistOptionId(item),
+                  label: specialistOptionName(item),
+                }))}
+                onChange={(value) =>
+                  setSpecialistFilter(typeof value === 'string' ? value : undefined)
+                }
+              />
+            </label>
+            <label className="management-filter-field">
+              <span>发布状态</span>
+              <Select
+                aria-label="发布状态"
+                allowClear
+                className="workflow-list-select"
+                placeholder="状态"
+                value={statusFilter}
+                options={statusOptions}
+                onChange={(value) => setStatusFilter(typeof value === 'string' ? value : undefined)}
+              />
+            </label>
             <Button icon={<ReloadOutlined />} onClick={resetFilters}>
               重置
             </Button>

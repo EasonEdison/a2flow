@@ -140,7 +140,7 @@ const CapabilityCenterPage: React.FC = () => {
         <div>
           <h1 className="page-title">业务能力中心</h1>
           <p className="page-subtitle">
-            把技术接口、业务语义和受控执行绑定整理为可复用的 CapabilityAction 草稿。
+            管理业务能力、接口配置与发布版本。
           </p>
         </div>
         <Space>
@@ -154,53 +154,73 @@ const CapabilityCenterPage: React.FC = () => {
       </div>
 
       <Card className="capability-center-filter-card">
-        <Space wrap>
-          <Input
-            allowClear
-            prefix={<SearchOutlined />}
-            placeholder="搜索 actionCode 或中文名"
-            value={keyword}
-            style={{ width: 360 }}
-            onChange={(event) => setKeyword(event.target.value)}
-            onPressEnter={() => { setPage(1); setAppliedFilters(currentQuery()); }}
-          />
-          <Select
-            allowClear
-            placeholder="业务域"
-            value={filters.businessDomain}
-            options={domainOptions(config.businessDomains)}
-            style={{ width: 180 }}
-            onChange={(value) => setFilters((current) => ({ ...current, businessDomain: value }))}
-          />
-          <Select
-            allowClear
-            placeholder="能力域"
-            value={filters.capabilityDomain}
-            options={domainOptions(config.capabilityDomains)}
-            style={{ width: 180 }}
-            onChange={(value) => setFilters((current) => ({ ...current, capabilityDomain: value }))}
-          />
-          <Select
-            allowClear
-            placeholder="所属专员"
-            value={filters.specialistId}
-            options={(config.specialists || [])
-              .map((item) => ({
-                value: String(item.id || item.specialistId || item.value || '').trim(),
-                label: String(item.name || item.specialistName || item.label || '').trim(),
-              }))
-              .filter((item) => item.value && item.label)}
-            style={{ width: 180 }}
-            onChange={(value) => setFilters((current) => ({ ...current, specialistId: value }))}
-          />
-          <Select
-            allowClear
-            placeholder="发布状态"
-            value={filters.publishStatus}
-            options={publishStatusOptions}
-            style={{ width: 180 }}
-            onChange={(value) => setFilters((current) => ({ ...current, publishStatus: value }))}
-          />
+        <Space wrap className="management-filter-controls">
+          <label className="management-filter-field">
+            <span>搜索能力</span>
+            <Input
+              aria-label="搜索能力"
+              allowClear
+              prefix={<SearchOutlined />}
+              placeholder="搜索 actionCode 或中文名"
+              value={keyword}
+              style={{ width: 360 }}
+              onChange={(event) => setKeyword(event.target.value)}
+              onPressEnter={() => { setPage(1); setAppliedFilters(currentQuery()); }}
+            />
+          </label>
+          <label className="management-filter-field">
+            <span>业务域</span>
+            <Select
+              aria-label="业务域"
+              allowClear
+              placeholder="业务域"
+              value={filters.businessDomain}
+              options={domainOptions(config.businessDomains)}
+              style={{ width: 180 }}
+              onChange={(value) => setFilters((current) => ({ ...current, businessDomain: value }))}
+            />
+          </label>
+          <label className="management-filter-field">
+            <span>能力域</span>
+            <Select
+              aria-label="能力域"
+              allowClear
+              placeholder="能力域"
+              value={filters.capabilityDomain}
+              options={domainOptions(config.capabilityDomains)}
+              style={{ width: 180 }}
+              onChange={(value) => setFilters((current) => ({ ...current, capabilityDomain: value }))}
+            />
+          </label>
+          <label className="management-filter-field">
+            <span>所属专员</span>
+            <Select
+              aria-label="所属专员"
+              allowClear
+              placeholder="所属专员"
+              value={filters.specialistId}
+              options={(config.specialists || [])
+                .map((item) => ({
+                  value: String(item.id || item.specialistId || item.value || '').trim(),
+                  label: String(item.name || item.specialistName || item.label || '').trim(),
+                }))
+                .filter((item) => item.value && item.label)}
+              style={{ width: 180 }}
+              onChange={(value) => setFilters((current) => ({ ...current, specialistId: value }))}
+            />
+          </label>
+          <label className="management-filter-field">
+            <span>发布状态</span>
+            <Select
+              aria-label="发布状态"
+              allowClear
+              placeholder="发布状态"
+              value={filters.publishStatus}
+              options={publishStatusOptions}
+              style={{ width: 180 }}
+              onChange={(value) => setFilters((current) => ({ ...current, publishStatus: value }))}
+            />
+          </label>
           <Button type="primary" onClick={() => { setPage(1); setAppliedFilters(currentQuery()); }}>
             搜索
           </Button>
