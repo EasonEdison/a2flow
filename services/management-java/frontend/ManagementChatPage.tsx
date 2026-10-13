@@ -27,6 +27,7 @@ const asText = (value: unknown) => typeof value === 'string' ? value : '';
 const safeErrorCode = (value: unknown) => /^[A-Z][A-Z0-9_]{0,159}$/.test(asText(value)) ? asText(value) : '';
 
 const toolLabels: Record<string, string> = {
+  read_file: '读取会话结果',
   AUTHORING_CONTRACT: '读取资产创建规范', SKILL_FACTORY_CONFIG: '读取创建配置', SKILL_LIST: '查找 Skill', SKILL_DETAIL: '读取 Skill',
   WORKSPACE_CREATE: '创建 Skill 草稿', SKILL_UPDATE: '更新 Skill 信息', WORKSPACE_TREE: '读取文件列表',
   WORKSPACE_FILE_CONTENT: '读取草稿文件', WORKSPACE_FILE_SAVE: '保存草稿文件', WORKSPACE_SAVE: '保存 Skill 草稿',
