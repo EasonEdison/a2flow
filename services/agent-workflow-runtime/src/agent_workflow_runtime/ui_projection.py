@@ -84,7 +84,7 @@ def put_output(view, node_id, kind, content):
         if existing != value:
             raise ActionRejected("OUTPUT_BINDING_CONFLICT")
         return view
-    if len(view["outputs"]) >= 8 or not any(n["nodeId"] == node_id for n in view["nodes"]):
+    if len(view["outputs"]) >= 9 or not any(n["nodeId"] == node_id for n in view["nodes"]):
         raise ActionRejected("INVALID_OUTPUT_VIEW")
     view["outputs"].append(value)
     return bounded(view)
