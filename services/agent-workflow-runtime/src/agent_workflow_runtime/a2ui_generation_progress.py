@@ -45,7 +45,7 @@ def observe_generation(observer: GenerationObserver) -> Iterator[None]:
 def generation_error_code(error: Exception) -> str:
     """Expose only platform codes; provider text can contain private request data."""
     code = str(error) if isinstance(error, ActionRejected) else ""
-    if re.fullmatch(r"(?:A2UI_|RPC_)[A-Z0-9_]{1,110}", code):
+    if re.fullmatch(r"(?:A2UI_|RPC_|TEMPORARY_INTERACTION_)[A-Z0-9_]{1,110}", code):
         return code
     return "A2UI_GENERATION_FAILED"
 
@@ -75,5 +75,7 @@ def generation_trace() -> Iterator[GenerationTrace]:
     try:
         yield trace
     except Exception as error:
-        trace.emit("failed", generation_error_code(error))
+        code = generation_error_code(error)
+        LOG.warning("A2UI generation failed: kind=%s code=%s", type(error).__name__, code)
+        trace.emit("failed", code)
         raise
