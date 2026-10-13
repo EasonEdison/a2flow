@@ -5043,62 +5043,82 @@ const SkillFactoryPage: React.FC = () => {
         </div>
 
         <Card className="skill-factory-catalog-filter">
-          <Space wrap>
-            <Input
-              allowClear
-              className="skill-factory-catalog-search"
-              placeholder="搜索 Skill / 专员 / 负责人"
-              prefix={<SearchOutlined />}
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              onPressEnter={() =>
-                loadList(keyword, '', businessDomainFilter, capabilityDomainFilter)
-              }
-            />
-            <Select
-              allowClear
-              showSearch
-              className="skill-factory-catalog-select"
-              placeholder="业务场域"
-              value={businessDomainFilter || undefined}
-              options={businessDomainSelectOptions}
-              onChange={(value) => setBusinessDomainFilter(value || '')}
-            />
-            <Select
-              allowClear
-              showSearch
-              className="skill-factory-catalog-select"
-              placeholder="能力域"
-              value={capabilityDomainFilter || undefined}
-              options={capabilityDomainSelectOptions}
-              onChange={(value) => setCapabilityDomainFilter(value || '')}
-            />
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              className="skill-factory-catalog-select"
-              placeholder="所属专员"
-              value={specialistFilter || undefined}
-              options={specialistFilterSelectOptions}
-              onChange={(value) => {
-                setSpecialistFilter(value || '');
-                loadList(keyword, '', businessDomainFilter, capabilityDomainFilter,
-                  1, value || '', statusFilter);
-              }}
-            />
-            <Select
-              allowClear
-              className="skill-factory-catalog-select"
-              placeholder="状态"
-              value={statusFilter || undefined}
-              options={SKILL_STATUS_FILTER_OPTIONS}
-              onChange={(value) => {
-                setStatusFilter(value || '');
-                loadList(keyword, '', businessDomainFilter, capabilityDomainFilter,
-                  1, specialistFilter, value || '');
-              }}
-            />
+          <Space wrap className="management-filter-controls">
+            <label className="management-filter-field">
+              <span>搜索 Skill</span>
+              <Input
+                aria-label="搜索 Skill"
+                allowClear
+                className="skill-factory-catalog-search"
+                placeholder="搜索 Skill / 专员 / 负责人"
+                prefix={<SearchOutlined />}
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                onPressEnter={() =>
+                  loadList(keyword, '', businessDomainFilter, capabilityDomainFilter)
+                }
+              />
+            </label>
+            <label className="management-filter-field">
+              <span>业务场域</span>
+              <Select
+                aria-label="业务场域"
+                allowClear
+                showSearch
+                className="skill-factory-catalog-select"
+                placeholder="业务场域"
+                value={businessDomainFilter || undefined}
+                options={businessDomainSelectOptions}
+                onChange={(value) => setBusinessDomainFilter(value || '')}
+              />
+            </label>
+            <label className="management-filter-field">
+              <span>能力域</span>
+              <Select
+                aria-label="能力域"
+                allowClear
+                showSearch
+                className="skill-factory-catalog-select"
+                placeholder="能力域"
+                value={capabilityDomainFilter || undefined}
+                options={capabilityDomainSelectOptions}
+                onChange={(value) => setCapabilityDomainFilter(value || '')}
+              />
+            </label>
+            <label className="management-filter-field">
+              <span>所属专员</span>
+              <Select
+                aria-label="所属专员"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                className="skill-factory-catalog-select"
+                placeholder="所属专员"
+                value={specialistFilter || undefined}
+                options={specialistFilterSelectOptions}
+                onChange={(value) => {
+                  setSpecialistFilter(value || '');
+                  loadList(keyword, '', businessDomainFilter, capabilityDomainFilter,
+                    1, value || '', statusFilter);
+                }}
+              />
+            </label>
+            <label className="management-filter-field">
+              <span>发布状态</span>
+              <Select
+                aria-label="发布状态"
+                allowClear
+                className="skill-factory-catalog-select"
+                placeholder="状态"
+                value={statusFilter || undefined}
+                options={SKILL_STATUS_FILTER_OPTIONS}
+                onChange={(value) => {
+                  setStatusFilter(value || '');
+                  loadList(keyword, '', businessDomainFilter, capabilityDomainFilter,
+                    1, specialistFilter, value || '');
+                }}
+              />
+            </label>
             <Button
               type="primary"
               icon={<SearchOutlined />}
@@ -5265,10 +5285,10 @@ const SkillFactoryPage: React.FC = () => {
       <div className="skill-factory-topbar">
         <div>
           <div className="skill-factory-title-row">
-            <h1 className="page-title">Skill Factory</h1>
+            <h1 className="page-title">Skill 管理</h1>
           </div>
           <div className="page-subtitle skill-factory-subtitle">
-            <span>{isDetailMode ? '当前 Skill 详情页' : '选择 Skill 后开始完整上翻闭环'}</span>
+            <span>{isDetailMode ? '当前 Skill 详情页' : '管理技能配置、依赖与发布版本'}</span>
           </div>
         </div>
         <Space>

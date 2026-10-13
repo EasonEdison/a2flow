@@ -440,62 +440,78 @@ const ComponentCenterPage: React.FC = () => {
       </div>
 
       <Card className="component-center-filter-card">
-        <Space wrap>
+        <Space wrap className="management-filter-controls">
           {isApplicationView ? (
             <>
-              <Select
-                value={applicationQuery.status || 'ALL'}
-                options={applicationStatusOptions}
-                style={{ width: 170 }}
-                onChange={(value) =>
-                  setApplicationQuery((prev) => ({
-                    ...prev,
-                    status: value as A2uiApplicationQuery['status'],
-                    page: 1,
-                  }))
-                }
-              />
-              <Input
-                value={applicationQuery.keyword}
-                placeholder="搜索 appCode / 中文名"
-                onChange={(event) =>
-                  setApplicationQuery((prev) => ({
-                    ...prev,
-                    keyword: event.target.value,
-                    page: 1,
-                  }))
-                }
-                style={{ width: 320 }}
-                allowClear
-              />
+              <label className="management-filter-field">
+                <span>发布状态</span>
+                <Select
+                  aria-label="发布状态"
+                  value={applicationQuery.status || 'ALL'}
+                  options={applicationStatusOptions}
+                  style={{ width: 170 }}
+                  onChange={(value) =>
+                    setApplicationQuery((prev) => ({
+                      ...prev,
+                      status: value as A2uiApplicationQuery['status'],
+                      page: 1,
+                    }))
+                  }
+                />
+              </label>
+              <label className="management-filter-field">
+                <span>搜索 Application</span>
+                <Input
+                  aria-label="搜索 Application"
+                  value={applicationQuery.keyword}
+                  placeholder="搜索 appCode / 中文名"
+                  onChange={(event) =>
+                    setApplicationQuery((prev) => ({
+                      ...prev,
+                      keyword: event.target.value,
+                      page: 1,
+                    }))
+                  }
+                  style={{ width: 320 }}
+                  allowClear
+                />
+              </label>
             </>
           ) : (
             <>
-              <Select
-                value={query.dslType || 'ALL'}
-                onChange={(value) =>
-                  setQuery((prev) => ({
-                    ...prev,
-                    dslType: value as ComponentAssetQuery['dslType'],
-                    page: 1,
-                  }))
-                }
-                options={dslTypeOptions}
-                style={{ width: 170 }}
-              />
-              <Input
-                value={query.keyword}
-                placeholder="搜索 componentName / 负责人 / 场景"
-                onChange={(event) =>
-                  setQuery((prev) => ({
-                    ...prev,
-                    keyword: event.target.value,
-                    page: 1,
-                  }))
-                }
-                style={{ width: 320 }}
-                allowClear
-              />
+              <label className="management-filter-field">
+                <span>组件类型</span>
+                <Select
+                  aria-label="组件类型"
+                  value={query.dslType || 'ALL'}
+                  onChange={(value) =>
+                    setQuery((prev) => ({
+                      ...prev,
+                      dslType: value as ComponentAssetQuery['dslType'],
+                      page: 1,
+                    }))
+                  }
+                  options={dslTypeOptions}
+                  style={{ width: 170 }}
+                />
+              </label>
+              <label className="management-filter-field">
+                <span>搜索组件</span>
+                <Input
+                  aria-label="搜索组件"
+                  value={query.keyword}
+                  placeholder="搜索 componentName / 负责人 / 场景"
+                  onChange={(event) =>
+                    setQuery((prev) => ({
+                      ...prev,
+                      keyword: event.target.value,
+                      page: 1,
+                    }))
+                  }
+                  style={{ width: 320 }}
+                  allowClear
+                />
+              </label>
             </>
           )}
           <Button onClick={refreshCurrentView}>刷新</Button>
