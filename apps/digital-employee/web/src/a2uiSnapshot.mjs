@@ -1,6 +1,7 @@
 import { A2uiMessageListSchema, MessageProcessor, extractRefFields } from '@a2ui/web_core/v0_9';
 
 export const RPC_PROFILE = 'a2flow.java-rpc.v1';
+export const TEMPORARY_PROFILE = 'a2flow.temporary.v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /** Changes only when persisted display content changes; transport revisions are not model input. */
@@ -10,7 +11,7 @@ export function persistedSnapshotKey(card) {
 
 /** A complete persisted snapshot is replayed into a fresh official processor, never patched onto another card. */
 export function createSnapshotProcessor(display, catalogs) {
-  if (display.protocolProfile !== RPC_PROFILE) throw new Error('不支持的 A2UI 协议配置');
+  if (![RPC_PROFILE, TEMPORARY_PROFILE].includes(display.protocolProfile)) throw new Error('不支持的 A2UI 协议配置');
   const meta = display.catalog;
   if (!meta || !['v0.9.1', '0.9.1'].includes(meta.protocolVersion) ||
       !meta.catalogId || meta.catalogRevision === undefined || !meta.catalogDigest) {
@@ -85,6 +86,9 @@ export function actionRequest(card, event) {
   const declared = card.display.actions.find(action => action.actionName === event.name &&
     action.surfaceId === event.surfaceId && action.componentId === event.sourceComponentId);
   if (!declared || !record(event.context)) throw new Error('Action 未声明或上下文无效');
+  if (card.display.protocolProfile === TEMPORARY_PROFILE) {
+    return { actionName: declared.actionName, inputs: structuredClone(event.context) };
+  }
   return { actionName: declared.actionName, inputs: {
     surfaceId: event.surfaceId, sourceComponentId: event.sourceComponentId,
     context: structuredClone(event.context),

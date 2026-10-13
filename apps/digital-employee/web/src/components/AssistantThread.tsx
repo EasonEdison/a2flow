@@ -26,6 +26,7 @@ import {
   UnassignedApplications,
 } from './ChatApplications';
 import { MarkdownContent } from './MarkdownContent';
+import { isGenerationTool } from '../generationProgress';
 import { GenerationProcess } from './GenerationProcess';
 
 type AssistantThreadProps = {
@@ -203,7 +204,7 @@ export function ExecutionPanel({ message }: { message: Message }) {
           message={item.value}
           showProcessText={!hasOrderedText}
         />
-        : item.value.name === 'generate_a2ui' ? <GenerationProcess
+        : isGenerationTool(item.value.name) ? <GenerationProcess
           key={`tool:${item.value.toolCallId}`} tool={item.value} active={running}
         /> : <ToolProcess
           key={`tool:${item.value.toolCallId}`}
@@ -233,8 +234,11 @@ function AssistantMessage({
   onCardActionStateChange: AssistantThreadProps['onCardActionStateChange'];
   onComposerDraft: (effect: ComposerDraftEffect) => void;
 }) {
+  const applications = message.parts?.filter(part => part.type === 'application') ?? [];
+  const temporarySubmitted = applications.length > 0 && applications.every(part =>
+    part.card?.display.definitionSource === 'TEMPORARY' && part.card.status === 'COMPLETED');
   const deliveryLabel = message.delivery === 'waiting_action'
-    ? '等待你确认'
+    ? temporarySubmitted ? '交互已提交' : '等待你确认'
     : message.delivery === 'completed'
       ? '已完成'
       : message.delivery === 'failed'
@@ -248,6 +252,8 @@ function AssistantMessage({
     <div className="aui-assistant-avatar" aria-hidden="true">AI</div>
     <div className="aui-assistant-content">
       {deliveryLabel ? <p className={`assistant-delivery ${message.delivery ?? ''}`}>{deliveryLabel}</p> : null}
+      {message.continuation && message.delivery === 'running'
+        ? <p className="muted">交互已保存，正在等待助手续轮结果；若运行中断，将保留未确认状态，不会自动重跑。</p> : null}
       <ExecutionPanel message={message} />
       {message.parts?.length
         ? message.parts.map(part => part.type === 'text'
