@@ -1,7 +1,7 @@
 # Readiness
 
-IMPLEMENTING. Not yet deployed or runtime-proven.
+Creation and PRT publication chain: PASS on deployed source `67ade5c`, 2026-10-14.
 
-Source, deployment and public execution gates are separate. A successful model answer or tool
-transport status is not publication proof. Record actual asset IDs, immutable versions, serving
-receipts, runtime readback, conversation/turn IDs and sanitized public screenshots in regression.md.
+A real management conversation produced two capabilities, one A2UI application, two Skills and one Workflow. All have actual PRT versions; Runtime material/dependency loading and browser refresh without replay passed. See regression.md for exact identities and failure evidence.
+
+Remaining acceptance: same-asset follow-up change and next PRT version, awaiting browser reauthentication after session expiry. Do not mark this change fully accepted or archive until that check is recorded. No B-side execution or ONLINE claim is made.
