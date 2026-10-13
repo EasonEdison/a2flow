@@ -155,7 +155,7 @@ function ChatPage() {
     <aside className="conversation-list"><div className="panel-heading"><h2>会话</h2><button aria-label="新建会话" onClick={async () => {
       try { const item = await productApi.createConversation(); setConversations(items => [item, ...items]); setConversationId(item.id); }
       catch { setError('新建会话失败'); }
-    }}><Icon name="plus" /></button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => setConversationId(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
+    }}><Icon name="plus" /><span>新建会话</span></button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => setConversationId(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
     {conversationId ? <ChatConversation key={conversationId} conversationId={conversationId} /> : null}
   </div>;
 }
