@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import re
 from collections.abc import Mapping
@@ -22,6 +23,8 @@ from referencing import Registry, Resource
 
 from .application_runtime import PreparedApplication
 from .models import ActionRejected
+
+LOG = logging.getLogger(__name__)
 
 PROFILE = "a2flow.temporary.v1"
 SUBMIT_ACTION = "submit"
@@ -98,6 +101,39 @@ class _Admission:
 
 def _reject(code: str) -> Never:
     raise ActionRejected("TEMPORARY_INTERACTION_" + code)
+
+
+def _reject_input_binding(
+    reason: Literal[
+        "path_shape",
+        "field_missing",
+        "duplicate_field",
+        "type_mismatch",
+        "slider_bounds",
+        "field_control_set",
+        "submit_presence",
+    ],
+    *,
+    component_kind: str = "none",
+    schema_type: str = "none",
+    field_count: int = 0,
+    control_count: int = 0,
+    interactive: bool = False,
+    submit_present: bool = False,
+) -> Never:
+    # Only allowlisted structural metadata; never paths, names, values or candidate text.
+    LOG.warning(
+        "Temporary interaction input binding rejected: reason=%s component_kind=%s "
+        "schema_type=%s field_count=%d control_count=%d interactive=%s submit_present=%s",
+        reason,
+        component_kind if component_kind in _INPUT_TYPES else "none",
+        schema_type if schema_type in {"string", "boolean", "number", "array"} else "none",
+        field_count,
+        control_count,
+        interactive,
+        submit_present,
+    )
+    _reject("INPUT_BINDING_INVALID")
 
 
 def bounded_json(value: object, *, max_bytes: int = _MAX_BYTES) -> JsonValue:
@@ -332,14 +368,17 @@ def _admit(candidate: TemporaryCandidate | dict[str, Any], data: dict[str, Any])
                 or type(path["path"]) is not str
                 or not path["path"].startswith("/inputs/")
             ):
-                _reject("INPUT_BINDING_INVALID")
+                _reject_input_binding("path_shape", component_kind=kind)
             field = path["path"][8:]
-            if (
-                field not in properties
-                or field in bound
-                or properties[field]["type"] != _INPUT_TYPES[kind]
-            ):
-                _reject("INPUT_BINDING_INVALID")
+            if field not in properties:
+                _reject_input_binding("field_missing", component_kind=kind)
+            schema_type = properties[field]["type"]
+            if field in bound:
+                _reject_input_binding(
+                    "duplicate_field", component_kind=kind, schema_type=schema_type
+                )
+            if schema_type != _INPUT_TYPES[kind]:
+                _reject_input_binding("type_mismatch", component_kind=kind, schema_type=schema_type)
             bound[field] = name
             if kind == "ChoicePicker":
                 choices = [option["value"] for option in component["options"]]
@@ -361,7 +400,7 @@ def _admit(candidate: TemporaryCandidate | dict[str, Any], data: dict[str, Any])
                 properties[field].get("minimum") != component.get("min", 0)
                 or properties[field].get("maximum") != component["max"]
             ):
-                _reject("INPUT_BINDING_INVALID")
+                _reject_input_binding("slider_bounds", component_kind=kind, schema_type=schema_type)
         if "action" in component:
             expected = {
                 "event": {
@@ -377,8 +416,16 @@ def _admit(candidate: TemporaryCandidate | dict[str, Any], data: dict[str, Any])
             ):
                 _reject("ACTION_NOT_ALLOWED")
             submit = name
-    if set(bound) != set(properties) or (value.mode == "INTERACTIVE") != (submit is not None):
-        _reject("INPUT_BINDING_INVALID")
+    if set(bound) != set(properties):
+        _reject_input_binding(
+            "field_control_set", field_count=len(properties), control_count=len(bound)
+        )
+    if (value.mode == "INTERACTIVE") != (submit is not None):
+        _reject_input_binding(
+            "submit_presence",
+            interactive=value.mode == "INTERACTIVE",
+            submit_present=submit is not None,
+        )
     if "root" not in indexed or indexed["root"]["component"] not in {"Column", "Row", "Card"}:
         _reject("ROOT_INVALID")
     visited: set[str] = set()
