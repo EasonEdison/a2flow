@@ -149,7 +149,7 @@ class ChatLoopRunner:
                     }
                 elif kind == TOOL_CALL:
                     yield {"type": "tool_call", "tool": payload.get("tool", "")}
-                elif kind in (TOOL_CALL_STARTED, TOOL_CALL_FINISHED):
+                elif kind in (TOOL_CALL_STARTED, TOOL_CALL_FINISHED, "a2ui_generation_progress"):
                     yield {"type": kind, **payload}
                 elif kind == WORKFLOW_CONFIRM:
                     yield {"type": kind, "workflowKey": payload.get("workflowKey"),
