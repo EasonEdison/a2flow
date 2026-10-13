@@ -27,6 +27,10 @@ public final class GrpcTargetRegistry implements AutoCloseable {
         try { return new GrpcTargetRegistry(JsonSupport.mapper().readValue(json, type)); }
         catch (java.io.IOException e) { throw new IllegalArgumentException("Invalid gRPC target configuration", e); }
     }
+    /** Read-only authoring admission; does not open a channel or expose endpoint credentials. */
+    public boolean isRegistered(String key, ReleaseEnvironment environment) {
+        return targets.getOrDefault(key, Map.of()).containsKey(environment);
+    }
     public ManagedChannel channel(String key, ReleaseEnvironment environment) {
         Endpoint endpoint = targets.getOrDefault(key, Map.of()).get(environment);
         if (endpoint == null) throw new IllegalArgumentException("No gRPC target for exact key/environment");

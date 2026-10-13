@@ -30,7 +30,7 @@ import dev.a2flow.management.lifecycle.SkillFactoryMethodDispatcher;
 @Import({SkillFactoryConfigReader.class, ManagementArtifactConfiguration.class,
         CapabilityActionToolProvider.class, CapabilityActionExecutor.class,
         dev.a2flow.management.agentcore.runtime.tool.CapabilityCatalogQueryService.class,
-        RuntimeRpcConfiguration.class})
+        RuntimeRpcConfiguration.class, dev.a2flow.management.managementagent.ManagementAgentConfiguration.class})
 public class ManualManagementConfiguration {
     @Bean
     public ManualManagementExecuteService manualManagementExecuteService(SkillFactoryMethodDispatcher dispatcher,

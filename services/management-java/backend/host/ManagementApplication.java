@@ -42,6 +42,8 @@ public final class ManagementApplication {
         web.setApplicationEventListeners(new Object[] {new RequestContextListener()});
         Tomcat.addServlet(web, "management", new ManagementHttpServlet()).setLoadOnStartup(1);
         web.addServletMappingDecoded("/api/management/v2/*", "management");
+        Tomcat.addServlet(web, "management-agent", new dev.a2flow.management.managementagent.ManagementAgentServlet()).setLoadOnStartup(1);
+        web.addServletMappingDecoded("/api/management/v2/agent/*", "management-agent");
         String accountOrigin = application.getEnvironment().getRequiredProperty("A2FLOW_ACCOUNT_LOGIN_ORIGIN");
         Tomcat.addServlet(web, "account", new AccountLoginProxyServlet(accountOrigin, policy)).setLoadOnStartup(1);
         web.addServletMappingDecoded("/login", "account");

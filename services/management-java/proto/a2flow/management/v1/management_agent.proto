@@ -1,0 +1,88 @@
+syntax = "proto3";
+package a2flow.management.v1;
+option java_package = "dev.a2flow.management.managementagent.proto";
+option java_multiple_files = true;
+
+// Java ingress supplies this host-only context after Cookie/admin authentication.
+// Never expose authority to the model, accept it from a browser, or forward a Cookie.
+message AgentContext {
+  int64 user_id = 1;
+  string namespace = 2;
+  string environment = 3; // PRT only in this management Agent release.
+  string grant = 4; // Opaque bounded Java-issued callback authority, host/tool closure only.
+}
+message Conversation {
+  string id = 1;
+  string title = 2;
+  int64 created_at = 3; // Unix milliseconds.
+  int64 updated_at = 4;
+}
+message AgentTurn {
+  string turn_id = 1;
+  string request_id = 2;
+  string status = 3; // RUNNING, COMPLETED, FAILED, UNKNOWN.
+  string message = 4;
+  string final_text = 5;
+  string error_code = 6;
+}
+message AgentEvent {
+  int64 sequence = 1;
+  string turn_id = 2;
+  string type = 3; // TURN_STARTED, TOOL_STARTED, TOOL_COMPLETED, ASSISTANT_MESSAGE, TURN_COMPLETED, TURN_FAILED, TURN_UNKNOWN.
+  bytes payload_json = 4; // Dynamic tool/result JSON; never authority or provider credentials.
+}
+message CreateConversationRequest { AgentContext context = 1; string request_id = 2; string title = 3; }
+message CreateConversationResponse { Conversation conversation = 1; string error_code = 2; }
+message ListConversationsRequest { AgentContext context = 1; string page_token = 2; int32 limit = 3; }
+message ListConversationsResponse { repeated Conversation items = 1; string next_page_token = 2; string error_code = 3; }
+message ReadConversationRequest { AgentContext context = 1; string conversation_id = 2; int64 after_event_seq = 3; int32 limit = 4; }
+message ReadConversationResponse {
+  Conversation conversation = 1;
+  repeated AgentTurn turns = 2;
+  repeated AgentEvent events = 3;
+  int64 next_event_seq = 4;
+  bool has_more = 5;
+  string error_code = 6;
+  bool can_send = 7;
+  bool mutations_blocked = 8;
+}
+message SendMessageRequest { AgentContext context = 1; string conversation_id = 2; string request_id = 3; string message = 4; }
+message SendMessageResponse { string conversation_id = 1; string turn_id = 2; string request_id = 3; string status = 4; string error_code = 5; }
+service ManagementAgent {
+  rpc CreateConversation(CreateConversationRequest) returns (CreateConversationResponse);
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+  rpc ReadConversation(ReadConversationRequest) returns (ReadConversationResponse);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+}
+
+// The model only supplies tool name/arguments; Python injects grant and stable tool IDs.
+// Callback identity is resolved from grant, NEVER from caller-supplied userId/role.
+message DescribeToolsRequest { string grant = 1; }
+message ManagementTool {
+  string name = 1;
+  string description = 2;
+  bytes input_schema_json = 3;
+  bool mutating = 4;
+}
+message DescribeToolsResponse { repeated ManagementTool tools = 1; string error_code = 2; }
+message ExecuteToolRequest {
+  string grant = 1;
+  string conversation_id = 2;
+  string turn_id = 3;
+  string tool_call_id = 4;
+  string request_id = 5;
+  string name = 6;
+  bytes arguments_json = 7;
+}
+message ReadReceiptRequest { string grant = 1; string conversation_id = 2; string request_id = 3; }
+message ToolResult {
+  string status = 1; // SUCCEEDED, REJECTED, UNKNOWN, RUNNING, NOT_FOUND (ReadReceipt only).
+  string error_code = 2;
+  bytes result_json = 3;
+  string request_id = 4;
+}
+service ManagementTools {
+  rpc DescribeTools(DescribeToolsRequest) returns (DescribeToolsResponse);
+  rpc ExecuteTool(ExecuteToolRequest) returns (ToolResult);
+  rpc ReadReceipt(ReadReceiptRequest) returns (ToolResult);
+}
