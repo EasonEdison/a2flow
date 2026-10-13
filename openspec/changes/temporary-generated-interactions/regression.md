@@ -89,3 +89,28 @@ All three task-owned isolated probe schemas were removed after checking their ex
 scope. The final real-model schema contained the expected 15 synthetic tables; namespace
 read-back was zero after cleanup. No production assets or business records were changed
 by the Flow probes.
+
+## Automatic continuation presentation correction
+
+Follow-up source `8f0600ccce3507c6c2b5e84cc7a9f809290d54f0` deployed only to B.
+Runtime and frontend remain at their previous deployed revisions. Card submission was
+already dispatching the next model turn automatically; the defect was exposing the
+server-owned trigger input as a user-authored chat bubble. The conversation display API
+now excludes only user records with ref_kind=temporary_interaction. Model input/turn
+identity, idempotency and assistant results are retained. Old conversation 43 showed
+its answer without the internal trigger after reloading the history.
+
+New public conversation 45: generated a required activity-name form; entered a fictitious
+name and clicked Submit once, with no further chat message. Assistant 124 automatically
+completed an introduction using the saved name. Database has one FINISHED action receipt;
+121 is the real user request, 123 is the internal continuation input omitted from display,
+122/124 are the initial/continuing assistant messages. No external business API was used.
+
+Python parsing, diff-check and sensitive/company-material scans passed. Ruff reports
+only an existing unused json import in app.py, reproduced unchanged on the baseline;
+no unit tests were run, as requested. The B restart briefly returned 502 during startup;
+startup completion was followed by HTTP 200 and running/restart=0/OOM=false.
+
+After refresh, conversation 45 retained the completed form and automatic answer without
+the internal user bubble. Browser screenshot captured the form directly followed by
+the assistant response.
