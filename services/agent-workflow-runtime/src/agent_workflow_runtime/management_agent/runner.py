@@ -13,11 +13,37 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.tools import StructuredTool
 
 from ..assembly import build_agent
+from ..deepseek_model import DeepSeekProtocolError
 from .bridge import ManagementToolBridge, ToolDescription
 from .models import AgentError, AgentIdentity, encode
 from .store import ManagementStore
 
 LOGGER = logging.getLogger(__name__)
+_SAFE_PROVIDER_PROTOCOL_CODES = frozenset(
+    {
+        "DUPLICATE_TOOL_ARGUMENT",
+        "NON_FINITE_TOOL_ARGUMENT",
+        "INVALID_COMPLETE_TOOL_ARGUMENTS",
+        "TOOL_ARGUMENTS_REQUIRE_OBJECT",
+        "INVALID_TOOL_CALL_IDENTITY",
+        "INCOMPLETE_OR_UNSUPPORTED_FINISH",
+    }
+)
+
+
+def _failure_code(error: Exception) -> str:
+    """Expose reviewed fixed codes; never stringify provider payloads or errors."""
+    if isinstance(error, AgentError):
+        return error.code
+    if (
+        isinstance(error, DeepSeekProtocolError)
+        and len(error.args) == 1
+        and type(error.args[0]) is str
+        and error.args[0] in _SAFE_PROVIDER_PROTOCOL_CODES
+    ):
+        return error.args[0]
+    return "MANAGEMENT_AGENT_FAILED"
+
 
 SYSTEM_PROMPT = """你是 A2Flow 管理助手，帮助用户创建、修改和发布 Skill、业务能力、A2UI 和 Workflow 管理资产。
 所有真实操作必须调用本次提供的管理工具；不能开发业务后端、调用业务执行RPC、访问shell/文件系统或转发Cookie。
@@ -317,7 +343,7 @@ class ManagementRunner:
                     error="MUTATION_UNCONFIRMED" if unresolved else "",
                 )
         except Exception as exc:
-            code = exc.code if isinstance(exc, AgentError) else "MANAGEMENT_AGENT_FAILED"
+            code = _failure_code(exc)
             LOGGER.warning(
                 "management_turn_failed conversation_id=%s turn_id=%s code=%s exception=%s",
                 cid,
