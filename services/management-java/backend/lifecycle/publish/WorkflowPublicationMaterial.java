@@ -81,6 +81,9 @@ final class WorkflowPublicationMaterial {
                 throw failure("UNSUPPORTED_WORKFLOW");
             }
             String id = text(node, "nodeId"), skill = text(node, "skillKey");
+            if (definition.has("summaryPrompt") && "workflow-summary".equals(id)) {
+                throw failure("INVALID_WORKFLOW_SUMMARY_NODE");
+            }
             PublicationMaterial.key("ID", id); PublicationMaterial.key("SKILL", skill);
             if (!nodeIds.add(id)) throw failure("INVALID_WORKFLOW_ENTRY");
             optionalText(node, "displayName", 200); optionalText(node, "nodePrompt", 4096);
