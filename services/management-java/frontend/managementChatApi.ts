@@ -56,9 +56,9 @@ async function request(path: string, body: object, signal?: AbortSignal): Promis
   try { envelope = object(await response.json()); }
   catch { throw new ManagementChatError('RESPONSE_INVALID'); }
   if (!response.ok || envelope.result !== 1) {
-    const code = typeof envelope.errorCode === 'string' && /^[A-Z][A-Z0-9_]{0,95}$/.test(envelope.errorCode)
+    const code = typeof envelope.errorCode === 'string' && /^[A-Z][A-Z0-9_]{0,159}$/.test(envelope.errorCode)
       ? envelope.errorCode : 'REQUEST_FAILED';
-    throw new ManagementChatError(code, ['INVALID_MANAGEMENT_AGENT_REQUEST', 'ACCOUNT_AUTHENTICATION_REQUIRED', 'ADMIN_REQUIRED', 'CLIENT_IDENTITY_FIELDS_NOT_ALLOWED', 'ACCOUNT_ORIGIN_REQUIRED', 'MANAGEMENT_AGENT_ROUTE_NOT_FOUND', 'CONVERSATION_NOT_FOUND', 'REQUEST_ID_CONFLICT', 'CONVERSATION_BUSY', 'TURN_LIMIT_REACHED'].includes(code));
+    throw new ManagementChatError(code, ['INVALID_MANAGEMENT_AGENT_REQUEST', 'ACCOUNT_AUTHENTICATION_REQUIRED', 'ADMIN_REQUIRED', 'CLIENT_IDENTITY_FIELDS_NOT_ALLOWED', 'ACCOUNT_ORIGIN_REQUIRED', 'MANAGEMENT_AGENT_ROUTE_NOT_FOUND', 'CONVERSATION_NOT_FOUND', 'REQUEST_ID_CONFLICT', 'CONVERSATION_BUSY', 'CONVERSATION_TURN_LIMIT', 'MANAGEMENT_AGENT_BUSY'].includes(code));
   }
   return object(envelope.data);
 }
