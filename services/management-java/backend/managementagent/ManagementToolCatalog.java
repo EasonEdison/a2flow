@@ -34,9 +34,8 @@ public final class ManagementToolCatalog {
         add("CAPABILITY_LIST", false, "Find current capability drafts.", "", "keyword,page,pageSize,businessDomain,capabilityDomain,specialistId");
         add("CAPABILITY_PUBLISHED_LIST", false, "Read existing published capability contracts and dependencies.", "", "keyword");
         add("CAPABILITY_DRAFT_DETAIL", false, "Read full canonical capability draft and current revision.", "draftId", "");
-        add("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED", true, "Preferred way to create a new capability for an existing registered interface: sourceDraftId must identify a capability currently published in PRT. Server copies its immutable complete contract and binary gRPC descriptor exactly, overriding only actionCode/name/description. Do NOT copy or regenerate descriptorSetBase64. Classification defaults to source; to change it provide all businessDomain, capabilityDomain, specialistIds from real config. Then CAPABILITY_VALIDATE and normal RELEASE_* publication; creation alone is not publication.", "sourceDraftId,actionCode,name,description", "businessDomain,capabilityDomain,specialistIds");
-        add("CAPABILITY_DRAFT_CREATE", true, "Low-level full-draft authoring; prefer CAPABILITY_DRAFT_CREATE_FROM_REGISTERED to reuse an existing interface without transporting binary descriptors. Register a capability draft for an EXISTING service only. Agent admission requires executionBinding and sideEffectLevel to exactly match an existing PRT published capability; read its draft detail and preserve those fields. Never create a backend or invent an endpoint; missing service contracts require clarification.", "draftJson", "businessDomain,capabilityDomain,specialistIds");
-        add("CAPABILITY_DRAFT_SAVE", true, "Save canonical capability draft with real baseRevision from detail. Preserve service bindings and classification.", "draftId,baseRevision,draftJson", "businessDomain,capabilityDomain,specialistIds");
+        add("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED", true, "Preferred way to create a new capability for an existing registered interface: sourceDraftId must identify a capability currently published in PRT. Server copies its immutable complete contract and binary gRPC descriptor exactly, overriding only actionCode/name/description. actionCode needs at least 3 dot-separated alphanumeric segments, each starting with a letter; hyphens and underscores are forbidden (for example demo.people.list). Do NOT copy or regenerate descriptorSetBase64. Classification defaults to source; to change it provide all businessDomain, capabilityDomain, specialistIds from real config. Then CAPABILITY_VALIDATE and normal RELEASE_* publication; creation alone is not publication.", "sourceDraftId,actionCode,name,description", "businessDomain,capabilityDomain,specialistIds");
+        add("CAPABILITY_DRAFT_UPDATE_METADATA", true, "Update an EXISTING capability using draftId and current baseRevision from CAPABILITY_DRAFT_DETAIL. Provide at least one of actionCode/name/description; all other configuration and binary gRPC descriptor are preserved server-side. actionCode requires at least 3 dot-separated alphanumeric segments, each starting with a letter, no hyphens or underscores. Use this to fix metadata validation errors on an already-created asset; do not delete/recreate it. Existing permission, editable-change and revision guards apply; validate and publish normally afterwards.", "draftId,baseRevision", "actionCode,name,description");
         add("CAPABILITY_VALIDATE", true, "Run and persist the real capability static validation; valid=false is not success. Publication uses RELEASE_* not legacy CAPABILITY_PUBLISH.", "draftId", "");
         add("COMPONENT_LIST", false, "Read current registered component assets.", "", "keyword,page,pageSize");
         add("COMPONENT_DETAIL", false, "Read component source and configuration.", "id", "");
@@ -79,8 +78,15 @@ public final class ManagementToolCatalog {
             else if (Set.of("protocolVersion", "baseRevision", "expectedDraftRevision", "page", "pageSize", "limit", "contextLines", "version", "baseVersion").contains(field)) property.putArray("type").add("integer").add("string");
             else if (field.equals("enabled")) property.putArray("type").add("boolean").add("string");
             else property.put("type", "string");
+            if (field.equals("actionCode")) property.put("pattern", ManagementCapabilityGuard.ACTION_CODE_PATTERN);
+            if (Set.of("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED", "CAPABILITY_DRAFT_UPDATE_METADATA").contains(name)
+                    && Set.of("sourceDraftId", "draftId", "name", "description").contains(field)) property.put("minLength", 1);
         }
         for (String field : required.split(",")) if (!field.isBlank()) requiredNode.add(field);
+        if (name.equals("CAPABILITY_DRAFT_UPDATE_METADATA")) {
+            var alternatives = schema.putArray("anyOf");
+            for (String field : List.of("actionCode", "name", "description")) alternatives.addObject().putArray("required").add(field);
+        }
         definitions.put(name, new Definition(name, mutating, description, schema));
     }
     public List<ManagementTool> tools() {
@@ -105,9 +111,20 @@ public final class ManagementToolCatalog {
                 };
             }
             if (!accepted) throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_TYPE_INVALID");
+            JsonNode property = definition.schema().path("properties").path(field);
+            if (value.isTextual() && property.has("pattern") && !value.asText().matches(property.path("pattern").asText())) {
+                throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_ACTION_CODE_INVALID");
+            }
+            if (value.isTextual() && property.has("minLength") && value.asText().isBlank()) {
+                throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_REQUIRED");
+            }
         });
         for (JsonNode field : definition.schema().path("required")) {
             if (!arguments.has(field.asText())) throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_REQUIRED");
+        }
+        if (name.equals("CAPABILITY_DRAFT_UPDATE_METADATA")
+                && !arguments.has("actionCode") && !arguments.has("name") && !arguments.has("description")) {
+            throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_METADATA_REQUIRED");
         }
         return definition;
     }

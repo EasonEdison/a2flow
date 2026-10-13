@@ -96,8 +96,11 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
             ToolResult response = transaction.execute(status -> {
                 ToolResult reply;
                 try {
-                    JsonNode effectiveArguments = request.getName().equals("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED")
-                            ? capabilityGuard.registeredCreateArguments(arguments) : arguments;
+                    JsonNode effectiveArguments = switch (request.getName()) {
+                        case "CAPABILITY_DRAFT_CREATE_FROM_REGISTERED" -> capabilityGuard.registeredCreateArguments(arguments);
+                        case "CAPABILITY_DRAFT_UPDATE_METADATA" -> capabilityGuard.metadataUpdateArguments(arguments);
+                        default -> arguments;
+                    };
                     capabilityGuard.check(dispatchMethod(request.getName()), effectiveArguments);
                     reply = dispatch(request, grant, effectiveArguments);
                 } catch (IllegalArgumentException rejection) {
@@ -150,7 +153,11 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
         } catch (Exception error) { throw new IllegalStateException("MANAGEMENT_TOOL_DISPATCH_FAILED", error); }
     }
     private static String dispatchMethod(String toolName) {
-        return toolName.equals("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED") ? "CAPABILITY_DRAFT_CREATE" : toolName;
+        return switch (toolName) {
+            case "CAPABILITY_DRAFT_CREATE_FROM_REGISTERED" -> "CAPABILITY_DRAFT_CREATE";
+            case "CAPABILITY_DRAFT_UPDATE_METADATA" -> "CAPABILITY_DRAFT_SAVE";
+            default -> toolName;
+        };
     }
     private boolean domainOperationSucceeded(ToolResult result) {
         try { return mapper.readTree(result.getResultJson().toByteArray()).path("success").asBoolean(false); }
