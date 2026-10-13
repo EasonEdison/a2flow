@@ -9,6 +9,7 @@ from typing import Any, Protocol, cast
 
 from langchain_core.messages import AIMessage, HumanMessage
 from openai import AsyncOpenAI, OpenAI
+from pydantic import ValidationError
 
 from .a2ui_generation import GENERATOR_TAG, _SingleDesignCall
 from .assembly import build_agent
@@ -102,10 +103,17 @@ class DeepAgentInteractionGenerator:
             if len(message.content.encode()) > 128 * 1024:
                 raise ActionRejected("TEMPORARY_INTERACTION_SIZE_LIMIT")
             try:
-                raw = bounded_json(json.loads(message.content))
+                decoded = json.loads(message.content)
+            except (ValueError, TypeError):
+                raise ActionRejected("TEMPORARY_INTERACTION_RESULT_JSON_INVALID") from None
+            except RecursionError:
+                raise ActionRejected("TEMPORARY_INTERACTION_SIZE_LIMIT") from None
+            raw = bounded_json(decoded)
+            try:
                 return TemporaryCandidate.model_validate(raw)
-            except (ValueError, TypeError, RecursionError):
-                raise ActionRejected("TEMPORARY_INTERACTION_RESULT_INVALID") from None
+            except ValidationError:
+                # Keep input and provider text out of errors while preserving the failing stage.
+                raise ActionRejected("TEMPORARY_INTERACTION_RESULT_SCHEMA_INVALID") from None
         finally:
             cast(OpenAI, model.client).close()
             asyncio.run(cast(AsyncOpenAI, model.async_client).close())
