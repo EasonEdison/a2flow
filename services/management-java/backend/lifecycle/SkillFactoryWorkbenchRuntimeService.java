@@ -726,7 +726,7 @@ public class SkillFactoryWorkbenchRuntimeService {
         if (!(componentsValue instanceof List) || ((List<?>) componentsValue).isEmpty()) {
             log.warn("SkillFactory业务能力渲染绑定被拒绝，端契约未提供包装组件, draftId:{}, client:{}",
                     draftId, client);
-            throw new IllegalArgumentException(ERROR_CAPABILITY_PRESENTATION_REQUIRED);
+            throw SkillFactoryValidationException.capabilityPresentationRequired();
         }
         for (Object item : (List<?>) componentsValue) {
             Map<String, Object> componentReference = map(item);

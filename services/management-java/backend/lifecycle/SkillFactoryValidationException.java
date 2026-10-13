@@ -36,4 +36,16 @@ public class SkillFactoryValidationException extends IllegalArgumentException {
                 ERROR_MESSAGE_SKILL_NAME_CN_PREFIX + skillNameCn + ERROR_MESSAGE_SKILL_NAME_CN_SUFFIX,
                 FIELD_PATH_SKILL_NAME_CN);
     }
+    /** Binding resolution rejects before replacing any relations. */
+    public static SkillFactoryValidationException capabilityPresentationRequired() {
+        return new SkillFactoryValidationException("SKILL_CAPABILITY_PRESENTATION_REQUIRED",
+                "EXECUTION_AND_RENDER requires capability presentation components", "capabilityBindings.bindMode");
+    }
+
+    /** Workspace files use relative paths from the actual workspace tree. */
+    public static SkillFactoryValidationException invalidWorkspaceFilePath() {
+        return new SkillFactoryValidationException("SKILL_WORKSPACE_FILE_PATH_INVALID",
+                "filePath must be a relative path inside the workspace", "filePath");
+    }
+
 }

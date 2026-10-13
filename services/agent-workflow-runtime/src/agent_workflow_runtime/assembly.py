@@ -3,6 +3,8 @@
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from deepagents.backends import StateBackend
+
 from deepagents import (
     GeneralPurposeSubagentProfile,
     HarnessProfile,
@@ -38,21 +40,28 @@ def build_agent(
     context_schema: type[Any] | None = None,
     system_prompt: str | None = None,
     control_middleware: Sequence[AgentMiddleware] = (),
+    session_result_backend: StateBackend | None = None,
 ) -> CompiledStateGraph:
     """Shared SDK construction; scope-specific lifecycle stays in middleware.
 
     No native Skill directory, filesystem execution or delegated agents are
     enabled here. Conversation mode does not require a tool for a greeting.
     """
+    if session_result_backend is not None and type(session_result_backend) is not StateBackend:
+        raise ValueError("SESSION_RESULTS_REQUIRE_STATE_BACKEND")
+    excluded_tools = IMPLICIT_DEEP_AGENT_TOOLS
+    if session_result_backend is not None:
+        excluded_tools = excluded_tools - {"read_file"}
     register_harness_profile(
         harness_profile_key,
         HarnessProfile(
-            excluded_tools=IMPLICIT_DEEP_AGENT_TOOLS,
+            excluded_tools=excluded_tools,
             general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
         ),
     )
     return create_deep_agent(
         model=model, tools=list(tools), checkpointer=checkpointer,
+        backend=session_result_backend,
         context_schema=context_schema,
         system_prompt=system_prompt or (
             "Use authorized Skills and operations only through Runtime-owned Tools."
