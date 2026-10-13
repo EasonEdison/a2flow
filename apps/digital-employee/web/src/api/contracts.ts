@@ -1,3 +1,6 @@
+import { parseSnapshotDisplay, TEMPORARY_PROFILE } from '../snapshotDisplay';
+import type { ChatCard } from '../productApi';
+
 /** mvp08.1 wire supplied by Runtime owner. No browser-authored identity. */
 export type Json =
   | null
@@ -40,6 +43,11 @@ export type WireCard = {
   state: 'WAITING' | 'READ_ONLY' | 'INVALIDATED';
   actionEligibility: 'REVALIDATION_REQUIRED' | 'NOT_OPERABLE';
 };
+export type TemporaryWireCard = Pick<WireCard, 'cardId' | 'nodeId' | 'interactionId' | 'state' | 'actionEligibility'>
+  & ChatCard['display'];
+export function isTemporaryWireCard(card: WireCard | TemporaryWireCard): card is TemporaryWireCard {
+  return card.protocolProfile === TEMPORARY_PROFILE;
+}
 export type WireView = {
   schemaVersion: 'mvp08.1';
   runId: string;
@@ -51,7 +59,7 @@ export type WireView = {
   revision: string;
   observedAt: string;
   nodes: WireNode[];
-  cards: WireCard[];
+  cards: (WireCard | TemporaryWireCard)[];
   outputs: { nodeId: string; kind: 'MODEL_TEXT' | 'ACTION_RESULT'; content: Json }[];
   availability: 'AVAILABLE' | 'UNCONFIRMED';
 };
@@ -156,7 +164,9 @@ export function parseView(value: unknown): WireView {
     throw new ContractError();
   }
 
-  list(view.nodes).forEach((node) => {
+  const nodes = list(view.nodes);
+  if (nodes.length > 9) throw new ContractError();
+  nodes.forEach((node) => {
     const parsed = object(node);
     string(parsed.nodeId);
     string(parsed.title);
@@ -184,13 +194,17 @@ export function parseView(value: unknown): WireView {
       'applicationKey',
       'applicationVersion',
       'protocolProfile',
-      'componentCatalogRef',
-      'rootId',
     ]) {
       string(parsed[key]);
     }
-    jsonObject(parsed.data);
-    jsonObject(parsed.inputSchema);
+    if (parsed.protocolProfile === TEMPORARY_PROFILE) {
+      try { parseSnapshotDisplay(parsed); } catch { throw new ContractError(); }
+    } else {
+      string(parsed.componentCatalogRef);
+      string(parsed.rootId);
+      jsonObject(parsed.data);
+      jsonObject(parsed.inputSchema);
+    }
     if (
       !['WAITING', 'READ_ONLY', 'INVALIDATED'].includes(string(parsed.state)) ||
       !['REVALIDATION_REQUIRED', 'NOT_OPERABLE'].includes(
@@ -207,7 +221,7 @@ export function parseView(value: unknown): WireView {
   });
 
   const outputs = list(view.outputs);
-  if (outputs.length > 8) {
+  if (outputs.length > 9) {
     throw new ContractError();
   }
   outputs.forEach((output) => {

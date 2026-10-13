@@ -1,3 +1,4 @@
+import { parseSnapshotDisplay } from './snapshotDisplay';
 import { parseView } from './api/contracts';
 import { toView } from './api/adapter';
 import type { RunView } from './presentation';
@@ -189,52 +190,14 @@ const finiteDuration = (value: unknown): number | undefined => (
 const chatCardOf = (value: unknown): ChatCard => {
   const card = recordOf(value);
   const display = recordOf(card.display);
-  const catalog = recordOf(display.catalog);
-  const actions = Array.isArray(display.actions) ? display.actions.map((value) => {
-    const action = recordOf(value);
-    return {
-      actionName: textOf(action.actionName),
-      surfaceId: textOf(action.surfaceId),
-      componentId: textOf(action.componentId),
-      inputSchema: recordOf(action.inputSchema),
-    };
-  }) : [];
-  if (!card.cardId || !card.conversationId || !card.status
-    || !display.applicationKey || !display.protocolProfile
-    || !catalog.protocolVersion || !catalog.catalogId || !catalog.catalogDigest
-    || !Array.isArray(display.snapshotMessages)) {
-    throw new Error('CHAT_CONTRACT_INVALID');
-  }
+  if (!card.cardId || !card.conversationId || !card.status) throw new Error('CHAT_CONTRACT_INVALID');
   return {
     cardId: textOf(card.cardId),
     conversationId: textOf(card.conversationId),
     turnId: textOf(card.turnId),
     status: textOf(card.status),
     ...(card.result !== undefined ? { result: card.result } : {}),
-    display: {
-      applicationKey: textOf(display.applicationKey),
-      ...(typeof display.applicationVersion === 'string' || typeof display.applicationVersion === 'number'
-        ? { applicationVersion: display.applicationVersion } : {}),
-      protocolProfile: textOf(display.protocolProfile),
-      ...(display.definitionSource === 'GENERATED' || display.definitionSource === 'PUBLISHED' || display.definitionSource === 'TEMPORARY'
-        ? { definitionSource: display.definitionSource } : {}),
-      ...(typeof display.title === 'string' ? { title: display.title } : {}),
-      ...(display.mode === 'DISPLAY_ONLY' || display.mode === 'INTERACTIVE' ? { mode: display.mode } : {}),
-      ...(display.inputSchema ? { inputSchema: recordOf(display.inputSchema) } : {}),
-      snapshotMessages: display.snapshotMessages.map(recordOf),
-      catalog: {
-        protocolVersion: textOf(catalog.protocolVersion),
-        catalogId: textOf(catalog.catalogId),
-        catalogRevision: typeof catalog.catalogRevision === 'number'
-          ? catalog.catalogRevision : textOf(catalog.catalogRevision),
-        catalogDigest: textOf(catalog.catalogDigest),
-      },
-      ...(optionalString(display.rootId) ? { rootId: textOf(display.rootId) } : {}),
-      ...(Array.isArray(display.components) ? { components: display.components.map(recordOf) } : {}),
-      ...(display.data && typeof display.data === 'object' && !Array.isArray(display.data)
-        ? { data: recordOf(display.data) } : {}),
-      actions,
-    },
+    display: parseSnapshotDisplay(display),
   };
 };
 
