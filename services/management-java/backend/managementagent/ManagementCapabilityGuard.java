@@ -47,6 +47,53 @@ public final class ManagementCapabilityGuard {
             if (requested.isEmpty() || !registered.containsAll(requested)) throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_INTERFACE_NOT_REGISTERED");
         } catch (java.io.IOException error) { throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CONTRACT_INVALID"); }
     }
+    /** Copy the immutable PRT interface server-side; model arguments never carry binary descriptors. */
+    public JsonNode registeredCreateArguments(JsonNode arguments) {
+        String sourceId = requiredText(arguments, "sourceDraftId");
+        String actionCode = requiredText(arguments, "actionCode");
+        String name = requiredText(arguments, "name");
+        String description = requiredText(arguments, "description");
+        try {
+            var source = published.requirePublished(ReleaseAssetType.CAPABILITY_ACTION, sourceId, ReleaseEnvironment.PRT);
+            CapabilityActionDraft frozen = mapper.readValue(source.getSnapshot().getPayloadJson(), CapabilityActionDraft.class);
+            var draft = mapper.valueToTree(frozen.getDraft());
+            if (!draft.isObject() || !draft.path("basicInfo").isObject()) {
+                throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CONTRACT_INVALID");
+            }
+            var basicInfo = (com.fasterxml.jackson.databind.node.ObjectNode) draft.path("basicInfo");
+            basicInfo.put("actionCode", actionCode).put("nameCn", name).put("description", description);
+            ((com.fasterxml.jackson.databind.node.ObjectNode) draft).put("mode", "CREATE");
+            var result = mapper.createObjectNode();
+            result.set("draftJson", draft);
+            boolean explicitClassification = arguments.has("businessDomain") || arguments.has("capabilityDomain")
+                    || arguments.has("specialistIds");
+            if (explicitClassification) {
+                for (String field : List.of("businessDomain", "capabilityDomain", "specialistIds")) {
+                    result.put(field, requiredText(arguments, field));
+                }
+            } else {
+                // The regular Create path requires full classification to retain a complete authoring draft.
+                if (frozen.getBusinessDomain() == null || frozen.getBusinessDomain().isBlank()
+                        || frozen.getCapabilityDomain() == null || frozen.getCapabilityDomain().isBlank()
+                        || frozen.getSpecialistId() == null || frozen.getSpecialistId().isBlank()) {
+                    throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CLASSIFICATION_REQUIRED");
+                }
+                result.put("businessDomain", frozen.getBusinessDomain());
+                result.put("capabilityDomain", frozen.getCapabilityDomain());
+                result.put("specialistIds", frozen.getSpecialistId());
+            }
+            return result;
+        } catch (java.io.IOException error) {
+            throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_CONTRACT_INVALID");
+        }
+    }
+    private static String requiredText(JsonNode arguments, String field) {
+        JsonNode value = arguments.path(field);
+        if (!value.isTextual() || value.asText().isBlank()) {
+            throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_REQUIRED");
+        }
+        return value.asText();
+    }
     private List<Contract> contracts(JsonNode draft) {
         List<Contract> result = new ArrayList<>();
         JsonNode variants = draft.path("clientVariants");

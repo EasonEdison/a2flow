@@ -96,8 +96,10 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
             ToolResult response = transaction.execute(status -> {
                 ToolResult reply;
                 try {
-                    capabilityGuard.check(request.getName(), arguments);
-                    reply = dispatch(request, grant, arguments);
+                    JsonNode effectiveArguments = request.getName().equals("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED")
+                            ? capabilityGuard.registeredCreateArguments(arguments) : arguments;
+                    capabilityGuard.check(dispatchMethod(request.getName()), effectiveArguments);
+                    reply = dispatch(request, grant, effectiveArguments);
                 } catch (IllegalArgumentException rejection) {
                     reply = result(request.getRequestId(), "REJECTED", safeCode(rejection.getMessage(), "MANAGEMENT_CAPABILITY_CONTRACT_INVALID"));
                 }
@@ -126,7 +128,7 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
             params.put("environment", "PRT"); params.put("requestId", request.getRequestId());
             var reply = request.getName().equals("AUTHORING_CONTRACT")
                     ? dev.a2flow.management.model.SkillFactoryExecutionResult.success(contracts.describe(), false)
-                    : dispatcher.execute(user, request.getName(), params);
+                    : dispatcher.execute(user, dispatchMethod(request.getName()), params);
             JsonNode data = mapper.valueToTree(reply.getData());
             String code = reply.isSuccess() ? "" : safeCode(data.path("errorCode").asText(), "MANAGEMENT_TOOL_VALIDATION_REJECTED");
             String outcome = reply.isSuccess() ? "SUCCEEDED" : code.equals("INTERNAL_SERVER_ERROR") ? "UNKNOWN" : "REJECTED";
@@ -146,6 +148,9 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
             return ToolResult.newBuilder().setRequestId(request.getRequestId()).setStatus(outcome)
                     .setErrorCode(code).setResultJson(ByteString.copyFromUtf8(body.toString())).build();
         } catch (Exception error) { throw new IllegalStateException("MANAGEMENT_TOOL_DISPATCH_FAILED", error); }
+    }
+    private static String dispatchMethod(String toolName) {
+        return toolName.equals("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED") ? "CAPABILITY_DRAFT_CREATE" : toolName;
     }
     private boolean domainOperationSucceeded(ToolResult result) {
         try { return mapper.readTree(result.getResultJson().toByteArray()).path("success").asBoolean(false); }
