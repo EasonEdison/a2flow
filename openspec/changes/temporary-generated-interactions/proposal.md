@@ -1,6 +1,6 @@
 # Temporary generated interactions in Chat and Flow
 
-Status: approved for implementation, 2026-10-13. Runtime readiness is separate.
+Status: implemented and deployed, 2026-10-13. Public Chat accepted; public Workflow gate remains open. See regression and readiness for evidence boundaries.
 
 Generate task-local A2UI from the user's request and supplied context without a
 pre-authored Application. Chat and Workflow share the generator and card protocol.

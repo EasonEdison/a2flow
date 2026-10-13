@@ -21,6 +21,11 @@
 - Flow uses existing node scope, interrupt, durable submit fact and resume gate.
   Native replay returns the saved generated card rather than another model call.
 - Historical completed cards are read-only. Refresh is a saved-state read, not execution.
-  Local browser draft support, if implemented, is explicitly not cross-device syncing.
+  Local browser drafts are scoped to the current account and browser; they do not sync across devices.
 - No new runtime version-reset requirement, automatic whole-Flow generation, generic
   business CRUD, or long-lived application instance is introduced.
+
+- Generation supplies the full candidate JSONSchema and a validated two-field protocol example.
+  The model must produce matching inputSchema fields, bound controls and submit-context fields.
+  Strict admission remains authoritative; safe rejection logs contain reason/type/count metadata,
+  never generated content or user input. No candidate normalization or retry is performed.
