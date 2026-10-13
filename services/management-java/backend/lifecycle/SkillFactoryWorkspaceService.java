@@ -528,6 +528,7 @@ public class SkillFactoryWorkspaceService {
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public Map<String, Object> createWorkspace(String userName, Map<String, String> params) throws IOException {
         String skillCode = required(params, PARAM_SKILL_CODE);
+        SkillKeyValidator.requireValid(skillCode);
         String skillNameCn = StringUtils.defaultIfBlank(string(params == null ? null : params.get(PARAM_SKILL_NAME_CN)),
                 skillCode);
         String skillDescription = StringUtils.defaultString(

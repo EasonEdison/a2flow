@@ -20,7 +20,7 @@ public final class ManagementToolCatalog {
         add("SKILL_FACTORY_CONFIG", false, "Read real domain, specialist and authoring configuration before choosing classification IDs.", "", "");
         add("SKILL_LIST", false, "Find existing Skills before creating or updating.", "", "keyword,businessDomain,capabilityDomain,specialistId,page,pageSize");
         add("SKILL_DETAIL", false, "Read Skill metadata, draft, bindings and actual permissions.", "skillCode", "");
-        add("WORKSPACE_CREATE", true, "Create a Skill database workspace. Choose an unused skillCode; classify only with existing configuration IDs.", "skillCode,skillNameCn,skillDescription", "businessDomain,capabilityDomain,specialistIds,version");
+        add("WORKSPACE_CREATE", true, "Create a Skill database workspace. skillCode must match the existing Runtime key contract: lowercase letters/digits/hyphens, optional slash-separated namespaces, at most 128 characters (example demo-people-browser). No uppercase, underscore or dot; never normalize or rename an existing code implicitly. Choose an unused skillCode; classify only with existing configuration IDs.", "skillCode,skillNameCn,skillDescription", "businessDomain,capabilityDomain,specialistIds,version");
         add("SKILL_UPDATE", true, "Update existing Skill metadata and relation-backed classification.", "skillCode,skillNameCn", "skillDescription,businessDomain,capabilityDomain,specialistIds");
         add("WORKSPACE_TREE", false, "Read Skill workspace file tree.", "workspaceId", "");
         add("WORKSPACE_FILE_CONTENT", false, "Read an existing workspace file before editing; filePath must be a relative path returned by WORKSPACE_TREE, such as SKILL.md. Never pass /large_tool_results or other agent-local/offload paths.", "workspaceId,filePath", "");
@@ -30,7 +30,7 @@ public final class ManagementToolCatalog {
         add("SKILL_COMPONENT_CANDIDATE_LIST", false, "Read registered A2UI dependencies available for Skill binding.", "", "workspaceId,keyword");
         add("SKILL_CAPABILITY_CANDIDATE_LIST", false, "Read existing capabilities available for Skill binding; never invent endpoints.", "", "workspaceId,keyword");
         add("SKILL_BINDINGS_REPLACE", true, "Replace Skill bindings using current candidate identifiers and existing binding contract. Use EXECUTION_ONLY if the capability resultContract has no presentationComponents; EXECUTION_AND_RENDER requires actual published presentation components on every supported client. Bind an independent A2UI application separately in componentBindings, not by changing the capability bindMode.", "workspaceId,version,capabilityBindings,componentBindings", "skillCode");
-        add("RUNTIME_VALIDATE", true, "Validate Skill runtime references and bindings before publication; this does not execute business actions.", "workspaceId", "");
+        add("RUNTIME_VALIDATE", true, "Optional legacy workbench output-sample preview, not the native Skill publication gate. PASSED/FAILED/PARTIAL describe this preview only; no samples yields FAILED. Do not invent samples to satisfy it.", "workspaceId", "");
         add("CAPABILITY_LIST", false, "Find current capability drafts.", "", "keyword,page,pageSize,businessDomain,capabilityDomain,specialistId");
         add("CAPABILITY_PUBLISHED_LIST", false, "Read existing published capability contracts and dependencies.", "", "keyword");
         add("CAPABILITY_DRAFT_DETAIL", false, "Read full canonical capability draft and current revision.", "draftId", "");
@@ -82,6 +82,9 @@ public final class ManagementToolCatalog {
             if (name.equals("CAPABILITY_DRY_RUN_READ_ONLY") && field.equals("clientType")) {
                 property.putArray("enum").add("PC").add("APP").add("COMMON");
             }
+            if (name.equals("WORKSPACE_CREATE") && field.equals("skillCode")) {
+                property.put("pattern", "^" + dev.a2flow.management.lifecycle.SkillKeyValidator.PATTERN + "$").put("maxLength", 128);
+            }
             if (field.equals("actionCode")) property.put("pattern", ManagementCapabilityGuard.ACTION_CODE_PATTERN);
             if (Set.of("CAPABILITY_DRAFT_CREATE_FROM_REGISTERED", "CAPABILITY_DRAFT_UPDATE_METADATA").contains(name)
                     && Set.of("sourceDraftId", "draftId", "name", "description").contains(field)) property.put("minLength", 1);
@@ -122,7 +125,10 @@ public final class ManagementToolCatalog {
                 if (!matches) throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_VALUE_INVALID");
             }
             if (value.isTextual() && property.has("pattern") && !value.asText().matches(property.path("pattern").asText())) {
-                throw new IllegalArgumentException("MANAGEMENT_CAPABILITY_ACTION_CODE_INVALID");
+                throw new IllegalArgumentException(field.equals("skillCode") ? "INVALID_ASSET_KEY" : "MANAGEMENT_CAPABILITY_ACTION_CODE_INVALID");
+            }
+            if (value.isTextual() && property.has("maxLength") && value.asText().length() > property.path("maxLength").asInt()) {
+                throw new IllegalArgumentException("INVALID_ASSET_KEY");
             }
             if (value.isTextual() && property.has("minLength") && value.asText().isBlank()) {
                 throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_REQUIRED");
@@ -130,6 +136,10 @@ public final class ManagementToolCatalog {
         });
         for (JsonNode field : definition.schema().path("required")) {
             if (!arguments.has(field.asText())) throw new IllegalArgumentException("MANAGEMENT_TOOL_ARGUMENT_REQUIRED");
+        }
+        if (name.equals("RELEASE_PREPROD_DEPLOY") && arguments.path("assetType").asText().equals("SKILL")
+                && !dev.a2flow.management.lifecycle.SkillKeyValidator.isValid(arguments.path("assetKey").asText())) {
+            throw new IllegalArgumentException("INVALID_ASSET_KEY");
         }
         if (name.equals("CAPABILITY_DRAFT_UPDATE_METADATA")
                 && !arguments.has("actionCode") && !arguments.has("name") && !arguments.has("description")) {

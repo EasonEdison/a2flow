@@ -141,9 +141,9 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
             if (reply.isSuccess() && dryRun && !dryRunPassed) {
                 outcome = "REJECTED"; code = "MANAGEMENT_CAPABILITY_DRY_RUN_FAILED";
             }
-            if (reply.isSuccess() && (request.getName().equals("CAPABILITY_VALIDATE") || request.getName().equals("RUNTIME_VALIDATE"))
-                    && data.has("valid") && !data.path("valid").asBoolean()) {
-                outcome = "REJECTED"; code = "MANAGEMENT_ASSET_VALIDATION_FAILED";
+            String validationFailure = validationFailure(request.getName(), data);
+            if (reply.isSuccess() && !validationFailure.isEmpty()) {
+                outcome = "REJECTED"; code = validationFailure;
             }
             if (reply.isSuccess() && request.getName().equals("RELEASE_PREPROD_DEPLOY") && !data.path("status").asText().equals("SUCCEEDED")) {
                 String state = data.path("status").asText();
@@ -157,6 +157,24 @@ public final class ManagementToolsService extends ManagementToolsGrpc.Management
             return ToolResult.newBuilder().setRequestId(request.getRequestId()).setStatus(outcome)
                     .setErrorCode(code).setResultJson(ByteString.copyFromUtf8(body.toString())).build();
         } catch (Exception error) { throw new IllegalStateException("MANAGEMENT_TOOL_DISPATCH_FAILED", error); }
+    }
+    private static String validationFailure(String toolName, JsonNode data) {
+        if (toolName.equals("CAPABILITY_VALIDATE") && data.has("valid") && !data.path("valid").asBoolean()) {
+            return "MANAGEMENT_ASSET_VALIDATION_FAILED";
+        }
+        if (toolName.equals("RUNTIME_VALIDATE")) {
+            return switch (data.path("status").asText()) {
+                case "PASSED" -> "";
+                case "PARTIAL" -> "MANAGEMENT_SKILL_PREVIEW_INCOMPLETE";
+                default -> "MANAGEMENT_SKILL_PREVIEW_FAILED";
+            };
+        }
+        if (toolName.equals("WORKFLOW_COMPILED_PLAN_PREVIEW")
+                && (!data.path("errors").isArray() || !data.path("errors").isEmpty()
+                    || !data.path("compiledPlan").isObject())) {
+            return "MANAGEMENT_WORKFLOW_COMPILATION_FAILED";
+        }
+        return "";
     }
     private JsonNode dryRunSummary(JsonNode data, Map<String, String> params, boolean passed) {
         // The existing service persists real evidence. Do not retain its transient request or business response.
