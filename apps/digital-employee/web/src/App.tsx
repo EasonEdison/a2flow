@@ -123,6 +123,8 @@ function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
       const entries = cards.filter(entry => entry.nodeId === node.id);
       const observedNode = { ...node, records: progress.records[node.id] ?? [], historyStatus: progress.historyStatus, ...(entries.length ? { card: undefined } : {}) };
       return <NodeCard key={node.id} node={observedNode} index={index} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); await refresh(); } finally { setBusy(false); } }}>
+        {node.snapshotCardIds?.some(cardId => !entries.some(entry => entry.card.cardId === cardId))
+          ? <p role="status">交互卡片尚未同步，请刷新页面重试。</p> : null}
         <WorkflowTimeline node={observedNode} entries={entries} renderCard={entry => <WorkflowApplications title={node.title} runId={run.id} entries={[entry]} disabled={!['RUNNING', 'WAITING'].includes(run.lifecycle) || !['RUNNING', 'WAITING'].includes(node.status) || busy} onUpdate={card => { cardReadEpoch.current++; setCards(current => current.map(entry => entry.card.cardId === card.cardId ? { ...entry, card } : entry)); }} onSettled={refresh} />} />
       </NodeCard>;
     })}</div>

@@ -1,5 +1,6 @@
 import {
   object,
+  isTemporaryWireCard,
   string,
   list,
   ContractError,
@@ -326,7 +327,9 @@ export function toView(
     nodes: [...wire.nodes]
       .sort((left, right) => left.order - right.order)
       .map((node) => {
-        const cards = wire.cards.filter((card) => card.nodeId === node.nodeId);
+        const nodeCards = wire.cards.filter((card) => card.nodeId === node.nodeId);
+        const snapshotCardIds = nodeCards.filter(isTemporaryWireCard).map(card => card.cardId);
+        const cards = nodeCards.filter((card): card is WireCard => !isTemporaryWireCard(card));
         if (cards.length > 1) {
           throw new ContractError();
         }
@@ -335,6 +338,7 @@ export function toView(
           title: node.title,
           status: status(node.status),
           summary: node.summary ?? undefined,
+          snapshotCardIds,
           records: records[node.nodeId] ?? [],
           card: cards[0]
             ? cardView(cards[0], wire.lifecycle === 'RUNNING' && node.status === 'WAITING')

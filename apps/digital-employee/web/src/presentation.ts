@@ -59,6 +59,7 @@ export type NodeView = {
   output?: string;
   actionResults?: import('./api/contracts').Json[];
   card?: CardView;
+  snapshotCardIds?: string[];
   incomplete?: boolean;
 };
 
