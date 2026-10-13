@@ -168,6 +168,13 @@ body .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous):hover { background:
 .management-content .ant-table-content { max-width: 100%; overflow-x: auto; }
 .management-content :is(.skill-factory-file-tree, .skill-factory-file-editor, .skill-factory-main, .component-center-detail) { min-width: 0; }
 .management-content .workflow-orchestration-page :is(.workflow-workbench-grid, .workflow-release-workbench, .workflow-metadata-editor) { border-color: var(--management-border); border-radius: var(--management-radius); box-shadow: var(--management-shadow); }
+.management-content .workflow-orchestration-page .workflow-page-header {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
 .management-content .workflow-orchestration-page .workflow-workbench-grid { grid-template-columns: 240px minmax(0, 1fr) 320px; }
 .management-content .workflow-orchestration-page .workflow-workbench-grid.detail-only { grid-template-columns: minmax(0, 1fr) 320px; }
 .management-content .workflow-orchestration-page :is(.workflow-catalog-item, .workflow-graph-node, .workflow-summary-node) { background: var(--management-surface); }
@@ -219,6 +226,21 @@ body .ant-drawer-extra .ant-space, .component-center-drawer-footer { flex-wrap: 
   .management-content .skill-factory-tabs button { min-height: 44px; }
   .management-content .component-center-asset-tabs button { flex: 1 1 100%; text-align: left; }
   .management-content :is(.component-authoring-workbench, .capability-authoring-workbench, .a2ui-application-authoring-workbench) { display: flex; flex-direction: column; }
+  .management-content .workflow-orchestration-page .workflow-page-title-block {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    min-width: 0;
+    gap: 16px;
+  }
+  .management-content .workflow-orchestration-page .workflow-page-title-block > div { width: 100%; min-width: 0; }
+  .management-content .workflow-orchestration-page .workflow-page-title-row { flex-wrap: wrap; align-items: center; gap: 8px; }
+  .management-content .workflow-orchestration-page .workflow-page-title-row h3 { flex: none; max-width: 100%; font-size: 22px; }
+  .management-content .workflow-orchestration-page .workflow-metadata-fields { grid-template-columns: minmax(0, 1fr); }
+  .management-content .workflow-orchestration-page .workflow-metadata-fields > label { min-width: 0; }
+  .management-content .workflow-orchestration-page .workflow-metadata-title { flex-wrap: wrap; align-items: flex-start; }
+  .management-content .workflow-orchestration-page .workflow-metadata-title > div { min-width: 0; overflow-wrap: anywhere; }
+  .management-content .workflow-orchestration-page .workflow-metadata-title .ant-space { flex-wrap: wrap; }
   .management-content .workflow-orchestration-page .workflow-canvas-toolbar { flex-wrap: wrap; padding: 16px; }
   .management-content .workflow-orchestration-page .workflow-canvas-scroll { padding: 24px 16px; }
   .management-content :is(.skill-factory-debug-workbench, .skill-factory-form-grid) { grid-template-columns: minmax(0, 1fr); }
