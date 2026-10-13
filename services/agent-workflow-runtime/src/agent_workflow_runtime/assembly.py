@@ -77,6 +77,8 @@ def build_engine(
     system_prompt: str | None = None,
     personal_memory: Any = None,
     tool_alternatives: Mapping[str, Sequence[str]] | None = None,
+    model_middleware: Sequence[AgentMiddleware] = (),
+    allow_tool_free: bool = False,
 ) -> CompiledStateGraph:
     """Build from trusted backend inputs, never request-selected Python internals.
 
@@ -84,6 +86,8 @@ def build_engine(
     unbound mode is retained only for standalone admission/Finalizer experiments.
     """
 
+    if allow_tool_free and (tools or validators or required_tool_names or tool_alternatives):
+        raise ValueError("Tool-free execution cannot declare Tool permissions")
     if node_context is not None and run_lifecycle is None:
         raise ValueError("Node context requires run lifecycle")
     if personal_memory is not None and node_context is None:
@@ -126,10 +130,11 @@ def build_engine(
         middleware=[
             *observation_middleware,
             *memory_middleware,
+            *model_middleware,
             RequiredToolFinalizerAdmission(
                 required_tool_names, terminal_guard, lifecycle=run_lifecycle,
                 node_context=node_context,
-                tool_alternatives=tool_alternatives,
+                tool_alternatives=tool_alternatives, allow_empty=allow_tool_free,
             ),
         ],
     )

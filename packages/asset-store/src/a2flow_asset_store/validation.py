@@ -103,7 +103,7 @@ class BundleValidator:
                 raise AssetError("INVALID_ABILITY")
         elif kind == "WORKFLOW":
             if (set(definition) - {"definitionKey", "displayName",
-                                   "entryNodeId", "nodes"}
+                                   "entryNodeId", "nodes", "summaryPrompt"}
                     or not {"definitionKey", "entryNodeId", "nodes"}
                     <= set(definition)):
                 raise AssetError("UNSUPPORTED_WORKFLOW")
@@ -115,10 +115,23 @@ class BundleValidator:
                 not isinstance(definition["displayName"], str)
                 or not 1 <= len(definition["displayName"]) <= 200):
                 raise AssetError("INVALID_WORKFLOW_DISPLAY_NAME")
+            summary_prompt = definition.get("summaryPrompt")
+            if "summaryPrompt" in definition and (
+                type(summary_prompt) is not str or not summary_prompt.strip()
+                or len(summary_prompt) > 4096
+            ):
+                raise AssetError("INVALID_WORKFLOW_SUMMARY_PROMPT")
             for node in nodes:
-                if (set(node) - {"nodeId", "skillKey", "displayName"}
+                if (set(node) - {"nodeId", "skillKey", "displayName", "nodePrompt"}
                         or not {"nodeId", "skillKey"} <= set(node)):
                     raise AssetError("UNSUPPORTED_WORKFLOW")
+                if "nodePrompt" in node and (
+                    type(node["nodePrompt"]) is not str or not node["nodePrompt"].strip()
+                    or len(node["nodePrompt"]) > 4096
+                ):
+                    raise AssetError("INVALID_WORKFLOW_NODE_PROMPT")
+                if summary_prompt is not None and node["nodeId"] == "__summary__":
+                    raise AssetError("INVALID_WORKFLOW_SUMMARY_NODE")
                 parse_identifier(node["nodeId"])
                 parse_skill_key(node["skillKey"])
                 if node.get("displayName") is not None and (

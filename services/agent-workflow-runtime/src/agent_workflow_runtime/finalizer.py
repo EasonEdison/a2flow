@@ -72,9 +72,10 @@ class RequiredToolFinalizerAdmission(AgentMiddleware):
         terminal_guard: Callable[[Any], None] | None = None, *, lifecycle=None,
         node_context=None,
         tool_alternatives: Mapping[str, Sequence[str]] | None = None,
+        allow_empty: bool = False,
     ) -> None:
         names = tuple(required_tool_names)
-        if not names or any(not isinstance(name, str) or not name for name in names):
+        if (not names and not allow_empty) or any(not isinstance(name, str) or not name for name in names):
             raise ValueError("Finalizer requires non-empty Tool names")
         if len(names) != len(set(names)):
             raise ValueError("Finalizer Tool names must be unique")
