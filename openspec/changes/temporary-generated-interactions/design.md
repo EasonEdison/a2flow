@@ -29,3 +29,8 @@
   The model must produce matching inputSchema fields, bound controls and submit-context fields.
   Strict admission remains authoritative; safe rejection logs contain reason/type/count metadata,
   never generated content or user input. No candidate normalization or retry is performed.
+
+- Card submission automatically starts the next model turn. The server-owned continuation
+  input record is retained for turn identity/deduplication but omitted from the conversation
+  display API; it must not appear as a user-authored chat bubble. Assistant progress and
+  answers remain visible, including after history reload. This also covers existing records.

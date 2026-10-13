@@ -508,7 +508,12 @@ def create_app(
             {"id": str(row["id"]), "role": row["role"],
              "content": row["content"], "refKind": row["ref_kind"],
              "refId": row["ref_id"], "createdAt": _iso(row["created_at"])}
-            for row in hydrated], "unassignedCards": unassigned_cards}
+            for row in hydrated
+            # A submission triggers the next model turn server-side. Its internal
+            # input record is not a message authored by the user.
+            if not (row["role"] == "user"
+                    and row["ref_kind"] == "temporary_interaction")],
+            "unassignedCards": unassigned_cards}
 
     @app.post("/api/conversations/{conversation_id}/messages")
     async def send_message(
