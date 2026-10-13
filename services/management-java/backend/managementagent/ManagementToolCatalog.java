@@ -23,13 +23,13 @@ public final class ManagementToolCatalog {
         add("WORKSPACE_CREATE", true, "Create a Skill database workspace. Choose an unused skillCode; classify only with existing configuration IDs.", "skillCode,skillNameCn,skillDescription", "businessDomain,capabilityDomain,specialistIds,version");
         add("SKILL_UPDATE", true, "Update existing Skill metadata and relation-backed classification.", "skillCode,skillNameCn", "skillDescription,businessDomain,capabilityDomain,specialistIds");
         add("WORKSPACE_TREE", false, "Read Skill workspace file tree.", "workspaceId", "");
-        add("WORKSPACE_FILE_CONTENT", false, "Read an existing workspace file before editing.", "workspaceId,filePath", "");
+        add("WORKSPACE_FILE_CONTENT", false, "Read an existing workspace file before editing; filePath must be a relative path returned by WORKSPACE_TREE, such as SKILL.md. Never pass /large_tool_results or other agent-local/offload paths.", "workspaceId,filePath", "");
         add("WORKSPACE_FILE_SAVE", true, "Save a workspace file through existing file guards. SKILL.md is the Skill entry; do not invent unsupported business tools.", "workspaceId,filePath,content", "");
         add("WORKSPACE_SAVE", true, "Persist current workspace draft through the normal save flow.", "workspaceId", "");
         add("WORKSPACE_DIFF", false, "Read workspace diff.", "workspaceId", "");
         add("SKILL_COMPONENT_CANDIDATE_LIST", false, "Read registered A2UI dependencies available for Skill binding.", "", "workspaceId,keyword");
         add("SKILL_CAPABILITY_CANDIDATE_LIST", false, "Read existing capabilities available for Skill binding; never invent endpoints.", "", "workspaceId,keyword");
-        add("SKILL_BINDINGS_REPLACE", true, "Replace Skill bindings using current candidate identifiers and existing binding contract.", "workspaceId,version,capabilityBindings,componentBindings", "skillCode");
+        add("SKILL_BINDINGS_REPLACE", true, "Replace Skill bindings using current candidate identifiers and existing binding contract. Use EXECUTION_ONLY if the capability resultContract has no presentationComponents; EXECUTION_AND_RENDER requires actual published presentation components on every supported client. Bind an independent A2UI application separately in componentBindings, not by changing the capability bindMode.", "workspaceId,version,capabilityBindings,componentBindings", "skillCode");
         add("RUNTIME_VALIDATE", true, "Validate Skill runtime references and bindings before publication; this does not execute business actions.", "workspaceId", "");
         add("CAPABILITY_LIST", false, "Find current capability drafts.", "", "keyword,page,pageSize,businessDomain,capabilityDomain,specialistId");
         add("CAPABILITY_PUBLISHED_LIST", false, "Read existing published capability contracts and dependencies.", "", "keyword");

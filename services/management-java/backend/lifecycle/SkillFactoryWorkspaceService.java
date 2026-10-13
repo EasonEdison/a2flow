@@ -1626,12 +1626,12 @@ public class SkillFactoryWorkspaceService {
     private Path resolveFile(Path workspace, String filePath) {
         if (StringUtils.isBlank(filePath) || Paths.get(filePath).isAbsolute() || filePath.contains("..")) {
             log.warn("SkillFactory文件路径非法, workspacePath:{}, filePath:{}", workspace, filePath);
-            throw new IllegalArgumentException(ERROR_FILE_PATH_INVALID);
+            throw SkillFactoryValidationException.invalidWorkspaceFilePath();
         }
         Path file = workspace.resolve(filePath).normalize();
         if (!file.startsWith(workspace)) {
             log.warn("SkillFactory文件路径越界, workspacePath:{}, filePath:{}", workspace, filePath);
-            throw new IllegalArgumentException(ERROR_FILE_OUTSIDE_WORKSPACE);
+            throw SkillFactoryValidationException.invalidWorkspaceFilePath();
         }
         return file;
     }
