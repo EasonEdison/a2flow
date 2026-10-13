@@ -207,6 +207,71 @@ def generation_contract() -> dict[str, Any]:
         ),
         "catalogDefinitions": catalog.get("$defs", {}),
         "submitAction": SUBMIT_ACTION,
+        "interactiveExample": {
+            "purpose": "Protocol binding example only, not a fixed business template. "
+            "Choose actual fields and layout from the user's intent and supplied data.",
+            "data": {
+                "options": [
+                    {"key": "first", "label": "示例选项一"},
+                    {"key": "second", "label": "示例选项二"},
+                ]
+            },
+            "candidate": {
+                "title": "输入绑定协议示例",
+                "mode": "INTERACTIVE",
+                "components": [
+                    {"id": "root", "component": "Column", "children": ["choice", "note", "submit"]},
+                    {
+                        "id": "choice",
+                        "component": "ChoicePicker",
+                        "label": "选择一项",
+                        "variant": "mutuallyExclusive",
+                        "options": [
+                            {"label": {"path": "/data/options/0/label"}, "value": "first"},
+                            {"label": {"path": "/data/options/1/label"}, "value": "second"},
+                        ],
+                        "value": {"path": "/inputs/selection"},
+                    },
+                    {
+                        "id": "note",
+                        "component": "TextField",
+                        "label": "补充说明 (可选)",
+                        "variant": "longText",
+                        "value": {"path": "/inputs/note"},
+                    },
+                    {
+                        "id": "submit",
+                        "component": "Button",
+                        "child": "submitLabel",
+                        "action": {
+                            "event": {
+                                "name": SUBMIT_ACTION,
+                                "context": {
+                                    "selection": {"path": "/inputs/selection"},
+                                    "note": {"path": "/inputs/note"},
+                                },
+                            }
+                        },
+                    },
+                    {"id": "submitLabel", "component": "Text", "text": "提交输入"},
+                ],
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "selection": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": ["first", "second"]},
+                            "minItems": 1,
+                            "maxItems": 1,
+                            "uniqueItems": True,
+                        },
+                        "note": {"type": "string", "maxLength": 2000},
+                    },
+                    "required": ["selection"],
+                    "additionalProperties": False,
+                },
+            },
+        },
     }
 
 
@@ -418,7 +483,11 @@ def _admit(candidate: TemporaryCandidate | dict[str, Any], data: dict[str, Any])
             submit = name
     if set(bound) != set(properties):
         _reject_input_binding(
-            "field_control_set", field_count=len(properties), control_count=len(bound)
+            "field_control_set",
+            field_count=len(properties),
+            control_count=len(bound),
+            interactive=value.mode == "INTERACTIVE",
+            submit_present=submit is not None,
         )
     if (value.mode == "INTERACTIVE") != (submit is not None):
         _reject_input_binding(
