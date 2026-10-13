@@ -323,10 +323,23 @@ class WorkflowActions(ActionService):
             or binding["metadata"].get("workflowCompletionRequestId") != action_request_id
             or len(matches) != 1
             or matches[0].status != "SUCCEEDED"
-            or matches[0].business_success is not True
         ):
             raise ActionRejected("INTERACTION_NOT_COMPLETED")
         fact = matches[0]
+        temporary = binding["metadata"].get("definitionSource") == "TEMPORARY"
+        if temporary:
+            # A terminal user submission is a completion fact, not a business RPC outcome.
+            if (
+                binding["card"]["display"].get("protocolProfile") != "a2flow.temporary.v1"
+                or fact.action_name != "submit"
+                or not isinstance(fact.result, dict)
+                or fact.result.get("status") != "SUBMITTED"
+                or not isinstance(fact.result.get("values"), dict)
+                or fact.result != binding["card"].get("result")
+            ):
+                raise ActionRejected("INTERACTION_NOT_COMPLETED")
+        elif fact.business_success is not True:
+            raise ActionRejected("INTERACTION_NOT_COMPLETED")
         key = (self.run.run_id, node_id, interaction_id)
         with self.repository.scope(self.run.owner, self.run.run_id):
             saved = self._get(key, self.run.owner)
