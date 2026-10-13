@@ -53,3 +53,47 @@ Stable published manuscript rendering remains governed by its existing contract.
 
 Source integration, deployment and public-page evidence are recorded separately below
 when completed. Do not interpret the preceding fixture checks as deployed acceptance.
+
+## Deployed revisions and public acceptance
+
+- Initial source integration: `d7da6fc231ca7c6e5a271c7d59fe96853f0beac9`.
+- Public testing exposed a missing event allow-list entry in the native Chat stream
+  bridge. Fixed in `1d155eec70af87f6d3ab6acc4cb00c9068570b81`; older records
+  without milestones are retained as missing evidence, never backfilled with invented stages.
+- Chinese mappings for actual component-tree validation errors were completed in
+  `a457241d2d3c243c2dcc477a78d03952d700f5d3`.
+- Deployed Runtime image: `generation-ux-d7da6fc`; B image: `generation-ux-1d155ee`;
+  employee static build: `generation-ux-a457241`. Unchanged services were not rebuilt.
+  Builds ran locally; old images and deployment plans were retained for rollback.
+- Final checks: both updated Python containers running with zero restarts, public
+  employee route HTTP 200, and source refs synchronized to server origin and GitHub main.
+  Frontend build passed with the existing chunk-size warning.
+
+Authenticated public Chat checks used only fictitious demo people; no person was
+selected and no business Action was submitted:
+
+| Evidence | Observed result |
+| --- | --- |
+| Conversation 36 / message 98, ordinary display request | `render_application`; published people card |
+| Conversation 36 / message 100, explicit natural-language layout request | Generated card displayed. Initial premature generation call was rejected by per-turn admission, then skill admission and generation succeeded. This predates the stream-bridge fix and has no saved milestones. |
+| Conversation 37 / message 102, new layout sample after bridge fix | Actual live generation stage visible; generated tree rejected with `A2UI_GENERATION_TREE_INVALID`. Saved stages: preparing 0, generating 213, validating/loading 4135, failed 4155 ms. Refresh retained the failure and timings. |
+| Conversation 38 / message 104, independent new layout sample | Generated people card displayed. Saved stages: preparing 0, generating 201, validating/loading 3294, saving 3392, completed 3403 ms. Refresh retained the card and all five milestones. |
+| Final static release on existing failed history | Chinese text: “生成的界面未通过校验；未自动重试。” No re-execution was requested. |
+
+The successful restored page had no captured console warnings or errors. The failed
+sample is retained in the evidence; this release does not promise every generated
+layout will pass. The independent successful request was a separate manual acceptance
+sample, not application retry or fallback. All failure handling remained explicit.
+
+Workflow progress in this batch was checked through implementation review and browser
+protocol fixtures, including parallel operation attribution. A new public Workflow run
+was not performed; earlier Workflow acceptance is not counted as evidence for this batch.
+
+## Follow-up outcome
+
+Generation progress, persisted failure explanations and natural-language layout
+selection are delivered within the approved scope. The bounded quality regression is
+complete with three supported cases and the explicit manuscript limitation above.
+This follow-up does not change the earlier release's gates or assert universal generated
+layout readiness. Public model variability, manuscript component support and Workflow
+live validation retain the precise evidence boundaries described here.
