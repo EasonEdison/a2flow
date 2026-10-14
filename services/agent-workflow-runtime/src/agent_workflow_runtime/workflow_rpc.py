@@ -332,6 +332,14 @@ class WorkflowActions(ActionService):
             )
         except BaseException:
             for operation in admissions:
+                with self.lifecycle.repository.run_scope(self.run.owner, self.run.run_id):
+                    persisted = self.lifecycle.repository.get_operation(
+                        self.run.owner, self.run.run_id, operation.operation_id,
+                    )
+                # Validation can roll back the admission transaction before dispatch.
+                # Do not replace that rejection with OPERATION_NOT_FOUND during cleanup.
+                if persisted is None:
+                    continue
                 self.lifecycle.finish(
                     self.run.owner,
                     self.run.run_id,
