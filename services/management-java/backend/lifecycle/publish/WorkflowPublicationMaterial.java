@@ -21,8 +21,8 @@ final class WorkflowPublicationMaterial {
         var graph = payload.getWorkflowGraph();
         if (plan == null || graph == null || !plan.getRouterDefinitions().isEmpty()
                 || !plan.getParallelDefinitions().isEmpty()
-                || plan.getNodeMap().size() < 3 || plan.getNodeMap().size() > 9) {
-            throw failure("WORKFLOW_RUNTIME_REQUIRES_LINEAR_SKILLS");
+                || plan.getNodeMap().size() < 2 || plan.getNodeMap().size() > 9) {
+            throw failure("WORKFLOW_RUNTIME_REQUIRES_LINEAR_BUSINESS_NODES");
         }
         var summary = graph.getSummaryConfig();
         if (summary == null || (summary.getDetailSummaryPrompt() != null
@@ -41,12 +41,18 @@ final class WorkflowPublicationMaterial {
         String next = plan.getEntryNodeCode();
         while (!plan.getSummaryNodeCode().equals(next)) {
             var node = plan.getNodeMap().get(next);
-            if (node == null || node.getNodeType() != WorkflowNodeType.SKILL || !visited.add(next)) {
-                throw failure("WORKFLOW_RUNTIME_REQUIRES_LINEAR_SKILLS");
+            if (node == null || (node.getNodeType() != WorkflowNodeType.SKILL
+                    && node.getNodeType() != WorkflowNodeType.BUSINESS_CAPABILITY) || !visited.add(next)) {
+                throw failure("WORKFLOW_RUNTIME_REQUIRES_LINEAR_BUSINESS_NODES");
             }
             if (node.isAllowSkip()) throw failure("WORKFLOW_RUNTIME_SKIP_UNSUPPORTED");
-            ObjectNode projected = object("nodeId", node.getNodeCode(), "skillKey", node.getSkillCode(),
-                    "nodePrompt", node.getNodePrompt());
+            ObjectNode projected;
+            if (node.getNodeType() == WorkflowNodeType.BUSINESS_CAPABILITY) {
+                projected = object("nodeId", node.getNodeCode(), "type", "BUSINESS_CAPABILITY", "abilityKey", node.getAbilityKey());
+                if (node.getNodePrompt() != null) projected.put("nodePrompt", node.getNodePrompt());
+            } else {
+                projected = object("nodeId", node.getNodeCode(), "skillKey", node.getSkillCode(), "nodePrompt", node.getNodePrompt());
+            }
             if (node.getDisplayName() != null) projected.put("displayName", node.getDisplayName());
             nodes.add(projected);
             next = plan.getFixedSuccessorByNode().get(next);
@@ -55,7 +61,7 @@ final class WorkflowPublicationMaterial {
                 || plan.getFixedSuccessorByNode().size() != visited.size()
                 || plan.getEdgeMap().size() != visited.size()
                 || plan.getFixedSuccessorByNode().containsKey(plan.getSummaryNodeCode())) {
-            throw failure("WORKFLOW_RUNTIME_REQUIRES_LINEAR_SKILLS");
+            throw failure("WORKFLOW_RUNTIME_REQUIRES_LINEAR_BUSINESS_NODES");
         }
         ObjectNode definition = object("definitionKey", payload.getWorkflowCode(),
                 "displayName", payload.getDisplayName(), "entryNodeId", plan.getEntryNodeCode(),
@@ -68,32 +74,36 @@ final class WorkflowPublicationMaterial {
         if (!definition.isObject() || !fields(definition, Set.of("definitionKey", "entryNodeId", "nodes"),
                 Set.of("definitionKey", "entryNodeId", "nodes", "displayName", "summaryPrompt"))
                 || !key.equals(text(definition, "definitionKey")) || !definition.path("nodes").isArray()
-                || definition.path("nodes").size() < 2 || definition.path("nodes").size() > 8) {
+                || definition.path("nodes").size() < 1 || definition.path("nodes").size() > 8) {
             throw failure("UNSUPPORTED_WORKFLOW");
         }
         optionalText(definition, "displayName", 200);
         optionalText(definition, "summaryPrompt", 4096);
         Set<String> nodeIds = new HashSet<>();
         TreeSet<String> skillKeys = new TreeSet<>();
+        TreeSet<String> abilityKeys = new TreeSet<>();
         for (JsonNode node : definition.path("nodes")) {
-            if (!fields(node, Set.of("nodeId", "skillKey"),
-                    Set.of("nodeId", "skillKey", "displayName", "nodePrompt"))) {
+            boolean capability = "BUSINESS_CAPABILITY".equals(node.path("type").asText());
+            if (capability ? !fields(node, Set.of("nodeId", "type", "abilityKey"),
+                    Set.of("nodeId", "type", "abilityKey", "displayName", "nodePrompt"))
+                    : !fields(node, Set.of("nodeId", "skillKey"), Set.of("nodeId", "skillKey", "displayName", "nodePrompt"))) {
                 throw failure("UNSUPPORTED_WORKFLOW");
             }
-            String id = text(node, "nodeId"), skill = text(node, "skillKey");
+            String id = text(node, "nodeId"), reference = text(node, capability ? "abilityKey" : "skillKey");
             if (definition.has("summaryPrompt") && "workflow-summary".equals(id)) {
                 throw failure("INVALID_WORKFLOW_SUMMARY_NODE");
             }
-            PublicationMaterial.key("ID", id); PublicationMaterial.key("SKILL", skill);
+            PublicationMaterial.key("ID", id); PublicationMaterial.key(capability ? "ABILITY" : "SKILL", reference);
             if (!nodeIds.add(id)) throw failure("INVALID_WORKFLOW_ENTRY");
             optionalText(node, "displayName", 200); optionalText(node, "nodePrompt", 4096);
-            skillKeys.add(skill);
+            if (capability) abilityKeys.add(reference); else skillKeys.add(reference);
         }
         if (!text(definition, "entryNodeId").equals(definition.path("nodes").get(0).path("nodeId").asText())) {
             throw failure("INVALID_WORKFLOW_ENTRY");
         }
         ArrayNode dependencies = array();
         skillKeys.forEach(skill -> dependencies.add(object("kind", "SKILL", "key", skill)));
+        abilityKeys.forEach(ability -> dependencies.add(object("kind", "ABILITY", "key", ability)));
         return dependencies;
     }
 

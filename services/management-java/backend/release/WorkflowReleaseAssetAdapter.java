@@ -125,7 +125,7 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
     private static final String LABEL_WORKFLOW_COMPILED = "Workflow强类型编译";
     private static final String LABEL_WORKFLOW_DEPENDENCIES = "Workflow递归依赖准出";
     private static final String MESSAGE_WORKFLOW_COMPILED = "Workflow graph与compiledPlan契约一致";
-    private static final String MESSAGE_DEPENDENCIES_READY = "Workflow全部Skill递归依赖已在目标环境就绪";
+    private static final String MESSAGE_DEPENDENCIES_READY = "Workflow全部Skill及业务能力递归依赖已在目标环境就绪";
     private static final String MESSAGE_SNAPSHOT_VALIDATED =
             "冻结Workflow发布快照及运行材料已验证，环境指针由publish-center-common-v2推进";
     private static final String ERROR_TRUSTED_CONTEXT_REQUIRED = "Workflow发布操作缺少可信operator上下文";
@@ -142,6 +142,9 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
 
     @Resource
     private WorkflowReleasePayloadAdapter payloadAdapter;
+
+    @Resource
+    private dev.a2flow.management.lifecycle.WorkflowCapabilitySelector workflowCapabilities;
 
     @Resource
     private RuntimeAssetPublisher runtimeAssetPublisher;
@@ -260,7 +263,7 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
                         .setRootAssetType(ReleaseAssetType.ORCHESTRATION_CONFIG.name())
                         .setRootAssetKey(assetKey)
                         .setRequestedEnvironment(environment)
-                        .setDependencies(skillDependencies(payload)));
+                        .setDependencies(workflowDependencies(payload, environment)));
         GateResult compiledGate = gate(GATE_WORKFLOW_COMPILED, LABEL_WORKFLOW_COMPILED,
                 true, true, MESSAGE_WORKFLOW_COMPILED);
         GateResult dependencyGate = dependencyGate(report);
@@ -334,6 +337,8 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
         requirePermission(operator, context.getAssetKey(), AssetAction.PUBLISH);
         WorkflowReleasePayload payload = payloadAdapter.requirePayload(
                 context.getSnapshot(), context.getAssetKey());
+        // Re-resolve fixed ability identities in the exact target environment at publication.
+        workflowCapabilities.dependencies(payload.getWorkflowCode(), payloadAdapter.abilityKeys(payload), context.getEnvironment());
         runtimeAssetPublisher.publishWorkflow(payload, context);
         log.info("冻结Workflow发布快照已写入运行材料，环境指针由publish-center-common-v2推进, workflowCode:{}, "
                         + "environment:{}, sourceType:{}, sourceVersion:{}, requestId:{}, operator:{}",
@@ -376,12 +381,14 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
         }
     }
 
-    private List<AssetDependencyReference> skillDependencies(WorkflowReleasePayload payload) {
-        return payloadAdapter.skillCodes(payload).stream()
+    private List<AssetDependencyReference> workflowDependencies(WorkflowReleasePayload payload, ReleaseEnvironment environment) {
+        List<AssetDependencyReference> dependencies = new ArrayList<>(payloadAdapter.skillCodes(payload).stream()
                 .map(skillCode -> new AssetDependencyReference()
                         .setAssetType(AssetDependencyType.SKILL)
                         .setAssetKey(skillCode))
-                .toList();
+                .toList());
+        dependencies.addAll(workflowCapabilities.dependencies(payload.getWorkflowCode(), payloadAdapter.abilityKeys(payload), environment));
+        return List.copyOf(dependencies);
     }
 
     private GateResult dependencyGate(DependencyReleaseReport report) {
@@ -524,6 +531,10 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
             details.put(DETAIL_PROMPT, skillNode.getNodePrompt());
             details.put(DETAIL_ALLOW_SKIP, skillNode.getControlPolicy() == null
                     ? null : skillNode.getControlPolicy().getAllowSkip());
+        } else if (node instanceof dev.a2flow.management.lifecycle.domain.graph.WorkflowBusinessCapabilityNode capability) {
+            details.put("abilityKey", capability.getAbilityKey());
+            details.put(DETAIL_NODE_PROMPT, capability.getNodePrompt());
+            details.put(DETAIL_PROMPT, capability.getNodePrompt());
         } else if (node instanceof WorkflowRouterNode routerNode) {
             details.put(DETAIL_ROUTER_PROMPT, routerNode.getRouterPrompt());
             details.put(DETAIL_PROMPT, routerNode.getRouterPrompt());

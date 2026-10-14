@@ -55,7 +55,7 @@ public final class WorkflowCompiledPlanBuilder {
     private static final String ERROR_CYCLE_DETECTED = "CYCLE_DETECTED";
     private static final String ERROR_ORPHAN_NODE = "ORPHAN_NODE";
     private static final String ERROR_SUMMARY_INVALID = "SUMMARY_INVALID";
-    private static final String ERROR_SKILL_REQUIRED = "SKILL_NODE_REQUIRED";
+    private static final String ERROR_BUSINESS_REQUIRED = "BUSINESS_NODE_REQUIRED";
     private static final String ERROR_NODE_OUTGOING_INVALID = "NODE_OUTGOING_INVALID";
     private static final String ERROR_ROUTER_CANDIDATE_INVALID = "ROUTER_CANDIDATE_INVALID";
     private static final String ERROR_FORK_JOIN_MISMATCH = "FORK_JOIN_MISMATCH";
@@ -161,6 +161,9 @@ public final class WorkflowCompiledPlanBuilder {
             case SKILL:
                 typeMatches = node instanceof WorkflowSkillNode;
                 break;
+            case BUSINESS_CAPABILITY:
+                typeMatches = node instanceof WorkflowBusinessCapabilityNode;
+                break;
             case ROUTER:
                 typeMatches = node instanceof WorkflowRouterNode;
                 break;
@@ -194,6 +197,11 @@ public final class WorkflowCompiledPlanBuilder {
                     basePath + ".controlPolicy", "Skill节点controlPolicy缺失");
             requireNodeField(skill.getControlPolicy().getAllowSkip() != null, node,
                     basePath + ".controlPolicy.allowSkip", "Skill节点allowSkip缺失");
+        } else if (node instanceof WorkflowBusinessCapabilityNode capability) {
+            requireNodeField(!isBlank(capability.getAbilityKey()), node, basePath + ".abilityKey", "业务能力标识缺失");
+            String prompt = capability.getNodePrompt();
+            requireNodeField(prompt == null || (!isBlank(prompt) && prompt.codePointCount(0, prompt.length()) <= 4096),
+                    node, basePath + ".nodePrompt", "节点说明必须非空且不超过4096字符");
         } else if (node instanceof WorkflowRouterNode) {
             WorkflowRouterNode router = (WorkflowRouterNode) node;
             requireNodeField(!isBlank(router.getRouterPrompt()), node,
@@ -374,13 +382,13 @@ public final class WorkflowCompiledPlanBuilder {
                     SUMMARY_NODE_CODE, null, null);
         }
         int summaryCount = 0;
-        int skillCount = 0;
+        int businessCount = 0;
         for (WorkflowNode node : nodes.values()) {
             if (node.getNodeType() == WorkflowNodeType.SUMMARY) {
                 summaryCount++;
             }
-            if (node.getNodeType() == WorkflowNodeType.SKILL) {
-                skillCount++;
+            if (node.getNodeType() == WorkflowNodeType.SKILL || node.getNodeType() == WorkflowNodeType.BUSINESS_CAPABILITY) {
+                businessCount++;
             }
         }
         WorkflowSummaryNode summary = (WorkflowSummaryNode) raw;
@@ -391,8 +399,11 @@ public final class WorkflowCompiledPlanBuilder {
             throw failure(ERROR_SUMMARY_INVALID, "Summary契约不合法", SUMMARY_NODE_CODE,
                     firstEdgeId(graph.outgoing.get(SUMMARY_NODE_CODE)), null);
         }
-        if (skillCount == 0) {
-            throw failure(ERROR_SKILL_REQUIRED, "Workflow至少需要一个Skill节点", null, null, null);
+        if (businessCount == 0) {
+            throw failure(ERROR_BUSINESS_REQUIRED, "Workflow至少需要一个Skill或业务能力节点", null, null, null);
+        }
+        if (businessCount > 8) {
+            throw failure("BUSINESS_NODE_LIMIT_EXCEEDED", "Workflow最多支持8个业务执行节点", null, null, null);
         }
         return summary;
     }
@@ -468,6 +479,7 @@ public final class WorkflowCompiledPlanBuilder {
         for (WorkflowNode node : nodes.values()) {
             List<WorkflowEdge> edges = outgoing.get(node.getNodeCode());
             switch (node.getNodeType()) {
+                case BUSINESS_CAPABILITY:
                 case SKILL:
                 case PARALLEL_JOIN:
                     requireExactlyOneEdgeType(node.getNodeCode(), edges, WorkflowEdgeType.NORMAL);
@@ -520,6 +532,7 @@ public final class WorkflowCompiledPlanBuilder {
         Map<String, String> result = new TreeMap<>();
         for (WorkflowNode node : nodes.values()) {
             if (node.getNodeType() == WorkflowNodeType.SKILL
+                    || node.getNodeType() == WorkflowNodeType.BUSINESS_CAPABILITY
                     || node.getNodeType() == WorkflowNodeType.PARALLEL_JOIN) {
                 result.put(node.getNodeCode(), outgoing.get(node.getNodeCode()).get(0)
                         .getTargetNodeCode());
@@ -774,6 +787,7 @@ public final class WorkflowCompiledPlanBuilder {
         Map<String, CompiledNode> result = new LinkedHashMap<>();
         for (WorkflowNode node : nodes.values()) {
             String skillCode = null;
+            String abilityKey = null;
             String nodePrompt = null;
             boolean allowSkip = false;
             if (node instanceof WorkflowSkillNode) {
@@ -781,12 +795,15 @@ public final class WorkflowCompiledPlanBuilder {
                 skillCode = skill.getSkillCode();
                 nodePrompt = skill.getNodePrompt();
                 allowSkip = skill.getControlPolicy().getAllowSkip().booleanValue();
+            } else if (node instanceof WorkflowBusinessCapabilityNode capability) {
+                abilityKey = capability.getAbilityKey(); nodePrompt = capability.getNodePrompt();
             }
             result.put(node.getNodeCode(), CompiledNode.builder()
                     .nodeCode(node.getNodeCode())
                     .nodeType(node.getNodeType())
                     .displayName(node.getDisplayName())
                     .skillCode(skillCode)
+                    .abilityKey(abilityKey)
                     .nodePrompt(nodePrompt)
                     .allowSkip(allowSkip)
                     .build());
@@ -846,6 +863,9 @@ public final class WorkflowCompiledPlanBuilder {
                 value.put("skillCode", node.getSkillCode());
                 value.put("nodePrompt", node.getNodePrompt());
                 value.put("allowSkip", node.isAllowSkip());
+            } else if (node.getNodeType() == WorkflowNodeType.BUSINESS_CAPABILITY) {
+                value.put("abilityKey", node.getAbilityKey());
+                if (node.getNodePrompt() != null) value.put("nodePrompt", node.getNodePrompt());
             }
             result.put(entry.getKey(), value);
         }

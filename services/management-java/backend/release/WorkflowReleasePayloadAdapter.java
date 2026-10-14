@@ -240,6 +240,19 @@ public class WorkflowReleasePayloadAdapter {
         return new ArrayList<>(skillCodes);
     }
 
+    /** Logical ability keys only; the target environment supplies management draft identities. */
+    public List<String> abilityKeys(WorkflowReleasePayload payload) {
+        if (payload == null || payload.getCompiledPlan() == null) throw new IllegalStateException(ERROR_COMPILED_PLAN_INVALID);
+        Set<String> keys = new TreeSet<>();
+        for (CompiledNode node : payload.getCompiledPlan().getNodeMap().values()) {
+            if (node.getNodeType() == WorkflowNodeType.BUSINESS_CAPABILITY) {
+                if (StringUtils.isBlank(node.getAbilityKey())) throw new IllegalStateException(ERROR_COMPILED_PLAN_INVALID);
+                keys.add(node.getAbilityKey());
+            }
+        }
+        return new ArrayList<>(keys);
+    }
+
     /** 返回稳定 canonical digest，覆盖完整 graph、compiledPlan 和全部发布执行字段。 */
     public String canonicalDigest(WorkflowReleasePayload payload) {
         Map<String, Object> raw = parseMap(JsonSupport.toJSON(payload));
