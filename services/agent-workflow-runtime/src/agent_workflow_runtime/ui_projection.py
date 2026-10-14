@@ -52,10 +52,12 @@ def initial_view(run, definition, effective_versions):
         "title": definition.get("displayName") or run.definition_key,
         "definitionVersion": workflow_versions[0], "createdAt": now(),
         "nodes": [{"nodeId": node["nodeId"],
-                   "title": node.get("displayName") or node["skillKey"],
+                   "title": node.get("displayName") or node.get("skillKey") or node["abilityKey"],
                    "order": index, "status": "PENDING", "summary": None}
                   for index, node in enumerate(definition["nodes"])],
         "cards": [], "outputs": [], "availability": "AVAILABLE",
+        "capabilityNodes": [node["nodeId"] for node in definition["nodes"]
+                            if node.get("type") == "BUSINESS_CAPABILITY"],
     })
 
 
@@ -73,7 +75,7 @@ def change_node(view, node_id, status, summary=None):
 
 
 def put_output(view, node_id, kind, content):
-    if kind not in {"MODEL_TEXT", "ACTION_RESULT"}:
+    if kind not in {"MODEL_TEXT", "ACTION_RESULT", "ABILITY_RESULT"}:
         raise ActionRejected("INVALID_OUTPUT_KIND")
     if kind == "MODEL_TEXT" and type(content) is not str:
         raise ActionRejected("INVALID_OUTPUT_CONTENT")
@@ -84,7 +86,7 @@ def put_output(view, node_id, kind, content):
         if existing != value:
             raise ActionRejected("OUTPUT_BINDING_CONFLICT")
         return view
-    if len(view["outputs"]) >= 9 or not any(n["nodeId"] == node_id for n in view["nodes"]):
+    if len(view["outputs"]) >= 17 or not any(n["nodeId"] == node_id for n in view["nodes"]):
         raise ActionRejected("INVALID_OUTPUT_VIEW")
     view["outputs"].append(value)
     return bounded(view)
@@ -119,6 +121,7 @@ def project_view(document, revision, lifecycle, lifecycle_revision, interactions
         raise ActionRejected("PROJECTION_UNAVAILABLE")
     node_ids = frozenset(node["nodeId"] for node in view["nodes"])
     cards = []
+    capability_nodes = view.pop("capabilityNodes", [])
     for interaction in interactions.values():
         card = _interaction_card(interaction, node_ids)
         scope = interaction.context.invocation_scope
@@ -131,6 +134,9 @@ def project_view(document, revision, lifecycle, lifecycle_revision, interactions
             if node["status"] not in {"SUCCEEDED", "STOPPED"}:
                 node["status"] = "WAITING"
         if card is None and interaction.display_json is not None:
+            continue
+        # Capability input submissions remain in their cards and are not business results.
+        if scope.node_id in capability_nodes:
             continue
         for attempt in interaction.attempts:
             if (attempt.status == "EXECUTED" and attempt.business_success

@@ -94,7 +94,7 @@ def compose_workflow(
     """Compose a bounded sequential asset workflow with native subgraph continuation."""
 
     nodes = definition.get("nodes") if type(definition) is dict else None
-    if (type(nodes) is not list or not 2 <= len(nodes) <= 8
+    if (type(nodes) is not list or not 1 <= len(nodes) <= 8
             or definition.get("entryNodeId") != nodes[0].get("nodeId")
             or definition.get("entryNodeId") != run.entry_node_id
             or len({node.get("nodeId") for node in nodes}) != len(nodes)
@@ -104,8 +104,12 @@ def compose_workflow(
         raise ActionRejected("WORKFLOW_CONTEXT_LOADER_REQUIRED")
     progress = None
     for node in nodes:
-        if (set(node) - {"nodeId", "skillKey", "displayName", "nodePrompt"}
-                or not {"nodeId", "skillKey"} <= set(node)):
+        capability = node.get("type") == "BUSINESS_CAPABILITY"
+        reference = "abilityKey" if capability else "skillKey"
+        allowed = {"nodeId", reference, "displayName", "nodePrompt"}
+        if capability:
+            allowed.add("type")
+        if set(node) - allowed or not {"nodeId", reference} <= set(node):
             raise ActionRejected("UNSUPPORTED_WORKFLOW_DEFINITION")
         agent = agents[node["nodeId"]]
         if not isinstance(agent, RunGraphBinding) or agent.lifecycle is not lifecycle:
@@ -163,7 +167,10 @@ def compose_workflow(
             lifecycle.finish(run.owner, run.run_id, fact.operation_id,
                              {"errorType": type(error).__name__}, status="UNCONFIRMED")
             if lifecycle.read(run.owner, run.run_id).status != "STOPPED":
-                views.node(run.owner, run.run_id, fact.node_id, "UNCONFIRMED")
+                code = error.code if isinstance(error, ActionRejected) else None
+                summary = code if isinstance(code, str) and code.startswith(
+                    ("WORKFLOW_CAPABILITY_", "WORKFLOW_PARAMETERS_")) else None
+                views.node(run.owner, run.run_id, fact.node_id, "UNCONFIRMED", summary)
 
     return RunGraphBinding(
         builder.compile(checkpointer=checkpointer), lifecycle, progress, record_failure,

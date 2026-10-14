@@ -28,7 +28,7 @@ from .chat.rpc_assets import RpcChatAssets
 from .lifecycle import OperationFact, RunLifecycle, RunRecord
 from .models import ActionRejected, ActionRequest, Attempt, Interaction
 from .ports import InteractionRepository
-from .rpc_client import GenerationScope, RpcClient
+from .rpc_client import AbilityDescription, AbilityResult, GenerationScope, RpcClient
 from .rpc_assets import RpcAssetReader
 
 
@@ -186,6 +186,52 @@ class WorkflowAssets(RpcChatAssets):
         }
 
 
+class WorkflowCapabilityAssets(WorkflowAssets):
+    """Direct Workflow dependency authority, without manufacturing Skill admission."""
+
+    def __init__(self, reader: RpcAssetReader, rpc: RpcClient, run: RunRecord,
+                 node_id: str, ability_key: str, store: ChatCardStore) -> None:
+        super().__init__(reader, rpc, run, node_id, "", store)
+        self.ability_key = ability_key
+
+    def capability_record(self) -> dict[str, Any]:
+        from a2flow_asset_store.java_runtime import is_java_asset
+        workflow = self._reader.resolve_asset("WORKFLOW", self.run.definition_key, self.owner)
+        nodes = [node for node in workflow["definition"]["nodes"]
+                 if node["nodeId"] == self.node_id]
+        if (len(nodes) != 1 or nodes[0].get("type") != "BUSINESS_CAPABILITY"
+                or nodes[0].get("abilityKey") != self.ability_key
+                or {"kind": "ABILITY", "key": self.ability_key}
+                not in workflow["dependencies"]):
+            raise ActionRejected("WORKFLOW_CAPABILITY_BINDING_CHANGED")
+        record = self._reader.resolve_asset("ABILITY", self.ability_key, self.owner)
+        if not is_java_asset(record["definition"]):
+            raise ActionRejected("RPC_PUBLICATION_REQUIRED")
+        return cast(dict[str, Any], record)
+
+    def current(self) -> None:
+        self.capability_record()
+
+    def admit_skill(self, skill_key: str) -> dict[str, Any]:
+        raise ActionRejected("SKILL_NOT_BOUND_TO_NODE")
+
+    def capability_description(self) -> AbilityDescription:
+        record = self.capability_record()
+        description = self.rpc.resolve(self.owner, record["definition"]["assetKey"],
+                                       "contract:" + self.control_request_id)
+        if description.action_code != self.ability_key:
+            raise ActionRejected("ABILITY_BINDING_MISMATCH")
+        return description
+
+    def execute_fixed(self, arguments: dict[str, Any], request_id: str) -> AbilityResult:
+        record = self.capability_record()
+        result = self.rpc.execute(self.owner, record["definition"]["assetKey"],
+                                  arguments, request_id)
+        if result.action_code != self.ability_key:
+            raise ActionRejected("ABILITY_BINDING_MISMATCH")
+        return result
+
+
 class WorkflowActions(ActionService):
     """Business execution belongs to RPC; only saved terminal facts resume nodes."""
 
@@ -198,12 +244,17 @@ class WorkflowActions(ActionService):
         rpc: RpcClient,
         run: RunRecord,
         skills: dict[str, str],
+        capabilities: dict[str, str] | None = None,
     ) -> None:
         # The inherited register/completion/finalizer retain native guard semantics.
         super().__init__(repository, None, None, None, lifecycle=lifecycle)
         self.store, self.reader, self.rpc, self.run, self.skills = store, reader, rpc, run, skills
+        self.capabilities = capabilities or {}
 
     def assets(self, node_id: str) -> WorkflowAssets:
+        if node_id in self.capabilities:
+            return WorkflowCapabilityAssets(self.reader, self.rpc, self.run, node_id,
+                                            self.capabilities[node_id], self.store)
         skill = self.skills.get(node_id)
         if skill is None:
             raise ActionRejected("NODE_NOT_FOUND")
@@ -212,7 +263,7 @@ class WorkflowActions(ActionService):
     def list_cards(self) -> list[WorkflowCard]:
         result: list[WorkflowCard] = []
         active = self.lifecycle.read(self.run.owner, self.run.run_id).status == "RUNNING"
-        for node_id in self.skills:
+        for node_id in (*self.skills, *self.capabilities):
             for card in self.store.list(self.run.owner, card_scope(self.run.run_id, node_id)):
                 if not active:
                     card["status"] = "DISPLAY_ONLY"
@@ -445,6 +496,18 @@ class WorkflowActions(ActionService):
         self, assets: WorkflowAssets, data: dict[str, Any], intent: str,
         tool_call_id: str, generator: InteractionGenerator,
     ) -> Command:
+        if isinstance(assets, WorkflowCapabilityAssets):
+            card_id = _card_id(
+                assets.owner, assets.conversation_id, assets.control_request_id, tool_call_id,
+            )
+            # Existing native interrupt replay remains valid at the resource ceiling.
+            if assets.store.read(assets.owner, assets.conversation_id, card_id) is None:
+                card_count = sum(
+                    len(self.store.list(self.run.owner, card_scope(self.run.run_id, node_id)))
+                    for node_id in (*self.skills, *self.capabilities)
+                )
+                if card_count >= 16:
+                    raise ActionRejected("WORKFLOW_PARAMETERS_CARD_LIMIT")
         card = assets.generate_interaction(data, intent, tool_call_id, generator)
         return self._render_card(
             assets, card, card["display"]["applicationKey"], tool_call_id, "generate_interaction",
