@@ -13,6 +13,7 @@ TOOL_CALL = "tool_call"
 TOOL_CALL_STARTED = "tool_call_started"
 TOOL_CALL_FINISHED = "tool_call_finished"
 WORKFLOW_CONFIRM = "workflow_confirm"
+PERSONAL_WORKFLOW_CREATED = "personal_workflow_created"
 DONE = "done"
 ERROR = "error"
 

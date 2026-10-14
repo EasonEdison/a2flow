@@ -51,6 +51,9 @@ from .events import (
     public_event_value,
     public_tool_result,
 )
+from .personal_workflows import (
+    PERSONAL_TOOL_VALIDATORS, PERSONAL_WORKFLOW_PROMPT, build_personal_workflow_tools,
+)
 from .tools import (
     _EMITTER,
     ProposeModelArgs,
@@ -74,6 +77,7 @@ _CHAT_BOOTSTRAP_TOOLS: Final[frozenset[str]] = frozenset({
     "propose_workflow_run",
     "use_skill",
     "generate_interaction",
+    *PERSONAL_TOOL_VALIDATORS,
 })
 _TURN_LOCAL_SKILL_PROMPT: Final[str] = (
     "Skill admission is local to the current turn. Historical use_skill results "
@@ -655,7 +659,7 @@ class ChatLoop:
         reader, control_request_id, emitter=None, system_prompt=None,
         tools=None, history=None, checkpointer=None, thread_id=None,
         history_loader=None, personal_memory=None,
-        chat_assets=None,
+        chat_assets=None, personal_workflows=None,
         observation_loader: ObservationLoader | None = None,
     ):
         require_owner(owner)
@@ -681,6 +685,7 @@ class ChatLoop:
         self._history_loader = history_loader
         self._personal_memory = personal_memory
         self._chat_assets = chat_assets
+        self._personal_workflows = personal_workflows
         self._observation_loader: ObservationLoader | None = observation_loader
         self._history = [
             HumanMessage(content=str(text)) if role == "user"
@@ -713,6 +718,11 @@ class ChatLoop:
                     lambda: self._model_factory.create(self._model_reference, self._owner),
                 ) if self._chat_assets is not None else None,
             )
+            if self._personal_workflows is not None:
+                tools = (*tools, *build_personal_workflow_tools(
+                    self._personal_workflows, self._owner, self._conversation_id,
+                    self._emitter.emit,
+                ))
             from ..personal_memory import PersonalMemoryMiddleware
             middleware = [_ToolExecutionEvents(self._emitter)]
             if self._observation_loader is not None:
@@ -741,12 +751,15 @@ class ChatLoop:
                     "generate_a2ui": GenerateModelArgs.model_validate,
                     "generate_interaction": GenerateInteractionModelArgs.model_validate,
                 })
+            if self._personal_workflows is not None:
+                validators.update(PERSONAL_TOOL_VALIDATORS)
             graph = build_agent(
                 model, tools,
                 validators,
                 harness_profile_key=model.configuration.harness_profile_key,
                 context_schema=TrustedInvocationContext,
-                system_prompt=self._system_prompt,
+                system_prompt=((self._system_prompt or "") + PERSONAL_WORKFLOW_PROMPT
+                               if self._personal_workflows is not None else self._system_prompt),
                 checkpointer=self._checkpointer,
                 middleware=middleware,
             )
