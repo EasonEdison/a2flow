@@ -1,4 +1,5 @@
 import type {
+  WorkflowCapabilityNode,
   WorkflowDraft,
   WorkflowEdge,
   WorkflowHandlingSuggestion,
@@ -23,6 +24,11 @@ export const WORKFLOW_SUMMARY_ADVICE_MAX_COUNT = 10;
 export const WORKFLOW_SUMMARY_ADVICE_TEXT_MAX_LENGTH = 4096;
 export const WORKFLOW_SUMMARY_TITLE = '经营问题结论';
 const UNSUPPORTED_WORKFLOW_SNAPSHOT_MESSAGE = 'Workflow草稿snapshotContractVersion仅支持v2';
+
+export const WORKFLOW_MAX_EXECUTION_NODES = 8;
+export const WORKFLOW_CAPABILITY_PROMPT_MAX_LENGTH = 4096;
+export const isWorkflowExecutionNode = (node?: WorkflowNode): node is WorkflowSkillNode | WorkflowCapabilityNode =>
+  node?.nodeType === 'SKILL' || node?.nodeType === 'BUSINESS_CAPABILITY';
 
 const optionalText = (value?: string): string | undefined =>
   value === undefined ? undefined : value.trim();
@@ -153,6 +159,14 @@ const normalizeNode = (node: WorkflowNode): WorkflowNode => {
         delete normalizedSkill.quickTriggerMessage;
       }
       return normalizedSkill;
+    case 'BUSINESS_CAPABILITY':
+      return {
+        nodeCode: base.nodeCode,
+        displayName: base.displayName,
+        nodeType: 'BUSINESS_CAPABILITY',
+        abilityKey: node.abilityKey?.trim?.(),
+        ...(node.nodePrompt?.trim?.() ? { nodePrompt: node.nodePrompt.trim() } : {}),
+      };
     case 'ROUTER':
       return {
         ...base,
@@ -262,6 +276,21 @@ export const appendWorkflowSkill = (draft: WorkflowDraft): WorkflowDraft => {
   const redirected = redirectSummaryTargets(draft, nodeCode);
   const groups = groupSummaryNodes(redirected.nodes);
   const node = createSkillNode(nodeCode, `Skill 节点 ${skillCount + 1}`);
+  return normalizeWorkflowDraft({
+    ...draft,
+    nodes: [...groups.contentNodes, node, ...groups.summaryNodes],
+    edges: [...redirected.edges, createNormalEdge(nodeCode, SUMMARY_NODE_CODE)],
+  });
+};
+
+export const appendWorkflowCapability = (draft: WorkflowDraft): WorkflowDraft => {
+  const nodeCode = nextCode(draft, 'CAPABILITY');
+  const redirected = redirectSummaryTargets(draft, nodeCode);
+  const groups = groupSummaryNodes(redirected.nodes);
+  const node: WorkflowCapabilityNode = {
+    nodeCode, nodeType: 'BUSINESS_CAPABILITY', abilityKey: '',
+    displayName: `业务能力节点 ${countNodesByType(draft.nodes, 'BUSINESS_CAPABILITY') + 1}`,
+  };
   return normalizeWorkflowDraft({
     ...draft,
     nodes: [...groups.contentNodes, node, ...groups.summaryNodes],
@@ -411,8 +440,7 @@ const workflowMutationTopologyError = (draft: WorkflowDraft): string | undefined
     if (!node.nodeCode || nodeByCode.has(node.nodeCode)) return '节点标识为空或重复';
     nodeByCode.set(node.nodeCode, node);
   }
-  const skillCount = draft?.nodes?.filter?.((node) => node.nodeType === 'SKILL')?.length;
-  if (!skillCount) return 'Workflow 至少保留一个 Skill 节点';
+  if (!draft.nodes.some(isWorkflowExecutionNode)) return 'Workflow 至少保留一个 Skill 或业务能力节点';
   const summaries = draft.nodes?.filter?.((node) => node.nodeType === 'SUMMARY');
   if (summaries.length !== 1 || summaries?.[0]?.nodeCode !== SUMMARY_NODE_CODE) {
     return 'Workflow 必须且只能包含一个 Summary 终点';
@@ -441,7 +469,7 @@ const workflowMutationTopologyError = (draft: WorkflowDraft): string | undefined
       if (nodeOutgoing.length) return 'Summary 必须是零出边终点';
       continue;
     }
-    if (node.nodeType === 'SKILL' || node.nodeType === 'PARALLEL_JOIN') {
+    if (isWorkflowExecutionNode(node) || node.nodeType === 'PARALLEL_JOIN') {
       if (nodeOutgoing.length !== 1 || nodeOutgoing?.[0]?.edgeType !== 'NORMAL') {
         return `${node.nodeCode} 必须只有一个 NORMAL 后继`;
       }
@@ -543,7 +571,7 @@ const workflowMutationTopologyError = (draft: WorkflowDraft): string | undefined
   return undefined;
 };
 
-const swapAdjacentSkillNodes = (
+const swapAdjacentExecutionNodes = (
   draft: WorkflowDraft,
   earlierNodeCode: string,
   laterNodeCode: string,
@@ -569,8 +597,8 @@ const swapAdjacentSkillNodes = (
     const boundaryNode = draft.nodes?.find?.(
       (node) => node.nodeCode === boundaryEdge.sourceNodeCode,
     );
-    if (boundaryEdge.edgeType !== 'NORMAL' || boundaryNode?.nodeType !== 'SKILL') {
-      return mutationFailure('Router、Fork 或 Join 边界内不能调整 Skill 顺序');
+    if (boundaryEdge.edgeType !== 'NORMAL' || !isWorkflowExecutionNode(boundaryNode)) {
+      return mutationFailure('Router、Fork 或 Join 边界内不能调整业务节点顺序');
     }
   }
   if (outgoingLater.length !== 1 || outgoingLater?.[0]?.edgeType !== 'NORMAL') {
@@ -608,7 +636,7 @@ export const moveWorkflowSkillNode = (
   if (sourceError) return mutationFailure(`当前拓扑不可安全调整：${sourceError}`);
   const draft = normalizeWorkflowDraft(source);
   const node = draft.nodes?.find?.((item) => item.nodeCode === nodeCode);
-  if (node?.nodeType !== 'SKILL') return mutationFailure('只有 Skill 节点可以调整顺序');
+  if (!isWorkflowExecutionNode(node)) return mutationFailure('只有 Skill 或业务能力节点可以调整顺序');
 
   const connectingEdges = draft.edges?.filter?.((edge) =>
     direction === 'UP' ? edge.targetNodeCode === nodeCode : edge.sourceNodeCode === nodeCode,
@@ -618,20 +646,20 @@ export const moveWorkflowSkillNode = (
       connectingEdges.length
         ? '节点前驱或后继不唯一，不能调整顺序'
         : direction === 'UP'
-        ? '当前 Skill 已是入口节点'
-        : '当前 Skill 已在该线性片段末端',
+        ? '当前节点已是入口节点'
+        : '当前节点已在该线性片段末端',
     );
   }
   const connectingEdge = connectingEdges?.[0];
   const adjacentNodeCode =
     direction === 'UP' ? connectingEdge.sourceNodeCode : connectingEdge.targetNodeCode;
   const adjacentNode = draft.nodes?.find?.((item) => item.nodeCode === adjacentNodeCode);
-  if (connectingEdge.edgeType !== 'NORMAL' || adjacentNode?.nodeType !== 'SKILL') {
+  if (connectingEdge.edgeType !== 'NORMAL' || !isWorkflowExecutionNode(adjacentNode)) {
     return mutationFailure('不能跨越 Router、Fork、Join 或 Summary 边界调整顺序');
   }
   return direction === 'UP'
-    ? swapAdjacentSkillNodes(draft, adjacentNodeCode, nodeCode, connectingEdge)
-    : swapAdjacentSkillNodes(draft, nodeCode, adjacentNodeCode, connectingEdge);
+    ? swapAdjacentExecutionNodes(draft, adjacentNodeCode, nodeCode, connectingEdge)
+    : swapAdjacentExecutionNodes(draft, nodeCode, adjacentNodeCode, connectingEdge);
 };
 
 export const deleteWorkflowSkillNode = (
@@ -642,9 +670,9 @@ export const deleteWorkflowSkillNode = (
   if (sourceError) return mutationFailure(`当前拓扑不可安全删除：${sourceError}`);
   const draft = normalizeWorkflowDraft(source);
   const node = draft.nodes?.find?.((item) => item.nodeCode === nodeCode);
-  if (node?.nodeType !== 'SKILL') return mutationFailure('只有 Skill 节点可以删除');
-  if (draft?.nodes?.filter?.((item) => item.nodeType === 'SKILL')?.length <= 1) {
-    return mutationFailure('Workflow 至少保留一个 Skill 节点');
+  if (!isWorkflowExecutionNode(node)) return mutationFailure('只有 Skill 或业务能力节点可以删除');
+  if (draft.nodes.filter(isWorkflowExecutionNode).length <= 1) {
+    return mutationFailure('Workflow 至少保留一个 Skill 或业务能力节点');
   }
 
   const incoming = draft.edges?.filter?.((edge) => edge.targetNodeCode === nodeCode);
@@ -654,7 +682,7 @@ export const deleteWorkflowSkillNode = (
   }
   const successorEdge = outgoing?.[0];
   if (successorEdge.edgeType !== 'NORMAL') {
-    return mutationFailure('删除 Skill 只支持唯一 NORMAL 后继');
+    return mutationFailure('删除业务节点只支持唯一 NORMAL 后继');
   }
   const predecessorEdge = incoming?.[0];
   if (predecessorEdge?.edgeType === 'PARALLEL') {
@@ -726,6 +754,10 @@ export const getWorkflowSkillNodeActionState = (
   moveDown: actionAvailability(moveWorkflowSkillNode(draft, nodeCode, 'DOWN')),
   delete: actionAvailability(deleteWorkflowSkillNode(draft, nodeCode)),
 });
+
+export const moveWorkflowExecutionNode = moveWorkflowSkillNode;
+export const deleteWorkflowExecutionNode = deleteWorkflowSkillNode;
+export const getWorkflowExecutionNodeActionState = getWorkflowSkillNodeActionState;
 
 export const serializeWorkflowDraft = (draft: WorkflowDraft): string => {
   const serialized = jsonStringify(normalizeWorkflowDraft(draft));

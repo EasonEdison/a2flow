@@ -58,6 +58,7 @@ export type NodeView = {
   historyStatus?: 'loading' | 'ready' | 'incomplete';
   output?: string;
   actionResults?: import('./api/contracts').Json[];
+  abilityResults?: import('./api/contracts').WireAbilityResult[];
   card?: CardView;
   snapshotCardIds?: string[];
   incomplete?: boolean;

@@ -1,6 +1,7 @@
 import { callSkillFactory, SkillFactoryMethod } from '../api';
 import { jsonParse } from '../shared/safeJson';
 import type {
+  WorkflowCapabilityOption,
   WorkflowCreateResult,
   WorkflowDefinitionView,
   WorkflowDraft,
@@ -66,6 +67,8 @@ export const workflowApi = {
     callSkillFactory<WorkflowSkillOption[]>(SkillFactoryMethod.WORKFLOW_SKILL_CANDIDATES, {
       workflowCode,
     }),
+  capabilities: (workflowCode: string) =>
+    callSkillFactory<WorkflowCapabilityOption[]>(SkillFactoryMethod.WORKFLOW_CAPABILITY_CANDIDATES, { workflowCode }),
   preview: (workflowCode: string, draft: WorkflowDraft) =>
     callSkillFactory<WorkflowGraphPreviewResult>(
       SkillFactoryMethod.WORKFLOW_COMPILED_PLAN_PREVIEW,

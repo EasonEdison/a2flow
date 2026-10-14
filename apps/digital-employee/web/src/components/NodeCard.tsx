@@ -58,6 +58,17 @@ export function NodeCard({
         />
       ) : null}
 
+      {node.abilityResults?.map((result, index) => <section className="workflow-assistant-note" key={`${result.abilityKey}-${index}`}>
+        <h3>业务能力结果</h3>
+        <p><strong>{result.status === 'SUCCEEDED' ? '调用成功' : result.status === 'FAILED' ? '调用失败' : '调用结果未确认'}</strong></p>
+        {result.status !== 'SUCCEEDED' ? <p className="observation-warning">{result.status === 'UNKNOWN' ? '调用结果尚未确认，不会自动重试。' : '业务调用未成功，未自动重试。'}</p> : null}
+        <details className="workflow-debug"><summary>查看能力返回结果</summary>
+          <p>业务能力：{result.abilityKey}</p>
+          {result.errorCode && /^[A-Z][A-Z0-9_]{0,159}$/.test(result.errorCode) ? <p>错误标识：<code>{result.errorCode}</code></p> : null}
+          <pre>{JSON.stringify(result.result, null, 2)}</pre>
+        </details>
+      </section>)}
+
       {hasResult ? (
         <section className="workflow-assistant-note">
           <button

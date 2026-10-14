@@ -1,4 +1,4 @@
-export type WorkflowNodeType = 'SKILL' | 'ROUTER' | 'PARALLEL_FORK' | 'PARALLEL_JOIN' | 'SUMMARY';
+export type WorkflowNodeType = 'SKILL' | 'BUSINESS_CAPABILITY' | 'ROUTER' | 'PARALLEL_FORK' | 'PARALLEL_JOIN' | 'SUMMARY';
 
 export type WorkflowEdgeType = 'NORMAL' | 'ROUTING' | 'PARALLEL';
 
@@ -18,6 +18,19 @@ export interface WorkflowSkillNode extends WorkflowNodeBase {
   quickTriggerMessage?: string;
   nodePrompt: string;
   controlPolicy: WorkflowNodeControlPolicy;
+}
+
+export interface WorkflowCapabilityNode extends WorkflowNodeBase {
+  nodeType: 'BUSINESS_CAPABILITY';
+  abilityKey: string;
+  nodePrompt?: string;
+}
+
+export interface WorkflowCapabilityOption {
+  abilityKey: string;
+  displayName: string;
+  description: string;
+  draftId?: string;
 }
 
 export interface WorkflowRouterCandidate {
@@ -57,6 +70,7 @@ export interface WorkflowSummaryNode extends WorkflowNodeBase {
 
 export type WorkflowNode =
   | WorkflowSkillNode
+  | WorkflowCapabilityNode
   | WorkflowRouterNode
   | WorkflowParallelForkNode
   | WorkflowParallelJoinNode

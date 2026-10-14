@@ -5,9 +5,13 @@ import {
   appendParallelPair,
   appendWorkflowRouter,
   appendWorkflowSkill,
+  appendWorkflowCapability,
+  isWorkflowExecutionNode,
+  WORKFLOW_MAX_EXECUTION_NODES,
   buildWorkflowGraphLayers,
 } from './model';
 import type {
+  WorkflowCapabilityOption,
   WorkflowDraft,
   WorkflowEdge,
   WorkflowNode,
@@ -19,16 +23,18 @@ const { Text } = Typography;
 
 const nodeColor: Record<WorkflowNode['nodeType'], string> = {
   SKILL: 'blue',
+  BUSINESS_CAPABILITY: 'cyan',
   ROUTER: 'purple',
   PARALLEL_FORK: 'orange',
   PARALLEL_JOIN: 'gold',
   SUMMARY: 'green',
 };
 
-const nodeSummary = (node: WorkflowNode, skills: Map<string, WorkflowSkillOption>): string => {
+const nodeSummary = (node: WorkflowNode, skills: Map<string, WorkflowSkillOption>, capabilities: Map<string, WorkflowCapabilityOption>): string => {
   if (node.nodeType === 'SKILL') {
     return skills?.get(node.skillCode)?.displayName || node.skillCode || '尚未选择 Skill';
   }
+  if (node.nodeType === 'BUSINESS_CAPABILITY') return capabilities.get(node.abilityKey)?.displayName || node.abilityKey || '尚未选择业务能力';
   if (node.nodeType === 'ROUTER') return `${node.candidates?.length} 条候选路由`;
   if (node.nodeType === 'PARALLEL_FORK') return `最大并发 ${node.maxParallelism}`;
   if (node.nodeType === 'PARALLEL_JOIN') return `匹配 ${node.matchingNodeCode || '未配置'}`;
@@ -48,6 +54,7 @@ const edgeLabel = (edge: WorkflowEdge): string => {
 interface WorkflowCanvasProps {
   draft?: WorkflowDraft;
   skills: WorkflowSkillOption[];
+  capabilities: WorkflowCapabilityOption[];
   selectedNodeCode?: string;
   issues: WorkflowValidationIssue[];
   readonly: boolean;
@@ -58,6 +65,7 @@ interface WorkflowCanvasProps {
 const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   draft,
   skills,
+  capabilities,
   selectedNodeCode,
   issues,
   readonly,
@@ -69,6 +77,7 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     () => new Map(skills.map((skill) => [skill.skillCode, skill])),
     [skills],
   );
+  const capabilityByKey = useMemo(() => new Map(capabilities.map(item => [item.abilityKey, item])), [capabilities]);
   const issueNodes = useMemo(
     () => new Set(issues?.map((issue) => issue.nodeCode)?.filter?.(Boolean)),
     [issues],
@@ -85,8 +94,10 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       </main>
     );
 
-  const add = (kind: 'SKILL' | 'ROUTER' | 'PARALLEL') => {
+  const add = (kind: 'SKILL' | 'BUSINESS_CAPABILITY' | 'ROUTER' | 'PARALLEL') => {
     if (readonly) return;
+    if ((kind === 'SKILL' || kind === 'BUSINESS_CAPABILITY') && draft.nodes.filter(isWorkflowExecutionNode).length >= WORKFLOW_MAX_EXECUTION_NODES) return;
+    if (kind === 'BUSINESS_CAPABILITY') onChange(appendWorkflowCapability(draft));
     if (kind === 'SKILL') onChange(appendWorkflowSkill(draft));
     if (kind === 'ROUTER') onChange(appendWorkflowRouter(draft));
     if (kind === 'PARALLEL') onChange(appendParallelPair(draft));
@@ -100,8 +111,11 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         </Text>
         {!readonly ? (
           <Space wrap>
-            <Button size="small" icon={<PlusOutlined />} onClick={() => add('SKILL')}>
+            <Button size="small" icon={<PlusOutlined />} disabled={draft.nodes.filter(isWorkflowExecutionNode).length >= WORKFLOW_MAX_EXECUTION_NODES} onClick={() => add('SKILL')}>
               Skill
+            </Button>
+            <Button size="small" icon={<PlusOutlined />} disabled={draft.nodes.filter(isWorkflowExecutionNode).length >= WORKFLOW_MAX_EXECUTION_NODES} onClick={() => add('BUSINESS_CAPABILITY')}>
+              业务能力
             </Button>
             <Button size="small" icon={<PlusOutlined />} onClick={() => add('ROUTER')}>
               Router
@@ -147,14 +161,14 @@ const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
                     <span className="workflow-node-content">
                       <span className="workflow-node-title-row">
                         <strong>{node.displayName || node.nodeCode}</strong>
-                        <Tag color={nodeColor[node.nodeType]}>{node.nodeType}</Tag>
+                        <Tag color={nodeColor[node.nodeType]}>{node.nodeType === 'BUSINESS_CAPABILITY' ? '业务能力' : node.nodeType}</Tag>
                         {node.nodeType === 'SKILL' ? (
                           node.controlPolicy?.allowSkip ? (
                             <Tag>允许跳过</Tag>
                           ) : null
                         ) : null}
                       </span>
-                      <span className="workflow-node-prompt">{nodeSummary(node, skillByCode)}</span>
+                      <span className="workflow-node-prompt">{nodeSummary(node, skillByCode, capabilityByKey)}</span>
                       {outgoing.length ? (
                         <span className="workflow-edge-list">
                           {outgoing.map((edge) => (
