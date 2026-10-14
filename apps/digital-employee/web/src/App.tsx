@@ -302,9 +302,29 @@ function WorkflowCenter({ onSchedule }: { onSchedule: (workflowKey: string) => v
   const [runs, setRuns] = useState<RunItem[]>([]);
   const [selected, setSelected] = useState('');
   const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [starting, setStarting] = useState('');
+  const [startError, setStartError] = useState('');
+  const startInFlight = useRef(false);
+  const startRun = async (workflowKey: string) => {
+    if (startInFlight.current) return;
+    startInFlight.current = true; setStarting(workflowKey); setStartError('');
+    try {
+      const result = await productApi.startRun(workflowKey, inputs[workflowKey] ?? '');
+      setSelected(result.runId);
+    } catch {
+      setStartError('工作流启动状态未确认，请查看我的运行记录；未自动重试，请勿重复启动。');
+    } finally {
+      startInFlight.current = false; setStarting('');
+    }
+  };
+  const viewRunsAfterStart = async () => {
+    setTab('runs');
+    try { setRuns((await productApi.runs()).items); }
+    catch { setStartError('运行记录暂未同步，请刷新页面查看；请勿重复启动同一工作流。'); }
+  };
   useEffect(() => { void Promise.all([productApi.workflows(), productApi.runs()]).then(([catalog, mine]) => { setWorkflows(catalog.items); setRuns(mine.items); }); }, []);
   if (selected) return <RunDetail runId={selected} onBack={() => setSelected('')} />;
-  return <section><div className="page-title"><h1>工作流中心</h1><p>选择工作流立即运行，或查看我的运行记录。</p></div><div className="tabs" role="tablist"><button role="tab" aria-selected={tab === 'catalog'} onClick={() => setTab('catalog')}>可执行工作流</button><button role="tab" aria-selected={tab === 'runs'} onClick={() => setTab('runs')}>我的运行</button></div>{tab === 'catalog' ? <div className="catalog-grid">{workflows.map((workflow) => <article className="workflow-catalog-card" key={workflow.key}><span className="card-icon"><Icon name="workflow" /></span><h2>{workflow.name}</h2><p>{workflow.description}</p><label htmlFor={`input-${workflow.key}`}>执行输入</label><textarea id={`input-${workflow.key}`} placeholder={workflow.inputHint} value={inputs[workflow.key] ?? ''} onChange={(event) => setInputs((value) => ({ ...value, [workflow.key]: event.target.value }))} /><div><button className="primary" onClick={async () => setSelected((await productApi.startRun(workflow.key, inputs[workflow.key] ?? '')).runId)}>立即运行</button><button className="secondary" onClick={() => onSchedule(workflow.key)}>设置定时</button></div></article>)}</div> : <div className="run-list">{runs.map((run) => <button key={run.id} onClick={() => setSelected(run.id)}><div><strong>{run.title}</strong><p>{run.input}</p></div><span className={`status ${run.status.toLowerCase()}`}>{runLabels[run.status] ?? run.status}</span></button>)}</div>}</section>;
+  return <section><div className="page-title"><h1>工作流中心</h1><p>选择工作流立即运行，或查看我的运行记录。</p></div>{startError ? <div><p className="inline-error" role="alert">{startError}</p><button className="secondary" onClick={() => void viewRunsAfterStart()}>查看我的运行</button></div> : null}<div className="tabs" role="tablist"><button role="tab" aria-selected={tab === 'catalog'} onClick={() => setTab('catalog')}>可执行工作流</button><button role="tab" aria-selected={tab === 'runs'} onClick={() => setTab('runs')}>我的运行</button></div>{tab === 'catalog' ? <div className="catalog-grid">{workflows.map((workflow) => <article className="workflow-catalog-card" key={workflow.key}><span className="card-icon"><Icon name="workflow" /></span><h2>{workflow.name}</h2><p>{workflow.description}</p><label htmlFor={`input-${workflow.key}`}>执行输入</label><textarea id={`input-${workflow.key}`} placeholder={workflow.inputHint} value={inputs[workflow.key] ?? ''} onChange={(event) => setInputs((value) => ({ ...value, [workflow.key]: event.target.value }))} /><div><button className="primary" disabled={Boolean(starting)} onClick={() => void startRun(workflow.key)}>{starting === workflow.key ? '正在启动…' : '立即运行'}</button><button className="secondary" onClick={() => onSchedule(workflow.key)}>设置定时</button></div></article>)}</div> : <div className="run-list">{runs.map((run) => <button key={run.id} onClick={() => setSelected(run.id)}><div><strong>{run.title}</strong><p>{run.input}</p></div><span className={`status ${run.status.toLowerCase()}`}>{runLabels[run.status] ?? run.status}</span></button>)}</div>}</section>;
 }
 
 function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
