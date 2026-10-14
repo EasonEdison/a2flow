@@ -116,7 +116,9 @@ def create_app_from_environment():
             + "\n".join(catalog_lines) + "\n"
             "当用户想执行工作流（例如活动策划、活动套餐）时，必须直接调用 "
             "propose_workflow_run 工具发起确认提案，不要只用文字描述；"
-            "用户确认前绝不启动运行。其他任务可用 use_skill 调用技能。"
+            "用户确认前绝不启动运行。用户要求创建或保存工作流时，使用个人工作流工具，"
+            "创建成功只登记到本人的工作流目录，不调用 propose_workflow_run 或启动运行。"
+            "其他任务可用 use_skill 调用技能。"
         )
 
     def _password_dsn():
@@ -133,6 +135,11 @@ def create_app_from_environment():
         options="-c statement_timeout=10000 -c lock_timeout=5000",
         application_name="a2flow-b-side-api",
     )
+    from a2flow_asset_store.personal_workflows import PersonalWorkflowReader, PersonalWorkflowRepository
+    personal_workflows = PersonalWorkflowRepository(
+        connection_factory, namespace=config.namespace, environment=config.environment, validator=validator,
+    )
+    reader = PersonalWorkflowReader(reader, personal_workflows)
     from agent_workflow_runtime.chat.persistence import ConversationStore
     from langchain_core.messages import AIMessage, HumanMessage
     import json
@@ -205,6 +212,7 @@ def create_app_from_environment():
         conversation_store=ConversationStore(conninfo),
         history_loader=legacy_history,
         personal_memory=personal_memory,
+        personal_workflows=reader,
         assets_factory=assets_factory,
         observation_loader=card_store.list_observations,
     )

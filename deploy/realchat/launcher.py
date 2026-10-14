@@ -44,6 +44,24 @@ def initialize(dsn):
     print("PRT schemas and reviewed prerequisite assets initialized")
 
 
+def personal_workflow_repository(dsn, validator):
+    import psycopg
+    from psycopg.rows import dict_row
+    from a2flow_asset_store.personal_workflows import PersonalWorkflowRepository
+    return PersonalWorkflowRepository(
+        lambda: psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5,
+                               options="-c statement_timeout=10000 -c lock_timeout=5000"),
+        namespace=os.environ["A2FLOW_ASSET_NAMESPACE"], environment="PRT", validator=validator,
+    )
+
+
+def initialize_personal_workflows(dsn):
+    """Explicit schema-only migration; never re-seed or change shared assets."""
+    from deploy.assets import bundle_validator
+    personal_workflow_repository(dsn, bundle_validator()).install()
+    print("Personal workflow schema initialized")
+
+
 def bside():
     from deploy.attended.bside_app import create_app_from_environment
     from fastapi.staticfiles import StaticFiles
@@ -80,12 +98,14 @@ def runtime():
         return SecretStr(os.environ["DEEPSEEK_API_KEY"])
 
     dsn = os.environ["A2FLOW_DATABASE_URL"]
+    validator = bundle_validator()
     return RpcWorkflowHost(
         rpc=RpcClient.from_environment(os.environ),
         completion_observer=completed_card, event_sink=SchedulerEventSink(dsn),
         conninfo=dsn, database=os.environ["A2FLOW_DATABASE_NAME"],
         environment="PRT", namespace=os.environ["A2FLOW_ASSET_NAMESPACE"],
-        bundle_validator=bundle_validator(),
+        bundle_validator=validator,
+        personal_workflows=personal_workflow_repository(dsn, validator),
         application_validator=application_validator,
         application_data_validator=application_data_validator,
         operation_specs=operations(),
@@ -101,11 +121,14 @@ def main():
         "runtime": "deploy.realchat.launcher:runtime",
     }
     command = sys.argv[1] if len(sys.argv) == 2 else ""
-    if command not in {*commands, "initialize"}:
+    if command not in {*commands, "initialize", "initialize-personal-workflows"}:
         raise RuntimeError("INVALID_REALCHAT_COMMAND")
     dsn = configure()
     if command == "initialize":
         initialize(dsn)
+        return
+    if command == "initialize-personal-workflows":
+        initialize_personal_workflows(dsn)
         return
     raw_port = os.environ["A2FLOW_LISTEN_PORT"]
     port = int(raw_port)

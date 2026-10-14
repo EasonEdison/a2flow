@@ -602,8 +602,7 @@ def create_app(
         return run_id
 
     def _resolve_inputs(workflow_key: str, user_id: int, raw_input):
-        if not isinstance(raw_input, str):
-            return raw_input
+        # Every start, including object inputs, must resolve the caller's catalog.
         # Scheduled runs carry a plain prompt; wrap it into the workflow's
         # single required string property when it has one.
         entry = next(
@@ -613,6 +612,8 @@ def create_app(
         )
         if entry is None:
             raise BsideError("WORKFLOW_NOT_FOUND", 404)
+        if not isinstance(raw_input, str):
+            return raw_input
         schema = entry.get("inputSchema") or {}
         required = schema.get("required") or []
         properties = schema.get("properties") or {}
@@ -685,6 +686,8 @@ def create_app(
         _require_internal(request)
         if body.environment != environment:
             raise BsideError("ENVIRONMENT_MISMATCH", 400)
+        if body.workflowKey.startswith("personal-wf-"):
+            raise BsideError("PERSONAL_WORKFLOW_SCHEDULING_UNSUPPORTED", 400)
         inputs = _resolve_inputs(body.workflowKey, body.userId, body.input)
         # Commit ownership before calling Runtime. A timeout must not cause a
         # new control ID; Runtime's durable allocation deduplicates this ID.
@@ -933,6 +936,8 @@ def create_app(
     async def create_schedule(
             body: ScheduleCreate,
             identity: RequestIdentity = Depends(identity)):
+        if body.workflowKey.startswith("personal-wf-"):
+            raise BsideError("PERSONAL_WORKFLOW_SCHEDULING_UNSUPPORTED", 400)
         timezone = body.timezone or "Asia/Shanghai"
         next_at = _computed_next(body.ruleType, body.ruleJson.model_dump(), timezone)
         row = schedules.create(
@@ -991,6 +996,8 @@ def create_app(
         row = schedules.get(schedule_id)
         if row is None or row["user_id"] != identity.userId:
             raise BsideError("NOT_FOUND", 404)
+        if row["workflow_key"].startswith("personal-wf-"):
+            raise BsideError("PERSONAL_WORKFLOW_SCHEDULING_UNSUPPORTED", 400)
         fields = {}
         if body.enabled is not None:
             fields["enabled"] = body.enabled
