@@ -24,6 +24,13 @@ Respond in the user's language; for Chinese requests, explain progress and resul
 When the user requests creating their own Workflow, query_workflow_candidates to find
 currently published Skills or business capabilities, then create_personal_workflow.
 Create only a sequential configuration of 1-8 business nodes and one final summary.
+Prefer the fewest nodes needed for the user's goal. Read each Skill's instructions and
+declaredDependencies: those dependencies describe available capabilities, not a guarantee
+that every capability will execute. If a Skill already completes the same goal for the
+same inputs and time, reuse its saved result downstream instead of adding another query
+for that goal. The final summary uses existing results; do not add a query just to summarize.
+Different inputs, a different time, or an explicit user request may require repeating an
+ability. Do not remove such steps merely because their ability keys match.
 A Skill node preserves that Skill's instructions and tools; a BUSINESS_CAPABILITY node
 invokes exactly one registered ability and collects missing input at runtime.
 Never invent asset keys, create shared assets, change publications, or run business tools
@@ -152,6 +159,7 @@ def build_personal_workflow_tools(
             for row in page:
                 key = row["key"]
                 if kind == "SKILL":
+                    record = reader.base_reader.resolve_asset(kind, key, owner)
                     material = reader.base_reader.load_skill(key, owner)
                     verified = validate_package_entries(
                         (material.instruction_entry, *material.resource_entries)
@@ -162,6 +170,10 @@ def build_personal_workflow_tools(
                             "key": key,
                             "instructions": verified[0].text,
                             "requiredToolNames": list(material.required_tool_names),
+                            "declaredDependencies": [
+                                {"kind": dependency["kind"], "key": dependency["key"]}
+                                for dependency in record["dependencies"]
+                            ],
                         }
                     )
                 else:
@@ -214,6 +226,11 @@ def build_personal_workflow_tools(
         Query current published candidates first. Supply 1-8 sequential Skill/capability
         nodes and a final summary prompt. Runtime derives business inputs from the task
         and predecessor results and asks for missing input. Do not invent asset keys.
+        Choose the fewest necessary nodes based on Skill instructions and declared
+        dependencies (available capabilities, not guaranteed execution). Reuse a Skill's
+        result when it already satisfies the same goal, inputs and time; the final summary
+        needs no extra query. Repeated abilities remain valid for different inputs/times
+        or when explicitly requested by the user.
         Saving is immutable, scoped to this user/environment and idempotent for this call.
         An unknown save outcome must be explained, never automatically retried.
         """
