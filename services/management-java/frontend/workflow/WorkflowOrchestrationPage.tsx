@@ -22,6 +22,7 @@ import type {
   WorkflowDefinitionView,
   WorkflowDraft,
   WorkflowSkillOption,
+  WorkflowCapabilityOption,
   WorkflowValidationIssue,
 } from './types';
 import './workflowOrchestration.less';
@@ -48,6 +49,7 @@ const WorkflowOrchestrationPage: React.FC = () => {
   const [definition, setDefinition] = useState<WorkflowDefinitionView>();
   const [draft, setDraft] = useState<WorkflowDraft>();
   const [draftRevision, setDraftRevision] = useState(0);
+  const [capabilities, setCapabilities] = useState<WorkflowCapabilityOption[]>([]);
   const [skills, setSkills] = useState<WorkflowSkillOption[]>([]);
   const [specialists, setSpecialists] = useState<SkillFactorySpecialistOption[]>([]);
   const [specialistsLoaded, setSpecialistsLoaded] = useState(false);
@@ -67,10 +69,11 @@ const WorkflowOrchestrationPage: React.FC = () => {
     setDetailLoading(true);
     setErrorText('');
     try {
-      const [nextDefinition, draftDetail, candidates] = await Promise.all([
+      const [nextDefinition, draftDetail, candidates, capabilityCandidates] = await Promise.all([
         workflowApi.detail(code),
         workflowApi.draft(code),
         workflowApi.skills(code),
+        workflowApi.capabilities(code),
       ]);
       if (nextDefinition.workflowCode !== code || draftDetail.draft?.workflowCode !== code) {
         throw new Error('Workflow 详情与路由身份不一致');
@@ -80,6 +83,7 @@ const WorkflowOrchestrationPage: React.FC = () => {
       setDraft(nextDraft);
       setDraftRevision(draftDetail.draftRevision);
       setSkills(candidates);
+      setCapabilities(capabilityCandidates);
       setSelectedNodeCode(nextDraft.nodes?.[0]?.nodeCode);
       setIssues([]);
       setDraftDirty(false);
@@ -88,6 +92,7 @@ const WorkflowOrchestrationPage: React.FC = () => {
       setDefinition(undefined);
       setDraft(undefined);
       setSkills([]);
+      setCapabilities([]);
       setErrorText(errorMessage(cause, 'Workflow 详情加载失败'));
     } finally {
       setDetailLoading(false);
@@ -373,6 +378,7 @@ const WorkflowOrchestrationPage: React.FC = () => {
               <WorkflowCanvas
                 draft={draft}
                 skills={skills}
+                capabilities={capabilities}
                 selectedNodeCode={selectedNodeCode}
                 issues={issues}
                 readonly={readonly}
@@ -384,6 +390,7 @@ const WorkflowOrchestrationPage: React.FC = () => {
                 selectedNodeCode={selectedNodeCode}
                 specialistCode={definition?.specialistCode}
                 skills={skills}
+                capabilities={capabilities}
                 issues={issues}
                 readonly={readonly}
                 onChange={handleDraftChange}

@@ -13,12 +13,16 @@ import {
 } from 'antd';
 import {
   deleteWorkflowSkillNode,
+  deleteWorkflowExecutionNode,
+  moveWorkflowExecutionNode,
+  getWorkflowExecutionNodeActionState,
   getWorkflowSkillNodeActionState,
   moveWorkflowSkillNode,
   updateWorkflowEdge,
   updateWorkflowNode,
   updateWorkflowSkillSelection,
   WORKFLOW_DETAIL_SUMMARY_PROMPT_MAX_LENGTH,
+  WORKFLOW_CAPABILITY_PROMPT_MAX_LENGTH,
   WORKFLOW_QUICK_TRIGGER_MESSAGE_MAX_LENGTH,
   WORKFLOW_SUMMARY_ADVICE_MAX_COUNT,
   WORKFLOW_SUMMARY_ADVICE_TEXT_MAX_LENGTH,
@@ -28,6 +32,8 @@ import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined } from '@ant-design/
 import RouterNodeInspector from './WorkflowRouterInspector';
 import ParallelForkInspector from './WorkflowParallelInspector';
 import type {
+  WorkflowCapabilityNode,
+  WorkflowCapabilityOption,
   WorkflowDraft,
   WorkflowEdge,
   WorkflowHandlingSuggestion,
@@ -45,6 +51,7 @@ interface WorkflowInspectorProps {
   selectedNodeCode?: string;
   specialistCode?: string;
   skills: WorkflowSkillOption[];
+  capabilities: WorkflowCapabilityOption[];
   issues: WorkflowValidationIssue[];
   readonly: boolean;
   onChange: (draft: WorkflowDraft) => void;
@@ -60,6 +67,7 @@ interface NodePanelProps {
 
 const nodeTitle: Record<WorkflowNode['nodeType'], string> = {
   SKILL: 'Skill 节点配置',
+  BUSINESS_CAPABILITY: '业务能力节点配置',
   ROUTER: 'Router 节点配置',
   PARALLEL_FORK: 'Parallel Fork 配置',
   PARALLEL_JOIN: 'Parallel Join 配置',
@@ -129,6 +137,46 @@ const NormalSuccessorField: React.FC<NodePanelProps> = ({
       />
     </label>
   );
+};
+
+const CapabilityNodeInspector: React.FC<NodePanelProps & {
+  node: WorkflowCapabilityNode;
+  capabilities: WorkflowCapabilityOption[];
+}> = ({ draft, node, capabilities, readonly, targetOptions, onChange }) => {
+  const selected = capabilities.find(item => item.abilityKey === node.abilityKey);
+  const actions = useMemo(() => getWorkflowExecutionNodeActionState(draft, node.nodeCode), [draft, node.nodeCode]);
+  const update = (patch: Partial<WorkflowCapabilityNode>) => changeNode(draft, node.nodeCode, readonly, onChange,
+    current => current.nodeType === 'BUSINESS_CAPABILITY' ? { ...current, ...patch } : current);
+  const move = (direction: 'UP' | 'DOWN') => {
+    if (readonly) return;
+    const result = moveWorkflowExecutionNode(draft, node.nodeCode, direction);
+    if (result.ok) onChange(result.draft); else message.warning(result.reason);
+  };
+  const remove = () => {
+    if (readonly || !actions.delete.enabled) return;
+    Modal.confirm({ title: '删除业务能力节点', content: `确认删除“${node.displayName || node.nodeCode}”并重新连接前后节点？`,
+      okText: '确认删除', cancelText: '取消', okButtonProps: { danger: true }, onOk: () => {
+        const result = deleteWorkflowExecutionNode(draft, node.nodeCode);
+        if (result.ok) onChange(result.draft); else message.warning(result.reason);
+      } });
+  };
+  return <>
+    <NodeNameField {...{ draft, node, readonly, targetOptions, onChange }} />
+    <Space wrap>
+      <Button size="small" icon={<ArrowUpOutlined />} disabled={readonly || !actions.moveUp.enabled} title={actions.moveUp.reason} onClick={() => move('UP')}>上移</Button>
+      <Button size="small" icon={<ArrowDownOutlined />} disabled={readonly || !actions.moveDown.enabled} title={actions.moveDown.reason} onClick={() => move('DOWN')}>下移</Button>
+      <Button size="small" danger icon={<DeleteOutlined />} disabled={readonly || !actions.delete.enabled} title={actions.delete.reason} onClick={remove}>删除</Button>
+    </Space>
+    <label><span>业务能力</span><Select disabled={readonly} showSearch optionFilterProp="label" value={node.abilityKey || undefined}
+      placeholder="选择已注册业务能力" options={capabilities.map(item => ({ value: item.abilityKey, label: `${item.displayName} · ${item.abilityKey}` }))}
+      onChange={value => update({ abilityKey: value })} /></label>
+    {selected ? <Text type="secondary">{selected.description || '暂无描述'}</Text> : null}
+    {node.abilityKey && !selected ? <Alert type="warning" showIcon message="当前能力不在可用目录中，请检查发布与访问权限。" /> : null}
+    <label><span>节点说明（可选）</span><TextArea disabled={readonly} rows={7} maxLength={WORKFLOW_CAPABILITY_PROMPT_MAX_LENGTH} value={node.nodePrompt || ''}
+      placeholder="补充本步骤的目标或注意事项" onChange={event => update({ nodePrompt: event.target.value })} /></label>
+    <NormalSuccessorField {...{ draft, node, readonly, targetOptions, onChange }} />
+    <Alert type="info" showIcon message="节点固定调用所选能力。运行时根据任务和前序结果准备参数，缺少必要信息时会请求补充。" />
+  </>;
 };
 
 const SkillNodeInspector: React.FC<
@@ -443,6 +491,7 @@ const WorkflowInspector: React.FC<WorkflowInspectorProps> = ({
   selectedNodeCode,
   specialistCode,
   skills,
+  capabilities,
   issues,
   readonly,
   onChange,
@@ -484,6 +533,7 @@ const WorkflowInspector: React.FC<WorkflowInspectorProps> = ({
         {node.nodeType === 'SKILL' ? (
           <SkillNodeInspector {...props} node={node} skills={skills} skillLabel={skillLabel} />
         ) : null}
+        {node.nodeType === 'BUSINESS_CAPABILITY' ? <CapabilityNodeInspector {...props} node={node} capabilities={capabilities} /> : null}
         {node.nodeType === 'ROUTER' ? <RouterNodeInspector {...props} node={node} /> : null}
         {node.nodeType === 'PARALLEL_FORK' ? (
           <ParallelForkInspector {...props} node={node} />

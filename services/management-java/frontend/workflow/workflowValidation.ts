@@ -1,5 +1,8 @@
 import {
   normalizeWorkflowDraft,
+  isWorkflowExecutionNode,
+  WORKFLOW_MAX_EXECUTION_NODES,
+  WORKFLOW_CAPABILITY_PROMPT_MAX_LENGTH,
   WORKFLOW_DETAIL_SUMMARY_PROMPT_MAX_LENGTH,
   WORKFLOW_QUICK_TRIGGER_MESSAGE_MAX_LENGTH,
   WORKFLOW_SUMMARY_ADVICE_MAX_COUNT,
@@ -152,7 +155,17 @@ export const validateWorkflowDraft = (source: WorkflowDraft): WorkflowValidation
     ...duplicateIssues(scopedBranchValues(draft)),
     ...nestedForkIssues(draft),
   ];
+  const executionCount = draft.nodes.filter(isWorkflowExecutionNode).length;
+  if (executionCount < 1 || executionCount > WORKFLOW_MAX_EXECUTION_NODES) {
+    issues.push({ path: 'nodes', message: `Workflow 必须包含 1–${WORKFLOW_MAX_EXECUTION_NODES} 个 Skill 或业务能力节点` });
+  }
   draft.nodes?.forEach?.((node) => {
+    if (node.nodeType === 'BUSINESS_CAPABILITY' && !node.abilityKey) {
+      issues.push({ path: `nodes.${node.nodeCode}.abilityKey`, nodeCode: node.nodeCode, message: '请选择业务能力' });
+    }
+    if (node.nodeType === 'BUSINESS_CAPABILITY' && (node.nodePrompt?.length || 0) > WORKFLOW_CAPABILITY_PROMPT_MAX_LENGTH) {
+      issues.push({ path: `nodes.${node.nodeCode}.nodePrompt`, nodeCode: node.nodeCode, message: `节点说明不能超过 ${WORKFLOW_CAPABILITY_PROMPT_MAX_LENGTH} 个字符` });
+    }
     if (node.nodeType === 'SKILL' && !node.skillCode) {
       issues.push({
         path: `nodes.${node.nodeCode}.skillCode`,

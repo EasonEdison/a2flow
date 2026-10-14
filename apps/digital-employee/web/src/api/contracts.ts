@@ -48,6 +48,12 @@ export type TemporaryWireCard = Pick<WireCard, 'cardId' | 'nodeId' | 'interactio
 export function isTemporaryWireCard(card: WireCard | TemporaryWireCard): card is TemporaryWireCard {
   return card.protocolProfile === TEMPORARY_PROFILE;
 }
+export type WireAbilityResult = {
+  abilityKey: string;
+  status: 'SUCCEEDED' | 'FAILED' | 'UNKNOWN';
+  result: Json;
+  errorCode: string | null;
+};
 export type WireView = {
   schemaVersion: 'mvp08.1';
   runId: string;
@@ -60,7 +66,8 @@ export type WireView = {
   observedAt: string;
   nodes: WireNode[];
   cards: (WireCard | TemporaryWireCard)[];
-  outputs: { nodeId: string; kind: 'MODEL_TEXT' | 'ACTION_RESULT'; content: Json }[];
+  outputs: ({ nodeId: string; kind: 'MODEL_TEXT' | 'ACTION_RESULT'; content: Json }
+    | { nodeId: string; kind: 'ABILITY_RESULT'; content: WireAbilityResult })[];
   availability: 'AVAILABLE' | 'UNCONFIRMED';
 };
 export type ProgressRecord = {
@@ -221,14 +228,20 @@ export function parseView(value: unknown): WireView {
   });
 
   const outputs = list(view.outputs);
-  if (outputs.length > 9) {
+  if (outputs.length > 17) {
     throw new ContractError();
   }
   outputs.forEach((output) => {
     const parsed = object(output);
     string(parsed.nodeId);
-    if (!['MODEL_TEXT', 'ACTION_RESULT'].includes(string(parsed.kind))) {
+    if (!['MODEL_TEXT', 'ACTION_RESULT', 'ABILITY_RESULT'].includes(string(parsed.kind))) {
       throw new ContractError();
+    }
+    if (parsed.kind === 'ABILITY_RESULT') {
+      const content = object(parsed.content);
+      if (!string(content.abilityKey).trim() || !['SUCCEEDED', 'FAILED', 'UNKNOWN'].includes(string(content.status))
+        || !Object.prototype.hasOwnProperty.call(content, 'result')
+        || (content.errorCode !== null && typeof content.errorCode !== 'string')) throw new ContractError();
     }
   });
 

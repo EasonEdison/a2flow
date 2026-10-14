@@ -45,6 +45,7 @@ const toolLabels: Record<string, string> = {
   A2UI_APPLICATION_CREATE: '创建 A2UI Application', A2UI_APPLICATION_UPDATE: '更新 A2UI Application',
   A2UI_APPLICATION_ACTION_SCAN: '校验应用动作', WORKFLOW_LIST: '查找 Workflow', WORKFLOW_DETAIL: '读取 Workflow',
   WORKFLOW_CREATE: '创建 Workflow 草稿', WORKFLOW_BASIC_INFO_UPDATE: '更新 Workflow 信息',
+  WORKFLOW_CAPABILITY_CANDIDATES: '查找可用业务能力',
   WORKFLOW_DRAFT_DETAIL: '读取流程草稿', WORKFLOW_SKILL_CANDIDATES: '查找可用 Skill',
   WORKFLOW_DRAFT_UPDATE: '保存流程草稿', WORKFLOW_COMPILED_PLAN_PREVIEW: '校验流程计划',
   RELEASE_OVERVIEW: '读取发布状态', RELEASE_CHANGE_CREATE: '创建发布变更', RELEASE_DIFF: '读取发布变更',

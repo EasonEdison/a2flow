@@ -352,6 +352,7 @@ export function toView(
                   : JSON.stringify(output.content, null, 2)),
               )
               .join('\n\n') || undefined,
+          abilityResults: wire.outputs.flatMap(output => output.nodeId === node.nodeId && output.kind === 'ABILITY_RESULT' ? [output.content] : []),
           actionResults: wire.outputs.filter(output => output.nodeId === node.nodeId && output.kind === 'ACTION_RESULT').map(output => output.content),
           incomplete: wire.availability === 'UNCONFIRMED',
         };
