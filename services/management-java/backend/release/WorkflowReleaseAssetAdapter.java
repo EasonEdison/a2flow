@@ -16,6 +16,7 @@ import dev.a2flow.management.support.JsonSupport;
 import dev.a2flow.management.access.AssetAction;
 import dev.a2flow.management.access.AssetAuthorizationService;
 import dev.a2flow.management.lifecycle.WorkflowDefinitionService;
+import dev.a2flow.management.lifecycle.WorkflowControlPlaneException;
 import dev.a2flow.management.lifecycle.publish.RuntimeAssetPublisher;
 import dev.a2flow.management.lifecycle.domain.WorkflowReleaseSourceView;
 import dev.a2flow.management.lifecycle.domain.graph.WorkflowEdge;
@@ -258,14 +259,40 @@ public class WorkflowReleaseAssetAdapter extends AbstractReleaseAssetAdapter {
         }
         WorkflowReleasePayload payload = payloadAdapter.requirePayload(snapshot, assetKey);
         runtimeAssetPublisher.validateWorkflow(payload);
+        GateResult compiledGate = gate(GATE_WORKFLOW_COMPILED, LABEL_WORKFLOW_COMPILED,
+                true, true, MESSAGE_WORKFLOW_COMPILED);
+        List<AssetDependencyReference> dependencies;
+        try {
+            dependencies = workflowDependencies(payload, environment);
+        } catch (WorkflowControlPlaneException exception) {
+            // Overview evaluates both environments. A missing/ambiguous binding is a
+            // failed gate in that environment, not a failure to read the entire overview.
+            if (!"WORKFLOW_CAPABILITY_NOT_PUBLISHED".equals(exception.getErrorCode())
+                    && !"WORKFLOW_CAPABILITY_AMBIGUOUS".equals(exception.getErrorCode())) {
+                throw exception;
+            }
+            GateResult dependencyGate = gate(GATE_WORKFLOW_DEPENDENCIES, LABEL_WORKFLOW_DEPENDENCIES,
+                    false, true, "目标环境业务能力尚未唯一发布")
+                    .setErrorCode(ERROR_DEPENDENCY_NOT_READY + ":" + exception.getErrorCode())
+                    .setCauseCode(exception.getErrorCode())
+                    .setFieldPath(exception.getFieldPath())
+                    .setDependencyDetailsContractVersion(DEPENDENCY_DETAILS_CONTRACT_VERSION)
+                    .setDependencyDetails(List.of(new DependencyGateDetail()
+                            .setStatus(GATE_FAILED)
+                            .setAssetType(AssetDependencyType.CAPABILITY_ACTION.name())
+                            .setRequestedEnvironment(environment.name())
+                            .setErrorCode(exception.getErrorCode())
+                            .setCauseCode(exception.getErrorCode())
+                            .setFieldPath(exception.getFieldPath())
+                            .setMessage("目标环境业务能力尚未唯一发布")));
+            return List.of(compiledGate, dependencyGate);
+        }
         DependencyReleaseReport report = dependencyReleaseValidator.validate(
                 new DependencyValidationRequest()
                         .setRootAssetType(ReleaseAssetType.ORCHESTRATION_CONFIG.name())
                         .setRootAssetKey(assetKey)
                         .setRequestedEnvironment(environment)
-                        .setDependencies(workflowDependencies(payload, environment)));
-        GateResult compiledGate = gate(GATE_WORKFLOW_COMPILED, LABEL_WORKFLOW_COMPILED,
-                true, true, MESSAGE_WORKFLOW_COMPILED);
+                        .setDependencies(dependencies));
         GateResult dependencyGate = dependencyGate(report);
         log.info("Workflow发布门禁执行完成, workflowCode:{}, environment:{}, dependencyPassed:{}, "
                         + "failureCount:{}, operator:{}",
