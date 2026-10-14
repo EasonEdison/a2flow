@@ -42,7 +42,7 @@ import lombok.extern.slf4j.Slf4j;
  * Workflow 定义控制面 Service。
  *
  * <p>负责 Workflow 稳定资产的全生命周期管理：创建（workflowCode 后端生成，specialistCode 绑定并
- * 通过 KConf 受控专员事实校验）、基础信息更新、草稿读写（含乐观并发 CAS）。所有 mutation 操作
+ * 通过专员注册信息校验）、基础信息更新、草稿读写（含乐观并发 CAS）。所有 mutation 操作
  * 在调用 Repository 前强校验 OWNER/ADMIN 权限；只读操作允许 VIEWER。
  *
  * <p>updateWorkflowDraft 在 CAS 前把完整草稿解析为强类型聚合，并委托
