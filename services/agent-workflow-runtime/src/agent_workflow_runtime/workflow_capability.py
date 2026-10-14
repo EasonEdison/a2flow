@@ -297,4 +297,3 @@ def build_capability_graph(
     builder.add_edge("collect", "parameters")
     builder.add_edge("execute", END)
     return RunGraphBinding(builder.compile(), lifecycle, progress)
-
