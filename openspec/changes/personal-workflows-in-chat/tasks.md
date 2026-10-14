@@ -1,14 +1,16 @@
 # Implementation
 
-- [x] Record the user-confirmed B versus M distinction and creation-to-My-workflows behavior.
-- [ ] Add owner/environment-isolated personal definition storage and validation.
-- [ ] Integrate explicit personal/preset resolution at all runtime reads.
-- [ ] Add constrained Chat candidate/create/read tools with stable persistence identity.
-- [ ] Persist structured creation results in streaming and chat history.
-- [ ] Add composer shortcut, result card and My workflows view.
-- [ ] Preserve existing explicit run and missing-input continuation behavior.
-- [ ] Complete builds and focused ownership/idempotency/contract probes.
-- [ ] Integrate, scan and deploy compatible components with rollback.
-- [ ] Verify real Chat creation, synchronized catalog/history, explicit execution and refresh.
+- [x] Record B personal workflows versus M presets and creation-to-My-workflows behavior.
+- [x] Add owner/environment/namespace-isolated immutable storage and validation.
+- [x] Integrate personal/preset resolution and native Skill material/catalog ports.
+- [x] Add published-candidate/create/read tools with stable persistence identity.
+- [x] Persist structured creation results in streaming and chat history.
+- [x] Add draft-preserving composer shortcut, result card and My workflows view.
+- [x] Preserve explicit run and missing-input submission/continuation.
+- [x] Complete builds and focused ownership/idempotency/real-adapter probes.
+- [x] Scan, integrate and deploy compatible components with rollback retained.
+- [x] Verify real Chat creation, catalog synchronization and explicit execution.
+- [x] Complete final terminal refresh fingerprint comparison.
 
-Unit tests are waived. Necessary build, contract and real runtime evidence remains required.
+Unit tests were waived. Build, contract probes and live execution were performed.
+Generation quality limitations are documented separately; these checks do not establish optimal plans or factual accuracy of generated display text.
