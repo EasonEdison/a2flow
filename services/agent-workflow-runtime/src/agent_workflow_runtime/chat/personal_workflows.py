@@ -12,6 +12,7 @@ from a2flow_asset_store.records import AssetError
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from skill_registry import validate_package_entries
 from skillweave_contracts import TrustedContext, TrustedInvocationContext
 
 from ..models import ActionRejected
@@ -19,6 +20,7 @@ from .events import PERSONAL_WORKFLOW_CREATED
 from .rpc_assets import plain
 
 PERSONAL_WORKFLOW_PROMPT = """
+Respond in the user's language; for Chinese requests, explain progress and results in Chinese.
 When the user requests creating their own Workflow, query_workflow_candidates to find
 currently published Skills or business capabilities, then create_personal_workflow.
 Create only a sequential configuration of 1-8 business nodes and one final summary.
@@ -151,11 +153,14 @@ def build_personal_workflow_tools(
                 key = row["key"]
                 if kind == "SKILL":
                     material = reader.base_reader.load_skill(key, owner)
+                    verified = validate_package_entries(
+                        (material.instruction_entry, *material.resource_entries)
+                    )
                     items.append(
                         {
                             "kind": kind,
                             "key": key,
-                            "instructions": material.instruction_entry.text,
+                            "instructions": verified[0].text,
                             "requiredToolNames": list(material.required_tool_names),
                         }
                     )
