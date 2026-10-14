@@ -7,6 +7,9 @@ from contextlib import contextmanager
 from collections.abc import Callable, Iterator
 from typing import Any, Literal, Protocol, TypedDict, Unpack
 
+from a2flow_asset_store.personal_workflows import (
+    PersonalWorkflowReader, PersonalWorkflowRepository,
+)
 from fastapi import Request
 from langchain.tools import ToolRuntime, tool
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
@@ -223,6 +226,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
         conninfo: str,
         namespace: str,
         model_factory: WorkflowModelFactory,
+        personal_workflows: PersonalWorkflowRepository | None = None,
         **kwargs: Unpack[HostOptions],
     ) -> None:
         super().__init__(
@@ -230,6 +234,8 @@ class RpcWorkflowHost(MvpRuntimeHost):
         )
         self.rpc = rpc
         self.reader = RpcAssetReader(self.asset_repository, namespace, rpc)
+        if personal_workflows is not None:
+            self.reader = PersonalWorkflowReader(self.reader, personal_workflows)
         self.card_store = ChatCardStore(
             conninfo,
             environment=self.environment,
