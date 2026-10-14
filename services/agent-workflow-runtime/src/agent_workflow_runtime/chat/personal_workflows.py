@@ -31,6 +31,14 @@ same inputs and time, reuse its saved result downstream instead of adding anothe
 for that goal. The final summary uses existing results; do not add a query just to summarize.
 Different inputs, a different time, or an explicit user request may require repeating an
 ability. Do not remove such steps merely because their ability keys match.
+A Skill must execute according to its published instructions. displayName and nodePrompt
+cannot turn a Skill that performs a lookup into a summary-only step or disable its declared
+business task. When the user only wants a summary of already obtained fields, put that
+request in summaryPrompt; do not add a business node for that summary.
+For example, for one browse-then-lookup goal, choose either browse Skill -> lookup Skill
+-> built-in summary, or browse Skill -> lookup Ability -> built-in summary. These are
+alternative plans for the same goal: do not include both lookup steps, or rename one
+"summary", unless different inputs/times or an explicit repeat request require both.
 A Skill node preserves that Skill's instructions and tools; a BUSINESS_CAPABILITY node
 invokes exactly one registered ability and collects missing input at runtime.
 Never invent asset keys, create shared assets, change publications, or run business tools
@@ -231,6 +239,12 @@ def build_personal_workflow_tools(
         result when it already satisfies the same goal, inputs and time; the final summary
         needs no extra query. Repeated abilities remain valid for different inputs/times
         or when explicitly requested by the user.
+        Skill semantics come from published instructions: displayName/nodePrompt cannot
+        turn a lookup Skill into a summary-only step. Summarizing existing fields belongs
+        only in summaryPrompt, not an extra business node. For the same browse-then-lookup
+        goal, choose browse Skill -> lookup Skill -> built-in summary OR browse Skill ->
+        lookup Ability -> built-in summary, not both lookup steps disguised as a summary.
+        Different inputs/times or an explicit repeat request remain valid exceptions.
         Saving is immutable, scoped to this user/environment and idempotent for this call.
         An unknown save outcome must be explained, never automatically retried.
         """
