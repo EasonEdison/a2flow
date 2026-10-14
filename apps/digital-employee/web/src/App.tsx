@@ -1,3 +1,5 @@
+import { PersonalWorkflowCard, PersonalWorkflowSteps } from './components/PersonalWorkflowCard';
+import type { PersonalWorkflow } from './personalWorkflow';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from './components/Icon';
@@ -18,6 +20,7 @@ import type { WorkflowCard } from './productApi';
 import type { InteractiveCard, RunView } from './presentation';
 
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
+type WorkflowTab = 'personal' | 'preset' | 'runs';
 type Page = 'chat' | 'workflows' | 'schedules' | 'notifications' | 'memory';
 const runLabels: Record<string, string> = { RUNNING: '运行中', WAITING: '等待确认', SUCCEEDED: '已完成', STOPPED: '已停止', FAILED: '失败', SUBMITTED: '已提交' };
 const notificationLabels: Record<string, string> = { WAITING: '等待确认', COMPLETED: '完成', STOPPED: '停止', FAILED: '失败', SYSTEM: '系统' };
@@ -140,7 +143,7 @@ function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
   </section>;
 }
 
-function ChatPage() {
+function ChatPage({ onOpenWorkflows }: { onOpenWorkflows: (tab: WorkflowTab) => void }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState('');
   const [error, setError] = useState('');
@@ -156,11 +159,11 @@ function ChatPage() {
       try { const item = await productApi.createConversation(); setConversations(items => [item, ...items]); setConversationId(item.id); }
       catch { setError('新建会话失败'); }
     }}><Icon name="plus" /><span>新建会话</span></button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => setConversationId(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
-    {conversationId ? <ChatConversation key={conversationId} conversationId={conversationId} /> : null}
+    {conversationId ? <ChatConversation key={conversationId} conversationId={conversationId} onOpenWorkflows={onOpenWorkflows} /> : null}
   </div>;
 }
 
-function ChatConversation({ conversationId }: { conversationId: string }) {
+function ChatConversation({ conversationId, onOpenWorkflows }: { conversationId: string; onOpenWorkflows: (tab: WorkflowTab) => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [unassignedCards, setUnassignedCards] = useState<ChatCard[]>([]);
   const [busy, setBusy] = useState(false);
@@ -176,6 +179,9 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
   const [activeCardActionCount, setActiveCardActionCount] = useState(0);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [runId, setRunId] = useState('');
+  const workflowStartInFlight = useRef(false);
+  const [startingWorkflow, setStartingWorkflow] = useState(false);
+  const [workflowStartUnconfirmed, setWorkflowStartUnconfirmed] = useState(false);
   const load = useCallback(async () => {
     if (sending.current || activeCardActions.current.size) return;
     const current = ++epoch.current;
@@ -272,6 +278,25 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
       if (!abort.signal.aborted) { await load(); setBusy(false); }
     }
   }, [conversationId, load, loaded, pending]);
+  const runPersonalWorkflow = async (workflow: PersonalWorkflow, requirement: string) => {
+    if (workflowStartInFlight.current || workflowStartUnconfirmed || busy || pending || !loaded || activeCardActions.current.size) return;
+    workflowStartInFlight.current = true;
+    setStartingWorkflow(true); setError('');
+    let startedRunId = '';
+    try {
+      const result = await productApi.startRun(workflow.definitionKey, requirement);
+      startedRunId = result.runId;
+      setRunId(result.runId);
+      await productApi.attachRun(conversationId, result.runId);
+      setHistoryRefreshKey(value => value + 1);
+    } catch {
+      if (startedRunId) setError('运行已创建，但未能关联到当前对话。请查看下方运行或运行历史，不要重复启动。');
+      else {
+        setWorkflowStartUnconfirmed(true);
+        setError('工作流启动状态未确认，请查看运行历史；不会自动重试，请勿重复启动。');
+      }
+    } finally { workflowStartInFlight.current = false; setStartingWorkflow(false); }
+  };
   const renderMessageExtras = useCallback((message: Message) => <>
     {message.event?.type === 'workflow_confirm' && (!message.delivery || message.delivery === 'completed') ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><button className="primary" onClick={async () => {
       try { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', '来自对话的工作请求'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }
@@ -284,47 +309,82 @@ function ChatConversation({ conversationId }: { conversationId: string }) {
       messages={messages}
       unassignedCards={unassignedCards}
       isRunning={busy || pending}
-      isSendDisabled={!loaded || pending || activeCardActionCount > 0}
+      isSendDisabled={!loaded || pending || activeCardActionCount > 0 || startingWorkflow}
       error={historyError || error}
       onSend={send}
       onCardUpdate={updateCard}
       onCardActionStateChange={setCardActionState}
       onComposerError={setError}
       renderMessageExtras={renderMessageExtras}
-      threadTail={runId ? <RunDetail runId={runId} /> : null}
+      renderPersonalWorkflow={workflow => <PersonalWorkflowCard workflow={workflow}
+        disabled={!loaded || busy || pending || activeCardActionCount > 0 || startingWorkflow || workflowStartUnconfirmed}
+        onRun={runPersonalWorkflow} onOpenWorkflows={() => onOpenWorkflows('personal')} />}
+      threadTail={<>{workflowStartUnconfirmed ? <button className="secondary" onClick={() => onOpenWorkflows('runs')}>查看运行历史</button> : null}{runId && !messages.some(message => message.event?.type === 'interaction_required' && message.event.runId === runId) ? <RunDetail runId={runId} /> : null}</>}
     />
   </section>;
 }
 
-function WorkflowCenter({ onSchedule }: { onSchedule: (workflowKey: string) => void }) {
-  const [tab, setTab] = useState<'catalog' | 'runs'>('catalog');
+function WorkflowCenter({ onSchedule, initialTab }: { onSchedule: (workflowKey: string) => void; initialTab: WorkflowTab }) {
+  const [tab, setTab] = useState<WorkflowTab>(initialTab);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [runs, setRuns] = useState<RunItem[]>([]);
   const [selected, setSelected] = useState('');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [starting, setStarting] = useState('');
   const [startError, setStartError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
   const startInFlight = useRef(false);
-  const startRun = async (workflowKey: string) => {
+  const startRun = async (workflow: Workflow) => {
     if (startInFlight.current) return;
-    startInFlight.current = true; setStarting(workflowKey); setStartError('');
+    startInFlight.current = true; setStarting(workflow.key); setStartError('');
     try {
-      const result = await productApi.startRun(workflowKey, inputs[workflowKey] ?? '');
+      const result = await productApi.startRun(workflow.key, inputs[workflow.key] ?? workflow.personal?.defaultRequirement ?? '');
       setSelected(result.runId);
     } catch {
-      setStartError('工作流启动状态未确认，请查看我的运行记录；未自动重试，请勿重复启动。');
-    } finally {
-      startInFlight.current = false; setStarting('');
-    }
+      setStartError('工作流启动状态未确认，请查看运行历史；未自动重试，请勿重复启动。');
+    } finally { startInFlight.current = false; setStarting(''); }
   };
   const viewRunsAfterStart = async () => {
     setTab('runs');
     try { setRuns((await productApi.runs()).items); }
     catch { setStartError('运行记录暂未同步，请刷新页面查看；请勿重复启动同一工作流。'); }
   };
-  useEffect(() => { void Promise.all([productApi.workflows(), productApi.runs()]).then(([catalog, mine]) => { setWorkflows(catalog.items); setRuns(mine.items); }); }, []);
+  useEffect(() => {
+    let active = true;
+    void Promise.all([productApi.workflows(), productApi.runs()]).then(([catalog, mine]) => {
+      if (active) { setWorkflows(catalog.items); setRuns(mine.items); }
+    }).catch(() => { if (active) setLoadError('工作流或运行历史读取失败，请刷新页面重试。'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
   if (selected) return <RunDetail runId={selected} onBack={() => setSelected('')} />;
-  return <section><div className="page-title"><h1>工作流中心</h1><p>选择工作流立即运行，或查看我的运行记录。</p></div>{startError ? <div><p className="inline-error" role="alert">{startError}</p><button className="secondary" onClick={() => void viewRunsAfterStart()}>查看我的运行</button></div> : null}<div className="tabs" role="tablist"><button role="tab" aria-selected={tab === 'catalog'} onClick={() => setTab('catalog')}>可执行工作流</button><button role="tab" aria-selected={tab === 'runs'} onClick={() => setTab('runs')}>我的运行</button></div>{tab === 'catalog' ? <div className="catalog-grid">{workflows.map((workflow) => <article className="workflow-catalog-card" key={workflow.key}><span className="card-icon"><Icon name="workflow" /></span><h2>{workflow.name}</h2><p>{workflow.description}</p><label htmlFor={`input-${workflow.key}`}>执行输入</label><textarea id={`input-${workflow.key}`} placeholder={workflow.inputHint} value={inputs[workflow.key] ?? ''} onChange={(event) => setInputs((value) => ({ ...value, [workflow.key]: event.target.value }))} /><div><button className="primary" disabled={Boolean(starting)} onClick={() => void startRun(workflow.key)}>{starting === workflow.key ? '正在启动…' : '立即运行'}</button><button className="secondary" onClick={() => onSchedule(workflow.key)}>设置定时</button></div></article>)}</div> : <div className="run-list">{runs.map((run) => <button key={run.id} onClick={() => setSelected(run.id)}><div><strong>{run.title}</strong><p>{run.input}</p></div><span className={`status ${run.status.toLowerCase()}`}>{runLabels[run.status] ?? run.status}</span></button>)}</div>}</section>;
+  const visible = workflows.filter(workflow => workflow.source === (tab === 'personal' ? 'PERSONAL' : 'PRESET'));
+  return <section>
+    <div className="page-title"><h1>工作流中心</h1><p>运行你的工作流或预制工作流，查看已保存的运行历史。</p></div>
+    {startError ? <div><p className="inline-error" role="alert">{startError}</p><button className="secondary" onClick={() => void viewRunsAfterStart()}>查看运行历史</button></div> : null}
+    {loadError ? <p className="inline-error" role="alert">{loadError}</p> : null}
+    <div className="tabs" role="tablist" aria-label="工作流分类">
+      {([['personal', '我的工作流'], ['preset', '预制工作流'], ['runs', '运行历史']] as const).map(([value, label]) =>
+        <button key={value} role="tab" aria-selected={tab === value} onClick={() => setTab(value)}>{label}</button>)}
+    </div>
+    {loading ? <p role="status">正在读取工作流与运行历史…</p> : tab !== 'runs' ? <>
+      {!visible.length && !loadError ? <p className="muted">{tab === 'personal' ? '还没有我的工作流。在对话中点击“创建工作流”，或直接描述你的创建需求。' : '当前没有可执行的预制工作流。'}</p> : null}
+      <div className="catalog-grid">{visible.map(workflow => <article className="workflow-catalog-card" key={workflow.key}>
+        <span className="card-icon"><Icon name="workflow" /></span><h2>{workflow.name}</h2>
+        {workflow.description ? <p>{workflow.description}</p> : null}
+        {workflow.personal ? <PersonalWorkflowSteps workflow={workflow.personal} /> : null}
+        <label htmlFor={`input-${workflow.key}`}>本次运行要求</label>
+        <textarea id={`input-${workflow.key}`} placeholder={workflow.inputHint} maxLength={2000}
+          value={inputs[workflow.key] ?? workflow.personal?.defaultRequirement ?? ''}
+          onChange={event => setInputs(value => ({ ...value, [workflow.key]: event.target.value }))} />
+        <div><button className="primary" disabled={Boolean(starting) || (workflow.source === 'PERSONAL' && !(inputs[workflow.key] ?? workflow.personal?.defaultRequirement ?? '').trim())} onClick={() => void startRun(workflow)}>{starting === workflow.key ? '正在启动…' : '立即运行'}</button>
+          {workflow.source === 'PRESET' ? <button className="secondary" onClick={() => onSchedule(workflow.key)}>设置定时</button> : null}</div>
+      </article>)}</div>
+    </> : <div className="run-list">{!runs.length && !loadError ? <p className="muted">暂无运行历史。</p> : null}{runs.map(run => <button key={run.id} onClick={() => setSelected(run.id)}>
+      <div><strong>{run.title}</strong><p>{run.input}</p></div><span className={`status ${run.status.toLowerCase()}`}>{runLabels[run.status] ?? run.status}</span>
+    </button>)}</div>}
+  </section>;
 }
 
 function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
@@ -344,8 +404,9 @@ function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
     let active = true;
     void Promise.all([productApi.workflows(), productApi.schedules()]).then(([catalog, schedules]) => {
       if (!active) return;
-      setWorkflows(catalog.items); setItems(schedules.items);
-      setWorkflowKey((value) => value || catalog.items[0]?.key || '');
+      const presets = catalog.items.filter(workflow => workflow.source === 'PRESET');
+      setWorkflows(presets); setItems(schedules.items);
+      setWorkflowKey(value => presets.some(workflow => workflow.key === value) ? value : presets[0]?.key || '');
     }).catch(() => { if (active) setError('定时任务加载失败，请刷新页面重试。'); });
     return () => { active = false; };
   }, []);
@@ -405,6 +466,7 @@ function Product() {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
   const [page, setPage] = useState<Page>('chat');
+  const [workflowTab, setWorkflowTab] = useState<WorkflowTab>('personal');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [scheduleWorkflow, setScheduleWorkflow] = useState('');
   const [notificationRun, setNotificationRun] = useState('');
@@ -415,7 +477,7 @@ function Product() {
   if (checking) return <div className="loading-screen">正在加载 A2Flow…</div>;
   if (!session) return <Login onSession={setSession} />;
   return <TemporaryDraftOwner.Provider value={session.userId}><Shell session={session} page={page} unread={unread} onPage={(next) => { setNotificationRun(''); setPage(next); }} onLogout={async () => { await productApi.logout(); setPage('chat'); setSession(null); }}>
-    {notificationRun ? <RunDetail runId={notificationRun} onBack={() => setNotificationRun('')} /> : page === 'memory' ? <MemorySettingsPage key={session.userId} /> : page === 'chat' ? <ChatPage /> : page === 'workflows' ? <WorkflowCenter onSchedule={(key) => { setScheduleWorkflow(key); setPage('schedules'); }} /> : page === 'schedules' ? <SchedulePage initialWorkflow={scheduleWorkflow} /> : <NotificationPage items={notifications} refresh={refreshNotifications} onRun={(id) => setNotificationRun(id)} />}
+    {notificationRun ? <RunDetail runId={notificationRun} onBack={() => setNotificationRun('')} /> : page === 'memory' ? <MemorySettingsPage key={session.userId} /> : page === 'chat' ? <ChatPage onOpenWorkflows={tab => { setWorkflowTab(tab); setPage('workflows'); }} /> : page === 'workflows' ? <WorkflowCenter initialTab={workflowTab} onSchedule={(key) => { setScheduleWorkflow(key); setPage('schedules'); }} /> : page === 'schedules' ? <SchedulePage initialWorkflow={scheduleWorkflow} /> : <NotificationPage items={notifications} refresh={refreshNotifications} onRun={(id) => setNotificationRun(id)} />}
   </Shell></TemporaryDraftOwner.Provider>;
 }
 

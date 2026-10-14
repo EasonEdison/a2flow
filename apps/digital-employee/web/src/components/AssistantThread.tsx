@@ -1,3 +1,4 @@
+import type { PersonalWorkflow } from '../personalWorkflow';
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
@@ -39,6 +40,7 @@ type AssistantThreadProps = {
   onCardUpdate: (card: ChatCard) => void;
   onCardActionStateChange: (cardId: string, active: boolean) => void;
   renderMessageExtras: (message: Message) => React.ReactNode;
+  renderPersonalWorkflow: (workflow: PersonalWorkflow) => React.ReactNode;
   threadTail?: React.ReactNode;
   onComposerError: (message: string) => void;
 };
@@ -67,6 +69,9 @@ const toolStateLabel = (tool: ChatToolCall) => {
 
 const toolLabels: Record<string, string> = {
   use_skill: '执行技能',
+  query_workflow_candidates: '查找可用技能与业务能力',
+  create_personal_workflow: '创建我的工作流',
+  read_personal_workflow: '读取我的工作流',
   render_application: '展示交互卡片',
   generate_interaction: '生成临时交互',
   generate_a2ui: '生成界面布局',
@@ -230,12 +235,14 @@ function UserMessage({ message }: { message: Message }) {
 function AssistantMessage({
   message,
   renderMessageExtras,
+  renderPersonalWorkflow,
   onCardUpdate,
   onCardActionStateChange,
   onComposerDraft,
 }: {
   message: Message;
   renderMessageExtras: AssistantThreadProps['renderMessageExtras'];
+  renderPersonalWorkflow: AssistantThreadProps['renderPersonalWorkflow'];
   onCardUpdate: AssistantThreadProps['onCardUpdate'];
   onCardActionStateChange: AssistantThreadProps['onCardActionStateChange'];
   onComposerDraft: (effect: ComposerDraftEffect) => void;
@@ -264,6 +271,8 @@ function AssistantMessage({
       {message.parts?.length
         ? message.parts.map(part => part.type === 'text'
           ? <section className="assistant-answer" key={part.id}><MarkdownContent markdown={part.text} /></section>
+          : part.type === 'personal_workflow'
+            ? <div key={part.id}>{renderPersonalWorkflow(part.workflow)}</div>
           : <OrderedApplication
             key={part.id}
             part={part}
@@ -285,28 +294,44 @@ function AssistantMessage({
   </MessagePrimitive.Root>;
 }
 
-function ChatComposer() {
-  return <ComposerPrimitive.Root className="aui-composer">
+function ChatComposer({ disabled, onError }: { disabled: boolean; onError: (message: string) => void }) {
+  const aui = useAui();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fillWorkflowIntent = () => {
+    const composer = aui.composer();
+    const intent = '请帮我创建一个工作流，用于：';
+    const current = composer.getState().text;
+    const next = current.includes(intent) ? current : appendComposerDraft(current, intent);
+    if (next === null) { onError('追加创建意图后超过 4000 字，未覆盖已有输入。'); return; }
+    composer.setText(next);
+    inputRef.current?.focus();
+  };
+  return <><div className="composer-shortcuts"><button type="button" className="secondary"
+    disabled={disabled} onClick={fillWorkflowIntent}>创建工作流</button></div><ComposerPrimitive.Root className="aui-composer">
     <ComposerPrimitive.Input
+      ref={inputRef}
       aria-label="消息"
       placeholder="输入消息，描述你想完成的工作"
       submitMode="enter"
       unstable_insertNewlineOnTouchEnter
     />
     <ComposerPrimitive.Send className="aui-send" aria-label="发送消息">发送</ComposerPrimitive.Send>
-  </ComposerPrimitive.Root>;
+  </ComposerPrimitive.Root></>;
 }
 
 function ThreadBody({
   messages,
   error,
   renderMessageExtras,
+  renderPersonalWorkflow,
   onComposerError,
   threadTail,
   unassignedCards,
   onCardUpdate,
   onCardActionStateChange,
-}: Omit<AssistantThreadProps, 'onSend' | 'isSendDisabled'>) {
+  isRunning,
+  isSendDisabled,
+}: Omit<AssistantThreadProps, 'onSend'>) {
   const aui = useAui();
   const consumedEffects = useRef(new Set<string>());
   const applyComposerDraft = useCallback((effect: ComposerDraftEffect) => {
@@ -341,6 +366,7 @@ function ThreadBody({
               : <AssistantMessage
                 message={source}
                 renderMessageExtras={renderMessageExtras}
+                renderPersonalWorkflow={renderPersonalWorkflow}
                 onCardUpdate={onCardUpdate}
                 onCardActionStateChange={onCardActionStateChange}
                 onComposerDraft={applyComposerDraft}
@@ -357,7 +383,7 @@ function ThreadBody({
       </ThreadPrimitive.Viewport>
         <div className="aui-thread-footer">
           {error ? <p className="chat-error" role="alert">{error}</p> : null}
-          <ChatComposer />
+          <ChatComposer disabled={isRunning || isSendDisabled} onError={onComposerError} />
         </div>
     </ThreadPrimitive.Root>;
 }

@@ -1,3 +1,4 @@
+import { parsePersonalWorkflow, type PersonalWorkflow } from './personalWorkflow';
 import { parseSnapshotDisplay } from './snapshotDisplay';
 import { parseView } from './api/contracts';
 import { toView } from './api/adapter';
@@ -55,7 +56,8 @@ export type ChatApplicationPart = {
   cardId: string;
   card: ChatCard | null;
 };
-export type ChatContentPart = ChatTextPart | ChatApplicationPart;
+export type ChatPersonalWorkflowPart = { type: 'personal_workflow'; id: string; workflow: PersonalWorkflow };
+export type ChatContentPart = ChatTextPart | ChatApplicationPart | ChatPersonalWorkflowPart;
 export type Message = {
   id: string;
   role: 'user' | 'assistant';
@@ -80,11 +82,12 @@ export type ChatStreamEvent = ChatStreamBase & (
   | ({ type: 'a2ui_generation_progress' } & GenerationProgress)
   | { type: 'tool_call_finished'; toolCallId: string; name: string; lifecycleStatus: 'returned' | 'raised'; toolMessageStatus: 'success' | 'error' | null; businessSuccess?: boolean | null; startedAt?: string; finishedAt: string; durationMs: number; result?: ChatJson; errorCode?: string }
   | { type: 'application_rendered'; turnId: string; assistantMessageId: string; partId: string; card: ChatCard }
+  | { type: 'personal_workflow_created'; turnId: string; partId: string; workflow: PersonalWorkflow }
   | { type: 'waiting_action'; turnId: string; assistantMessageId: string; partId: string; cardId: string }
   | { type: 'done'; finalModelMessageId?: string | null; content: unknown }
   | { type: 'error'; code?: string }
 );
-export type Workflow = { key: string; name: string; description: string; inputHint: string };
+export type Workflow = { key: string; name: string; description: string; inputHint: string; source: 'PRESET' | 'PERSONAL'; personal?: PersonalWorkflow };
 export type RunItem = { id: string; workflowKey: string; title: string; status: string; input: string; createdAt: string };
 export type ScheduleRun = { scheduleId: string; controlId: string; runId: string | null; scheduledAt: string; deliveryState: string; lifecycle: string | null; inputText: string };
 export type Schedule = { id: string; workflowKey: string; workflowName: string; input: string; cadence: string; enabled: boolean; nextRunAt: string; expression: string; timezone: string; lastRunAt: string; latestRun: ScheduleRun | null };
@@ -220,6 +223,11 @@ const contentPartsOf = (content: unknown): ChatContentPart[] | undefined => {
         text: textOf(part.text),
         ...(optionalString(part.modelMessageId) ? { modelMessageId: textOf(part.modelMessageId) } : {}),
       } satisfies ChatTextPart;
+    }
+    if (part.type === 'personal_workflow') {
+      const workflow = parsePersonalWorkflow(part.workflow);
+      if (id !== `personal-workflow:${workflow.definitionKey}`) throw new Error('CHAT_CONTRACT_INVALID');
+      return { type: 'personal_workflow', id, workflow } satisfies ChatPersonalWorkflowPart;
     }
     if (part.type === 'application') {
       const cardId = textOf(part.cardId);
@@ -450,7 +458,10 @@ export const productApi = {
     return {
       items: (payload.workflows ?? []).map((row) => {
         const key = textOf(row.definitionKey);
-        return { key, name: textOf(row.name) || key, description: '', inputHint: inputHintOf(row.inputSchema) };
+        if (!key || (row.source !== 'PRESET' && row.source !== 'PERSONAL')) throw new Error('WORKFLOW_CATALOG_CONTRACT_INVALID');
+        const personal = row.source === 'PERSONAL' ? parsePersonalWorkflow(row) : undefined;
+        return { key, name: textOf(row.name) || key, description: '', inputHint: inputHintOf(row.inputSchema),
+          source: row.source, ...(personal ? { personal } : {}) };
       }),
     };
   },
