@@ -10,6 +10,7 @@ from typing import Any, cast
 from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from skill_registry import CatalogPort, MaterialPort, SkillMaterial
 from skillweave_contracts import TrustedContext
 
 from .java_runtime import is_java_asset
@@ -216,7 +217,7 @@ class PersonalWorkflowRepository:
         return saved
 
 
-class PersonalWorkflowReader:
+class PersonalWorkflowReader(CatalogPort, MaterialPort):
     """Explicit personal-key routing; misses and owner mismatches never fall back."""
 
     def __init__(
@@ -233,6 +234,12 @@ class PersonalWorkflowReader:
 
     def __getattr__(self, name: str) -> object:
         return getattr(self.base_reader, name)
+
+    def list_skills(self, trusted_context: object) -> tuple[dict[str, Any], ...]:
+        return cast(tuple[dict[str, Any], ...], self.base_reader.list_skills(trusted_context))
+
+    def load_skill(self, skill_key: str, trusted_context: object) -> SkillMaterial:
+        return cast(SkillMaterial, self.base_reader.load_skill(skill_key, trusted_context))
 
     def list_workflows(self, owner: object) -> tuple[dict[str, Any], ...]:
         trusted = self.personal_repository._owner(owner)
