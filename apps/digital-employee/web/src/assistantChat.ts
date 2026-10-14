@@ -1,3 +1,4 @@
+import { parsePersonalWorkflow } from './personalWorkflow';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import { parseGenerationProgress } from './generationProgress';
 
@@ -277,6 +278,14 @@ export const applyChatStreamEvent = (
       parts: upsertApplicationPart(message.parts, event),
       execution: { ...message.execution, turnId: event.turnId },
     };
+  }
+  if (event.type === 'personal_workflow_created' && message.execution) {
+    const workflow = parsePersonalWorkflow(event.workflow);
+    if (event.partId !== `personal-workflow:${workflow.definitionKey}`) throw new Error('CHAT_PART_ORDER_INVALID');
+    const parts = message.parts ?? [];
+    const existing = parts.find(part => part.id === event.partId);
+    if (existing && existing.type !== 'personal_workflow') throw new Error('CHAT_PART_ORDER_INVALID');
+    return { ...message, parts: existing ? parts : [...parts, { type: 'personal_workflow', id: event.partId, workflow }] };
   }
   if (event.type === 'waiting_action' && message.execution) {
     return {
