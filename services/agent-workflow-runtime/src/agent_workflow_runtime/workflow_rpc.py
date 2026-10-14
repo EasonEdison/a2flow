@@ -466,8 +466,9 @@ class WorkflowActions(ActionService):
                 "interactionId": card["cardId"],
                 "nodeId": assets.node_id,
             }
-            if not interactive and display.get("protocolProfile") == "a2flow.temporary.v1":
-                # Native persistence requires an explicit read-only completion snapshot.
+            if not interactive:
+                # Normalize only the internal completion snapshot; the saved card
+                # retains its published display actions, including pagination.
                 display.update(state="READ_ONLY", actionEligibility="NOT_OPERABLE", actions=[])
             saved = Interaction(
                 context,
