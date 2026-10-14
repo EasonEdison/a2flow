@@ -83,6 +83,11 @@ def create_app_from_environment(*, chat_runner=None):
         options="-c statement_timeout=10000 -c lock_timeout=5000",
         application_name="a2flow-b-side-api")
 
+    from a2flow_asset_store.personal_workflows import PersonalWorkflowReader, PersonalWorkflowRepository
+    reader = PersonalWorkflowReader(reader, PersonalWorkflowRepository(
+        connection_factory, namespace=config.namespace, environment=config.environment, validator=validator,
+    ))
+
     return create_app(
         users=UsersRepository(connection_factory),
         sessions=SessionsRepository(connection_factory),

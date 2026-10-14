@@ -80,7 +80,13 @@ class ApplicationContentPart(TypedDict, total=False):
     card: JsonObject | None
 
 
-ContentPart: TypeAlias = TextContentPart | ApplicationContentPart
+class PersonalWorkflowContentPart(TypedDict):
+    type: Literal["personal_workflow"]
+    id: str
+    workflow: JsonObject
+
+
+ContentPart: TypeAlias = TextContentPart | ApplicationContentPart | PersonalWorkflowContentPart
 
 
 def _identifier(value: object, *, limit: int = 256) -> str | None:
@@ -183,6 +189,46 @@ class ChatDelivery:
             self.parts.append({
                 "type": "application", "id": part_id, "cardId": card_id,
             })
+        return part_id, copied
+
+    def _personal_workflow(self, event: dict[str, Any]) -> tuple[str, JsonObject]:
+        workflow = event.get("workflow")
+        if not isinstance(workflow, dict):
+            raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
+        key = _identifier(workflow.get("definitionKey"))
+        if key is None or not key.startswith("personal-wf-") or workflow.get("source") != "PERSONAL":
+            raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
+        if (not isinstance(workflow.get("name"), str) or not workflow["name"].strip()
+                or len(workflow["name"]) > 200
+                or not isinstance(workflow.get("defaultRequirement"), str)
+                or len(workflow["defaultRequirement"]) > 2000):
+            raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
+        nodes = workflow.get("nodes")
+        if not isinstance(nodes, list) or not 1 <= len(nodes) <= 8:
+            raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
+        public_nodes: list[JsonValue] = []
+        for node in nodes:
+            if not isinstance(node, dict) or node.get("type") not in {"SKILL", "BUSINESS_CAPABILITY"}:
+                raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
+            reference = "skillKey" if node["type"] == "SKILL" else "abilityKey"
+            if _identifier(node.get("nodeId")) is None or _identifier(node.get(reference)) is None:
+                raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
+            public_node = {field: node[field] for field in ("nodeId", "type", reference)}
+            if isinstance(node.get("displayName"), str):
+                public_node["displayName"] = node["displayName"]
+            public_nodes.append(public_node)
+        copied: JsonObject = {"definitionKey": key, "source": "PERSONAL",
+                              "name": workflow["name"], "defaultRequirement": workflow["defaultRequirement"],
+                              "nodes": public_nodes}
+        if isinstance(workflow.get("inputSchema"), dict):
+            copied["inputSchema"] = copy.deepcopy(workflow["inputSchema"])
+        part_id = "personal-workflow:" + key
+        existing = next((part for part in self.parts if part.get("id") == part_id), None)
+        if existing is not None:
+            if existing.get("workflow") != copied:
+                raise ValueError("PERSONAL_WORKFLOW_EVENT_CONFLICT")
+        else:
+            self.parts.append({"type": "personal_workflow", "id": part_id, "workflow": copied})
         return part_id, copied
 
     def _public_content(self) -> dict[str, Any]:
@@ -412,6 +458,20 @@ class ChatDelivery:
                         "partId": part_id,
                         "cardId": card["cardId"],
                     })
+                elif kind == "personal_workflow_created":
+                    part_id, workflow = self._personal_workflow(event)
+                    event = {"type": kind, "workflow": workflow, "partId": part_id,
+                             "turnId": self.turn_id, "sequence": self.sequence + 1,
+                             "messageId": str(self.assistant_id),
+                             "inputMessageId": str(self.input_id),
+                             "assistantMessageId": str(self.assistant_id)}
+                    if not any(item.get("type") == kind and item.get("partId") == part_id
+                               for item in self.content["events"]):
+                        self.content["events"].append(copy.deepcopy(event))
+                    # A displayed registration result must survive a refresh even
+                    # if the model's later turn fails or the subscriber disconnects.
+                    await self.save()
+                    last_save = time.monotonic()
                 elif kind in ("workflow_confirm", "interaction_required"):
                     event = {**event, "turnId": self.turn_id,
                              "inputMessageId": str(self.input_id),

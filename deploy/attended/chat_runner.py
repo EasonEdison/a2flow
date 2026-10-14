@@ -28,6 +28,7 @@ class ChatLoopRunner:
         conversation_store,
         history_loader,
         personal_memory=None,
+        personal_workflows=None,
         assets_factory=None,
         observation_loader=None,
         system_prompt: str | None = None,
@@ -39,6 +40,7 @@ class ChatLoopRunner:
         self._conversation_store = conversation_store
         self._history_loader = history_loader
         self._personal_memory = personal_memory
+        self._personal_workflows = personal_workflows
         self._assets_factory = assets_factory
         self._observation_loader = observation_loader
         self._system_prompt = system_prompt
@@ -95,6 +97,7 @@ class ChatLoopRunner:
                     emitter=emitter, system_prompt=prompt,
                     checkpointer=saver, thread_id=thread_id,
                     personal_memory=self._personal_memory,
+                    personal_workflows=self._personal_workflows,
                     chat_assets=(self._assets_factory(owner, str(conversation_id), f"chat-{turn_id}")
                                  if self._assets_factory is not None else None),
                     observation_loader=(
@@ -154,7 +157,7 @@ class ChatLoopRunner:
                 elif kind == WORKFLOW_CONFIRM:
                     yield {"type": kind, "workflowKey": payload.get("workflowKey"),
                            "title": payload.get("title")}
-                elif kind in ("application_rendered", "waiting_action"):
+                elif kind in ("application_rendered", "waiting_action", "personal_workflow_created"):
                     yield {"type": kind, **payload}
                 elif kind == ERROR and not failed:
                     failed = True
