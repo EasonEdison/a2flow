@@ -55,6 +55,7 @@ from .rpc_assets import RpcAssetReader
 from .rpc_client import RpcClient
 from .service import ExecutionSession
 from .workflow_loader import compose_workflow
+from .workflow_capability import build_capability_graph, saved_result
 from .workflow_rpc import WorkflowActions, WorkflowAssets, WorkflowCard, ResumeStatus
 
 
@@ -284,7 +285,10 @@ class RpcWorkflowHost(MvpRuntimeHost):
             self.reader,
             self.rpc,
             run,
-            {node["nodeId"]: node["skillKey"] for node in definition["nodes"]},
+            {node["nodeId"]: node["skillKey"] for node in definition["nodes"]
+             if node.get("type") != "BUSINESS_CAPABILITY"},
+            {node["nodeId"]: node["abilityKey"] for node in definition["nodes"]
+             if node.get("type") == "BUSINESS_CAPABILITY"},
         )
 
     @contextmanager
@@ -309,6 +313,14 @@ class RpcWorkflowHost(MvpRuntimeHost):
                 }
                 for node in definition["nodes"]:
                     assets = actions.assets(node["nodeId"])
+                    if node.get("type") == "BUSINESS_CAPABILITY":
+                        agents[node["nodeId"]] = build_capability_graph(
+                            run=run, node=node, lifecycle=lifecycle, assets=assets,
+                            actions=actions, views=self.views, progress=self.progress,
+                            create_model=lambda: self.model_factory.create(
+                                self.model_reference, run.owner),
+                        )
+                        continue
                     material = self.reader.load_skill(node["skillKey"], run.context(node["nodeId"]))
                     required = tuple(dict.fromkeys(("use_skill", *material.required_tool_names)))
                     allowed = {*required, "generate_interaction"}
@@ -371,6 +383,10 @@ class RpcWorkflowHost(MvpRuntimeHost):
                     # Final text is already provided by NodeBoundary. Add only saved
                     # business facts, without demo-specific selectedOption assumptions.
                     results: list[JsonObject] = []
+                    for node_id in node_ids:
+                        result = saved_result(lifecycle, run, node_id)
+                        if result is not None:
+                            results.append({"nodeId": node_id, **result})
                     with self.interactions.scope(run.owner, run.run_id):
                         for node_id in node_ids:
                             for item in self.interactions.for_node(run.owner, run.run_id, node_id):

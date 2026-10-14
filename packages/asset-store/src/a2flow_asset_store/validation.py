@@ -109,7 +109,7 @@ class BundleValidator:
                 raise AssetError("UNSUPPORTED_WORKFLOW")
             nodes = definition["nodes"]
             if (definition["definitionKey"] != key or type(nodes) is not list
-                    or not 2 <= len(nodes) <= 8):
+                    or not 1 <= len(nodes) <= 8):
                 raise AssetError("UNSUPPORTED_WORKFLOW")
             if definition.get("displayName") is not None and (
                 not isinstance(definition["displayName"], str)
@@ -122,8 +122,12 @@ class BundleValidator:
             ):
                 raise AssetError("INVALID_WORKFLOW_SUMMARY_PROMPT")
             for node in nodes:
-                if (set(node) - {"nodeId", "skillKey", "displayName", "nodePrompt"}
-                        or not {"nodeId", "skillKey"} <= set(node)):
+                capability = node.get("type") == "BUSINESS_CAPABILITY"
+                reference = "abilityKey" if capability else "skillKey"
+                allowed = {"nodeId", reference, "displayName", "nodePrompt"}
+                if capability:
+                    allowed.add("type")
+                if (set(node) - allowed or not {"nodeId", reference} <= set(node)):
                     raise AssetError("UNSUPPORTED_WORKFLOW")
                 if "nodePrompt" in node and (
                     type(node["nodePrompt"]) is not str or not node["nodePrompt"].strip()
@@ -133,7 +137,7 @@ class BundleValidator:
                 if summary_prompt is not None and node["nodeId"] == "workflow-summary":
                     raise AssetError("INVALID_WORKFLOW_SUMMARY_NODE")
                 parse_identifier(node["nodeId"])
-                parse_skill_key(node["skillKey"])
+                (parse_identifier if capability else parse_skill_key)(node[reference])
                 if node.get("displayName") is not None and (
                     not isinstance(node["displayName"], str)
                     or not 1 <= len(node["displayName"]) <= 200):
@@ -197,9 +201,12 @@ class BundleValidator:
                 dep_keys.add(dk)
             self.validate_definition(kind, key, item["definition"])
             if kind == "WORKFLOW":
-                required = {("SKILL", n["skillKey"]) for n in item["definition"]["nodes"]}
+                required = {
+                    ("ABILITY", n["abilityKey"]) if n.get("type") == "BUSINESS_CAPABILITY"
+                    else ("SKILL", n["skillKey"]) for n in item["definition"]["nodes"]
+                }
                 if not required <= dep_keys:
-                    raise AssetError("MISSING_SKILL_BINDING")
+                    raise AssetError("MISSING_WORKFLOW_BINDING")
             data = canonical({k: v for k, v in item.items() if k != "contentDigest"})
             if digest(data) != item["contentDigest"]:
                 raise AssetError("DIGEST_MISMATCH")
