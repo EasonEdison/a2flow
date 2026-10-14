@@ -20,6 +20,7 @@ public final class CompiledNode {
     private final WorkflowNodeType nodeType;
     private final String displayName;
     private final String skillCode;
+    private final String abilityKey;
     private final String nodePrompt;
     private final boolean allowSkip;
 
@@ -28,6 +29,7 @@ public final class CompiledNode {
         this.nodeType = builder.nodeType;
         this.displayName = builder.displayName;
         this.skillCode = builder.skillCode;
+        this.abilityKey = builder.abilityKey;
         this.nodePrompt = builder.nodePrompt;
         this.allowSkip = builder.allowSkip;
     }
@@ -55,6 +57,9 @@ public final class CompiledNode {
     public String getSkillCode() {
         return skillCode;
     }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public String getAbilityKey() { return abilityKey; }
 
     /** Skill 专属 Prompt 只在 Skill compiled node 中输出。 */
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -84,6 +89,7 @@ public final class CompiledNode {
         private WorkflowNodeType nodeType;
         private String displayName;
         private String skillCode;
+        private String abilityKey;
         private String nodePrompt;
         private boolean allowSkip;
 
@@ -110,6 +116,8 @@ public final class CompiledNode {
             return this;
         }
 
+        Builder abilityKey(String value) { this.abilityKey = value; return this; }
+
         Builder nodePrompt(String value) {
             this.nodePrompt = value;
             return this;
@@ -128,7 +136,14 @@ public final class CompiledNode {
                     && (skillCode == null || nodePrompt == null)) {
                 throw new IllegalStateException("CompiledNode Skill字段不完整");
             }
-            if (nodeType != WorkflowNodeType.SKILL
+            if (nodeType == WorkflowNodeType.BUSINESS_CAPABILITY
+                    && (abilityKey == null || skillCode != null || allowSkip)) {
+                throw new IllegalStateException("CompiledNode能力字段不完整");
+            }
+            if (nodeType != WorkflowNodeType.BUSINESS_CAPABILITY && abilityKey != null) {
+                throw new IllegalStateException("非能力节点不得携带abilityKey");
+            }
+            if (nodeType != WorkflowNodeType.SKILL && nodeType != WorkflowNodeType.BUSINESS_CAPABILITY
                     && (skillCode != null || nodePrompt != null || allowSkip)) {
                 throw new IllegalStateException("系统节点不得携带Skill专属字段");
             }

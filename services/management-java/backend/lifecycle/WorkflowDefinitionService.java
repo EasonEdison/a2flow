@@ -119,6 +119,9 @@ public class WorkflowDefinitionService {
     private WorkflowSpecialistSkillSelector workflowSpecialistSkillSelector;
 
     @Resource
+    private WorkflowCapabilitySelector workflowCapabilitySelector;
+
+    @Resource
     private AssetReleaseEditGuard assetReleaseEditGuard;
 
     @Resource
@@ -308,6 +311,7 @@ public class WorkflowDefinitionService {
                 operator, ReleaseAssetType.ORCHESTRATION_CONFIG, workflowCode, AssetAction.VIEW);
         workflowSpecialistSkillSelector.validateSkillReferences(
                 operator, workflowCode, AssetAction.PUBLISH, aggregate);
+        workflowCapabilitySelector.validateReferences(workflowCode, aggregate);
     }
 
     /** 只读快照对已解析 graph 执行 VIEW 权限和当前 Skill 关系重验。 */
@@ -315,6 +319,7 @@ public class WorkflowDefinitionService {
             String operator, String workflowCode, WorkflowGraphAggregate aggregate) {
         workflowSpecialistSkillSelector.validateSkillReferences(
                 operator, workflowCode, AssetAction.VIEW, aggregate);
+        workflowCapabilitySelector.validateReferences(workflowCode, aggregate);
     }
 
     /** 编辑期预览对已解析 graph 执行 EDIT 权限和当前 Skill 关系重验。 */
@@ -322,6 +327,7 @@ public class WorkflowDefinitionService {
             String operator, String workflowCode, WorkflowGraphAggregate aggregate) {
         workflowSpecialistSkillSelector.validateSkillReferences(
                 operator, workflowCode, AssetAction.EDIT, aggregate);
+        workflowCapabilitySelector.validateReferences(workflowCode, aggregate);
     }
 
     /**
@@ -394,6 +400,7 @@ public class WorkflowDefinitionService {
 
         workflowSpecialistSkillSelector.validateSkillReferences(
                 operator, workflowCode, AssetAction.EDIT, aggregate);
+        workflowCapabilitySelector.validateReferences(workflowCode, aggregate);
         WorkflowCompiledPlanBuilder.build(aggregate);
 
         String canonicalDraftPayloadJson = WorkflowGraphAggregateParser.serialize(aggregate);

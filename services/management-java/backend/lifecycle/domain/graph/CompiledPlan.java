@@ -229,6 +229,7 @@ public final class CompiledPlan {
                 return sourceType == WorkflowNodeType.PARALLEL_FORK;
             }
             return sourceType == WorkflowNodeType.SKILL
+                    || sourceType == WorkflowNodeType.BUSINESS_CAPABILITY
                     || sourceType == WorkflowNodeType.PARALLEL_JOIN;
         }
 
@@ -236,6 +237,7 @@ public final class CompiledPlan {
             Set<String> expectedSources = new HashSet<>();
             for (CompiledNode node : nodeMap.values()) {
                 if (node.getNodeType() == WorkflowNodeType.SKILL
+                        || node.getNodeType() == WorkflowNodeType.BUSINESS_CAPABILITY
                         || node.getNodeType() == WorkflowNodeType.PARALLEL_JOIN) {
                     expectedSources.add(node.getNodeCode());
                 }
@@ -247,6 +249,7 @@ public final class CompiledPlan {
                 CompiledNode source = nodeMap.get(entry.getKey());
                 if (source == null || !nodeMap.containsKey(entry.getValue())
                         || (source.getNodeType() != WorkflowNodeType.SKILL
+                        && source.getNodeType() != WorkflowNodeType.BUSINESS_CAPABILITY
                         && source.getNodeType() != WorkflowNodeType.PARALLEL_JOIN)
                         || countOutgoingEdges(entry.getKey(), WorkflowEdgeType.NORMAL) != 1
                         || countMatchingEdges(entry.getKey(), entry.getValue(),

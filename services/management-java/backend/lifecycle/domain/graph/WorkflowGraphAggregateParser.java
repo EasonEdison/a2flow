@@ -83,6 +83,8 @@ public final class WorkflowGraphAggregateParser {
     private static final Set<String> SKILL_NODE_FIELDS = new HashSet<>(Arrays.asList(
             NODE_FIELD_NODE_CODE, NODE_FIELD_NODE_TYPE, NODE_FIELD_DISPLAY_NAME, NODE_FIELD_SKILL_CODE,
             NODE_FIELD_NODE_PROMPT, NODE_FIELD_CONTROL_POLICY, NODE_FIELD_QUICK_TRIGGER_MESSAGE));
+    private static final Set<String> CAPABILITY_NODE_FIELDS = Set.of(
+            NODE_FIELD_NODE_CODE, NODE_FIELD_NODE_TYPE, NODE_FIELD_DISPLAY_NAME, "abilityKey", NODE_FIELD_NODE_PROMPT);
     private static final Set<String> ROUTER_NODE_FIELDS = new HashSet<>(Arrays.asList(
             NODE_FIELD_NODE_CODE, NODE_FIELD_NODE_TYPE, NODE_FIELD_DISPLAY_NAME, NODE_FIELD_ROUTER_PROMPT,
             NODE_FIELD_ROUTER_CONTRACT_VERSION, NODE_FIELD_ROUTER_SCHEMA_DIGEST,
@@ -213,6 +215,9 @@ public final class WorkflowGraphAggregateParser {
             case SKILL:
                 node = parseSkillNode(nodeMap, nodeCode, nodePath);
                 break;
+            case BUSINESS_CAPABILITY:
+                node = parseCapabilityNode(nodeMap, nodeCode, nodePath);
+                break;
             case ROUTER:
                 node = parseRouterNode(nodeMap, nodeCode, nodePath);
                 break;
@@ -267,6 +272,21 @@ public final class WorkflowGraphAggregateParser {
         node.setQuickTriggerMessage(optionalQuickTriggerMessage(nodeMap, nodeCode));
         node.setNodeCode(nodeCode);
         node.setNodeType(WorkflowNodeType.SKILL);
+        return node;
+    }
+
+    private static WorkflowBusinessCapabilityNode parseCapabilityNode(
+            Map<String, Object> nodeMap, String nodeCode, String nodePath) {
+        requireNoUnknownFields(nodeMap, CAPABILITY_NODE_FIELDS, nodePath);
+        String abilityKey = requireNonBlankString(nodeMap, "abilityKey", childPath(nodePath, "abilityKey"));
+        String prompt = nodeMap.containsKey(NODE_FIELD_NODE_PROMPT)
+                ? requireNonBlankString(nodeMap, NODE_FIELD_NODE_PROMPT, childPath(nodePath, NODE_FIELD_NODE_PROMPT)) : null;
+        if (prompt != null && prompt.codePointCount(0, prompt.length()) > 4096) {
+            throw domainFailure("nodePrompt超过4096字符", childPath(nodePath, NODE_FIELD_NODE_PROMPT));
+        }
+        WorkflowBusinessCapabilityNode node = new WorkflowBusinessCapabilityNode();
+        node.setAbilityKey(abilityKey); node.setNodePrompt(prompt);
+        node.setNodeCode(nodeCode); node.setNodeType(WorkflowNodeType.BUSINESS_CAPABILITY);
         return node;
     }
 

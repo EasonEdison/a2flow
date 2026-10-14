@@ -30,6 +30,9 @@ public class WorkflowAssetDependencyAdapter implements AssetDependencyAdapter {
     @Resource
     private WorkflowReleasePayloadAdapter payloadAdapter;
 
+    @Resource
+    private dev.a2flow.management.lifecycle.WorkflowCapabilitySelector capabilities;
+
     @Override
     public AssetDependencyType assetType() {
         return AssetDependencyType.ORCHESTRATION_CONFIG;
@@ -67,11 +70,14 @@ public class WorkflowAssetDependencyAdapter implements AssetDependencyAdapter {
     public List<AssetDependencyReference> dependencies(ResolvedReleasedAsset resolvedAsset) {
         try {
             WorkflowReleasePayload payload = payloadAdapter.requirePayload(resolvedAsset);
-            return payloadAdapter.skillCodes(payload).stream()
+            List<AssetDependencyReference> dependencies = new java.util.ArrayList<>(payloadAdapter.skillCodes(payload).stream()
                     .map(skillCode -> new AssetDependencyReference()
                             .setAssetType(AssetDependencyType.SKILL)
                             .setAssetKey(skillCode))
-                    .toList();
+                    .toList());
+            dependencies.addAll(capabilities.dependencies(payload.getWorkflowCode(), payloadAdapter.abilityKeys(payload),
+                    resolvedAsset.getRequestedEnvironment()));
+            return List.copyOf(dependencies);
         } catch (WorkflowReleasePayloadValidationException exception) {
             throw dependencyNotReady(resolvedAsset, exception);
         }

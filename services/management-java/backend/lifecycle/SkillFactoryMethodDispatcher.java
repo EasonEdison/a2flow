@@ -174,6 +174,9 @@ public class SkillFactoryMethodDispatcher {
     private WorkflowSpecialistSkillSelector workflowSpecialistSkillSelector;
 
     @Resource
+    private WorkflowCapabilitySelector workflowCapabilitySelector;
+
+    @Resource
     private WorkflowGraphPreviewService workflowGraphPreviewService;
 
     @Resource
@@ -424,6 +427,10 @@ public class SkillFactoryMethodDispatcher {
                     userName, requiredWorkflow(params, PARAM_WORKFLOW_CODE),
                     string(params.get(PARAM_DRAFT_PAYLOAD_JSON)),
                     requiredWorkflowLong(params, PARAM_EXPECTED_DRAFT_REVISION)), false);
+        }
+        if (method == SkillFactoryMethodEnum.WORKFLOW_CAPABILITY_CANDIDATES) {
+            return success(workflowCapabilitySelector.candidates(
+                    userName, requiredWorkflow(params, PARAM_WORKFLOW_CODE)), true);
         }
         if (method == SkillFactoryMethodEnum.WORKFLOW_SKILL_CANDIDATES) {
             return success(workflowSpecialistSkillSelector.getSkillsForWorkflow(

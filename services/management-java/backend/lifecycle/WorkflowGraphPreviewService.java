@@ -72,6 +72,9 @@ public class WorkflowGraphPreviewService {
 
         try {
             workflowDefinitionService.validatePreviewSkillReferences(operator, workflowCode, aggregate);
+        } catch (WorkflowControlPlaneException exception) {
+            errors.add(new WorkflowGraphValidationError(exception.getErrorCode(), exception.getMessage(),
+                    exception.getFieldPath(), null, null, null));
         } catch (WorkflowSkillReferenceValidationException exception) {
             errors.add(new WorkflowGraphValidationError(
                     exception.getErrorCode(), exception.getMessage(), exception.getFieldPath(),

@@ -19,6 +19,7 @@ package dev.a2flow.management.lifecycle.domain.graph;
 public enum WorkflowNodeType {
 
     SKILL,
+    BUSINESS_CAPABILITY,
     ROUTER,
     PARALLEL_FORK,
     PARALLEL_JOIN,

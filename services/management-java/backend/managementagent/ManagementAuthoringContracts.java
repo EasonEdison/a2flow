@@ -21,7 +21,7 @@ public final class ManagementAuthoringContracts {
         bindings.put("componentBinding", "{assetId:number from candidates,componentCode?:string matching registered identity}");
         bindings.put("replace", "{workspaceId:string,version:current Skill version,capabilityBindings:[...],componentBindings:[...]}; arrays replace the whole set, so preserve existing bindings when adding.");
         result.set("workflowDraftSchema", workflowSchema());
-        result.put("workflowInstructions", "workflowCode must equal WORKFLOW_CREATE/DETAIL. Use WORKFLOW_SKILL_CANDIDATES; required 2-8 SKILL nodes with real same-specialist Skills effective in PRT, then exactly one SUMMARY nodeCode __summary__. Native runtime has no one-Skill publication path. Nodes form one connected NORMAL edge chain. Summary prompt equals summaryConfig.prompt; allowSkip=false. Do not include quickTriggerMessage, detailSummaryPrompt, handlingSuggestions, router, loop or parallel execution. Preserve all chosen nodePrompt instructions. Save with current expectedDraftRevision and call WORKFLOW_COMPILED_PLAN_PREVIEW before normal release.");
+        result.put("workflowInstructions", "workflowCode must equal WORKFLOW_CREATE/DETAIL. Use WORKFLOW_SKILL_CANDIDATES and WORKFLOW_CAPABILITY_CANDIDATES. Required 1-8 business nodes, SKILL and/or BUSINESS_CAPABILITY, then exactly one SUMMARY nodeCode __summary__. A pure capability flow is valid. SKILL references retain same-specialist rules and required nodePrompt/controlPolicy. BUSINESS_CAPABILITY uses published abilityKey (actionCode), optional displayName/nodePrompt, no controlPolicy, fixed arguments, field mapping or Agent configuration. Runtime fills arguments from the task and prior real results using the current capability schema; missing information is collected through a node-bound temporary interaction and submission resumes that node. Candidate environments are informative; publication requires each dependency effective in the actual target environment. No cross-environment fallback or automatic retry. Nodes form one connected NORMAL edge chain. Summary prompt equals summaryConfig.prompt; allowSkip=false. Set summaryConfig.handlingSuggestions to the required empty array []; nonempty suggestions, quickTriggerMessage, detailSummaryPrompt, router, loop and parallel execution are unsupported. Preserve all chosen nodePrompt instructions. Save with current expectedDraftRevision and call WORKFLOW_COMPILED_PLAN_PREVIEW before normal release.");
         result.put("publicationInstructions", "Read RELEASE_OVERVIEW currentSnapshot.digest and activeChange. Create change if absent; use its real digest for RELEASE_PREPROD_DEPLOY. Release type/key: SKILL/skillCode, CAPABILITY_ACTION/draftId, COMPONENT/numeric id, A2UI_APPLICATION/appCode, ORCHESTRATION_CONFIG/workflowCode. Then read RELEASE_DEPLOYMENT_DETAIL(operationId) and RELEASE_OVERVIEW environments.PRT; only the actual effective pointer proves availability. Draft creation, compiler validity and tool transport success are not publication. Dependency failures must be fixed by publishing the actual dependency first; no fallback or invented success.");
         return result;
     }
@@ -29,13 +29,18 @@ public final class ManagementAuthoringContracts {
         ObjectNode root = object(); var properties = root.withObject("properties");
         properties.set("snapshotContractVersion", mapper.createObjectNode().put("const", 2));
         properties.set("workflowCode", string()); properties.set("metadata", mapper.createObjectNode().put("type", "object"));
-        ObjectNode nodes = properties.putObject("nodes").put("type", "array").put("minItems", 3).put("maxItems", 9);
+        ObjectNode nodes = properties.putObject("nodes").put("type", "array").put("minItems", 2).put("maxItems", 9);
         var alternatives = nodes.putObject("items").putArray("oneOf");
         ObjectNode skill = object(); var fields = skill.withObject("properties");
         fields.set("nodeCode", string()); fields.set("nodeType", mapper.createObjectNode().put("const", "SKILL"));
         fields.set("displayName", string()); fields.set("skillCode", string()); fields.set("nodePrompt", string());
         ObjectNode control = object(); control.withObject("properties").set("allowSkip", mapper.createObjectNode().put("const", false)); required(control, "allowSkip");
         fields.set("controlPolicy", control); required(skill, "nodeCode", "nodeType", "skillCode", "nodePrompt", "controlPolicy"); alternatives.add(skill);
+        ObjectNode capability = object(); fields = capability.withObject("properties");
+        fields.set("nodeCode", string()); fields.set("nodeType", mapper.createObjectNode().put("const", "BUSINESS_CAPABILITY"));
+        fields.set("displayName", string()); fields.set("abilityKey", string());
+        fields.set("nodePrompt", string().put("maxLength", 4096));
+        required(capability, "nodeCode", "nodeType", "abilityKey"); alternatives.add(capability);
         ObjectNode summary = object(); fields = summary.withObject("properties");
         fields.set("nodeCode", mapper.createObjectNode().put("const", "__summary__")); fields.set("nodeType", mapper.createObjectNode().put("const", "SUMMARY"));
         fields.set("displayName", string()); fields.set("prompt", string()); fields.set("allowSkip", mapper.createObjectNode().put("const", false)); required(summary, "nodeCode", "nodeType", "prompt", "allowSkip"); alternatives.add(summary);
@@ -43,7 +48,7 @@ public final class ManagementAuthoringContracts {
         for (String field : new String[]{"edgeId", "sourceNodeCode", "targetNodeCode"}) fields.set(field, string());
         fields.set("edgeType", mapper.createObjectNode().put("const", "NORMAL")); required(edge, "edgeId", "sourceNodeCode", "targetNodeCode", "edgeType");
         properties.putObject("edges").put("type", "array").set("items", edge);
-        ObjectNode summaryConfig = object(); summaryConfig.withObject("properties").set("prompt", string()); required(summaryConfig, "prompt");
+        ObjectNode summaryConfig = object(); summaryConfig.withObject("properties").set("prompt", string()); summaryConfig.withObject("properties").set("handlingSuggestions", mapper.createObjectNode().put("type", "array").put("maxItems", 0)); required(summaryConfig, "prompt", "handlingSuggestions");
         properties.set("summaryConfig", summaryConfig); required(root, "snapshotContractVersion", "workflowCode", "metadata", "nodes", "edges", "summaryConfig");
         return root;
     }
