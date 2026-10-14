@@ -2,7 +2,7 @@
 
 ## Delivery and actual public acceptance — 2026-10-14
 
-Runtime source `67ade5cbc3cedbbf580c060ecfc61890c5847c70` is integrated to both main remotes and deployed for the Java management service and dedicated Python management Agent. The frontend build is `c4395a1`; unchanged B/Workflow execution services retain their previous deployments.
+Initial management acceptance source `67ade5cbc3cedbbf580c060ecfc61890c5847c70` was integrated to both main remotes and deployed for the Java management service and dedicated Python management Agent. The management frontend build is `c4395a1`. B/Workflow execution services retained their previous deployments at that acceptance stage; the later B execution and its deployed fixes are recorded below.
 
 Authenticated Chrome management conversation `4f7b68c9f9f34f32822122c5d09cc9cf` created the following assets through real model-selected management tools, not preinserted fixture rows. Final creation turn `5743462db58f477487e3b6e32a9036ca` completed with 48 tool calls. Earlier turns and partial failures remain in history; this was an iterative acceptance run with concrete defects repaired, not an uninterrupted first-attempt success.
 
@@ -17,7 +17,7 @@ Authenticated Chrome management conversation `4f7b68c9f9f34f32822122c5d09cc9cf` 
 
 The two business capabilities reuse registered read-only ListPeople/ResolvePeople interfaces and passed actual digest-bound PRT dry runs. The A2UI is DISPLAY_ONLY. The Workflow contains browse_people -> resolve_people -> __summary__; compilation and PRT dependency gates passed. The two previous invalid camelCase Skill drafts remain as failed acceptance history; explicitly named legal replacements were created through Chat.
 
-Actual Runtime `RpcAssetReader`, `load_skill` and `resolve_workflow` resolved all six published materials and their complete dependency closure. This proves publication and material loading, not a new B-side Workflow execution or business-write run.
+Actual Runtime `RpcAssetReader`, `load_skill` and `resolve_workflow` resolved all six published materials and their complete dependency closure. That check proves publication and material loading only. The separate real B-side read-only Workflow execution is recorded below; no business-write run is claimed.
 
 ## Refresh and continuation
 
@@ -30,6 +30,20 @@ The requested sentence was added in two description locations in SKILL.md. Compa
 Actual PRT build `build_b70ccb6535dc4c2d81047dc93f62b201`, deployment `deployment_5a599bdcfd58459899dbb5718939940e`, digest `04c1d4b376c13efd78ffa6a38039cda9ae34cefce6f6298296052131e214c917`, status EFFECTIVE. This is PRT build #2 for target version 1, not a semantic v2 release: the existing active-change lifecycle permits multiple immutable PRT builds before sealing a formal release. The earlier acceptance shorthand “v2” was inaccurate; no lifecycle rule was changed merely to force a display-number increment.
 
 A second browser reload retained the updated result with identical before/after snapshots: 1 turn, 37 events, 3 mutations, last sequence 487; fingerprint `bbfb8801be636a622b8aac36f68ce308afb6fef74e98e0edc1ed4256e35576f8`. No unresolved mutations or repeat publication.
+
+## Public B Workflow execution and recovery — 2026-10-14
+
+The coordinator verified the Chat-authored Workflow `wf_e47bd91dd95b49d58a703013e13b4f71` in authenticated public Chrome after integrated main `3c178785a37620a963347bf190e6f6f9bdd1ae01` was deployed. This deployment updated the single Runtime source file for non-waiting interaction snapshots and the B static frontend; it did not introduce a new business service or asset backend.
+
+Run `35aca777fa5240f2af4a8ad5b510e96f`, control `dca23a63675e4318ac41b5aec357eaba`, completed in PRT. All three nodes — `browse_people`, `resolve_people`, `workflow-summary` — were SUCCEEDED. Persisted execution facts contained 8 MODEL, 6 TOOL, 3 NODE and 3 FINALIZER records: 20 total, all RETURNED. The real read-only ListPeople and ResolvePeople calls returned the same five synthetic person IDs, `001` through `005`, with ages 26, 31, 24, 29 and 35 respectively.
+
+There was one DISPLAY_ONLY card and one COMPLETED, non-waiting interaction, with zero Actions. The coordinator expanded the A2UI and final summary in public Chrome and verified their rendered content. This is real read-only execution acceptance, not a new interactive-submission acceptance.
+
+After a full reload, opening My Runs and selecting the same run restored the same card and summary. Before/after persisted counts and fingerprint were identical: `89321bc9b2867e805c65946cb81e3a1b36aa3c0bfc31d0aa4aecd763f063d06c`. Recovery did not add execution facts or replay business calls.
+
+The first run `e09dc3e1a2ac410f9c5754ef8c7d0cca`, control `d07f116d8b7f40de871afcc98a017cf3`, remains FAILED with an UNCONFIRMED control. Its failure exposed a non-waiting snapshot defect: read-only completion normalization applied only to temporary displays, leaving a published DISPLAY_ONLY snapshot incompatible with the native completed-interaction contract. Fix `59516dd90167715ab426233d2d444161ba6a7207` applies the existing read-only completion shape to every non-interactive internal snapshot; it preserves the separately saved published card definition. B UI fix `f0b7fb63bc0e722853017322e0e511db72dacf2a` exposes uncertain starts, prevents concurrent double submission and offers explicit My Runs refresh without automatic retry. The failed run and its original evidence were retained; the successful run above is a distinct execution, not a rewritten failure.
+
+Pagination clicks were not exercised. The completed history card is read-only, while the model's summary suggested moving to another page. That suggestion exceeds the available history-card behavior and is a non-blocking output-copy issue for this acceptance; no pagination functionality or Action success is claimed.
 
 ## Failure and durability evidence
 

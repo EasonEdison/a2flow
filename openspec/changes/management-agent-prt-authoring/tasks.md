@@ -12,4 +12,9 @@
 - [x] Verify refresh and explicit failure boundaries.
 - [x] Verify a follow-up same-asset change publishes a new immutable PRT build without changing identity or unrelated assets.
 
+- [x] Execute the Chat-authored PRT Workflow through public B UI with real read-only ListPeople/ResolvePeople calls and inspect its A2UI and final summary.
+- [x] Reload and reopen the same run from My Runs; verify unchanged persisted execution facts and fingerprint.
+
+This execution acceptance covers DISPLAY_ONLY presentation with zero Actions. It does not add interactive-submit or pagination-click acceptance.
+
 Unit tests are waived by the user. Relevant builds and direct integration acceptance remain required.
