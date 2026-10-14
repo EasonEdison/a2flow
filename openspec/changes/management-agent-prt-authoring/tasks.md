@@ -10,6 +10,6 @@
 - [x] Integrate source into clean main and deploy with rollback artifacts.
 - [x] Run a real public conversation covering four asset kinds and PRT readback.
 - [x] Verify refresh and explicit failure boundaries.
-- [ ] Verify a follow-up same-asset change publishes the next PRT version.
+- [x] Verify a follow-up same-asset change publishes a new immutable PRT build without changing identity or unrelated assets.
 
 Unit tests are waived by the user. Relevant builds and direct integration acceptance remain required.
