@@ -23,7 +23,13 @@ Actual Runtime `RpcAssetReader`, `load_skill` and `resolve_workflow` resolved al
 
 After completion, a full browser reload retained the saved conversation and publication results. Exact read-only database snapshots before/after were identical: 5 turns, 400 events, last sequence 450, 63 mutation-journal rows (49 succeeded, 14 rejected), no unresolved mutations. Fingerprint: `e888977c53d5faf76f5455d416d7f47d9c5ccfbbf7e930e849b31afa44931a41`. Tool-completed counts include receipt reconciliation events; they are not an execution count. Refresh did not create a new turn or repeat a write.
 
-Follow-up same-asset change/publication acceptance is pending authenticated browser continuation: the next send was rejected after the account session expired, before a new turn was admitted.
+Follow-up same-asset change/publication: PASS after reauthentication, 2026-10-14 10:54 Asia/Shanghai. The user signed into a different existing administrator account; the original private conversation correctly remained inaccessible. A new authenticated conversation `0317fd2f4d0a4759b8d9d45bf409c247`, turn `63d09699d4ef42ea8ced4c5439442367`, modified the existing Browse Skill through normal domain authorization, without changing ownership or conversation access. It completed 17 tools, including only three mutations: file save, workspace save and PRT deployment.
+
+The requested sentence was added in two description locations in SKILL.md. Comparing retained immutable Runtime materials showed that removing exactly those two sentence occurrences reproduces the prior file byte-for-byte; every other file, dependency and required tool is unchanged. Asset ID remains `skill-389824b97e6f3ee2b2f219d49a10ed32cd3f835c11b2544a2e8379b2cca529f5`. Runtime version changed from `java-73bf7d909cbda224bf4623dc8df8c180f32f893ea1a7662f116d378459e21ed9` to `java-c0a80864ac327c299d55b808e4dd6f185de721a38ba6c8c015d5e0c2fefb1e30`. All five other asset version IDs are unchanged and all six materials remain READABLE.
+
+Actual PRT build `build_b70ccb6535dc4c2d81047dc93f62b201`, deployment `deployment_5a599bdcfd58459899dbb5718939940e`, digest `04c1d4b376c13efd78ffa6a38039cda9ae34cefce6f6298296052131e214c917`, status EFFECTIVE. This is PRT build #2 for target version 1, not a semantic v2 release: the existing active-change lifecycle permits multiple immutable PRT builds before sealing a formal release. The earlier acceptance shorthand “v2” was inaccurate; no lifecycle rule was changed merely to force a display-number increment.
+
+A second browser reload retained the updated result with identical before/after snapshots: 1 turn, 37 events, 3 mutations, last sequence 487; fingerprint `bbfb8801be636a622b8aac36f68ce308afb6fef74e98e0edc1ed4256e35576f8`. No unresolved mutations or repeat publication.
 
 ## Failure and durability evidence
 
