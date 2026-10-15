@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
+from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from langchain_core.messages import ToolMessage
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
+from langchain_core.messages import SystemMessage, ToolMessage
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from .lifecycle import RunRecord
@@ -33,6 +36,55 @@ class ReportAttentionArgs(BaseModel):
     evidenceRefs: list[Annotated[str, Field(min_length=6, max_length=300)]] = Field(min_length=1, max_length=8)
 
 
+def attention_evidence_refs(messages: list[Any]) -> set[str]:
+    """Only successful business calls in the bound node can support a report."""
+    return {
+        "tool:" + message.tool_call_id
+        for message in messages
+        if isinstance(message, ToolMessage)
+        and message.status != "error"
+        and message.name == "execute_ability"
+    }
+
+
+class AttentionEvidenceTools(AgentMiddleware):
+    """Expose reporting only after a business result, with exact evidence handles."""
+
+    @staticmethod
+    def _prepare(request: ModelRequest) -> ModelRequest:
+        references = sorted(attention_evidence_refs(request.state.get("messages", [])))
+        tools = [
+            item for item in request.tools
+            if references or (item.name if isinstance(item, BaseTool) else item.get("name"))
+            != "report_workflow_attention"
+        ]
+        if not references:
+            return request.override(tools=tools)
+        current = request.system_message
+        content = current.content if current else ""
+        blocks = ([{"type": "text", "text": content}] if isinstance(content, str)
+                  else list(content))
+        blocks.append({"type": "text", "text":
+            "当前节点可用于异常上报的成功业务查询证据引用如下。仅在真实结果符合本次异常条件时，"
+            "从这些值中原样选择 evidenceRefs；不可使用页面内部加载 requestId、其他节点编号或猜测值。"
+            "已有结果无需重新查询，上报不执行业务补救。可用引用："
+            + json.dumps(references, ensure_ascii=False)})
+        system_message = (SystemMessage(content=blocks) if current is None
+                          else current.model_copy(update={"content": blocks}))
+        return request.override(tools=tools, system_message=system_message)
+
+    def wrap_model_call(
+        self, request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse],
+    ) -> ModelResponse:
+        return handler(self._prepare(request))
+
+    async def awrap_model_call(
+        self, request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        return await handler(self._prepare(request))
+
+
 class WorkflowAttentionReporter:
     def __init__(self, conninfo: str) -> None:
         self._conninfo = conninfo
@@ -41,13 +93,7 @@ class WorkflowAttentionReporter:
         self, run: RunRecord, node_id: str, tool_call_id: str,
         arguments: ReportAttentionArgs, messages: list[Any],
     ) -> dict[str, Any]:
-        allowed = {
-            "tool:" + message.tool_call_id
-            for message in messages
-            if isinstance(message, ToolMessage)
-            and message.status != "error"
-            and message.name == "execute_ability"
-        }
+        allowed = attention_evidence_refs(messages)
         references = sorted(set(arguments.evidenceRefs))
         if any(reference not in allowed for reference in references):
             raise ActionRejected("ATTENTION_EVIDENCE_NOT_FOUND")
