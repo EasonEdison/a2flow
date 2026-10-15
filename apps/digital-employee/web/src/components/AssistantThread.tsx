@@ -1,10 +1,8 @@
 import type { PersonalWorkflow } from '../personalWorkflow';
 import {
   AssistantRuntimeProvider,
-  ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  useAui,
   useExternalStoreRuntime,
   type AppendMessage,
 } from '@assistant-ui/react';
@@ -29,8 +27,15 @@ import {
 import { MarkdownContent } from './MarkdownContent';
 import { isGenerationTool } from '../generationProgress';
 import { GenerationProcess } from './GenerationProcess';
+import { RunReferenceChips } from './WorkActivity';
+import type { RunReference } from '../productApi';
 
 type AssistantThreadProps = {
+  draftText: string;
+  onDraftTextChange: (text: string) => void;
+  runReferences: RunReference[];
+  onRemoveReference: (id: string) => void;
+  onOpenReference: (id: string) => void;
   messages: Message[];
   isRunning: boolean;
   isSendDisabled: boolean;
@@ -74,6 +79,8 @@ const toolLabels: Record<string, string> = {
   read_personal_workflow: '读取我的工作流',
   render_application: '展示交互卡片',
   generate_interaction: '生成临时交互',
+  list_workflow_runs: '查找工作流运行',
+  get_workflow_run_result: '读取工作流结果',
   generate_a2ui: '生成界面布局',
 };
 
@@ -226,9 +233,9 @@ export function ExecutionPanel({ message }: { message: Message }) {
   </details>;
 }
 
-function UserMessage({ message }: { message: Message }) {
+function UserMessage({ message, onOpenReference }: { message: Message; onOpenReference: (id: string) => void }) {
   return <MessagePrimitive.Root className="aui-message aui-user-message">
-    <div className="aui-user-bubble">{message.text}</div>
+    <div className="aui-user-bubble">{message.runReferences?.length ? <RunReferenceChips references={message.runReferences} onOpen={onOpenReference} /> : null}{message.text}</div>
   </MessagePrimitive.Root>;
 }
 
@@ -294,29 +301,24 @@ function AssistantMessage({
   </MessagePrimitive.Root>;
 }
 
-function ChatComposer({ disabled, onError }: { disabled: boolean; onError: (message: string) => void }) {
-  const aui = useAui();
+function ChatComposer({ disabled, onError, draftText, onDraftTextChange, onSend, runReferences, onRemoveReference, onOpenReference }: Pick<AssistantThreadProps, 'draftText' | 'onDraftTextChange' | 'onSend' | 'runReferences' | 'onRemoveReference' | 'onOpenReference'> & { disabled: boolean; onError: (message: string) => void }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fillWorkflowIntent = () => {
-    const composer = aui.composer();
     const intent = '请帮我创建一个工作流，用于：';
-    const current = composer.getState().text;
-    const next = current.includes(intent) ? current : appendComposerDraft(current, intent);
+    const next = draftText.includes(intent) ? draftText : appendComposerDraft(draftText, intent);
     if (next === null) { onError('追加创建意图后超过 4000 字，未覆盖已有输入。'); return; }
-    composer.setText(next);
+    onDraftTextChange(next);
     inputRef.current?.focus();
   };
   return <><div className="composer-shortcuts"><button type="button" className="secondary"
-    disabled={disabled} onClick={fillWorkflowIntent}>创建工作流</button></div><ComposerPrimitive.Root className="aui-composer">
-    <ComposerPrimitive.Input
-      ref={inputRef}
-      aria-label="消息"
-      placeholder="输入消息，描述你想完成的工作"
-      submitMode="enter"
-      unstable_insertNewlineOnTouchEnter
-    />
-    <ComposerPrimitive.Send className="aui-send" aria-label="发送消息">发送</ComposerPrimitive.Send>
-  </ComposerPrimitive.Root></>;
+    disabled={disabled} onClick={fillWorkflowIntent}>创建工作流</button></div>
+    <RunReferenceChips references={runReferences} onRemove={onRemoveReference} onOpen={onOpenReference} />
+    <form className="aui-composer" onSubmit={event => { event.preventDefault(); if (!disabled && draftText.trim()) void onSend(draftText); }}>
+      <textarea ref={inputRef} aria-label="消息" placeholder="输入消息，描述你想完成的工作" maxLength={4000}
+        value={draftText} onChange={event => onDraftTextChange(event.target.value)}
+        onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !matchMedia('(pointer: coarse)').matches) { event.preventDefault(); if (!disabled) event.currentTarget.form?.requestSubmit(); } }} />
+      <button type="submit" className="aui-send" aria-label="发送消息" disabled={disabled || !draftText.trim()}>发送</button>
+    </form></>;
 }
 
 function ThreadBody({
@@ -331,21 +333,23 @@ function ThreadBody({
   onCardActionStateChange,
   isRunning,
   isSendDisabled,
-}: Omit<AssistantThreadProps, 'onSend'>) {
-  const aui = useAui();
+  draftText, onDraftTextChange, onSend, runReferences, onRemoveReference, onOpenReference,
+}: AssistantThreadProps) {
   const consumedEffects = useRef(new Set<string>());
+  const composerText = useRef(draftText);
+  composerText.current = draftText;
   const applyComposerDraft = useCallback((effect: ComposerDraftEffect) => {
     if (effect.type !== 'COMPOSER_DRAFT' || effect.mode !== 'APPEND'
       || !effect.requestId || !effect.text || consumedEffects.current.has(effect.requestId)) return;
-    const composer = aui.composer();
-    const next = appendComposerDraft(composer.getState().text, effect.text);
+    const next = appendComposerDraft(composerText.current, effect.text);
     if (next === null) {
       onComposerError('回填内容与当前输入合并后超过 4000 字，未覆盖已有输入。');
       return;
     }
-    composer.setText(next);
+    composerText.current = next;
+    onDraftTextChange(next);
     consumedEffects.current.add(effect.requestId);
-  }, [aui, onComposerError]);
+  }, [draftText, onDraftTextChange, onComposerError]);
 
   const messagesById = useMemo(() => new Map(messages.map(message => [message.id, message])), [messages]);
   return <ThreadPrimitive.Root className="aui-thread">
@@ -363,7 +367,7 @@ function ThreadBody({
             const source = messagesById.get(message.id);
             if (!source) return null;
             return source.role === 'user'
-              ? <UserMessage message={source} />
+              ? <UserMessage message={source} onOpenReference={onOpenReference} />
               : <AssistantMessage
                 message={source}
                 renderMessageExtras={renderMessageExtras}
@@ -384,7 +388,7 @@ function ThreadBody({
       </ThreadPrimitive.Viewport>
         <div className="aui-thread-footer">
           {error ? <p className="chat-error" role="alert">{error}</p> : null}
-          <ChatComposer disabled={isRunning || isSendDisabled} onError={onComposerError} />
+          <ChatComposer disabled={isRunning || isSendDisabled} onError={onComposerError} draftText={draftText} onDraftTextChange={onDraftTextChange} onSend={onSend} runReferences={runReferences} onRemoveReference={onRemoveReference} onOpenReference={onOpenReference} />
         </div>
     </ThreadPrimitive.Root>;
 }

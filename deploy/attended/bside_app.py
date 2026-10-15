@@ -29,6 +29,7 @@ from a2flow_bside.repositories import (
 from a2flow_bside.runtime_client import HttpRuntimeClient
 from a2flow_bside.notification_repository import NotificationsRepository, notification_engine
 from a2flow_bside.schedule_history import ScheduleHistoryRepository
+from a2flow_bside.work_activities import WorkActivitiesRepository
 
 from pydantic import SecretStr
 
@@ -205,6 +206,7 @@ def create_app_from_environment():
             result.append(cls(content=text, id=f"legacy-{row['id']}"))
         return result
 
+    work_activities = WorkActivitiesRepository(connection_factory)
     chat_runner = ChatLoopRunner(
         model_factory=chat_model_factory, model_reference="deepseek-v4-flash",
         environment=config.environment, reader=reader,
@@ -215,6 +217,7 @@ def create_app_from_environment():
         personal_workflows=reader,
         assets_factory=assets_factory,
         observation_loader=card_store.list_observations,
+        workflow_run_provider=work_activities,
     )
 
     return create_app(
@@ -228,6 +231,7 @@ def create_app_from_environment():
         notifications=NotificationsRepository(notification_engine(conninfo)),
         schedule_history=ScheduleHistoryRepository(notification_engine(conninfo)),
         run_ownership=RunOwnershipRepository(connection_factory),
+        work_activities=work_activities,
         runtime_client=HttpRuntimeClient(config.runtime_url),
         chat_runner=chat_runner,
         chat_cards=chat_cards,

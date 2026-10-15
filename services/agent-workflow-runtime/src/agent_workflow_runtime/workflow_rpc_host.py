@@ -61,6 +61,7 @@ from .service import ExecutionSession
 from .workflow_loader import compose_workflow
 from .workflow_capability import build_capability_graph, saved_result
 from .workflow_rpc import WorkflowActions, WorkflowAssets, WorkflowCard, ResumeStatus
+from .workflow_attention import ReportAttentionArgs, WorkflowAttentionReporter
 
 
 class WorkflowModelFactory(Protocol):
@@ -112,6 +113,7 @@ def tools_for(
     assets: WorkflowAssets, actions: WorkflowActions,
     generator: A2uiGenerator | None = None,
     interaction_generator: InteractionGenerator | None = None,
+    attention_reporter: WorkflowAttentionReporter | None = None,
 ) -> tuple[BaseTool, ...]:
     @tool("use_skill", args_schema=UseSkillArgs, response_format="content_and_artifact")
     def use_skill(skillKey: str, runtime: ToolRuntime[TrustedInvocationContext]) -> tuple[str, Any]:
@@ -192,7 +194,30 @@ def tools_for(
             assets, data, intent, runtime.tool_call_id, interaction_generator,
         )
 
+    @tool("report_workflow_attention")
+    def report_workflow_attention(
+        title: str, summary: str, evidenceRefs: list[str],
+        runtime: ToolRuntime[TrustedInvocationContext],
+    ) -> str:
+        """Report a concrete business anomaly supported by returned business Tool results.
+
+        evidenceRefs must contain tool:<tool_call_id> references to actual successful
+        execute_ability results in this node; UI generation or user input alone is
+        not proof of a business anomaly. Reporting never changes execution status or performs
+        business remediation. Do not report normal completion as an anomaly.
+        """
+        assets.validate_context(runtime.context)
+        if attention_reporter is None or not runtime.tool_call_id:
+            raise ActionRejected("ATTENTION_REPORT_UNAVAILABLE")
+        arguments = ReportAttentionArgs(title=title, summary=summary, evidenceRefs=evidenceRefs)
+        return json.dumps(attention_reporter.report(
+            assets.run, assets.node_id, runtime.tool_call_id, arguments,
+            runtime.state.get("messages", []),
+        ), ensure_ascii=False)
+
     tools = (use_skill, execute_ability, query_skill_dependencies, render_application)
+    if attention_reporter is not None:
+        tools = (*tools, report_workflow_attention)
     if generator is not None:
         tools = (*tools, generate_a2ui)
     if interaction_generator is not None:
@@ -237,6 +262,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
             conninfo=conninfo, namespace=namespace, model_factory=model_factory, **kwargs
         )
         self.rpc = rpc
+        self.attention_reporter = WorkflowAttentionReporter(conninfo)
         self.reader = RpcAssetReader(self.asset_repository, namespace, rpc)
         if personal_workflows is not None:
             self.reader = PersonalWorkflowReader(self.reader, personal_workflows)
@@ -284,6 +310,8 @@ class RpcWorkflowHost(MvpRuntimeHost):
             "它不能替代 required render_application，也不能使后继节点提前运行。"
             "仅展示的界面不会等待提交；需要输入的界面应在 intent 中明确等待目标。"
             "失败明确报告，不自动重试或降级。"
+            "当前节点若确实从返回的业务结果发现异常，可使用 report_workflow_attention，引用真实工具调用结果。"
+            "这仅提醒用户查看，不改变运行状态，不自动补救；正常完成无需报告异常。"
         )
 
     def _actions(self, run: RunRecord) -> WorkflowActions:
@@ -320,6 +348,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                     "render_application": RenderModelArgs,
                     "generate_a2ui": GenerateModelArgs,
                     "generate_interaction": GenerateInteractionModelArgs,
+                    "report_workflow_attention": ReportAttentionArgs,
                 }
                 for node in definition["nodes"]:
                     assets = actions.assets(node["nodeId"])
@@ -333,7 +362,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                         continue
                     material = self.reader.load_skill(node["skillKey"], run.context(node["nodeId"]))
                     required = tuple(dict.fromkeys(("use_skill", *material.required_tool_names)))
-                    allowed = {*required, "generate_interaction"}
+                    allowed = {*required, "generate_interaction", "report_workflow_attention"}
                     if "render_application" in allowed:
                         allowed.add("query_skill_dependencies")
                         allowed.add("generate_a2ui")
@@ -345,7 +374,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                     )
                     available = {
                         item.name: item for item in tools_for(
-                            assets, actions, generator, interaction_generator,
+                            assets, actions, generator, interaction_generator, self.attention_reporter,
                         )
                     }
                     if not allowed <= available.keys():

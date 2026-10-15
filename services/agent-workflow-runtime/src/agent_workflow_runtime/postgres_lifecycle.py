@@ -12,6 +12,7 @@ from skillweave_contracts import TrustedContext
 from .lifecycle import RunRecord, RunControl, OperationFact, canonical
 from .models import ActionRejected
 from .postgres import lock_key
+from .workflow_attention import DDL as ATTENTION_DDL
 
 
 DDL = (
@@ -131,7 +132,7 @@ class PostgresRunRepository:
 
     def setup(self):
         with self._transaction(None):
-            for statement in DDL:
+            for statement in (*DDL, *ATTENTION_DDL):
                 self._local.connection.execute(statement)
 
     @contextmanager

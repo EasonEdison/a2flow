@@ -22,4 +22,5 @@ class ChatRunner(Protocol):
     async def iterate(self, *, user_id: int, conversation_id: int,
                       text: str,
                       turn_id: str,
+                      run_references: tuple[dict[str, Any], ...] = (),
                       ) -> AsyncIterator[dict[str, Any]]: ...
