@@ -712,7 +712,7 @@ class ChatLoop:
         model = None
         try:
             user_message = HumanMessage(
-                content=user_text, id=f"chat-user:{self._control_request_id}",
+                content=user_text, id=f"chat-user:{self._control_request_id}:{uuid4()}",
             )
             if self._chat_assets is not None:
                 self._chat_assets.begin_turn()
