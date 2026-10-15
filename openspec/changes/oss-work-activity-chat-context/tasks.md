@@ -8,4 +8,6 @@
 - [x] Add explicit evidenced business attention reporting.
 - [x] Review, build, migrate additive schema and deploy from clean main.
 
+- [x] Validate model-reported business attention through the public rail and multi-turn Chat, including viewed-state persistence.
+
 Runtime evidence and release decision belong in regression.md and readiness.md.
