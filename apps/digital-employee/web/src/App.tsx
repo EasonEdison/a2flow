@@ -3,6 +3,9 @@ import type { PersonalWorkflow } from './personalWorkflow';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from './components/Icon';
+import { ActivityDialog, WorkActivitySidebar, useWorkActivities } from './components/WorkActivity';
+import { chatDraftKey, readChatDraft, saveChatDraft } from './chatDraft';
+import type { RunReference, WorkActivity } from './productApi';
 import { RunHistory, runDisplayName, displayTime } from './components/RunHistory';
 import { NodeCard } from './components/NodeCard';
 import { WorkflowTimeline } from './components/WorkflowTimeline';
@@ -71,7 +74,7 @@ function Shell({ session, page, unread, onPage, onLogout, children }: { session:
   </div>;
 }
 
-function RunDetail({ runId, onBack, metadata }: { runId: string; onBack?: () => void; metadata?: RunItem }) {
+function RunDetail({ runId, onBack, metadata, onUpdated }: { runId: string; onBack?: () => void; metadata?: RunItem; onUpdated?: () => void }) {
   const [run, setRun] = useState<RunView | null>(null);
   const [busy, setBusy] = useState(false);
   const [cards, setCards] = useState<WorkflowCard[]>([]);
@@ -131,41 +134,45 @@ function RunDetail({ runId, onBack, metadata }: { runId: string; onBack?: () => 
   return <section className="run-detail">
     {error ? <p className="inline-error" role="alert">{error}</p> : null}
     {progress.error ? <p className="observation-warning" role="status">{progress.error}</p> : null}
-    <div className="section-heading">{onBack ? <button className="secondary" onClick={onBack}>返回</button> : null}<div><h2>{metadata?.title || run.title}</h2><p>{run.requirement}</p>{metadata ? <p className="run-started">发起于 {displayTime(metadata.createdAt)} · 本地时间</p> : null}</div><span className={`status ${run.lifecycle.toLowerCase()}`}>{runLabels[run.lifecycle] ?? run.lifecycle}</span>{['RUNNING', 'WAITING'].includes(run.lifecycle) ? <button className="quiet danger" onClick={async () => { if (!confirm('停止后无法恢复，确认停止？')) return; await productApi.stopRun(run.id); await refresh(); }}>停止运行</button> : null}</div>
+    <div className="section-heading">{onBack ? <button className="secondary" onClick={onBack}>返回</button> : null}<div><h2>{metadata?.title || run.title}</h2><p>{run.requirement}</p>{metadata ? <p className="run-started">发起于 {displayTime(metadata.createdAt)} · 本地时间</p> : null}</div><span className={`status ${run.lifecycle.toLowerCase()}`}>{runLabels[run.lifecycle] ?? run.lifecycle}</span>{['RUNNING', 'WAITING'].includes(run.lifecycle) ? <button className="quiet danger" onClick={async () => { if (!confirm('停止后无法恢复，确认停止？')) return; await productApi.stopRun(run.id); await refresh(); onUpdated?.(); }}>停止运行</button> : null}</div>
     <details className="run-identifiers"><summary>运行标识</summary><p>运行记录：<code>{run.id}</code></p>{metadata ? <p>工作流：<code>{metadata.workflowKey}</code></p> : null}</details>
     <div className="nodes">{run.nodes.map((node, index) => {
       const entries = cards.filter(entry => entry.nodeId === node.id);
       const observedNode = { ...node, records: progress.records[node.id] ?? [], historyStatus: progress.historyStatus, ...(entries.length ? { card: undefined } : {}) };
-      return <NodeCard key={node.id} node={observedNode} index={index} defaultResultOpen={index === run.nodes.length - 1 && node.status === 'SUCCEEDED'} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); await refresh(); } finally { setBusy(false); } }}>
+      return <NodeCard key={node.id} node={observedNode} index={index} defaultResultOpen={index === run.nodes.length - 1 && node.status === 'SUCCEEDED'} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); await refresh(); onUpdated?.(); } finally { setBusy(false); } }}>
         {node.snapshotCardIds?.some(cardId => !entries.some(entry => entry.card.cardId === cardId))
           ? <p role="status">交互卡片尚未同步，请刷新页面重试。</p> : null}
-        <WorkflowTimeline node={observedNode} entries={entries} renderCard={entry => <WorkflowApplications title={node.title} runId={run.id} entries={[entry]} disabled={!['RUNNING', 'WAITING'].includes(run.lifecycle) || !['RUNNING', 'WAITING'].includes(node.status) || busy} onUpdate={card => { cardReadEpoch.current++; setCards(current => current.map(entry => entry.card.cardId === card.cardId ? { ...entry, card } : entry)); }} onSettled={refresh} />} />
+        <WorkflowTimeline node={observedNode} entries={entries} renderCard={entry => <WorkflowApplications title={node.title} runId={run.id} entries={[entry]} disabled={!['RUNNING', 'WAITING'].includes(run.lifecycle) || !['RUNNING', 'WAITING'].includes(node.status) || busy} onUpdate={card => { cardReadEpoch.current++; setCards(current => current.map(entry => entry.card.cardId === card.cardId ? { ...entry, card } : entry)); }} onSettled={async () => { await refresh(); onUpdated?.(); }} />} />
       </NodeCard>;
     })}</div>
   </section>;
 }
 
-function ChatPage({ onOpenWorkflows }: { onOpenWorkflows: (tab: WorkflowTab) => void }) {
+function ChatPage({ ownerId, onOpenWorkflows }: { ownerId: string; onOpenWorkflows: (tab: WorkflowTab) => void }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState('');
   const [error, setError] = useState('');
   const initial = useRef<Promise<Conversation[]> | null>(null);
+  const selectConversation = useCallback((id: string) => {
+    setConversationId(id);
+    try { sessionStorage.setItem(`a2flow:last-chat:${ownerId}`, id); } catch { /* Draft storage reports its own availability. */ }
+  }, [ownerId]);
   useEffect(() => {
     let active = true;
     initial.current ??= productApi.conversations().then(async ({ items }) => items.length ? items : [await productApi.createConversation()]);
-    void initial.current.then(items => { if (active) { setConversations(items); setConversationId(items[0].id); } }).catch(() => { if (active) setError('会话读取失败，请刷新页面'); });
+    void initial.current.then(items => { if (active) { setConversations(items); let saved = ''; try { saved = sessionStorage.getItem(`a2flow:last-chat:${ownerId}`) || ''; } catch { /* Use the newest conversation when no saved selection exists. */ } selectConversation(items.some(item => item.id === saved) ? saved : items[0].id); } }).catch(() => { if (active) setError('会话读取失败，请刷新页面'); });
     return () => { active = false; };
   }, []);
   return <div className="chat-layout">
     <aside className="conversation-list"><div className="panel-heading"><h2>会话</h2><button aria-label="新建会话" onClick={async () => {
-      try { const item = await productApi.createConversation(); setConversations(items => [item, ...items]); setConversationId(item.id); }
+      try { const item = await productApi.createConversation(); setConversations(items => [item, ...items]); selectConversation(item.id); }
       catch { setError('新建会话失败'); }
-    }}><Icon name="plus" /><span>新建会话</span></button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => setConversationId(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
-    {conversationId ? <ChatConversation key={conversationId} conversationId={conversationId} onOpenWorkflows={onOpenWorkflows} /> : null}
+    }}><Icon name="plus" /><span>新建会话</span></button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => selectConversation(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
+    {conversationId ? <ChatConversation key={`${ownerId}:${conversationId}`} ownerId={ownerId} conversationId={conversationId} onOpenWorkflows={onOpenWorkflows} /> : null}
   </div>;
 }
 
-function ChatConversation({ conversationId, onOpenWorkflows }: { conversationId: string; onOpenWorkflows: (tab: WorkflowTab) => void }) {
+function ChatConversation({ ownerId, conversationId, onOpenWorkflows }: { ownerId: string; conversationId: string; onOpenWorkflows: (tab: WorkflowTab) => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [unassignedCards, setUnassignedCards] = useState<ChatCard[]>([]);
   const [busy, setBusy] = useState(false);
@@ -184,6 +191,45 @@ function ChatConversation({ conversationId, onOpenWorkflows }: { conversationId:
   const workflowStartInFlight = useRef(false);
   const [startingWorkflow, setStartingWorkflow] = useState(false);
   const [workflowStartUnconfirmed, setWorkflowStartUnconfirmed] = useState(false);
+  const draftKey = chatDraftKey(ownerId, conversationId);
+  const initialDraft = useRef(readChatDraft(draftKey));
+  const [draftText, setDraftText] = useState(initialDraft.current.text);
+  const [runReferences, setRunReferences] = useState<RunReference[]>(initialDraft.current.references);
+  const [draftStorageError, setDraftStorageError] = useState('');
+  const [compactActivity, setCompactActivity] = useState(() => !matchMedia('(min-width: 1400px)').matches);
+  const [activityOpen, setActivityOpen] = useState(() => matchMedia('(min-width: 1400px)').matches);
+  const [selectedActivity, setSelectedActivity] = useState<WorkActivity | null>(null);
+  const [activityReadError, setActivityReadError] = useState('');
+  const [readingActivity, setReadingActivity] = useState(false);
+  const activityReadEpoch = useRef(0);
+  const activityTrigger = useRef<HTMLButtonElement>(null);
+  const activities = useWorkActivities(activityOpen && !selectedActivity);
+  useEffect(() => {
+    const media = matchMedia('(min-width: 1400px)');
+    const resize = () => setCompactActivity(!media.matches);
+    media.addEventListener('change', resize);
+    return () => media.removeEventListener('change', resize);
+  }, []);
+  useEffect(() => {
+    setDraftStorageError(saveChatDraft(draftKey, draftText, runReferences) ? '' : '浏览器暂时无法保存草稿，请在刷新前复制输入内容。');
+  }, [draftKey, draftText, runReferences]);
+  const addRunReference = (item: WorkActivity) => {
+    if (runReferences.some(reference => reference.activityId === item.activityId)) return;
+    if (runReferences.length >= 3) { setError('一次最多引用 3 次运行，请先移除一个引用。'); return; }
+    setError('');
+    setRunReferences(current => [...current, { activityId: item.activityId, workflowName: item.workflowName, createdAt: item.createdAt }]);
+    if (compactActivity) setActivityOpen(false);
+  };
+  const openRunReference = useCallback(async (id: string) => {
+    const epoch = ++activityReadEpoch.current;
+    setReadingActivity(true); setActivityReadError('');
+    try {
+      const item = await productApi.workActivity(id);
+      if (epoch === activityReadEpoch.current) setSelectedActivity(item);
+    } catch (error) { if (epoch === activityReadEpoch.current) setActivityReadError(apiErrorMessage(error, '运行详情读取失败，请重新打开。')); }
+    finally { if (epoch === activityReadEpoch.current) setReadingActivity(false); }
+  }, []);
+
   const load = useCallback(async () => {
     if (sending.current || activeCardActions.current.size) return;
     const current = ++epoch.current;
@@ -246,15 +292,18 @@ function ChatConversation({ conversationId, onOpenWorkflows }: { conversationId:
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true); setError('');
+    const sentReferences = runReferences;
+    let accepted = false;
     try {
       await productApi.sendMessage(conversationId, text, event => {
         if (abort.signal.aborted) return;
+        if (event.type === 'turn_started' && !accepted) { accepted = true; setDraftText(current => current.trim() === text ? '' : current); setRunReferences(current => current.filter(reference => !sentReferences.some(sent => sent.activityId === reference.activityId))); }
         setMessages(items => {
           let next = items;
           if (event.type === 'turn_started') {
             const createdAt = new Date().toISOString();
             next = items.filter(item => item.id !== event.inputMessageId && item.id !== event.messageId).concat([
-              { id: event.inputMessageId, role: 'user', text, createdAt },
+              { id: event.inputMessageId, role: 'user', text, createdAt, runReferences: sentReferences },
               applyChatStreamEvent(
                 { id: event.messageId, role: 'assistant', text: '', delivery: 'running', createdAt },
                 event,
@@ -273,20 +322,20 @@ function ChatConversation({ conversationId, onOpenWorkflows }: { conversationId:
           });
         });
         if (event.type === 'error') setError('本轮未成功完成，请查看保存的状态；不会自动重试。');
-      }, abort.signal);
+      }, abort.signal, sentReferences.map(({ activityId }) => ({ activityId })));
     } catch { if (!abort.signal.aborted) { setLoaded(false); setError('连接中断或发送状态未确认。请刷新页面查看已保存状态，不要重复发送原消息。'); } }
     finally {
       sending.current = false;
       if (!abort.signal.aborted) { await load(); setBusy(false); }
     }
-  }, [conversationId, load, loaded, pending]);
+  }, [conversationId, load, loaded, pending, runReferences]);
   const runPersonalWorkflow = async (workflow: PersonalWorkflow, requirement: string) => {
     if (workflowStartInFlight.current || workflowStartUnconfirmed || busy || pending || !loaded || activeCardActions.current.size) return;
     workflowStartInFlight.current = true;
     setStartingWorkflow(true); setError('');
     let startedRunId = '';
     try {
-      const result = await productApi.startRun(workflow.definitionKey, requirement);
+      const result = await productApi.startRun(workflow.definitionKey, requirement, 'chat');
       startedRunId = result.runId;
       setRunId(result.runId);
       await productApi.attachRun(conversationId, result.runId);
@@ -301,18 +350,24 @@ function ChatConversation({ conversationId, onOpenWorkflows }: { conversationId:
   };
   const renderMessageExtras = useCallback((message: Message) => <>
     {message.event?.type === 'workflow_confirm' && (!message.delivery || message.delivery === 'completed') ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><button className="primary" onClick={async () => {
-      try { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', '来自对话的工作请求'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }
+      try { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', '来自对话的工作请求', 'chat'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }
       catch { setError('工作流启动状态未确认，请查看工作流列表。'); }
     }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
     {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
   </>, [conversationId]);
-  return <section className="chat-main"><header className="chat-header"><div><h1>对话</h1><p>描述目标，在这里查看结果并完成确认</p></div></header>
+  const activitySidebar = <WorkActivitySidebar {...activities} onClose={() => { setActivityOpen(false); activityTrigger.current?.focus(); }} onOpen={setSelectedActivity} onReference={addRunReference} />;
+  return <div className={`chat-workspace ${activityOpen && !compactActivity ? 'with-activity' : ''}`}><section className="chat-main"><header className="chat-header"><div><h1>对话</h1><p>描述目标，在这里查看结果并完成确认</p></div><button ref={activityTrigger} className="secondary activity-toggle" aria-expanded={activityOpen} onClick={() => setActivityOpen(value => !value)}><Icon name="workflow" size={17} />工作动态{activities.attentionCount ? <span>{activities.attentionCount}</span> : null}</button></header>
     <AssistantThread
+      draftText={draftText}
+      onDraftTextChange={setDraftText}
+      runReferences={runReferences}
+      onRemoveReference={id => { setRunReferences(current => current.filter(reference => reference.activityId !== id)); setError(''); }}
+      onOpenReference={id => void openRunReference(id)}
       messages={messages}
       unassignedCards={unassignedCards}
       isRunning={busy || pending}
       isSendDisabled={!loaded || pending || activeCardActionCount > 0 || startingWorkflow}
-      error={historyError || error}
+      error={historyError || error || draftStorageError || activityReadError || (readingActivity ? '正在读取运行详情…' : '')}
       onSend={send}
       onCardUpdate={updateCard}
       onCardActionStateChange={setCardActionState}
@@ -323,7 +378,14 @@ function ChatConversation({ conversationId, onOpenWorkflows }: { conversationId:
         onRun={runPersonalWorkflow} onOpenWorkflows={() => onOpenWorkflows('personal')} />}
       threadTail={<>{workflowStartUnconfirmed ? <button className="secondary" onClick={() => onOpenWorkflows('runs')}>查看运行历史</button> : null}{runId && !messages.some(message => message.event?.type === 'interaction_required' && message.event.runId === runId) ? <RunDetail runId={runId} /> : null}</>}
     />
-  </section>;
+  </section>
+    {activityOpen && !compactActivity ? activitySidebar : null}
+    {activityOpen && compactActivity && !selectedActivity ? <ActivityDialog title="工作动态" onClose={() => setActivityOpen(false)}>{activitySidebar}</ActivityDialog> : null}
+    {selectedActivity ? <ActivityDialog title="工作详情" onClose={() => { setSelectedActivity(null); activities.refresh(); }}>
+      <div className="activity-detail-actions"><button className="secondary" onClick={() => { addRunReference(selectedActivity); setSelectedActivity(null); }}>在对话中继续</button><p>引用结果后，发送你的问题继续分析。</p></div>
+      {selectedActivity.runId ? <RunDetail key={selectedActivity.controlRequestId} runId={selectedActivity.controlRequestId} metadata={{ id: selectedActivity.controlRequestId, workflowKey: selectedActivity.workflowKey, title: selectedActivity.workflowName, status: selectedActivity.runStatus, input: '', createdAt: selectedActivity.createdAt }} onUpdated={activities.refresh} /> : <p role="status">运行尚未关联执行实例，当前状态：{selectedActivity.runStatus}。请关闭详情后刷新工作动态查看。</p>}
+    </ActivityDialog> : null}
+  </div>;
 }
 
 function WorkflowCenter({ onSchedule, initialTab }: { onSchedule: (workflowKey: string) => void; initialTab: WorkflowTab }) {
@@ -495,7 +557,7 @@ function Product() {
   if (checking) return <div className="loading-screen">正在加载 A2Flow…</div>;
   if (!session) return <Login onSession={setSession} />;
   return <TemporaryDraftOwner.Provider value={session.userId}><Shell session={session} page={page} unread={unread} onPage={(next) => { setNotificationRun(''); setPage(next); }} onLogout={async () => { await productApi.logout(); setPage('chat'); setSession(null); }}>
-    {notificationRun ? <RunDetail runId={notificationRun} onBack={() => setNotificationRun('')} /> : page === 'memory' ? <MemorySettingsPage key={session.userId} /> : page === 'chat' ? <ChatPage onOpenWorkflows={tab => { setWorkflowTab(tab); setPage('workflows'); }} /> : page === 'workflows' ? <WorkflowCenter initialTab={workflowTab} onSchedule={(key) => { setScheduleWorkflow(key); setPage('schedules'); }} /> : page === 'schedules' ? <SchedulePage initialWorkflow={scheduleWorkflow} /> : <NotificationPage items={notifications} refresh={refreshNotifications} onRun={(id) => setNotificationRun(id)} />}
+    {notificationRun ? <RunDetail runId={notificationRun} onBack={() => setNotificationRun('')} /> : page === 'memory' ? <MemorySettingsPage key={session.userId} /> : page === 'chat' ? <ChatPage ownerId={session.userId} onOpenWorkflows={tab => { setWorkflowTab(tab); setPage('workflows'); }} /> : page === 'workflows' ? <WorkflowCenter initialTab={workflowTab} onSchedule={(key) => { setScheduleWorkflow(key); setPage('schedules'); }} /> : page === 'schedules' ? <SchedulePage initialWorkflow={scheduleWorkflow} /> : <NotificationPage items={notifications} refresh={refreshNotifications} onRun={(id) => setNotificationRun(id)} />}
   </Shell></TemporaryDraftOwner.Provider>;
 }
 
