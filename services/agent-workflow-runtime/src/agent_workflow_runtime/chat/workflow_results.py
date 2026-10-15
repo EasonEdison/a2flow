@@ -205,4 +205,3 @@ class WorkflowReferenceMiddleware(AgentMiddleware):
         handler: Callable[[ModelRequest[Any]], Awaitable[ModelResponse[Any]]],
     ) -> ModelResponse[Any]:
         return await handler(self._prepare(request))
-
