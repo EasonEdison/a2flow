@@ -202,8 +202,8 @@ def tools_for(
         """Report a concrete business anomaly supported by returned business Tool results.
 
         evidenceRefs must contain tool:<tool_call_id> references to actual successful
-        execute_ability, render_application, generate_a2ui or generate_interaction
-        results in this node. Reporting never changes execution status or performs
+        execute_ability results in this node; UI generation or user input alone is
+        not proof of a business anomaly. Reporting never changes execution status or performs
         business remediation. Do not report normal completion as an anomaly.
         """
         assets.validate_context(runtime.context)

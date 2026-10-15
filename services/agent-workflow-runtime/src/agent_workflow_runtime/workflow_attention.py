@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
-from typing import Any
+from typing import Annotated, Any
 
 import psycopg
 from psycopg.rows import dict_row
@@ -30,7 +30,7 @@ class ReportAttentionArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     title: str = Field(min_length=1, max_length=120)
     summary: str = Field(min_length=1, max_length=1200)
-    evidenceRefs: list[str] = Field(min_length=1, max_length=8)
+    evidenceRefs: list[Annotated[str, Field(min_length=6, max_length=300)]] = Field(min_length=1, max_length=8)
 
 
 class WorkflowAttentionReporter:
@@ -46,9 +46,7 @@ class WorkflowAttentionReporter:
             for message in messages
             if isinstance(message, ToolMessage)
             and message.status != "error"
-            and message.name in {
-                "execute_ability", "render_application", "generate_a2ui", "generate_interaction",
-            }
+            and message.name == "execute_ability"
         }
         references = sorted(set(arguments.evidenceRefs))
         if any(reference not in allowed for reference in references):
