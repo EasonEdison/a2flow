@@ -61,7 +61,9 @@ from .service import ExecutionSession
 from .workflow_loader import compose_workflow
 from .workflow_capability import build_capability_graph, saved_result
 from .workflow_rpc import WorkflowActions, WorkflowAssets, WorkflowCard, ResumeStatus
-from .workflow_attention import ReportAttentionArgs, WorkflowAttentionReporter
+from .workflow_attention import (
+    AttentionEvidenceTools, ReportAttentionArgs, WorkflowAttentionReporter,
+)
 
 
 class WorkflowModelFactory(Protocol):
@@ -310,7 +312,9 @@ class RpcWorkflowHost(MvpRuntimeHost):
             "它不能替代 required render_application，也不能使后继节点提前运行。"
             "仅展示的界面不会等待提交；需要输入的界面应在 intent 中明确等待目标。"
             "失败明确报告，不自动重试或降级。"
-            "当前节点若确实从返回的业务结果发现异常，可使用 report_workflow_attention，引用真实工具调用结果。"
+            "只有当前节点 execute_ability 成功返回后，异常上报工具才会开放。"
+            "仅展示或渲染的节点不得上报，也不能使用页面内部加载结果替代业务查询证据；由后续查询节点判断。"
+            "若真实查询结果符合本次异常条件，可使用 report_workflow_attention，原样引用系统提供的证据编号。"
             "这仅提醒用户查看，不改变运行状态，不自动补救；正常完成无需报告异常。"
         )
 
@@ -362,7 +366,9 @@ class RpcWorkflowHost(MvpRuntimeHost):
                         continue
                     material = self.reader.load_skill(node["skillKey"], run.context(node["nodeId"]))
                     required = tuple(dict.fromkeys(("use_skill", *material.required_tool_names)))
-                    allowed = {*required, "generate_interaction", "report_workflow_attention"}
+                    allowed = {*required, "generate_interaction"}
+                    if "execute_ability" in allowed:
+                        allowed.add("report_workflow_attention")
                     if "render_application" in allowed:
                         allowed.add("query_skill_dependencies")
                         allowed.add("generate_a2ui")
@@ -388,6 +394,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                         required,
                         harness_profile_key=model.configuration.harness_profile_key,
                         terminal_guard=actions.assert_finalizable,
+                        model_middleware=[AttentionEvidenceTools()],
                         run_lifecycle=lifecycle,
                         progress=self.progress,
                         node_context=run.context(node["nodeId"]),
