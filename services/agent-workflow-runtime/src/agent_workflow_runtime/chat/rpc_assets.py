@@ -133,27 +133,30 @@ class RpcChatAssets(ChatAssets):
     ) -> dict[str, Any]:
         if not tool_call_id:
             raise ActionRejected("TOOL_CALL_ID_REQUIRED")
-        with self._render_lock, generation_trace() as trace:
+        with self._render_lock:
             if self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
             self._preflight_application_params(application_key, data)
-            contract = self.rpc.describe_generation_source(
-                self.owner, application_key, "generation-contract:" + uuid4().hex,
-            )
-            require_supported_source(contract.contract)
-            trace.emit("generating")
-            candidate = generator.generate(intent, contract.contract)
-            # Recheck admission after the model call; no business work has run yet.
-            self.application_description(application_key)
-            trace.emit("validating_loading")
-            result = self.rpc.activate_generated(
-                self.owner, application_key, data, candidate.model_dump(mode="json"),
-                self.generation_scope(), "generated-render:" + uuid4().hex,
-            )
-            trace.emit("saving")
-            saved = self._save_render_result(application_key, result, tool_call_id, intent=intent)
-            trace.emit("completed")
-            return saved
+            with generation_trace() as trace:
+                contract = self.rpc.describe_generation_source(
+                    self.owner, application_key, "generation-contract:" + uuid4().hex,
+                )
+                require_supported_source(contract.contract)
+                trace.emit("generating")
+                candidate = generator.generate(intent, contract.contract)
+                # Recheck admission after the model call; no business work has run yet.
+                self.application_description(application_key)
+                trace.emit("validating_loading")
+                result = self.rpc.activate_generated(
+                    self.owner, application_key, data, candidate.model_dump(mode="json"),
+                    self.generation_scope(), "generated-render:" + uuid4().hex,
+                )
+                trace.emit("saving")
+                saved = self._save_render_result(
+                    application_key, result, tool_call_id, intent=intent,
+                )
+                trace.emit("completed")
+                return saved
 
     def generate_interaction(
         self, data: dict[str, Any], intent: str, tool_call_id: str,
