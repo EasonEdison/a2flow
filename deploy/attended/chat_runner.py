@@ -11,8 +11,11 @@ from __future__ import annotations
 import asyncio
 import queue
 import threading
-from collections.abc import AsyncIterator
-from typing import Any
+from collections.abc import AsyncIterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agent_workflow_runtime.chat.workflow_results import WorkflowRunProvider
 
 
 class ChatLoopRunner:
@@ -31,6 +34,7 @@ class ChatLoopRunner:
         personal_workflows=None,
         assets_factory=None,
         observation_loader=None,
+        workflow_run_provider: WorkflowRunProvider | None = None,
         system_prompt: str | None = None,
     ) -> None:
         self._model_factory = model_factory
@@ -43,11 +47,13 @@ class ChatLoopRunner:
         self._personal_workflows = personal_workflows
         self._assets_factory = assets_factory
         self._observation_loader = observation_loader
+        self._workflow_run_provider = workflow_run_provider
         self._system_prompt = system_prompt
 
     async def iterate(
         self, *, user_id: int, conversation_id: int, text: str,
         turn_id: str,
+        run_references: Sequence[Mapping[str, Any]] = (),
     ) -> AsyncIterator[dict[str, Any]]:
         from agent_workflow_runtime.chat.events import (
             DONE,
@@ -98,6 +104,8 @@ class ChatLoopRunner:
                     checkpointer=saver, thread_id=thread_id,
                     personal_memory=self._personal_memory,
                     personal_workflows=self._personal_workflows,
+                    workflow_run_provider=self._workflow_run_provider,
+                    run_references=run_references,
                     chat_assets=(self._assets_factory(owner, str(conversation_id), f"chat-{turn_id}")
                                  if self._assets_factory is not None else None),
                     observation_loader=(
