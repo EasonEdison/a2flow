@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Annotated, Any, NotRequired, Protocol
+from typing import Annotated, Any, Literal, NotRequired, Protocol
 
 from langchain.agents.middleware import AgentMiddleware, AgentState, ModelRequest, ModelResponse
 from langchain.agents.middleware.types import PrivateStateAttr
@@ -31,11 +31,19 @@ class WorkflowRunProvider(Protocol):
     ) -> Mapping[str, Any]: ...
 
 
+WorkflowSourceType = Literal["", "chat", "manual", "scheduled", "unknown"]
+WorkflowRunStatus = Literal["", "RUNNING", "SUBMITTED", "SUCCEEDED", "FAILED", "STOPPED", "UNCONFIRMED"]
+
+
 class ListWorkflowRunsArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     query: str = Field(default="", max_length=200)
-    status: str = Field(default="", max_length=40)
-    sourceType: str = Field(default="", max_length=40)
+    status: WorkflowRunStatus = Field(
+        default="", description="Exact uppercase run status; empty means all statuses.",
+    )
+    sourceType: WorkflowSourceType = Field(
+        default="", description="Exact lowercase source: chat, manual, scheduled, unknown; empty means all sources.",
+    )
     createdAfter: str | None = Field(default=None, max_length=40)
     createdBefore: str | None = Field(default=None, max_length=40)
     cursor: str | None = Field(default=None, max_length=512)
@@ -82,7 +90,7 @@ def build_workflow_result_tools(
 ) -> tuple[BaseTool, ...]:
     @tool("list_workflow_runs", args_schema=ListWorkflowRunsArgs)
     def list_runs(
-        query: str = "", status: str = "", sourceType: str = "",
+        query: str = "", status: WorkflowRunStatus = "", sourceType: WorkflowSourceType = "",
         createdAfter: str | None = None, createdBefore: str | None = None,
         cursor: str | None = None, limit: int = 10,
     ) -> str:
