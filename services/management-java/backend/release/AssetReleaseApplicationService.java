@@ -123,7 +123,6 @@ public class AssetReleaseApplicationService {
     private static final String ERROR_VALIDATION_RULE_VERSION_MISMATCH =
             "release validation ruleVersion does not match current requirement";
     private static final String MESSAGE_VALIDATION_RULE_VERSION_EXPIRED = "准出规则已更新，请重新核验";
-    private static final String ERROR_ACTIVE_CHANGE_EXISTS = "active release change already exists";
     private static final String ERROR_ACTIVE_CHANGE_REQUIRED = "active release change is required";
     private static final String ERROR_VERIFIED_BUILD_REQUIRED = "verified preprod build is required";
     private static final String ERROR_DOMAIN_PUBLISH_FAILED = "领域发布执行失败";
@@ -272,7 +271,7 @@ public class AssetReleaseApplicationService {
             }
             if (state.getActiveChange() != null
                     && StringUtils.equals(state.getActiveChange().getStatus(), STATUS_ACTIVE)) {
-                throw new IllegalStateException(ERROR_ACTIVE_CHANGE_EXISTS);
+                throw ReleaseChangeValidationException.activeChangeExists();
             }
             Integer baseVersion = optionalInteger(params.get(PARAM_BASE_VERSION));
             if (baseVersion != null) {

@@ -45,6 +45,7 @@ import dev.a2flow.management.method.SkillFactoryMethodEnum;
 import dev.a2flow.management.model.SkillFactoryExecutionResult;
 import dev.a2flow.management.release.AssetReleaseApplicationService;
 import dev.a2flow.management.release.ReleaseAssetType;
+import dev.a2flow.management.release.ReleaseChangeValidationException;
 import dev.a2flow.management.release.WorkflowReleasePayloadValidationException;
 import dev.a2flow.management.release.dependency.AssetDependencyResolutionException;
 import dev.a2flow.management.storage.db.repository.ApplicationListRepository;
@@ -591,6 +592,10 @@ public class SkillFactoryMethodDispatcher {
     }
 
     private SkillFactoryExecutionResult knownFailure(Exception exception) {
+        if (exception instanceof ReleaseChangeValidationException change) {
+            return SkillFactoryExecutionResult.fail(change.getMessage(), errorData(
+                    change.getErrorCode(), null, null));
+        }
         if (exception instanceof SkillFactoryValidationException validation) {
             return SkillFactoryExecutionResult.fail(validation.getMessage(), errorData(
                     validation.getErrorCode(), null, validation.getFieldPath()));
