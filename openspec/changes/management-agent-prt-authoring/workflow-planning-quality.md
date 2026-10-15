@@ -19,3 +19,7 @@ The first B run failed after its list read because the model supplied people/pag
 ## Follow-up clarification (2026-10-15)
 
 The list count above refers only to Agent execute_ability calls. The browse Application also loads the list internally, so this was not proof of a single total business read. The parameter issue has since been fixed at the shared preflight boundary and the unchanged workflow completed with a normal request without contract hints; see [A2UI parameter preflight and review](a2ui-parameter-preflight.md). Original failures remain preserved.
+
+## Application loading follow-up
+
+The duplicate Skill/Application list load and safe execution observations are now implemented, deployed and verified with one internal LOAD and no direct list query. The normal manual publication and the separately repaired Chat release-change rejection boundary are documented in [Application-owned loading and execution observations](a2ui-load-observation.md).

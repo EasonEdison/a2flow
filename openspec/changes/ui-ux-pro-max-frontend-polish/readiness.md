@@ -14,3 +14,7 @@ No new model run or submission was triggered. Existing execution evidence remain
 
 Rollback artifacts/configurations are preserved. See structural-design.md and
 structural-regression.md for the concept comparison and local responsive checks.
+
+## Management Chat refinement, 2026-10-15
+
+The screenshot-specific M Chat refinement is deployed at 2e866a5. TypeScript/Vite, scoped review, all 57 public static hashes, a real read-only conversation and refresh restoration passed. See [Management Chat layout refinement](management-chat-refinement.md) for design comparison, responsive checks and their precise boundaries. This does not replace the older whole-product evidence above.
