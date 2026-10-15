@@ -208,6 +208,8 @@ class ExecutionSummary:
     success: bool
     capability_version: int
     error_code: str
+    request_id: str | None = None
+    phase: str = "UNKNOWN"
 
 
 @dataclass(frozen=True, slots=True)
@@ -511,8 +513,11 @@ class RpcClient:
                 session.catalog_revision, session.catalog_digest) != (release.app_build_id, catalog.protocol_version,
                 catalog.catalog_id, catalog.catalog_revision, catalog.catalog_digest):
             raise RpcFailure("RPC_SESSION_MISMATCH")
+        if any(item.phase not in {"", "LOAD", "ACTION", "UNKNOWN"} for item in value.executions):
+            raise RpcFailure("RPC_EXECUTION_SUMMARY_INVALID")
         executions = tuple(ExecutionSummary(item.binding_id, item.action_code, item.success, item.capability_version,
-                                            item.error_code) for item in value.executions)
+                                            item.error_code, item.request_id or None,
+                                            item.phase or "UNKNOWN") for item in value.executions)
         observation = None
         if value.HasField("action_observation"):
             item = value.action_observation

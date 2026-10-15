@@ -109,6 +109,10 @@ message ExecutionSummary {
   bool success = 3;
   int32 capability_version = 4;
   string error_code = 5;
+  // Execution identity, not business arguments or transport credentials.
+  string request_id = 6;
+  // LOAD or ACTION; absent on older servers.
+  string phase = 7;
 }
 message ActionExecutionObservation {
   string binding_id = 1;

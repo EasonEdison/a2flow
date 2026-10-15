@@ -420,11 +420,17 @@ class ExecutionSummary(google.protobuf.message.Message):
     SUCCESS_FIELD_NUMBER: builtins.int
     CAPABILITY_VERSION_FIELD_NUMBER: builtins.int
     ERROR_CODE_FIELD_NUMBER: builtins.int
+    REQUEST_ID_FIELD_NUMBER: builtins.int
+    PHASE_FIELD_NUMBER: builtins.int
     binding_id: builtins.str
     action_code: builtins.str
     success: builtins.bool
     capability_version: builtins.int
     error_code: builtins.str
+    request_id: builtins.str
+    """Execution identity, not business arguments or transport credentials."""
+    phase: builtins.str
+    """LOAD or ACTION; absent on older servers."""
     def __init__(
         self,
         *,
@@ -433,8 +439,10 @@ class ExecutionSummary(google.protobuf.message.Message):
         success: builtins.bool = ...,
         capability_version: builtins.int = ...,
         error_code: builtins.str = ...,
+        request_id: builtins.str = ...,
+        phase: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["action_code", b"action_code", "binding_id", b"binding_id", "capability_version", b"capability_version", "error_code", b"error_code", "success", b"success"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["action_code", b"action_code", "binding_id", b"binding_id", "capability_version", b"capability_version", "error_code", b"error_code", "phase", b"phase", "request_id", b"request_id", "success", b"success"]) -> None: ...
 
 Global___ExecutionSummary: typing_extensions.TypeAlias = ExecutionSummary
 

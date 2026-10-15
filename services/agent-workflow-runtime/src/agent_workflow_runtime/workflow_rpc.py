@@ -182,6 +182,8 @@ class WorkflowAssets(RpcChatAssets):
             "appCode": metadata["applicationKey"],
             "arguments": metadata["observation"]["arguments"],
             "preparedContent": metadata["observation"]["preparedContent"],
+            **({"loadExecutions": metadata["observation"]["loadExecutions"]}
+               if "loadExecutions" in metadata["observation"] else {}),
             "visibility": "Prepared and saved; this does not assert the user viewed it.",
         }
 

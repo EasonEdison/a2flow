@@ -5,7 +5,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import math
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -71,6 +73,26 @@ from .models import (
     ShowInputSource,
     TrustedCard,
 )
+
+LOG = logging.getLogger(__name__)
+
+
+def _log_execution(
+    result: ExecutionResult, binding_id: str, phase: str, *, presentation_failed: bool = False,
+) -> None:
+    # A returned capability result can precede a presentation failure. Record
+    # metadata only; this is not a count of business-network dispatches.
+    def safe(value: str) -> str:
+        return value if re.fullmatch(r"[A-Za-z0-9_.:/-]{1,256}", value) else "INVALID_METADATA"
+
+    LOG.log(
+        logging.WARNING if presentation_failed else logging.INFO,
+        "a2ui_capability_returned request_id=%s binding_id=%s action_code=%s "
+        "phase=%s success=%s stage=%s",
+        safe(result.request_id), safe(binding_id), safe(result.action_code), phase, result.success,
+        "PRESENTATION_FAILED" if presentation_failed else "CAPABILITY_RETURNED",
+    )
+
 
 _OBSERVATION_PRIVATE_KEYS = frozenset(
     {
@@ -718,10 +740,15 @@ class A2uiRuntimeService:
             )
             if result.action_code != binding.capability.action_code:
                 raise A2uiError("A2UI_CAPABILITY_RESULT_INVALID")
+            _log_execution(result, binding.binding_id, "LOAD")
             succeeded = result.success
             outcome = binding.success_outcome if succeeded else binding.failure_outcome
             adapters = binding.result_adapters if succeeded else binding.failure_result_adapters
-            emitted, ledger = adapt(ledger, outcome, adapters, result, trusted, {})
+            try:
+                emitted, ledger = adapt(ledger, outcome, adapters, result, trusted, {})
+            except Exception:
+                _log_execution(result, binding.binding_id, "LOAD", presentation_failed=True)
+                raise
             all_messages.extend(emitted)
             executions.append(
                 ExecutionSummary(
@@ -730,6 +757,8 @@ class A2uiRuntimeService:
                     succeeded,
                     result.capability_version,
                     None if succeeded else (result.error_code.value if result.error_code else None),
+                    result.request_id,
+                    "LOAD",
                 )
             )
             previous = result
@@ -800,6 +829,7 @@ class A2uiRuntimeService:
         )
         if result.action_code != binding.capability.action_code:
             raise A2uiError("A2UI_CAPABILITY_RESULT_INVALID")
+        _log_execution(result, binding.binding_id, "ACTION")
         capability_error = result.error_code.value if result.error_code else None
         try:
             selected = _select(binding, result)
@@ -820,6 +850,8 @@ class A2uiRuntimeService:
                 result.success,
                 result.capability_version,
                 capability_error,
+                result.request_id,
+                "ACTION",
             )
             return self._response(
                 published,
@@ -859,6 +891,8 @@ class A2uiRuntimeService:
                 selected.succeeded,
                 result.capability_version,
                 None if selected.succeeded else capability_error,
+                result.request_id,
+                "ACTION",
             )
             return self._response(
                 published,
@@ -890,6 +924,8 @@ class A2uiRuntimeService:
             None
             if selected.succeeded
             else (result.error_code.value if result.error_code else None),
+            result.request_id,
+            "ACTION",
         )
         return self._response(
             published,

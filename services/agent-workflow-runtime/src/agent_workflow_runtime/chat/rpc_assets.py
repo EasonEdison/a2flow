@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any, cast
@@ -32,7 +33,13 @@ from ..rpc_client import (
 from ..rpc_client import (
     JsonValue as RpcJsonValue,
 )
-from .assets import _APPLICATION_USAGE, ApplicationContract, ChatAssets
+from .assets import (
+    _APPLICATION_USAGE,
+    ApplicationContract,
+    ApplicationLoadBinding,
+    ApplicationLoadSource,
+    ChatAssets,
+)
 from .application_params import validate_application_params
 from .cards import JsonObject, JsonValue
 from .render_projection import project_business_state, project_rendered_content
@@ -74,10 +81,67 @@ def prepare_result(result: RuntimeResult) -> PreparedApplication:
                                json.dumps(display, ensure_ascii=False, allow_nan=False))
 
 
+def execution_summaries(result: RuntimeResult) -> list[JsonObject]:
+    """Safe returned-call facts; never imply fresh business transport or expose payloads."""
+    summaries: list[JsonObject] = []
+    for item in result.executions:
+        code = item.error_code
+        safe_code = (
+            code if re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", code or "")
+            else "UNCLASSIFIED_EXECUTION_ERROR" if code else None
+        )
+        summaries.append({
+            "requestId": item.request_id,
+            "bindingId": item.binding_id,
+            "actionCode": item.action_code,
+            "phase": item.phase,
+            "success": item.success,
+            "capabilityVersion": item.capability_version,
+            "errorCode": safe_code,
+        })
+    return summaries
+
+
+def published_load_bindings(build: dict[str, Any]) -> list[ApplicationLoadBinding]:
+    """Only declaration names and parameter paths, never constants or trusted values."""
+    bindings = build.get("loadBindings")
+    if not isinstance(bindings, list):
+        raise ActionRejected("APPLICATION_CONTRACT_INVALID")
+    projected: list[ApplicationLoadBinding] = []
+    allowed = {"APP_PARAMS", "CONSTANT", "TRUSTED_CONTEXT", "CAPABILITY_PREVIOUS_RESULT",
+               "ACTION_CONTEXT"}
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            raise ActionRejected("APPLICATION_CONTRACT_INVALID")
+        capability = binding.get("capability")
+        binding_id = binding.get("bindingId")
+        action_code = capability.get("actionCode") if isinstance(capability, dict) else None
+        mappings = binding.get("requestMappings")
+        if (not isinstance(binding_id, str) or not binding_id
+                or not isinstance(action_code, str) or not action_code
+                or not isinstance(mappings, list)):
+            raise ActionRejected("APPLICATION_CONTRACT_INVALID")
+        sources: list[ApplicationLoadSource] = []
+        for mapping in mappings:
+            if not isinstance(mapping, dict) or mapping.get("source") not in allowed:
+                raise ActionRejected("APPLICATION_CONTRACT_INVALID")
+            source: ApplicationLoadSource = {"source": mapping["source"]}
+            if mapping["source"] == "APP_PARAMS":
+                path = mapping.get("sourcePath")
+                if not isinstance(path, str):
+                    raise ActionRejected("APPLICATION_CONTRACT_INVALID")
+                source["paramsPath"] = path
+            if source not in sources:
+                sources.append(source)
+        projected.append({"bindingId": binding_id, "actionCode": action_code,
+                          "requestSources": sources})
+    return projected
+
+
 def runtime_metadata(result: RuntimeResult) -> dict[str, Any]:
     # Persist private session material only in binding_metadata, never display/events.
     value = {"release": asdict(result.release), "session": asdict(result.session),
-             "params": plain(result.params)}
+             "params": plain(result.params), "executions": execution_summaries(result)}
     if result.generated_definition is not None:
         value["generatedDefinition"] = result.generated_definition.record()
     return value
@@ -277,6 +341,7 @@ class RpcChatAssets(ChatAssets):
             type(description) is not str
             or type(published_schema) is not dict
             or published_schema != runtime_schema
+            or build.get("appBuildId") != runtime.release.app_build_id
         ):
             raise ActionRejected("APPLICATION_CONTRACT_INVALID")
         return {
@@ -284,6 +349,7 @@ class RpcChatAssets(ChatAssets):
             "description": description,
             "usage": _APPLICATION_USAGE,
             "paramsSchema": runtime_schema,
+            "loadBindings": published_load_bindings(build),
         }
 
     def _preflight_application_params(self, application_key: str, data: dict[str, Any]) -> None:
@@ -310,13 +376,14 @@ class RpcChatAssets(ChatAssets):
         prepared = prepare_result(result)
         snapshot = _plain_snapshot(result)
         business_state = project_business_state(snapshot)
+        load_executions = execution_summaries(result)
         metadata = {
                 "owner": {"userId": self.owner.user_id, "environment": self.owner.environment},
                 "conversationId": self.conversation_id, "controlRequestId": self.control_request_id,
                 "toolCallId": tool_call_id, "skillKey": admitted.skill_key,
                 "applicationKey": application_key, "applicationVersion": prepared.application_version,
                 "rpc": runtime_metadata(result),
-                "observation": {"arguments": business_state},
+                "observation": {"arguments": business_state, "loadExecutions": load_executions},
         }
         if intent is not None:
             metadata["generationIntent"] = intent
@@ -324,6 +391,7 @@ class RpcChatAssets(ChatAssets):
         self._render_observations[saved["cardId"]] = {
                 "cardId": saved["cardId"], "applicationKey": application_key,
                 "arguments": business_state,
+                "loadExecutions": load_executions,
                 "preparedContent": project_rendered_content(snapshot),
         }
         if prepared.interactive:
