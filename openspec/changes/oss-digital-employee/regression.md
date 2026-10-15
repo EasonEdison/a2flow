@@ -94,3 +94,8 @@
 - PostgreSQL 是唯一关系型数据库；不启用 MySQL、SQLite 或内存 fallback。
 - 多实例门禁至少包含两个无状态 BFF/worker 实例和共享 PostgreSQL。
 - 精确 Runtime/A2UI 版本、接口命名、实现、测试和部署均未完成，因此本文件不能作为 runtime 可用证据。
+
+
+## 2026-10-15 bounded employee UI acceptance
+
+See [employee-workspace-ui.md](employee-workspace-ui.md) for the current presentation-only slice. Build/source integrity, read-only desktop/narrow previews, public static hashes and authenticated management account navigation pass. Employee public login expired; real history/detail acceptance is pending normal login. No new workflow or scheduled execution was triggered. This scoped evidence does not supersede unrelated historic runtime gates above.

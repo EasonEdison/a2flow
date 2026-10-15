@@ -43,3 +43,8 @@
 5. 部署、HTTPS 演示、日志/指标和三分钟演示路径具备可复查证据。
 
 在全部必需门禁完成前，不得宣称产品可用、Runtime 可用、已部署或已验证。
+
+
+## 2026-10-15 UI slice status
+
+Source and deployment COMPLETE at `a0c9ff5`; read-only visual previews and all 64 public asset hashes PASS. Authenticated management account visibility PASS. Employee authenticated history/detail acceptance PENDING LOGIN. See [employee-workspace-ui.md](employee-workspace-ui.md). Do not interpret source/build completion as full authenticated UI acceptance or as completion of unrelated gates.
