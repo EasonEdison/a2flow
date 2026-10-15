@@ -28,6 +28,7 @@ from .a2ui_generation import A2uiGenerator, DeepAgentA2uiGenerator
 from .a2ui_selection_policy import A2UI_SELECTION_POLICY
 from .temporary_generation import DeepAgentInteractionGenerator, InteractionGenerator
 from .chat.cards import ChatCardStore, CompletionObserver, JsonObject
+from .chat.application_params import application_params_error_content
 from .chat.rpc_actions import ChatActionResponse
 from .deepseek_model import DeepSeekChat
 from .events import EventSink
@@ -169,6 +170,9 @@ def tools_for(
             raise ActionRejected("A2UI_GENERATOR_UNAVAILABLE")
         return actions.render(assets, appCode, params, runtime.tool_call_id,
                               generator=generator, intent=intent)
+
+    render_application.handle_tool_error = application_params_error_content
+    generate_a2ui.handle_tool_error = application_params_error_content
 
     @tool("generate_interaction", args_schema=GenerateInteractionArgs)
     def generate_interaction(

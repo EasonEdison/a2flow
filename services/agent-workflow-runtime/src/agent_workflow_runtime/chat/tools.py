@@ -30,6 +30,7 @@ from skillweave_contracts.models import (
 )
 
 from .events import WORKFLOW_CONFIRM
+from .application_params import application_params_error_content
 from ..mvp_tools import AbilityArgs
 from ..models import ActionRejected, json_copy
 from ..a2ui_generation import A2uiGenerator
@@ -324,6 +325,9 @@ def build_chat_tools(
             appCode, params, intent, runtime.tool_call_id, a2ui_generator,
         )
         return _rendered(saved, appCode)
+
+    render_application_tool.handle_tool_error = application_params_error_content
+    generate_a2ui_tool.handle_tool_error = application_params_error_content
 
     @tool("generate_interaction", args_schema=GenerateInteractionArgs,
           response_format="content_and_artifact")
