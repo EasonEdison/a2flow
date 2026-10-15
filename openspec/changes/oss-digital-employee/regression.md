@@ -98,4 +98,4 @@
 
 ## 2026-10-15 bounded employee UI acceptance
 
-See [employee-workspace-ui.md](employee-workspace-ui.md) for the current presentation-only slice. Build/source integrity, read-only desktop/narrow previews, public static hashes and authenticated management account navigation pass. Employee public login expired; real history/detail acceptance is pending normal login. No new workflow or scheduled execution was triggered. This scoped evidence does not supersede unrelated historic runtime gates above.
+See [employee-workspace-ui.md](employee-workspace-ui.md) for the current presentation-only slice. Build/source integrity, read-only desktop/narrow previews, public static hashes and authenticated management account navigation pass. Employee login restored; real 28-record history, combined filter, completed detail/Chat summary, refresh, catalogs, three disabled schedules, notification labels/filter and memory display passed. No mutations or new execution were submitted. No new workflow or scheduled execution was triggered. This scoped evidence does not supersede unrelated historic runtime gates above.
