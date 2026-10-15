@@ -477,9 +477,9 @@ export const productApi = {
         return {
           id: textOf(row.controlRequestId),
           workflowKey: textOf(row.workflowKey),
-          title: bound ? textOf(view?.title) || textOf(row.workflowKey) : textOf(row.workflowKey),
+          title: textOf(row.title) || textOf(view?.title),
           status,
-          input: '',
+          input: textOf(row.requirement),
           createdAt: textOf(row.createdAt),
         };
       }),

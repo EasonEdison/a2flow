@@ -3,6 +3,7 @@ import type { PersonalWorkflow } from './personalWorkflow';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from './components/Icon';
+import { RunHistory, runDisplayName, displayTime } from './components/RunHistory';
 import { NodeCard } from './components/NodeCard';
 import { WorkflowTimeline } from './components/WorkflowTimeline';
 import { WorkflowApplications } from './components/WorkflowApplications';
@@ -22,7 +23,7 @@ import type { InteractiveCard, RunView } from './presentation';
 const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fixture';
 type WorkflowTab = 'personal' | 'preset' | 'runs';
 type Page = 'chat' | 'workflows' | 'schedules' | 'notifications' | 'memory';
-const runLabels: Record<string, string> = { RUNNING: '运行中', WAITING: '等待确认', SUCCEEDED: '已完成', STOPPED: '已停止', FAILED: '失败', SUBMITTED: '已提交' };
+const runLabels: Record<string, string> = { RUNNING: '运行中', WAITING: '等待确认', SUCCEEDED: '已完成', STOPPED: '已停止', FAILED: '失败', SUBMITTED: '已提交', PENDING: '准备中', SKIPPED: '已跳过', UNKNOWN: '待核对' };
 const notificationLabels: Record<string, string> = { WAITING: '等待确认', COMPLETED: '完成', STOPPED: '停止', FAILED: '失败', SYSTEM: '系统' };
 
 function Login({ onSession }: { onSession: (session: Session) => void }) {
@@ -60,17 +61,17 @@ function Shell({ session, page, unread, onPage, onLogout, children }: { session:
       <nav className="rail-links" aria-label="应用">
         <button className={page === 'chat' ? 'active' : ''} aria-label="对话工作台" aria-current={page === 'chat' ? 'page' : undefined} onClick={() => navigate('chat')}><Icon name="chat" /><span>对话</span></button>
         <button className={page === 'workflows' ? 'active' : ''} aria-label="工作流中心" aria-current={page === 'workflows' ? 'page' : undefined} onClick={() => navigate('workflows')}><Icon name="workflow" /><span>工作流</span></button>
-        <button className={page === 'schedules' ? 'active' : ''} aria-label="定时管理" aria-current={page === 'schedules' ? 'page' : undefined} onClick={() => navigate('schedules')}><Icon name="clock" /><span>定时</span></button>
+        <button className={page === 'schedules' ? 'active' : ''} aria-label="定时管理" aria-current={page === 'schedules' ? 'page' : undefined} onClick={() => navigate('schedules')}><Icon name="clock" /><span>定时任务</span></button>
         <button className={page === 'notifications' ? 'active' : ''} aria-label={`通知中心，${unread} 条未读`} aria-current={page === 'notifications' ? 'page' : undefined} onClick={() => navigate('notifications')}><Icon name="bell" /><span>通知</span>{unread ? <span className="rail-count">{unread}</span> : null}</button>
         <button className={page === 'memory' ? 'active' : ''} aria-label="设置 · 个人记忆" aria-current={page === 'memory' ? 'page' : undefined} onClick={() => navigate('memory')}><Icon name="settings" /><span>设置</span></button>
       </nav>
-      <div className="rail-account"><Icon name="user" /><span>{session.username}</span><small>{session.role}</small><button aria-label="退出登录" onClick={onLogout}><Icon name="logout" size={18} /><span>退出</span></button></div>
+      <div className="rail-account"><Icon name="user" /><span>{session.username}</span><small>{session.role === 'ADMIN' ? '管理员' : '成员'}</small><button aria-label="退出登录" onClick={onLogout}><Icon name="logout" size={18} /><span>退出</span></button></div>
     </aside>
     <section className="product-content">{children}</section>
   </div>;
 }
 
-function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
+function RunDetail({ runId, onBack, metadata }: { runId: string; onBack?: () => void; metadata?: RunItem }) {
   const [run, setRun] = useState<RunView | null>(null);
   const [busy, setBusy] = useState(false);
   const [cards, setCards] = useState<WorkflowCard[]>([]);
@@ -130,11 +131,12 @@ function RunDetail({ runId, onBack }: { runId: string; onBack?: () => void }) {
   return <section className="run-detail">
     {error ? <p className="inline-error" role="alert">{error}</p> : null}
     {progress.error ? <p className="observation-warning" role="status">{progress.error}</p> : null}
-    <div className="section-heading">{onBack ? <button className="secondary" onClick={onBack}>返回</button> : null}<div><h2>{run.title}</h2><p>{run.requirement}</p></div><span className={`status ${run.lifecycle.toLowerCase()}`}>{runLabels[run.lifecycle] ?? run.lifecycle}</span>{['RUNNING', 'WAITING'].includes(run.lifecycle) ? <button className="quiet danger" onClick={async () => { if (!confirm('停止后无法恢复，确认停止？')) return; await productApi.stopRun(run.id); await refresh(); }}>停止运行</button> : null}</div>
+    <div className="section-heading">{onBack ? <button className="secondary" onClick={onBack}>返回</button> : null}<div><h2>{metadata?.title || run.title}</h2><p>{run.requirement}</p>{metadata ? <p className="run-started">发起于 {displayTime(metadata.createdAt)} · 本地时间</p> : null}</div><span className={`status ${run.lifecycle.toLowerCase()}`}>{runLabels[run.lifecycle] ?? run.lifecycle}</span>{['RUNNING', 'WAITING'].includes(run.lifecycle) ? <button className="quiet danger" onClick={async () => { if (!confirm('停止后无法恢复，确认停止？')) return; await productApi.stopRun(run.id); await refresh(); }}>停止运行</button> : null}</div>
+    <details className="run-identifiers"><summary>运行标识</summary><p>运行记录：<code>{run.id}</code></p>{metadata ? <p>工作流：<code>{metadata.workflowKey}</code></p> : null}</details>
     <div className="nodes">{run.nodes.map((node, index) => {
       const entries = cards.filter(entry => entry.nodeId === node.id);
       const observedNode = { ...node, records: progress.records[node.id] ?? [], historyStatus: progress.historyStatus, ...(entries.length ? { card: undefined } : {}) };
-      return <NodeCard key={node.id} node={observedNode} index={index} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); await refresh(); } finally { setBusy(false); } }}>
+      return <NodeCard key={node.id} node={observedNode} index={index} defaultResultOpen={index === run.nodes.length - 1 && node.status === 'SUCCEEDED'} busy={busy} onHistory={refresh} onAction={async (card: InteractiveCard, value: string) => { setBusy(true); try { await productApi.runAction(run.id, node.id, card.interactionId, card.actionName, value, card.confirmed, (view) => setRun(view)); await refresh(); } finally { setBusy(false); } }}>
         {node.snapshotCardIds?.some(cardId => !entries.some(entry => entry.card.cardId === cardId))
           ? <p role="status">交互卡片尚未同步，请刷新页面重试。</p> : null}
         <WorkflowTimeline node={observedNode} entries={entries} renderCard={entry => <WorkflowApplications title={node.title} runId={run.id} entries={[entry]} disabled={!['RUNNING', 'WAITING'].includes(run.lifecycle) || !['RUNNING', 'WAITING'].includes(node.status) || busy} onUpdate={card => { cardReadEpoch.current++; setCards(current => current.map(entry => entry.card.cardId === card.cardId ? { ...entry, card } : entry)); }} onSettled={refresh} />} />
@@ -304,7 +306,7 @@ function ChatConversation({ conversationId, onOpenWorkflows }: { conversationId:
     }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
     {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
   </>, [conversationId]);
-  return <section className="chat-main"><header className="chat-header"><div><h1>数字员工对话</h1><p>描述你的目标，在对话中查看结果并完成确认</p></div></header>
+  return <section className="chat-main"><header className="chat-header"><div><h1>对话</h1><p>描述目标，在这里查看结果并完成确认</p></div></header>
     <AssistantThread
       messages={messages}
       unassignedCards={unassignedCards}
@@ -358,10 +360,13 @@ function WorkflowCenter({ onSchedule, initialTab }: { onSchedule: (workflowKey: 
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
-  if (selected) return <RunDetail runId={selected} onBack={() => setSelected('')} />;
+  if (selected) {
+    const record = runs.find(run => run.id === selected);
+    return <RunDetail runId={selected} metadata={record ? { ...record, title: runDisplayName(record, workflows) } : undefined} onBack={() => setSelected('')} />;
+  }
   const visible = workflows.filter(workflow => workflow.source === (tab === 'personal' ? 'PERSONAL' : 'PRESET'));
   return <section>
-    <div className="page-title"><h1>工作流中心</h1><p>运行你的工作流或预制工作流，查看已保存的运行历史。</p></div>
+    <div className="page-title"><h1>工作流中心</h1><p>运行工作流，查看每一次执行的进展与结果。</p></div>
     {startError ? <div><p className="inline-error" role="alert">{startError}</p><button className="secondary" onClick={() => void viewRunsAfterStart()}>查看运行历史</button></div> : null}
     {loadError ? <p className="inline-error" role="alert">{loadError}</p> : null}
     <div className="tabs" role="tablist" aria-label="工作流分类">
@@ -381,13 +386,14 @@ function WorkflowCenter({ onSchedule, initialTab }: { onSchedule: (workflowKey: 
         <div><button className="primary" disabled={Boolean(starting) || (workflow.source === 'PERSONAL' && !(inputs[workflow.key] ?? workflow.personal?.defaultRequirement ?? '').trim())} onClick={() => void startRun(workflow)}>{starting === workflow.key ? '正在启动…' : '立即运行'}</button>
           {workflow.source === 'PRESET' ? <button className="secondary" onClick={() => onSchedule(workflow.key)}>设置定时</button> : null}</div>
       </article>)}</div>
-    </> : <div className="run-list">{!runs.length && !loadError ? <p className="muted">暂无运行历史。</p> : null}{runs.map(run => <button key={run.id} onClick={() => setSelected(run.id)}>
-      <div><strong>{run.title}</strong><p>{run.input}</p></div><span className={`status ${run.status.toLowerCase()}`}>{runLabels[run.status] ?? run.status}</span>
-    </button>)}</div>}
+    </> : <RunHistory runs={runs} workflows={workflows} onOpen={setSelected} hasError={Boolean(loadError)} />}
+
   </section>;
 }
 
 function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
+  const [creating, setCreating] = useState(Boolean(initialWorkflow));
+  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [history, setHistory] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState('');
@@ -407,7 +413,8 @@ function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
       const presets = catalog.items.filter(workflow => workflow.source === 'PRESET');
       setWorkflows(presets); setItems(schedules.items);
       setWorkflowKey(value => presets.some(workflow => workflow.key === value) ? value : presets[0]?.key || '');
-    }).catch(() => { if (active) setError('定时任务加载失败，请刷新页面重试。'); });
+    }).catch(() => { if (active) setError('定时任务加载失败，请刷新页面重试。'); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
   const workflowNames = useMemo(() => Object.fromEntries(workflows.map((item) => [item.key, item.name])), [workflows]);
@@ -420,46 +427,57 @@ function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
   };
   if (selectedRun) return <RunDetail runId={selectedRun} onBack={() => { setSelectedRun(''); void load().catch(() => setError('定时任务加载失败。')); }} />;
   return <section>
-    <div className="page-title"><h1>定时管理</h1><p>按 Cron 表达式和指定时区自动执行工作流。</p></div>
+    <div className="page-title page-title-actions"><div><h1>定时任务</h1><p>安排自动执行，掌握每次运行。</p></div><button className="primary icon-button" aria-expanded={creating} aria-controls="schedule-create" onClick={() => setCreating(value => !value)}><Icon name="plus" />{creating ? '收起表单' : '新建任务'}</button></div>
     {error ? <p className="inline-error" role="alert">{error}</p> : null}
-    <section className="schedule-form card"><h2>创建定时任务</h2>
+    {creating ? <section id="schedule-create" className="schedule-form card"><h2>新建定时任务</h2>
       <form onSubmit={(event) => {
         event.preventDefault();
         if (expression.trim().split(/\s+/).length !== 5) { setError('Cron 需要五个字段：分 时 日 月 周。'); return; }
         void mutate(async () => {
           await productApi.createSchedule({ workflowKey, input, ruleType: 'cron', ruleJson: { expression: expression.trim() }, timezone: timezone.trim() });
-          setInput('');
+          setInput(''); setCreating(false);
         });
       }}>
-        <label htmlFor="schedule-workflow">工作流</label>
-        <select id="schedule-workflow" required value={workflowKey} onChange={(event) => setWorkflowKey(event.target.value)}>{workflows.map((item) => <option value={item.key} key={item.key}>{item.name}</option>)}</select>
-        <label htmlFor="schedule-cron">Cron 表达式</label>
+        <div className="form-field"><label htmlFor="schedule-workflow">工作流</label>
+        <select id="schedule-workflow" required value={workflowKey} onChange={(event) => setWorkflowKey(event.target.value)}>{workflows.map((item) => <option value={item.key} key={item.key}>{item.name}</option>)}</select></div>
+        <div className="form-field"><label htmlFor="schedule-cron">Cron 表达式</label>
         <input id="schedule-cron" required value={expression} onChange={(event) => setExpression(event.target.value)} aria-describedby="cron-help" />
-        <small id="cron-help">分 时 日 月 周。例如 0 9 * * * 表示每天 09:00；*/15 * * * * 表示每 15 分钟。</small>
-        <label htmlFor="schedule-timezone">时区</label>
-        <input id="schedule-timezone" required value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="Asia/Shanghai" />
-        <label htmlFor="schedule-input">执行输入</label>
-        <textarea id="schedule-input" value={input} onChange={(event) => setInput(event.target.value)} required placeholder="输入工作流执行内容" />
-        <button className="primary" disabled={busy || !workflowKey}>{busy ? '正在保存…' : '创建定时任务'}</button>
+        <small id="cron-help">分 时 日 月 周。例如 0 9 * * * 表示每天 09:00；*/15 * * * * 表示每 15 分钟。</small></div>
+        <div className="form-field"><label htmlFor="schedule-timezone">时区</label>
+        <input id="schedule-timezone" required value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="Asia/Shanghai" /></div>
+        <div className="form-field form-field-wide"><label htmlFor="schedule-input">执行要求</label>
+        <textarea id="schedule-input" value={input} onChange={(event) => setInput(event.target.value)} required placeholder="输入工作流执行内容" /></div>
+        <div className="form-actions"><button type="button" className="secondary" disabled={busy} onClick={() => setCreating(false)}>取消</button><button className="primary" disabled={busy || !workflowKey}>{busy ? '正在保存…' : '创建定时任务'}</button></div>
       </form>
-    </section>
+    </section> : null}
+    {loading ? <p role="status">正在读取定时任务…</p> : null}
     <div className="schedule-list">{items.length ? items.map((item) => <article className="card schedule-card" key={item.id}>
-      <div className="schedule-overview"><h2>{workflowNames[item.workflowKey] ?? item.workflowName} <small>任务 #{item.id}</small></h2><p className="schedule-snapshot">{item.input}</p><small>{item.cadence}</small>
-        <p>下次执行：{item.enabled ? scheduleTime(item.nextRunAt, item.timezone) : '已停用，不会触发'}<br />最近触发：{scheduleTime(item.lastRunAt, item.timezone)}</p>
-        <p>最近结果：{item.latestRun ? scheduleRunLabel(item.latestRun) : '尚未触发'} {item.latestRun?.runId ? <button className="quiet" onClick={() => setSelectedRun(item.latestRun!.controlId)}>查看最近运行</button> : null}</p>
+      <div className="schedule-overview"><h2>{workflowNames[item.workflowKey] || (item.workflowName !== item.workflowKey ? item.workflowName : '工作流暂不可用')} <small className="schedule-task-id">任务 #{item.id}</small></h2><p className="schedule-snapshot">{item.input}</p><div className="schedule-facts"><div><span>执行规则 / 时区</span><strong>{item.expression || item.cadence}</strong><small>{item.timezone}</small></div><div><span>下次执行</span><strong>{item.enabled ? scheduleTime(item.nextRunAt, item.timezone) : '已停用'}</strong></div><div><span>最近触发</span><strong>{scheduleTime(item.lastRunAt, item.timezone)}</strong></div></div>
+        <p className="schedule-latest">最近结果：{item.latestRun ? scheduleRunLabel(item.latestRun) : '尚未触发'} {item.latestRun?.runId ? <button className="quiet" onClick={() => setSelectedRun(item.latestRun!.controlId)}>查看最近运行</button> : null}</p>
       </div>
       <div className="schedule-actions"><label className="switch"><input role="switch" type="checkbox" disabled={busy || editing !== null} checked={item.enabled} onChange={(event) => { void mutate(() => productApi.toggleSchedule(item.id, event.target.checked)); }} /><span>{item.enabled ? '已启用' : '已停用'}</span></label>
       <button className="secondary" disabled={busy || editing !== null} onClick={() => setEditing(item.id)}>编辑</button>
-      <button className="secondary" disabled={editing !== null} onClick={() => setHistory(history === item.id ? null : item.id)}>{history === item.id ? '收起运行记录' : '查看运行记录'}</button>
+      <button className="secondary" disabled={editing !== null} onClick={() => setHistory(history === item.id ? null : item.id)}>{history === item.id ? '收起记录' : '运行记录'}</button>
       <button className="quiet danger" disabled={busy || editing !== null} onClick={() => { void mutate(() => productApi.deleteSchedule(item.id)); }}>删除</button></div>
       {editing === item.id ? <ScheduleEditor key={item.id} item={item} onCancel={() => setEditing(null)} onSave={async () => { await load(); setEditing(null); }} /> : null}
       {history === item.id ? <ScheduleHistory key={item.id} item={item} onRun={setSelectedRun} /> : null}
-    </article>) : <div className="empty-card">暂无定时任务</div>}</div>
+    </article>) : !loading && !error ? <div className="empty-card"><Icon name="clock" size={32} /><h2>还没有定时任务</h2><p>为预制工作流安排执行时间，运行记录会保存在这里。</p><button className="primary" onClick={() => setCreating(true)}>新建任务</button></div> : null}</div>
   </section>;
 }
 
 function NotificationPage({ items, refresh, onRun }: { items: Notification[]; refresh: () => Promise<void>; onRun: (id: string) => void }) {
-  return <section><div className="page-title"><h1>通知中心</h1><p>跟踪等待确认、完成与系统事件。</p></div><div className="notification-list">{items.map((item) => <article className={`notification-item card ${item.read ? 'read' : ''}`} key={item.id}><span className={`notification-type ${item.type.toLowerCase()}`}>{notificationLabels[item.type] ?? item.type}</span><button className="notification-link" onClick={() => item.relatedId && onRun(item.relatedId)}><strong>{item.title}</strong><small>{new Date(item.createdAt).toLocaleString()}</small></button>{!item.read ? <button className="secondary" onClick={async () => { await productApi.readNotification(item.id); await refresh(); }}>标记已读</button> : <span className="read-label">已读</span>}</article>)}</div></section>;
+  const [onlyUnread, setOnlyUnread] = useState(false);
+  const [error, setError] = useState('');
+  const visible = items.filter(item => !onlyUnread || !item.read);
+  return <section><div className="page-title"><h1>通知中心</h1><p>查看需要你确认的事项，以及工作流的最新结果。</p></div>
+    <div className="list-toolbar"><label className="switch"><input type="checkbox" checked={onlyUnread} onChange={event => setOnlyUnread(event.target.checked)} />只看未读</label><span className="muted">{visible.length} 条通知</span></div>
+    {error ? <p role="alert" className="inline-error">{error}</p> : null}
+    <div className="notification-list">{visible.length ? visible.map(item => <article className={`notification-item card ${item.read ? 'read' : ''}`} key={item.id}>
+      <span className={`notification-type ${item.type.toLowerCase()}`}>{notificationLabels[item.type] ?? item.type}</span>
+      <div className="notification-copy"><strong>{item.title}</strong><time dateTime={item.createdAt}>{displayTime(item.createdAt)}</time></div>
+      {item.relatedId ? <button className="quiet" onClick={() => onRun(item.relatedId!)}>查看运行</button> : null}
+      {!item.read ? <button className="secondary" onClick={async () => { try { await productApi.readNotification(item.id); await refresh(); setError(''); } catch (reason) { setError(apiErrorMessage(reason, '标记结果未确认，请重新读取通知。')); } }}>标记已读</button> : <span className="read-label">已读</span>}
+    </article>) : <div className="empty-card"><Icon name="bell" size={32} /><h2>{onlyUnread ? '没有未读通知' : '暂无通知'}</h2><p>工作流的执行进展与待办事项会显示在这里。</p></div>}</div></section>;
 }
 
 function Product() {

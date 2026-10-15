@@ -357,6 +357,7 @@ function ThreadBody({
         scrollToBottomOnRunStart
         scrollToBottomOnThreadSwitch
       >
+        {!messages.length && !isRunning ? <section className="chat-welcome"><h2>今天，想完成什么？</h2><p>说出你的目标，让数字员工协助处理。也可以从下方创建一个自己的工作流。</p></section> : null}
         <ThreadPrimitive.Messages>
           {({ message }) => {
             const source = messagesById.get(message.id);

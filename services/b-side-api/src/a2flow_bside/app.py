@@ -795,6 +795,8 @@ def create_app(
                         _runtime(identity.userId).view, item["view"]["runId"],
                     )
                     item["lifecycle"] = actual.get("lifecycle")
+                    item["title"] = actual.get("title")
+                    item["requirement"] = actual.get("requirement")
                 except RemoteRuntimeError:
                     item["lifecycle"] = "UNKNOWN"
             items.append(item)
