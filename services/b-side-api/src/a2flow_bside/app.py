@@ -230,6 +230,36 @@ def _iso(value):
     return value
 
 
+def _bounded_run_reference(snapshot: dict) -> dict:
+    """Bound the final JSON attachment, including escaped strings and metadata."""
+    frozen = {key: value for key, value in snapshot.items() if key != "outputs"}
+    page = frozen["resultPage"]
+
+    def encoded_size(value: dict) -> int:
+        try:
+            return len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8"))
+        except (TypeError, ValueError) as error:
+            raise BsideError("INVALID_RUN_REFERENCE_RESULT", 502) from error
+
+    if encoded_size(frozen) <= 11000:
+        return frozen
+
+    def shortened(length: int) -> dict:
+        return {**frozen, "resultPage": page[:length], "truncated": True,
+                "nextOffset": frozen.get("resultOffset", 0) + length}
+
+    if encoded_size(shortened(0)) > 11000:
+        raise BsideError("RUN_REFERENCE_METADATA_TOO_LARGE", 413)
+    low, high = 0, len(page)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if encoded_size(shortened(middle)) <= 11000:
+            low = middle
+        else:
+            high = middle - 1
+    return shortened(low)
+
+
 def _schedule_json(row: dict) -> dict:
     return {
         "id": row["id"],
@@ -552,20 +582,8 @@ def create_app(
             snapshot = await asyncio.to_thread(
                 work_activities.get_result, user_id=identity.userId,
                 environment=environment, activity_id=reference.activityId, limit=8000)
-            # Store one bounded data representation, not duplicate output payloads.
-            snapshot.pop("outputs", None)
-            page = snapshot.pop("resultPage")
-            # Three references fit the runner's shared 36 KiB attachment budget.
-            metadata_bytes = len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8"))
-            budget = 11000 - metadata_bytes - 256
-            if budget < 0:
-                raise BsideError("RUN_REFERENCE_METADATA_TOO_LARGE", 413)
-            bounded_page = page.encode("utf-8")[:budget].decode("utf-8", errors="ignore")
-            snapshot["resultPage"] = bounded_page
-            if bounded_page != page:
-                snapshot["truncated"] = True
-                snapshot["nextOffset"] = len(bounded_page)
-            references.append(snapshot)
+            # Three fully encoded attachments fit the runner's shared 36 KiB budget.
+            references.append(_bounded_run_reference(snapshot))
         input_message = messages.append(
             conversation_id=conversation_id, role="user",
             content={"text": body.text, "delivery": "submitted", "runReferences": references})
