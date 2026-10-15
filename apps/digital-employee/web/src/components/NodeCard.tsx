@@ -14,6 +14,7 @@ export function NodeCard({
   busy,
   onAction,
   children,
+  defaultResultOpen = false,
 }: {
   node: NodeView;
   index: number;
@@ -21,8 +22,10 @@ export function NodeCard({
   onAction: (card: InteractiveCard, value: string) => Promise<void>;
   onHistory: () => Promise<void>;
   children?: ReactNode;
+  defaultResultOpen?: boolean;
 }) {
-  const [resultOpen, setResultOpen] = useState(false);
+  const [resultChoice, setResultChoice] = useState<boolean | null>(null);
+  const resultOpen = resultChoice ?? defaultResultOpen;
   const interactive = node.card?.kind === 'INTERACTIVE' ? node.card : undefined;
   const waitingInteractive =
     interactive && node.status === 'WAITING' ? interactive : undefined;
@@ -75,7 +78,7 @@ export function NodeCard({
             className="result-disclosure"
             aria-expanded={resultOpen}
             aria-controls={'result-' + node.id}
-            onClick={() => setResultOpen((value) => !value)}
+            onClick={() => setResultChoice(!resultOpen)}
           >
             <h3>步骤结果</h3>
             <Icon name="chevron" />

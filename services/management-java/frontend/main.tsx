@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Alert, Spin } from 'antd';
@@ -7,6 +7,7 @@ import 'antd/dist/antd.css';
 import './management.less';
 import { A2UI_APPLICATION_ROUTES } from './a2uiCatalogContracts';
 import ManagementSessionNotice from './ManagementSessionNotice';
+import { isManagementLoginRequired, subscribeManagementSession } from './shared/managementSession';
 
 const ManagementChat = lazy(() => import('./ManagementChatPage'));
 const SkillPage = lazy(() => import('./index'));
@@ -26,6 +27,8 @@ const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('缺少管理台 root 挂载节点');
 
 function ManagementShell() {
+  const [loginRequired, setLoginRequired] = useState(isManagementLoginRequired);
+  useEffect(() => subscribeManagementSession(() => setLoginRequired(isManagementLoginRequired())), []);
   const { pathname } = useLocation();
   const currentPath = pathname.replace(/\/+$/, '');
   const isSection = (path: string) => currentPath === path || currentPath.startsWith(`${path}/`);
@@ -47,8 +50,8 @@ function ManagementShell() {
         ))}
       </nav>
       <div className="management-account-actions">
-        <a href="/login">登录</a>
-        <form action="/logout" method="post"><button type="submit">退出登录</button></form>
+        {loginRequired ? <a href="/login">登录</a>
+          : <form action="/logout" method="post"><button type="submit">退出登录</button></form>}
       </div>
     </header>
     <main id="management-main" className="management-content" tabIndex={-1}>
