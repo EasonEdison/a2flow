@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Input } from 'antd';
-import { PlusOutlined, ReloadOutlined, SendOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, ApiOutlined, FormOutlined, MessageOutlined, PlusOutlined, ReloadOutlined, SendOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { managementChatApi, ManagementChatError, newManagementChatRequestId, type AgentAsset, type AgentConversation, type AgentEvent, type AgentHistory, type AgentTurn } from './managementChatApi';
+import { isManagementLoginRequired, subscribeManagementSession } from './shared/managementSession';
 import './managementChat.less';
 
 const errorLabels: Record<string, string> = {
@@ -23,6 +24,11 @@ const errorLabels: Record<string, string> = {
 };
 const failureText = (code: string) => errorLabels[code] ?? '本轮未能完成，请查看已保存的处理结果；未自动重试。';
 const statusLabels = { RUNNING: '正在执行', COMPLETED: '本轮已完成', FAILED: '执行失败', UNKNOWN: '结果待确认' };
+const creationIdeas = [
+  { title: '创建工作流', description: '组合已有技能与业务能力', icon: ApartmentOutlined, prompt: '帮我创建一个工作流：\n业务目标：\n已有技能或业务能力：\n完成后发布到 PRT。' },
+  { title: '设计交互界面', description: '创建表单与结果展示', icon: FormOutlined, prompt: '帮我创建一个 A2UI 交互界面：\n使用场景：\n需要展示或收集的信息：\n已有接口或资产：\n完成后发布到 PRT。' },
+  { title: '扩展业务能力', description: '复用已注册的服务接口', icon: ApiOutlined, prompt: '帮我基于已注册的服务接口创建业务能力：\n业务用途：\n已有接口信息：\n完成后发布到 PRT。' },
+];
 const asText = (value: unknown) => typeof value === 'string' ? value : '';
 const safeErrorCode = (value: unknown) => /^[A-Z][A-Z0-9_]{0,159}$/.test(asText(value)) ? asText(value) : '';
 
@@ -128,6 +134,13 @@ function Turn({ turn, events, receipts }: { turn: AgentTurn; events: AgentEvent[
 }
 
 export default function ManagementChatPage() {
+  const [loginRequired, setLoginRequired] = useState(isManagementLoginRequired);
+  useEffect(() => {
+    const update = () => setLoginRequired(isManagementLoginRequired());
+    const unsubscribe = subscribeManagementSession(update);
+    update();
+    return unsubscribe;
+  }, []);
   const [searchParams, setSearchParams] = useSearchParams();
   const selected = searchParams.get('conversationId') ?? '';
   const selectedRef = useRef(selected); selectedRef.current = selected;
@@ -167,7 +180,9 @@ export default function ManagementChatPage() {
       const result = await managementChatApi.list(pageToken);
       setConversations(previous => pageToken ? Array.from(new Map([...previous, ...result.items].map(item => [item.id, item])).values()) : result.items);
       setNextPageToken(result.nextPageToken); setListError('');
-    } catch { setListError('会话列表读取失败，请重新读取。'); }
+    } catch (error) {
+      setListError(error instanceof ManagementChatError && error.rejected ? failureText(error.code) : '会话列表读取失败，请重新读取。');
+    }
     finally { setListBusy(false); }
   }, []);
   useEffect(() => { void loadConversations(); }, [loadConversations]);
@@ -251,31 +266,49 @@ export default function ManagementChatPage() {
     }
   };
 
+  const isEmpty = !selected || history?.turns.length === 0;
+  const showError = (error: string) => error && !(loginRequired && error === failureText('ACCOUNT_AUTHENTICATION_REQUIRED'));
+  const fillIdea = (prompt: string) => {
+    // Examples only fill an empty draft. Creating assets still requires an explicit send.
+    if (draft || busy || !ready) return;
+    setDraft(prompt);
+    document.getElementById('management-chat-message')?.focus();
+  };
+
   return <section className="management-global-chat">
-    <header className="management-chat-heading"><div><h1>对话创建</h1><p>描述一次需求，由助手创建管理资产并发布到 PRT。执行和发布结果以保存记录为准。</p></div><Button icon={<ReloadOutlined />} onClick={() => { void loadConversations(); setRefresh(value => value + 1); }}>读取最新状态</Button></header>
     <div className="management-chat-layout">
       <aside className="management-chat-conversations" aria-label="创建会话">
-        <div className="management-chat-list-heading"><h2>会话</h2><Button icon={<PlusOutlined />} disabled={busy} onClick={() => void newConversation()}>新建</Button></div>
-        {listError ? <Alert type="warning" message={listError} /> : null}
-        {conversations.map(item => <button key={item.id} className={item.id === selected ? 'is-selected' : ''} aria-current={item.id === selected ? 'page' : undefined} disabled={busy} onClick={() => choose(item.id)}><strong>{item.title || '未命名会话'}</strong><small>{new Date(item.updatedAt).toLocaleString()}</small></button>)}
-        {!conversations.length && !listBusy ? <p className="management-chat-muted">发送需求后会保存为会话。</p> : null}
+        <Button className="management-chat-new" icon={<PlusOutlined />} disabled={busy} onClick={() => void newConversation()}>新建对话</Button>
+        <h2>最近会话</h2>
+        {showError(listError) ? <Alert type="warning" showIcon role="alert" message={listError} /> : null}
+        <div className="management-chat-conversation-list" aria-busy={listBusy}>
+          {conversations.map(item => <button type="button" key={item.id} className={item.id === selected ? 'is-selected' : ''} aria-current={item.id === selected ? 'page' : undefined} disabled={busy} onClick={() => choose(item.id)}><MessageOutlined aria-hidden="true" /><span><strong>{item.title || '未命名会话'}</strong><small>{new Date(item.updatedAt).toLocaleString()}</small></span></button>)}
+          {!conversations.length && !listBusy && !listError ? <div className="management-chat-list-empty"><MessageOutlined aria-hidden="true" /><strong>暂无会话</strong><p>发送需求后会保存在这里</p></div> : null}
+          {!conversations.length && listBusy ? <p className="management-chat-muted" role="status">正在读取会话…</p> : null}
+        </div>
         {nextPageToken ? <Button type="link" loading={listBusy} onClick={() => void loadConversations(nextPageToken)}>更多会话</Button> : null}
       </aside>
-      <div className="management-chat-main">
-        <div className="management-chat-messages" ref={viewport} onScroll={event => { const el = event.currentTarget; followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
-          {selected && !history ? <p role="status">正在读取已保存的对话…</p> : null}
-          {!selected || history?.turns.length === 0 ? <div className="management-chat-empty"><h2>从你的需求开始</h2><p>说明要创建什么、用于什么场景，以及已有的资产或接口信息。</p><p>支持 Skill、业务能力、组件、A2UI Application 和 Workflow，已有手工编辑入口保持可用。</p></div> : null}
-          {history?.turns.map(turn => <Turn key={turn.turnId} turn={turn} receipts={receipts} events={events.filter(event => event.turnId === turn.turnId)} />)}
-        </div>
-        <div className="management-chat-footer">
-          {readError ? <Alert type="warning" showIcon message={readError} /> : null}
-          {sendError ? <Alert type="error" showIcon message={sendError} /> : null}
-          {history?.mutationsBlocked ? <p className="management-chat-muted">有操作结果待确认：可以继续查询已保存状态，创建和发布操作暂不可重复执行。</p> : null}
-          <form onSubmit={event => { event.preventDefault(); void send(); }}>
-            <label className="management-chat-input-label" htmlFor="management-chat-message">创建需求</label>
-            <Input.TextArea id="management-chat-message" value={draft} onChange={event => setDraft(event.target.value)} placeholder="描述你的需求、目标资产及已有信息" autoSize={{ minRows: 2, maxRows: 6 }} disabled={busy || !ready} />
-            <div className="management-chat-compose-actions"><span>{busy ? '正在发送…' : history && !history.canSend ? history.turns.some(turn => turn.status === 'RUNNING') ? '当前会话仍在执行，请等待保存结果。' : '本会话已达到轮数上限，请新建会话。' : '默认创建并发布到 PRT'}</span><Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={busy} disabled={!draft.trim() || !ready}>发送需求</Button></div>
-          </form>
+      <div className={`management-chat-main${isEmpty ? ' is-empty' : ''}`}>
+        <header className="management-chat-heading"><h1>对话创建</h1><Button type="text" icon={<ReloadOutlined />} onClick={() => { void loadConversations(); setRefresh(value => value + 1); }}>读取最新状态</Button></header>
+        <div className="management-chat-workspace">
+          <div className="management-chat-messages" ref={viewport} onScroll={event => { const el = event.currentTarget; followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
+            {selected && !history && !readError ? <p className="management-chat-loading" role="status">正在读取已保存的对话…</p> : null}
+            {isEmpty ? <div className="management-chat-empty"><h2>把业务想法，变成可用资产</h2><p>描述你的需求，助手将复用已有能力，完成创建并发布到 PRT。</p>
+              <div className="management-chat-ideas" aria-label="需求示例">{creationIdeas.map(({ title, description, icon: Icon, prompt }) => <button type="button" key={title} disabled={Boolean(draft) || busy || !ready} onClick={() => fillIdea(prompt)}><Icon aria-hidden="true" /><span><strong>{title}</strong><small>{description}</small></span></button>)}</div>
+            </div> : null}
+            {history?.turns.map(turn => <Turn key={turn.turnId} turn={turn} receipts={receipts} events={events.filter(event => event.turnId === turn.turnId)} />)}
+          </div>
+          <div className="management-chat-footer">
+            {showError(readError) ? <Alert type="warning" showIcon role="alert" message={readError} /> : null}
+            {showError(sendError) ? <Alert type="error" showIcon role="alert" message={sendError} /> : null}
+            {history?.mutationsBlocked ? <p className="management-chat-muted">有操作结果待确认：可以继续查询已保存状态，创建和发布操作暂不可重复执行。</p> : null}
+            <form className="management-chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}>
+              <label className="management-chat-input-label" htmlFor="management-chat-message">{isEmpty ? '创建需求' : '继续对话'}</label>
+              <Input.TextArea id="management-chat-message" value={draft} onChange={event => setDraft(event.target.value)} placeholder={isEmpty ? '描述你想创建什么，以及已有的资产或接口…' : '继续补充需求或调整已创建的资产…'} autoSize={{ minRows: 3, maxRows: 7 }} disabled={busy || !ready} aria-describedby="management-chat-compose-hint" />
+              <div className="management-chat-compose-actions"><span id="management-chat-compose-hint">{busy ? '正在发送…' : history && !history.canSend ? history.turns.some(turn => turn.status === 'RUNNING') ? '当前会话仍在执行，请等待保存结果。' : '本会话已达到轮数上限，请新建会话。' : '默认创建并发布到 PRT'}</span><Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={busy} disabled={!draft.trim() || !ready}>发送需求</Button></div>
+            </form>
+            <p className="management-chat-footnote">{isEmpty ? '支持 Skill、业务能力、A2UI 和 Workflow' : '执行和发布结果以保存记录为准。'}</p>
+          </div>
         </div>
       </div>
     </div>
