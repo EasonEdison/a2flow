@@ -90,3 +90,17 @@ CREATE INDEX IF NOT EXISTS run_ownership_user
     ON run_ownership(user_id, created_at DESC);
 ALTER TABLE run_ownership ADD COLUMN IF NOT EXISTS run_id text;
 CREATE INDEX IF NOT EXISTS run_ownership_run ON run_ownership(run_id);
+
+-- Work activity reads use Runtime facts; these columns only record admission provenance.
+ALTER TABLE run_ownership ADD COLUMN IF NOT EXISTS environment text;
+ALTER TABLE run_ownership ADD COLUMN IF NOT EXISTS source_type text;
+CREATE INDEX IF NOT EXISTS run_ownership_activity_page
+    ON run_ownership(user_id, environment, created_at DESC, control_id DESC);
+CREATE TABLE IF NOT EXISTS work_activity_attention_acks (
+    user_id bigint NOT NULL,
+    environment text NOT NULL,
+    activity_id text NOT NULL,
+    attention_id text NOT NULL,
+    acknowledged_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(user_id, environment, activity_id, attention_id)
+);

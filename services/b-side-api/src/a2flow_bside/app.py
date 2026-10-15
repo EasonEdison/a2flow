@@ -57,6 +57,10 @@ def _query_allowed(request: Request) -> bool:
           or re.fullmatch(
               r"/api/runs/[^/]+/nodes/[^/]+/executions/[^/]+/(history|stream)", path)):
         allowed = {"after", "limit"}
+    elif path == "/api/work-activities":
+        allowed = {"group", "cursor", "limit"}
+    elif re.fullmatch(r"/api/work-activities/[^/]+/result", path):
+        allowed = {"nodeId", "offset", "limit"}
     else:
         return False
     pairs = request.query_params.multi_items()
@@ -91,11 +95,25 @@ class ConversationCreate(BaseModel):
     title: str | None = Field(default=None, max_length=200)
 
 
+class RunReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    activityId: str = Field(min_length=1, max_length=256)
+
+
 class MessageSend(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+    runReferences: list[RunReference] = Field(default_factory=list, max_length=3)
+
+    @field_validator("text")
+    @classmethod
+    def nonblank(cls, value):
+        if not value.strip():
+            raise ValueError("MESSAGE_TEXT_REQUIRED")
+        return value
 
 
 class RunStart(BaseModel):
+    sourceType: Literal["manual", "chat"] = "manual"
     workflowKey: str = Field(min_length=1, max_length=256)
     input: dict[str, object] | str
 
@@ -248,6 +266,7 @@ def create_app(
     schedule_history: ScheduleHistoryRepository | None = None,
     memory_view=None,
     memory_replace=None,
+    work_activities=None,
     chat_cards=None,
     chat_action=None,
     browser_origins: tuple[str, ...] = (),
@@ -522,9 +541,34 @@ def create_app(
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
             raise BsideError("NOT_FOUND", 404)
+        references = []
+        seen = set()
+        for reference in body.runReferences:
+            if reference.activityId in seen:
+                raise BsideError("DUPLICATE_RUN_REFERENCE", 400)
+            seen.add(reference.activityId)
+            if work_activities is None:
+                raise BsideError("WORK_ACTIVITIES_UNAVAILABLE", 503)
+            snapshot = await asyncio.to_thread(
+                work_activities.get_result, user_id=identity.userId,
+                environment=environment, activity_id=reference.activityId, limit=8000)
+            # Store one bounded data representation, not duplicate output payloads.
+            snapshot.pop("outputs", None)
+            page = snapshot.pop("resultPage")
+            # Three references fit the runner's shared 36 KiB attachment budget.
+            metadata_bytes = len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8"))
+            budget = 11000 - metadata_bytes - 256
+            if budget < 0:
+                raise BsideError("RUN_REFERENCE_METADATA_TOO_LARGE", 413)
+            bounded_page = page.encode("utf-8")[:budget].decode("utf-8", errors="ignore")
+            snapshot["resultPage"] = bounded_page
+            if bounded_page != page:
+                snapshot["truncated"] = True
+                snapshot["nextOffset"] = len(bounded_page)
+            references.append(snapshot)
         input_message = messages.append(
             conversation_id=conversation_id, role="user",
-            content={"text": body.text, "delivery": "submitted"})
+            content={"text": body.text, "delivery": "submitted", "runReferences": references})
 
         assistant_message = messages.append(
             conversation_id=conversation_id, role="assistant",
@@ -532,7 +576,8 @@ def create_app(
         delivery = ChatDelivery(
             messages=messages, runner=chat_runner, user_id=identity.userId,
             conversation_id=conversation_id, text=body.text,
-            input_message=input_message, assistant_message=assistant_message)
+            input_message=input_message, assistant_message=assistant_message,
+            run_references=references)
         task = asyncio.create_task(delivery.produce())
         retain_task(task, conversation_id)
         return ChatStreamingResponse(delivery)
@@ -574,6 +619,46 @@ def create_app(
             content={"text": "工作流已启动，等待你的确认。"},
             ref_kind="run", ref_id=body.runId)
         return {"id": row["id"]}
+
+    # ---- committed work activities (read-only except reminder acknowledgement) ----
+
+    def _activities():
+        if work_activities is None:
+            raise BsideError("WORK_ACTIVITIES_UNAVAILABLE", 503)
+        return work_activities
+
+    @app.get("/api/work-activities")
+    async def list_work_activities(
+        group: Literal["attention", "running", "completed"] | None = None,
+        cursor: str | None = Query(default=None, max_length=1024),
+        limit: int = Query(default=5, ge=1, le=50),
+        identity: RequestIdentity = Depends(identity),
+    ):
+        return await asyncio.to_thread(
+            _activities().list_runs, user_id=identity.userId, environment=environment,
+            group=group, cursor=cursor, limit=limit)
+
+    @app.get("/api/work-activities/{activity_id}/result")
+    async def work_activity_result(
+        activity_id: str, nodeId: str | None = None,
+        offset: int = Query(default=0, ge=0), limit: int = Query(default=12000, ge=1, le=12000),
+        identity: RequestIdentity = Depends(identity),
+    ):
+        return await asyncio.to_thread(
+            _activities().get_result, user_id=identity.userId, environment=environment,
+            activity_id=activity_id, node_id=nodeId, offset=offset, limit=limit)
+
+    @app.get("/api/work-activities/{activity_id}")
+    async def work_activity_detail(activity_id: str, identity: RequestIdentity = Depends(identity)):
+        return await asyncio.to_thread(
+            _activities().get, user_id=identity.userId, environment=environment, activity_id=activity_id)
+
+    @app.post("/api/work-activities/{activity_id}/attention/{attention_id}/ack")
+    async def work_activity_ack(activity_id: str, attention_id: str,
+                                identity: RequestIdentity = Depends(identity)):
+        return await asyncio.to_thread(
+            _activities().acknowledge, user_id=identity.userId, environment=environment,
+            activity_id=activity_id, attention_id=attention_id)
 
     # ---- workflows catalog ----
 
@@ -623,7 +708,7 @@ def create_app(
         raise BsideError("INVALID_INPUT", 400)
 
     async def _start_for(
-        user_id: int, workflow_key: str, raw_input: dict[str, object] | str,
+        user_id: int, workflow_key: str, raw_input: dict[str, object] | str, source_type: str = "manual",
     ) -> dict[str, str]:
         control_id = uuid.uuid4().hex
         inputs = await asyncio.to_thread(
@@ -631,7 +716,7 @@ def create_app(
         )
         await asyncio.to_thread(
             run_ownership.reserve, control_id=control_id, user_id=user_id,
-            workflow_key=workflow_key,
+            workflow_key=workflow_key, environment=environment, source_type=source_type,
         )
         runtime = _runtime(user_id)
         try:
@@ -671,7 +756,7 @@ def create_app(
     @app.post("/api/runs")
     async def start_run(body: RunStart,
                         identity: RequestIdentity = Depends(identity)):
-        return await _start_for(identity.userId, body.workflowKey, body.input)
+        return await _start_for(identity.userId, body.workflowKey, body.input, body.sourceType)
 
     def _require_internal(request: Request) -> None:
         token = os.environ.get("A2FLOW_BSIDE_INTERNAL_TOKEN")
@@ -694,6 +779,7 @@ def create_app(
         await asyncio.to_thread(
             run_ownership.reserve, control_id=body.requestId,
             user_id=body.userId, workflow_key=body.workflowKey,
+            environment=environment, source_type="unknown",
         )
         view = await asyncio.to_thread(
             _runtime(body.userId).start, body.requestId, body.workflowKey, inputs,
