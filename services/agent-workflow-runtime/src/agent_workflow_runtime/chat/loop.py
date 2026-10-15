@@ -54,6 +54,10 @@ from .events import (
 from .personal_workflows import (
     PERSONAL_TOOL_VALIDATORS, PERSONAL_WORKFLOW_PROMPT, build_personal_workflow_tools,
 )
+from .workflow_results import (
+    WORKFLOW_RESULT_VALIDATORS, WORKFLOW_RESULTS_PROMPT, WorkflowRunProvider,
+    WorkflowReferenceMiddleware, build_workflow_result_tools,
+)
 from .tools import (
     _EMITTER,
     ProposeModelArgs,
@@ -78,6 +82,7 @@ _CHAT_BOOTSTRAP_TOOLS: Final[frozenset[str]] = frozenset({
     "use_skill",
     "generate_interaction",
     *PERSONAL_TOOL_VALIDATORS,
+    *WORKFLOW_RESULT_VALIDATORS,
 })
 _TURN_LOCAL_SKILL_PROMPT: Final[str] = (
     "Skill admission is local to the current turn. Historical use_skill results "
@@ -661,6 +666,8 @@ class ChatLoop:
         history_loader=None, personal_memory=None,
         chat_assets=None, personal_workflows=None,
         observation_loader: ObservationLoader | None = None,
+        workflow_run_provider: WorkflowRunProvider | None = None,
+        run_references: Sequence[Mapping[str, Any]] = (),
     ):
         require_owner(owner)
         if type(conversation_id) is not str or not conversation_id:
@@ -687,6 +694,8 @@ class ChatLoop:
         self._chat_assets = chat_assets
         self._personal_workflows = personal_workflows
         self._observation_loader: ObservationLoader | None = observation_loader
+        self._workflow_run_provider = workflow_run_provider
+        self._run_references = run_references
         self._history = [
             HumanMessage(content=str(text)) if role == "user"
             else AIMessage(content=str(text)) for role, text in (history or [])
@@ -702,7 +711,9 @@ class ChatLoop:
         token = _EMITTER.set(self._emitter)
         model = None
         try:
-            user_message = HumanMessage(content=user_text.strip())
+            user_message = HumanMessage(
+                content=user_text, id=f"chat-user:{self._control_request_id}:{uuid4()}",
+            )
             if self._chat_assets is not None:
                 self._chat_assets.begin_turn()
             model = self._model_factory.create(self._model_reference, self._owner)
@@ -723,8 +734,16 @@ class ChatLoop:
                     self._personal_workflows, self._owner, self._conversation_id,
                     self._emitter.emit,
                 ))
+            if self._workflow_run_provider is not None:
+                tools = (*tools, *build_workflow_result_tools(
+                    self._workflow_run_provider, self._owner,
+                ))
             from ..personal_memory import PersonalMemoryMiddleware
             middleware = [_ToolExecutionEvents(self._emitter)]
+            if self._workflow_run_provider is not None or self._run_references:
+                middleware.append(WorkflowReferenceMiddleware(
+                    user_message.id, self._run_references,
+                ))
             if self._observation_loader is not None:
                 middleware.append(_ChatObservationStateMiddleware(
                     self._observation_loader,
@@ -753,13 +772,19 @@ class ChatLoop:
                 })
             if self._personal_workflows is not None:
                 validators.update(PERSONAL_TOOL_VALIDATORS)
+            if self._workflow_run_provider is not None:
+                validators.update(WORKFLOW_RESULT_VALIDATORS)
+            system_prompt = self._system_prompt or ""
+            if self._personal_workflows is not None:
+                system_prompt += PERSONAL_WORKFLOW_PROMPT
+            if self._workflow_run_provider is not None or self._run_references:
+                system_prompt += WORKFLOW_RESULTS_PROMPT
             graph = build_agent(
                 model, tools,
                 validators,
                 harness_profile_key=model.configuration.harness_profile_key,
                 context_schema=TrustedInvocationContext,
-                system_prompt=((self._system_prompt or "") + PERSONAL_WORKFLOW_PROMPT
-                               if self._personal_workflows is not None else self._system_prompt),
+                system_prompt=system_prompt or None,
                 checkpointer=self._checkpointer,
                 middleware=middleware,
             )
