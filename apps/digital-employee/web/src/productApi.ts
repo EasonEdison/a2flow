@@ -58,7 +58,13 @@ export type ChatApplicationPart = {
 };
 export type ChatPersonalWorkflowPart = { type: 'personal_workflow'; id: string; workflow: PersonalWorkflow };
 export type ChatContentPart = ChatTextPart | ChatApplicationPart | ChatPersonalWorkflowPart;
+export type RunReference = { activityId: string; workflowName: string; createdAt: string; runStatus?: string; resultRevision?: string; observedAt?: string };
+export type ActivityGroup = 'attention' | 'running' | 'completed';
+export type WorkAttention = { attentionId: string; kind: 'waiting' | 'failed' | 'business'; title: string; summary: string; nodeId?: string; interactionId?: string; acknowledged: boolean };
+export type WorkActivity = RunReference & { controlRequestId: string; runId: string | null; workflowKey: string; sourceType: 'chat' | 'manual' | 'scheduled' | 'unknown'; updatedAt: string | null; runStatus: string; currentNode: { nodeId: string; title: string; status: string } | null; summary: string | null; attentionItems: WorkAttention[]; group: ActivityGroup; scheduleName?: string | null; scheduledAt?: string | null };
+export type WorkActivityPage = { items: WorkActivity[]; counts: Record<ActivityGroup, number>; nextCursor: string | null; updatedAt: string | null };
 export type Message = {
+  runReferences?: RunReference[];
   id: string;
   role: 'user' | 'assistant';
   text: string;
@@ -338,6 +344,9 @@ export const messageFromContent = (
       && typeof recordOf(continuation).cardId === 'string'
       ? { continuation: { cardId: textOf(recordOf(continuation).cardId),
         requestId: textOf(recordOf(continuation).requestId) } } : {}),
+    ...(Array.isArray((content as Row)?.runReferences) ? { runReferences: ((content as Row).runReferences as unknown[])
+      .filter((value): value is Row => Boolean(value && typeof value === 'object' && !Array.isArray(value) && typeof (value as Row).activityId === 'string'))
+      .map(value => ({ activityId: textOf(value.activityId), workflowName: textOf(value.workflowName) || '工作流运行', createdAt: textOf(value.createdAt), runStatus: textOf(value.runStatus), resultRevision: textOf(value.resultRevision), observedAt: textOf(value.observedAt) })) } : {}),
     ...(execution ? { execution } : {}),
     ...(parts !== undefined ? { parts } : {}),
     ...(legacyCards?.length ? { legacyCards } : {}),
@@ -444,8 +453,8 @@ export const productApi = {
       unassignedCards: (payload.unassignedCards ?? []).map(chatCardOf),
     };
   },
-  sendMessage: async (id: string, text: string, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal) => {
-    const response = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`, { ...body({ text }), signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
+  sendMessage: async (id: string, text: string, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal, runReferences: Pick<RunReference, 'activityId'>[] = []) => {
+    const response = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`, { ...body({ text, runReferences }), signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
     if (!response.ok) {
       const error = new Error('发送失败') as ApiError;
       error.code = 'REQUEST_FAILED';
@@ -453,6 +462,13 @@ export const productApi = {
     }
     await readChatStream(response, onEvent);
   },
+  workActivities: (group: ActivityGroup, cursor: string | null = null, signal?: AbortSignal) => {
+    const query = new URLSearchParams({ group, limit: '5' });
+    if (cursor) query.set('cursor', cursor);
+    return api<WorkActivityPage>(`/api/work-activities?${query}`, { signal });
+  },
+  workActivity: (id: string, signal?: AbortSignal) => api<WorkActivity>(`/api/work-activities/${encodeURIComponent(id)}`, { signal }),
+  acknowledgeActivity: (id: string, attentionId: string) => api(`/api/work-activities/${encodeURIComponent(id)}/attention/${encodeURIComponent(attentionId)}/ack`, body({})),
   workflows: async (): Promise<{ items: Workflow[] }> => {
     const payload = await api<{ workflows?: Row[] }>('/api/workflows');
     return {
@@ -510,8 +526,8 @@ export const productApi = {
     return { card: chatCardOf(response.card), effects: response.effects ?? [] };
   },
   attachRun: (conversationId: string, runId: string) => api(`/api/conversations/${encodeURIComponent(conversationId)}/run-refs`, body({ runId })),
-  startRun: async (workflowKey: string, input: string): Promise<{ runId: string }> => {
-    const payload = await api<{ controlRequestId?: unknown }>('/api/runs', body({ workflowKey, input }));
+  startRun: async (workflowKey: string, input: string, sourceType: 'manual' | 'chat' = 'manual'): Promise<{ runId: string }> => {
+    const payload = await api<{ controlRequestId?: unknown }>('/api/runs', body({ workflowKey, input, sourceType }));
     return { runId: textOf(payload.controlRequestId) };
   },
   runAction: async (id: string, nodeId: string, interactionId: string, actionName: string, value: string, confirmed: boolean, onSurface: (view: RunView) => void) => {
