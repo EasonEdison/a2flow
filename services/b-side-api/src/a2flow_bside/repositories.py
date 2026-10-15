@@ -307,20 +307,22 @@ class RunOwnershipRepository:
                 " VALUES (%s, %s, %s)",
                 (control_id, user_id, workflow_key))
 
-    def reserve(self, *, control_id: str, user_id: int, workflow_key: str) -> None:
+    def reserve(self, *, control_id: str, user_id: int, workflow_key: str,
+                environment: str | None = None, source_type: str = "unknown") -> None:
         """Idempotently bind a scheduled control before remote dispatch."""
         require_user_id(user_id)
         with self._factory() as connection:
             connection.execute(
-                "INSERT INTO run_ownership (control_id, user_id, workflow_key) "
-                "VALUES (%s, %s, %s) ON CONFLICT (control_id) DO NOTHING",
-                (control_id, user_id, workflow_key),
+                "INSERT INTO run_ownership (control_id, user_id, workflow_key, environment, source_type) "
+                "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (control_id) DO NOTHING",
+                (control_id, user_id, workflow_key, environment, source_type),
             )
             row = connection.execute(
-                "SELECT user_id, workflow_key FROM run_ownership WHERE control_id = %s",
+                "SELECT user_id, workflow_key, environment FROM run_ownership WHERE control_id = %s",
                 (control_id,),
             ).fetchone()
-            if row is None or row["user_id"] != user_id or row["workflow_key"] != workflow_key:
+            if (row is None or row["user_id"] != user_id or row["workflow_key"] != workflow_key
+                    or (row["environment"] is not None and row["environment"] != environment)):
                 raise BsideError("RUN_CONTROL_ID_CONFLICT", 409)
 
     def owner_by_run(self, run_id: str) -> int | None:
