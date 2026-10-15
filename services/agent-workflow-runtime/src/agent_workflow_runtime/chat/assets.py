@@ -36,7 +36,10 @@ from .cards import JsonObject
 _CHAT_SKILL_TOOLS = frozenset({"execute_ability", "render_application"})
 _APPLICATION_CONTRACT_TOOL = "query_skill_dependencies"
 _APPLICATION_USAGE = (
-    "Call render_application with this appCode and params that satisfy "
+    "Application params are only the fields accepted by paramsSchema, not arbitrary "
+    "business output. For an explicitly empty input contract, pass {}. "
+    "Reuse successful business results; do not repeat business queries just to fix "
+    "rendering arguments. Call render_application with this appCode and params that satisfy "
     "paramsSchema."
 )
 

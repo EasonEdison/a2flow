@@ -33,6 +33,7 @@ from ..rpc_client import (
     JsonValue as RpcJsonValue,
 )
 from .assets import _APPLICATION_USAGE, ApplicationContract, ChatAssets
+from .application_params import validate_application_params
 from .cards import JsonObject, JsonValue
 from .render_projection import project_business_state, project_rendered_content
 
@@ -135,7 +136,7 @@ class RpcChatAssets(ChatAssets):
         with self._render_lock, generation_trace() as trace:
             if self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
-            self.application_description(application_key)
+            self._preflight_application_params(application_key, data)
             contract = self.rpc.describe_generation_source(
                 self.owner, application_key, "generation-contract:" + uuid4().hex,
             )
@@ -282,6 +283,10 @@ class RpcChatAssets(ChatAssets):
             "paramsSchema": runtime_schema,
         }
 
+    def _preflight_application_params(self, application_key: str, data: dict[str, Any]) -> None:
+        contract = self._application_contract(application_key)
+        validate_application_params(application_key, contract["paramsSchema"], data)
+
     def render_application(self, application_key: str, data: dict[str, Any],
                            tool_call_id: str) -> dict[str, Any]:
         if type(tool_call_id) is not str or not tool_call_id:
@@ -289,7 +294,7 @@ class RpcChatAssets(ChatAssets):
         with self._render_lock:
             if self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
-            self.application_description(application_key)
+            self._preflight_application_params(application_key, data)
             result = self.rpc.activate(self.owner, application_key, data,
                                        "render:" + uuid4().hex)
             return self._save_render_result(application_key, result, tool_call_id)
