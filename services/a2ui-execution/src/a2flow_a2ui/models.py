@@ -494,6 +494,8 @@ class ExecutionSummary:
     success: bool
     capability_version: int
     error_code: str | None = None
+    request_id: str | None = None
+    phase: Literal["LOAD", "ACTION", "UNKNOWN"] = "UNKNOWN"
 
 
 @dataclass(frozen=True, slots=True)

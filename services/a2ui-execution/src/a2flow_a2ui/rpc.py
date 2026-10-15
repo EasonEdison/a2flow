@@ -218,6 +218,8 @@ def _response(value: RuntimeResult) -> a2ui_pb2.RuntimeResponse:
                 success=item.success,
                 capability_version=item.capability_version,
                 error_code=item.error_code or "",
+                request_id=item.request_id or "",
+                phase=item.phase,
             )
             for item in value.executions
         ],

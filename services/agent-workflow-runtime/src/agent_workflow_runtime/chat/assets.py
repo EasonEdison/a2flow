@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Callable, TypedDict
+from typing import Any, Callable, NotRequired, TypedDict
 
 from skill_registry import (
     InvocationScope as RegistryScope,
@@ -40,8 +40,22 @@ _APPLICATION_USAGE = (
     "business output. For an explicitly empty input contract, pass {}. "
     "Reuse successful business results; do not repeat business queries just to fix "
     "rendering arguments. Call render_application with this appCode and params that satisfy "
-    "paramsSchema."
+    "paramsSchema. Published loadBindings, when provided, declare capabilities called during "
+    "rendering; they are not execution receipts or proof of matching prior query inputs. "
+    "Use them to avoid an unnecessary separate query for the same goal, inputs and time, "
+    "while following the Skill instructions and required tools. Absence means unknown."
 )
+
+
+class ApplicationLoadSource(TypedDict):
+    source: str
+    paramsPath: NotRequired[str]
+
+
+class ApplicationLoadBinding(TypedDict):
+    bindingId: str
+    actionCode: str
+    requestSources: list[ApplicationLoadSource]
 
 
 class ApplicationContract(TypedDict):
@@ -51,6 +65,7 @@ class ApplicationContract(TypedDict):
     description: str
     usage: str
     paramsSchema: JsonObject
+    loadBindings: NotRequired[list[ApplicationLoadBinding]]
 
 
 class SkillDependencies(TypedDict):
@@ -382,9 +397,11 @@ class ChatAssets:
             contract = self._application_contract(app_code)
             if (
                 type(contract) is not dict
-                or set(contract) != {
-                    "appCode", "description", "usage", "paramsSchema",
-                }
+                or set(contract) not in (
+                    {"appCode", "description", "usage", "paramsSchema"},
+                    {"appCode", "description", "usage", "paramsSchema", "loadBindings"},
+                )
+                or ("loadBindings" in contract and type(contract["loadBindings"]) is not list)
                 or contract.get("appCode") != app_code
                 or type(contract.get("description")) is not str
                 or contract.get("usage") != _APPLICATION_USAGE
