@@ -47,4 +47,4 @@
 
 ## 2026-10-15 UI slice status
 
-Source and deployment COMPLETE at `a0c9ff5`; read-only visual previews and all 64 public asset hashes PASS. Authenticated management account visibility PASS. Employee authenticated history/detail acceptance PENDING LOGIN. See [employee-workspace-ui.md](employee-workspace-ui.md). Do not interpret source/build completion as full authenticated UI acceptance or as completion of unrelated gates.
+Source and deployment COMPLETE at `a0c9ff5`; read-only visual previews and all 64 public asset hashes PASS. Authenticated management account visibility PASS. Employee authenticated history/detail and all-page presentation acceptance PASS after normal login; follow-up notification labels deployed in employee static `2a01fcd`. See [employee-workspace-ui.md](employee-workspace-ui.md). Do not interpret source/build completion as full authenticated UI acceptance or as completion of unrelated gates.
