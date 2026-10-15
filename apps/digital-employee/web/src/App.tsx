@@ -24,7 +24,7 @@ const fixtureMode = new URLSearchParams(location.search).get('preview') === 'fix
 type WorkflowTab = 'personal' | 'preset' | 'runs';
 type Page = 'chat' | 'workflows' | 'schedules' | 'notifications' | 'memory';
 const runLabels: Record<string, string> = { RUNNING: '运行中', WAITING: '等待确认', SUCCEEDED: '已完成', STOPPED: '已停止', FAILED: '失败', SUBMITTED: '已提交', PENDING: '准备中', SKIPPED: '已跳过', UNKNOWN: '待核对' };
-const notificationLabels: Record<string, string> = { WAITING: '等待确认', COMPLETED: '完成', STOPPED: '停止', FAILED: '失败', SYSTEM: '系统' };
+const notificationLabels: Record<string, string> = { WAITING: '等待确认', COMPLETED: '完成', STOPPED: '停止', FAILED: '失败', SYSTEM: '系统', waiting: '等待确认', finished: '完成', stopped: '停止', failed: '失败', system: '系统' };
 
 function Login({ onSession }: { onSession: (session: Session) => void }) {
   const [register, setRegister] = useState(false);
