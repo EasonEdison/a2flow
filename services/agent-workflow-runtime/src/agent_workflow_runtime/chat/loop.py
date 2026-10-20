@@ -98,7 +98,12 @@ _TURN_LOCAL_SKILL_PROMPT: Final[str] = (
     "generate_interaction directly; it requires no Skill or existing Application. "
     "User submissions are saved inputs, not completed business operations. Continue "
     "the task using the submitted result; do not regenerate a submitted form. "
-    "For real business data/actions use authorized Skill tools. Do not invent data."
+    "For real business data/actions use authorized Skill tools. Do not invent data. "
+    "Once required business inputs are known, call the admitted execute_ability directly. "
+    "The host executes READ operations or creates the required real write-confirmation card. "
+    "Do not ask for an extra approval or generate a temporary form solely to confirm a "
+    "business write. Generic confirmed=true input is not a write approval receipt. "
+    "Use generate_interaction for missing business inputs, not for platform write approval."
 )
 _SKILL_TOOL_NAMES: Final[frozenset[str]] = frozenset({
     "execute_ability",

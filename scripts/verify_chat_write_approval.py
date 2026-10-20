@@ -320,6 +320,11 @@ def continuation_binding_probe():
 
 
 def main():
+    from agent_workflow_runtime.chat.loop import _TURN_LOCAL_SKILL_PROMPT
+    check("call the admitted execute_ability directly" in _TURN_LOCAL_SKILL_PROMPT)
+    check("The host executes READ operations or creates the required real write-confirmation card" in _TURN_LOCAL_SKILL_PROMPT)
+    check("Generic confirmed=true input is not a write approval receipt" in _TURN_LOCAL_SKILL_PROMPT)
+    check("Use generate_interaction for missing business inputs, not for platform write approval" in _TURN_LOCAL_SKILL_PROMPT)
     assets, rpc, store, memory, service, factory = fixture("READ")
     read = assets.execute_ability("ability", ARGUMENTS, tool_call_id="tool-read")
     check(read["output"]["recordId"] == "synthetic-result" and len(rpc.calls) == 1)
