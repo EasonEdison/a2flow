@@ -21,6 +21,7 @@ ROOT = Path(os.path.abspath(__file__)).parents[1]
 OWNER = "a2flow.core-probes"
 REDACTIONS: list[str] = []
 JAVA_PROBES = (
+    ("management-context", "ManagementContextStartupProbe", "dev.a2flow.management.host"),
     ("capability-approval", "CapabilityApprovalGuardProbe", "dev.a2flow.management.capabilityrpc"),
     ("package-restore", "PackageRestoreGuardProbe", "dev.a2flow.management.lifecycle.artifact"),
 )
@@ -207,10 +208,11 @@ def check_schemas_removed(docker: list[str], pg: str, database: str) -> None:
         raise ProbeFailure("Probe schema remains in its disposable database")
 
 
-def java_postgres_probe(args, report: dict, classes: str, main_class: str) -> str:
+def java_postgres_probe(args, report: dict, classes: str, main_class: str, name: str) -> str:
     with isolated_postgres(args, report) as resources:
         docker, labels, pg, private, password = resources
-        command([*docker, "exec", pg, "createdb", "-U", "probe", "a2flow_approval_probe"])
+        database = "a2flow_management_probe" if name == "management-context" else "a2flow_approval_probe"
+        command([*docker, "exec", pg, "createdb", "-U", "probe", database])
         env_file = private / "java.env"
         env_file.write_text("A2FLOW_PROBE_DB_PASSWORD=" + password + "\n")
         env_file.chmod(0o600)
@@ -225,9 +227,9 @@ def java_postgres_probe(args, report: dict, classes: str, main_class: str) -> st
             "--mount", f"type=bind,src={classes},dst=/probe-classes,readonly",
             "--workdir", "/workspace", "--env-file", str(env_file),
             "--entrypoint", "java", args.java_image, "-ea", "-cp", classpath, main_class,
-            "jdbc:postgresql://127.0.0.1:5432/a2flow_approval_probe", "probe",
+            f"jdbc:postgresql://127.0.0.1:5432/{database}", "probe",
         ], timeout=args.probe_timeout)
-        check_schemas_removed(docker, pg, "a2flow_approval_probe")
+        check_schemas_removed(docker, pg, database)
         return output
 
 
@@ -243,8 +245,8 @@ def java_probes(args, report: dict) -> None:
                 raise ProbeFailure(f"Required probe missing: {filename}.java")
             command(["javac", "--release", "17", "-cp", classpath, "-d", classes, str(source)],
                     timeout=120, env=clean_environment())
-            if name == "capability-approval":
-                output = java_postgres_probe(args, report, classes, f"{package}.{filename}")
+            if name in ("management-context", "capability-approval"):
+                output = java_postgres_probe(args, report, classes, f"{package}.{filename}", name)
             else:
                 output = command(["java", "-ea", "-cp", classes + os.pathsep + classpath,
                                   f"{package}.{filename}"], timeout=args.probe_timeout,
@@ -252,8 +254,10 @@ def java_probes(args, report: dict) -> None:
             result = result_json(output)
             if result.get("result") != "PASS":
                 raise ProbeFailure(f"{name}: missing PASS result")
-            if name == "capability-approval" and result.get("postgres") is not True:
+            if name in ("management-context", "capability-approval") and result.get("postgres") is not True:
                 raise ProbeFailure("Approval probe did not exercise PostgreSQL")
+            if name == "management-context" and result.get("productionComposition") is not True:
+                raise ProbeFailure("Management probe did not start the production composition root")
             report["probes"][name] = result
             print(f"PASS: {name}", flush=True)
     report["cleanup"] = ("temporary Java classes removed" if args.java_probe == "package-restore"
@@ -267,7 +271,7 @@ def main() -> int:
                         "capability-approval", "chat-write-approval", "workflow-write-approval",
                         "a2ui-write-preflight"),
                         default="all", help="Local focused reproduction; CI always selects all")
-    parser.add_argument("--java-probe", choices=("all", "capability-approval", "package-restore"),
+    parser.add_argument("--java-probe", choices=("all", "management-context", "capability-approval", "package-restore"),
                         default="all", help="Local focused reproduction; CI always selects all")
     parser.add_argument("--docker-context")
     parser.add_argument("--postgres-image", default="postgres:16.6-bookworm")

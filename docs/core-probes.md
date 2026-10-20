@@ -13,6 +13,7 @@ replace [full self-host acceptance](../openspec/changes/portfolio-selfhost/readi
 | Python capability approval | Actual Python executor admission and PostgreSQL consumption, read-only role with minimal append privilege, concurrent and fresh-process replay rejection, unknown outcome not retried | Recording/fault-injected business transport; no public RPC/mTLS server |
 | A2UI write preflight | A2UI preflight and confirmed dispatch through the actual Python executor/guard | Synthetic transport and in-memory receipts; no network |
 | Java capability approval | Management execution admission plus durable PostgreSQL receipt consumption, aliases and concurrent consumption | Local fake business transport |
+| Management context startup | Production Spring composition root, dependency injection, real PostgreSQL pool and loopback gRPC lifecycle start/close | Empty isolated database, temporary JSON configuration; no HTTP request or business dispatch |
 | Package restore | Archive admission, extraction limits and workspace preservation | Small generated archives and temporary workspaces |
 
 The Python/PostgreSQL and Java suites are independent jobs. Failure is nonzero, never a
@@ -86,17 +87,23 @@ docker pull eclipse-temurin:17-jre-jammy
 python3 scripts/run_core_probes.py --suite java --probe-timeout 60
 ```
 
-Only the two explicit probe mains are compiled into a temporary directory and run
+Only the three explicit probe mains are compiled into a temporary directory and run
 with assertions enabled. This does not execute the full unit suite or start the
 management application. The approval probe uses a public JRE container and
 loopback fake transport, sharing its isolated PostgreSQL namespace for the
 durable consumption checks. The runner requires `postgres: true` in its result,
-then verifies schema cleanup. It publishes no ports. The archive probe runs in
-the local JDK with disposable files. Both must be present in the selected source
+then verifies schema cleanup. The startup probe registers the same
+`ManualManagementConfiguration` in the same `AnnotationConfigWebApplicationContext`
+type as the production host, without replacing beans. It checks actual guard/store
+registration, database connection and gRPC lifecycle shutdown. A temporary hosts
+file resolves the isolated container's own hostname without DNS access.
+It publishes no ports. The archive probe runs in
+the local JDK with disposable files. All three must be present in the selected source
 revision; a missing probe is a failure.
 For a focused local reproduction, add `--java-probe package-restore` or
-`--java-probe capability-approval`. The report records this narrowed selection;
-CI always runs both, and a focused pass is not a pass of the whole Java gate.
+`--java-probe capability-approval` or `--java-probe management-context`.
+The report records this narrowed selection; CI always runs all three, and a
+focused pass is not a pass of the whole Java gate.
 Use the same `--docker-context`, `--source-root` and `--scratch-dir` options for a
 VM-backed engine. Keep the Maven outputs inside the exported source tree so the
 JRE container can read `target/classes` and `target/dependency`.
