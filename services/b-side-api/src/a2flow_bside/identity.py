@@ -37,10 +37,12 @@ class RequestIdentity:
 def parse_session_token(cookie_value: str | None) -> str | None:
     if not cookie_value:
         return None
-    token = cookie_value.strip()
-    if not 20 <= len(token) <= 128:
+    # new_session_token emits 32 random bytes as 43 URL-safe ASCII characters.
+    # Validate before hash_session_token encodes ASCII in request middleware.
+    if len(cookie_value) != 43 or not all(
+            c.isascii() and (c.isalnum() or c in "-_") for c in cookie_value):
         return None
-    return token
+    return cookie_value
 
 
 def require_origin(headers, browser_origin: str | tuple[str, ...]) -> None:
