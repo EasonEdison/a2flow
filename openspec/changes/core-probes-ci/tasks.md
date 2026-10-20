@@ -4,6 +4,6 @@
 - [x] Record scoped design before implementation.
 - [x] Add dependency installation and isolated probe runner.
 - [x] Add public CI jobs, timeouts, cleanup and structured reports.
-- [ ] Run isolated PostgreSQL and delivered Java probes.
+- [x] Run isolated PostgreSQL and delivered Java probes.
 - [x] Verify failure cleanup, repository checks and workflow syntax.
-- [ ] Commit/push this branch for parent integration; no deployment.
+- [x] Commit/push this branch for parent integration; no deployment.

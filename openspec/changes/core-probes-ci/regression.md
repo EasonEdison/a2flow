@@ -35,17 +35,32 @@ context; no local Git checkout, ECS builds or production operations.
   previous verified management classes/dependencies, and run through the same
   runner. Result: 107 checks, zero external calls, PASS. This focused run does not
   establish the complete Java suite or a fresh whole-module Maven build.
+- Subsequently overlaid approval sources from
+  `da2ff11f65b56fd67b3d1cb83116a50245582d99` onto the same independent export and
+  ran the workflow's standard Maven `compile dependency:copy-dependencies` with
+  JDK 17. All 609 Java sources compiled, including regenerated outputs from the
+  three canonical proto files. Both probes then passed in the default `all`
+  selection: approval 32 checks with five loopback fake RPC calls and
+  `postgres=false`; archive 107 checks with zero external calls. This Java gate
+  does not claim to test the approval store against real PostgreSQL.
+- Applied the delivered V003 SQL twice through the actual self-host
+  `bootstrap.apply_file` function in another empty isolated PostgreSQL database.
+  It produced one schema-history row and the empty approval-consumption table.
+  The dedicated container and private configuration were removed. This targeted
+  check does not repeat the complete self-host setup sequence.
+- Dependency-free repository checks passed: 354 Python files, 101 local entry-doc
+  links and the current direct-import/manifests checks. `git diff --check` passed.
 
 Two initial local runs exposed Colima's `/tmp` versus `/private/tmp` bind-mount
 boundary. The runner now supports an equivalent `--source-root` mount path and
 checks it resolves to its own checkout. Those failed attempts cleaned their own
 containers; they are not recorded as passes.
 
-## Remaining at this checkpoint
+## Delivery boundaries
 
-- Integrate the capability-approval worker's source and V003 migration; run both
-  Java probes together against the final integrated build.
-- Confirm the V003 self-host bootstrap integration with that delivered migration.
+- Integrate this branch together with the capability-approval worker's source,
+  V003 migration and package-restore source. The C branch deliberately does not
+  copy or independently edit those owners' Java/proto files.
 - The GitHub Actions workflow has not yet run remotely. Local command evidence
   does not establish a green public CI run.
 
