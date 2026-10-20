@@ -35,7 +35,7 @@ npm run preview
 
 打开 **http://127.0.0.1:4173/employee/?preview=fixture**。页面会明确提示为模拟展示，可查看工作流卡片与状态；不调用模型、数据库或业务服务，也不是完整登录产品的替代品。[开始使用](docs/getting-started.md)说明当前管理端构建和真实运行前提。
 
-**完整自托管仍需要操作者装配。** 现有 Compose 依赖已配置的数据库、账号、私有配置与 mTLS 证书，不是全新机器的一键安装器。不要在已有数据上直接重跑历史初始化脚本。
+新安装请使用[完整自托管指南](deploy/selfhost/README.md)：从公开基础镜像构建，创建隔离 PostgreSQL/Redis、显式管理员及 mTLS 配置。初始化和资产发布分开执行，启动不会暗中创建默认密码或写入演示业务。历史 operator Compose 仍依赖既有环境；实际验证范围见[验收记录](openspec/changes/production-foundations/readiness.md)。
 
 ## 已实现范围
 

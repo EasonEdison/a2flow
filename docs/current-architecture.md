@@ -58,9 +58,11 @@ A scheduled workflow can run without a parent conversation. Its saved result/att
 | Unknown external outcome | Retained as uncertain; no generic automatic replay or compensation |
 | Model end vs task end | A model stream ending does not satisfy a pending interaction or all required workflow states |
 | Handling completion | Requires a completed/appropriate final delivery and settled operations; an early returned tool is not enough |
-| Notifications | Status and event sink currently use different transactions; a failure window remains (see roadmap) |
+| Notifications | Lifecycle state and scheduler outbox commit together; stable identities deduplicate repeated delivery. Native waiting checkpoints use bounded read-only recovery, not business replay |
 
 The workflow factory allocates a run before constructing the graph. Setup failure must therefore fail the allocated run even when a graph object does not exist. Late failure must not overwrite STOPPED/SUCCEEDED or publish a contradictory failure event. This is covered by the targeted failure-boundary evidence linked in the roadmap.
+
+The engine accepts a transaction-scoped event writer from deployment assembly rather than importing the scheduler. Terminal events share the run transaction. Waiting checkpoints belong to LangGraph, so recovery reads the actual native interrupt, checks the current run/interaction under lock and queues a stable waiting event. This is eventual projection recovery across separate persistence boundaries, not a distributed transaction or exactly-once business execution. External notification outcomes that are uncertain remain UNKNOWN.
 
 ## Product scope versus earlier targets
 

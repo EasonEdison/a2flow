@@ -35,7 +35,7 @@ npm run preview
 
 Open **http://127.0.0.1:4173/employee/?preview=fixture**. This explicitly labeled, local fixture demonstrates workflow cards and state presentation. It does **not** call a model, database or business service, and is not the full authenticated product. See [getting started](docs/getting-started.md) for the current management build and the prerequisites for real execution.
 
-**Full-stack installation is still operator-oriented.** Existing Compose files require provisioned databases, accounts, private configuration and mTLS certificates. They are not a fresh-machine one-command installer; do not run historical initialization scripts against existing data.
+For a new installation, follow the [complete self-hosting guide](deploy/selfhost/README.md): public image builds, isolated PostgreSQL/Redis, explicit administrator creation and mTLS configuration. Initialization and asset publication are separate steps; no default password or sample business writes are hidden in startup. The historical operator Compose files still require existing infrastructure. See the [acceptance record](openspec/changes/production-foundations/readiness.md) for the verified scope.
 
 ## What is implemented?
 
