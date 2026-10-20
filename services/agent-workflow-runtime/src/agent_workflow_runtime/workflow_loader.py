@@ -90,6 +90,7 @@ class NodeBoundary:
 
 def compose_workflow(
     run, lifecycle, definition, agents, views, context_loader, checkpointer, *, summary_agent=None,
+    initialize_view=True,
 ):
     """Compose a bounded sequential asset workflow with native subgraph continuation."""
 
@@ -135,7 +136,8 @@ def compose_workflow(
     elif summary_agent is not None:
         raise ActionRejected("INVALID_WORKFLOW_SUMMARY_BINDING")
 
-    views.ensure(run, definition, run.versions)
+    if initialize_view:
+        views.ensure(run, definition, run.versions)
     builder = StateGraph(MessagesState, context_schema=type(run.context()))
     predecessor_ids = []
     for node in nodes:

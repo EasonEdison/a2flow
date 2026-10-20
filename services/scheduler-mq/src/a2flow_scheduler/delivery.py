@@ -90,3 +90,22 @@ def reconcile_unknown(outbox: PostgresOutbox, ingress: WorkflowIngress) -> None:
         except Exception:
             # Keep actionable durable UNKNOWN until a read proves admission.
             continue
+
+
+def reconcile_notifications(
+    outbox: PostgresOutbox, *, external_sender_configured: bool,
+) -> None:
+    """Restore in-app visibility after a crash without retrying external sends."""
+    for command in outbox.uncertain_notifications():
+        if not isinstance(command, NotificationCommand):
+            continue
+        try:
+            persist_notification(outbox, command)
+            if external_sender_configured:
+                outbox.finish(command.message_id, "unknown",
+                              "LOCAL_NOTIFICATION_RESTORED_EXTERNAL_UNCONFIRMED")
+            else:
+                outbox.finish(command.message_id, "completed")
+        except Exception:
+            # Leave durable UNKNOWN; a later bounded pass may retry local persistence.
+            continue

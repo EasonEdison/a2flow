@@ -17,7 +17,7 @@ from .mvp_host import create_mvp_app
 from .mvp_tools import build_tools, validators
 from .native_control import ControlledRunRunner
 from .postgres import PostgresInteractionRepository
-from .postgres_lifecycle import PostgresRunRepository
+from .postgres_lifecycle import PostgresRunRepository, TransactionalEventWriter
 from .postgres_progress import PostgresProgress
 from .postgres_projection import PostgresProjection
 from .progress_writer import ProgressWriter
@@ -105,6 +105,7 @@ class MvpRuntimeHost:
         checkpointer_factory=None, unexpected_error_observer=None,
         application_data_validator=None, event_sink=None,
         personal_memory=None,
+        transactional_event_writer: TransactionalEventWriter | None = None,
     ):
         if not callable(identity_resolver):
             raise ValueError("VERIFIED_IDENTITY_RESOLVER_REQUIRED")
@@ -129,8 +130,22 @@ class MvpRuntimeHost:
             validator=bundle_validator,
         )
         self.reader = AssetReader(self.asset_repository, namespace)
-        self.run_repository = PostgresRunRepository(conninfo)
-        self.lifecycle = RunLifecycle(self.run_repository, event_sink=event_sink)
+        if event_sink is not None and transactional_event_writer is not None:
+            raise ValueError("AMBIGUOUS_EVENT_DELIVERY_CONFIGURATION")
+        self.run_repository = PostgresRunRepository(
+            conninfo, transactional_event_writer=transactional_event_writer,
+        )
+        self.lifecycle = RunLifecycle(
+            self.run_repository,
+            event_sink=self.run_repository if transactional_event_writer is not None else event_sink,
+            waiting_validator=self.run_repository.waiting_interaction,
+        )
+        self.waiting_recovery = None
+        if transactional_event_writer is not None:
+            from .waiting_notifications import WaitingNotificationRecovery
+            self.waiting_recovery = WaitingNotificationRecovery(
+                self.run_repository, self.lifecycle, self.execution_session, self.environment,
+            )
         self.interactions = PostgresInteractionRepository(conninfo)
         self.projection = PostgresProjection(conninfo)
         self.progress_repository = PostgresProgress(conninfo)
@@ -183,7 +198,7 @@ class MvpRuntimeHost:
         )
 
     @contextmanager
-    def execution_session(self, owner):
+    def execution_session(self, owner, *, read_only=False):
         require_owner(owner)
         models = []
         built = {}
@@ -232,6 +247,7 @@ class MvpRuntimeHost:
                 )
                 graph = compose_workflow(
                     run, lifecycle, definition, agents, self.views, context_loader, saver,
+                    initialize_view=not read_only,
                 )
                 service.continuation = LangGraphContinuation(graph, lifecycle=lifecycle)
                 built[run.run_id] = service
@@ -267,10 +283,16 @@ class MvpRuntimeHost:
         with self._checkpointer_factory() as saver:
             saver.setup()
         self.progress.start()
+        if self.waiting_recovery is not None:
+            self.waiting_recovery.start()
         try:
             yield
         finally:
-            if not self.progress.shutdown():
+            recovered = self.waiting_recovery is None or self.waiting_recovery.shutdown()
+            progressed = self.progress.shutdown()
+            if not recovered:
+                raise RuntimeError("WAITING_RECOVERY_SHUTDOWN_UNCONFIRMED")
+            if not progressed:
                 raise RuntimeError("PROGRESS_WRITER_SHUTDOWN_UNCONFIRMED")
 
     def create_app(self):
