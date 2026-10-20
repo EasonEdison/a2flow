@@ -170,7 +170,15 @@ class ProcessingTasksRepository:
         with self._factory() as connection:
             row = connection.execute('SELECT task_id FROM processing_cards WHERE user_id=%s AND environment=%s '
                                      'AND conversation_id=%s AND card_id=%s', (*scope, card_id)).fetchone()
-            return _context(self._row(connection, scope, row['task_id'])) if row else None
+            card = connection.execute('SELECT binding_metadata FROM chat_a2ui_cards WHERE user_id=%s '
+                                      'AND environment=%s AND conversation_id=%s AND card_id=%s',
+                                      (user_id, environment, str(scope[2]), card_id)).fetchone()
+            metadata_task = card['binding_metadata'].get('processingTaskId') if card else None
+            if row is None and (card is None or 'processingTaskId' not in card['binding_metadata']):
+                return None
+            if row is None or not isinstance(metadata_task, str) or metadata_task != row['task_id']:
+                raise BsideError('PROCESSING_CARD_BINDING_UNCONFIRMED', 409)
+            return _context(self._row(connection, scope, row['task_id']))
 
     def bind_continuation(self, *, user_id: int, environment: str, conversation_id: str,
                           task_id: str, card_id: str, input_message_id: int,
