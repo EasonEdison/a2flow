@@ -54,6 +54,7 @@ public class CapabilityActionExecutionPlan {
     private String idempotency;
     private String responsePolicy;
     private String sideEffectLevel;
+    private String approvalPolicy;
     private List<String> modelArgumentFields;
     private List<String> requiredArgumentFields;
     private Map<String, String> argumentTypes;

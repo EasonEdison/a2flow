@@ -30,8 +30,12 @@ public final class PublishedCapabilityExecutionService implements CapabilityExec
         return executePlan(resolve(assetKey, context), argumentsJson, context);
     }
     public CurrentExecution executeCurrent(String assetKey, String argumentsJson, CapabilityRpcContext context) {
+        return executeCurrent(assetKey, argumentsJson, context, null);
+    }
+    public CurrentExecution executeCurrent(String assetKey, String argumentsJson, CapabilityRpcContext context,
+            dev.a2flow.management.capabilityrpc.proto.ApprovalReceipt receipt) {
         var plan = resolve(assetKey, context);
-        return new CurrentExecution(plan, executePlan(plan, argumentsJson, context));
+        return new CurrentExecution(plan, executePlan(plan, argumentsJson, context, receipt));
     }
     @Override public CapabilityToolResult executeActionCode(String actionCode, String argumentsJson, CapabilityRpcContext context) {
         String assetKey = catalog.requireAssetKey(actionCode, context.environment(), context.userId(), context.client());
@@ -42,9 +46,16 @@ public final class PublishedCapabilityExecutionService implements CapabilityExec
         return executePlan(plan, argumentsJson, context);
     }
     private CapabilityToolResult executePlan(CapabilityActionExecutionPlan plan, String json, CapabilityRpcContext context) {
+        return executePlan(plan, json, context, null);
+    }
+    private CapabilityToolResult executePlan(CapabilityActionExecutionPlan plan, String json, CapabilityRpcContext context,
+            dev.a2flow.management.capabilityrpc.proto.ApprovalReceipt receipt) {
         BaseAgentContext agent = new BaseAgentContext();
         agent.setUserId(context.userId()); agent.setClient(context.client()); agent.setEnv(context.environment().name());
-        var toolContext = new ToolContext(Map.of("agentContext", agent, TrustedToolContext.TRACE_ID, context.requestId()));
+        Map<String, Object> authority = new java.util.LinkedHashMap<>();
+        authority.put("agentContext", agent); authority.put(TrustedToolContext.TRACE_ID, context.requestId());
+        if (receipt != null) authority.put(TrustedToolContext.CAPABILITY_APPROVAL_RECEIPT, receipt);
+        var toolContext = new ToolContext(authority);
         return executor.executeResult(plan, json, toolContext, context.environment(), context.environment());
     }
 }

@@ -50,10 +50,21 @@ public class CapabilityActionExecutor {
     @Resource
     private dev.a2flow.management.capabilityrpc.GrpcCapabilityTransport grpcCapabilityTransport;
 
+    @Resource
+    private dev.a2flow.management.capabilityrpc.CapabilityApprovalGuard capabilityApprovalGuard;
+
     public CapabilityActionExecutor() { }
 
     public CapabilityActionExecutor(dev.a2flow.management.capabilityrpc.GrpcCapabilityTransport transport) {
+        this(transport, new dev.a2flow.management.capabilityrpc.CapabilityApprovalGuard(receipt -> {
+            throw new IllegalStateException("Approval store not configured");
+        }));
+    }
+
+    public CapabilityActionExecutor(dev.a2flow.management.capabilityrpc.GrpcCapabilityTransport transport,
+            dev.a2flow.management.capabilityrpc.CapabilityApprovalGuard approvalGuard) {
         this.grpcCapabilityTransport = transport;
+        this.capabilityApprovalGuard = approvalGuard;
     }
 
     /**
@@ -71,6 +82,9 @@ public class CapabilityActionExecutor {
         try {
             PreparedExecution prepared = prepare(executionPlan, toolInput, toolContext,
                     requestedEnvironment, resolvedEnvironment);
+            capabilityApprovalGuard.admit(executionPlan, toolInput,
+                    rpcContext(requireAgentContext(toolContext), toolContext, resolvedEnvironment),
+                    toolContext.getContext().get(TrustedToolContext.CAPABILITY_APPROVAL_RECEIPT));
             Object data = grpcCapabilityTransport.execute(executionPlan, prepared.preview().getEffectiveRequestBody(),
                     rpcContext(requireAgentContext(toolContext), toolContext, resolvedEnvironment));
             result = CapabilityToolResult.builder().success(true).rpcStatus("OK")
@@ -172,6 +186,8 @@ public class CapabilityActionExecutor {
             throw failure(CapabilityToolErrorCode.EXECUTION_PLAN_INVALID,
                     "capability execution plan is required");
         }
+        dev.a2flow.management.capabilityrpc.CapabilityApprovalGuard.validateGovernance(
+                executionPlan.getSideEffectLevel(), executionPlan.getApprovalPolicy());
         if (!"GRPC".equals(executionPlan.getBindingType())) {
             throw failure(CapabilityToolErrorCode.EXECUTION_PLAN_INVALID,
                     "unsupported capability binding type");
@@ -184,15 +200,6 @@ public class CapabilityActionExecutor {
             throw failure(CapabilityToolErrorCode.EXECUTION_PLAN_INVALID,
                     "controlled HTTP execution policy is invalid");
         }
-    }
-
-    /** 只接受宿主可信上下文中的审核结论；普通业务参数或模型 Tool 入参不能授予副作用权限。 */
-    private boolean reviewedDemoApproved(ToolContext toolContext) {
-        if (toolContext == null || toolContext.getContext() == null) {
-            return false;
-        }
-        return Boolean.TRUE.equals(
-                toolContext.getContext().get(TrustedToolContext.REVIEWED_DEMO_APPROVED));
     }
 
     private BaseAgentContext requireAgentContext(ToolContext toolContext) {

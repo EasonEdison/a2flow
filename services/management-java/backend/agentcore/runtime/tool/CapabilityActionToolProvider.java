@@ -272,8 +272,9 @@ public class CapabilityActionToolProvider {
 
         String idempotency = IDEMPOTENCY_NONE;
         String responsePolicy = DEFAULT_RESPONSE_POLICY;
-        String sideEffectLevel = StringUtils.defaultIfBlank(
-                stringValue(governance.get(FIELD_SIDE_EFFECT_LEVEL)), SIDE_EFFECT_READ);
+        String sideEffectLevel = stringValue(governance.get(FIELD_SIDE_EFFECT_LEVEL));
+        String approvalPolicy = stringValue(governance.get("approvalPolicy"));
+        dev.a2flow.management.capabilityrpc.CapabilityApprovalGuard.validateGovernance(sideEffectLevel, approvalPolicy);
         return CapabilityActionExecutionPlan.builder()
                 .sourceId(draft.getDraftId())
                 .revision(draft.getRevision() == null ? 0 : draft.getRevision())
@@ -299,6 +300,7 @@ public class CapabilityActionToolProvider {
                 .idempotency(idempotency)
                 .responsePolicy(responsePolicy)
                 .sideEffectLevel(sideEffectLevel)
+                .approvalPolicy(approvalPolicy)
                 .modelArgumentFields(List.copyOf(modelArgumentFields))
                 .requiredArgumentFields(List.copyOf(requiredArgumentFields))
                 .argumentTypes(unmodifiableMap(argumentTypes))
