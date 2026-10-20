@@ -542,12 +542,12 @@ function SchedulePage({ initialWorkflow }: { initialWorkflow: string }) {
   </section>;
 }
 
-function NotificationPage({ items, refresh, onRun }: { items: Notification[]; refresh: () => Promise<void>; onRun: (id: string) => void }) {
+function NotificationPage({ items, refresh, onRun }: { items: Notification[]; refresh: () => void; onRun: (id: string) => void }) {
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [error, setError] = useState('');
   const visible = items.filter(item => !onlyUnread || !item.read);
   return <section><div className="page-title"><h1>通知中心</h1><p>查看需要你确认的事项，以及工作流的最新结果。</p></div>
-    <div className="list-toolbar"><label className="switch"><input type="checkbox" checked={onlyUnread} onChange={event => setOnlyUnread(event.target.checked)} />只看未读</label><span className="muted">{visible.length} 条通知</span></div>
+    <div className="list-toolbar"><label className="switch"><input type="checkbox" checked={onlyUnread} onChange={event => setOnlyUnread(event.target.checked)} />只看未读</label><span className="muted">{visible.length} 条通知</span><button className="secondary" onClick={refresh}>刷新通知</button></div>
     {error ? <p role="alert" className="inline-error">{error}</p> : null}
     <div className="notification-list">{visible.length ? visible.map(item => <article className={`notification-item card ${item.read ? 'read' : ''}`} key={item.id}>
       <span className={`notification-type ${item.type.toLowerCase()}`}>{notificationLabels[item.type] ?? item.type}</span>
@@ -565,13 +565,40 @@ function Product() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [scheduleWorkflow, setScheduleWorkflow] = useState('');
   const [notificationRun, setNotificationRun] = useState('');
-  const refreshNotifications = useCallback(async () => setNotifications((await productApi.notifications()).items), []);
+  const [notificationRevision, setNotificationRevision] = useState(0);
+  const [notificationError, setNotificationError] = useState('');
+  const refreshNotifications = useCallback(() => setNotificationRevision(value => value + 1), []);
   useEffect(() => { void productApi.session().then(setSession).catch(() => setSession(null)).finally(() => setChecking(false)); }, []);
-  useEffect(() => { if (session) void refreshNotifications(); }, [session, refreshNotifications]);
+  useEffect(() => {
+    setNotifications([]);
+    setNotificationError('');
+  }, [session?.userId]);
+  useEffect(() => {
+    if (!session) return;
+    const abort = new AbortController();
+    let inFlight = false;
+    const load = async () => {
+      if (document.hidden || inFlight || abort.signal.aborted) return;
+      inFlight = true;
+      try {
+        const result = await productApi.notifications(abort.signal);
+        if (!abort.signal.aborted) { setNotifications(result.items); setNotificationError(''); }
+      } catch (error) {
+        if (!abort.signal.aborted) setNotificationError(apiErrorMessage(error, '通知更新失败，当前显示上次读取的结果。'));
+      } finally { inFlight = false; }
+    };
+    void load();
+    const interval = window.setInterval(() => void load(), 15000);
+    const focus = () => void load();
+    document.addEventListener('visibilitychange', focus);
+    window.addEventListener('focus', focus);
+    return () => { abort.abort(); clearInterval(interval); document.removeEventListener('visibilitychange', focus); window.removeEventListener('focus', focus); };
+  }, [session?.userId, notificationRevision]);
   const unread = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
   if (checking) return <div className="loading-screen">正在加载 A2Flow…</div>;
   if (!session) return <Login onSession={setSession} />;
   return <TemporaryDraftOwner.Provider value={session.userId}><Shell session={session} page={page} unread={unread} onPage={(next) => { setNotificationRun(''); setPage(next); }} onLogout={async () => { await productApi.logout(); setPage('chat'); setSession(null); }}>
+    {notificationError ? <p className="inline-error" role="status">{notificationError}<button className="quiet" onClick={refreshNotifications}>重新读取通知</button></p> : null}
     {notificationRun ? <RunDetail runId={notificationRun} onBack={() => setNotificationRun('')} /> : page === 'memory' ? <MemorySettingsPage key={session.userId} /> : page === 'chat' ? <ChatPage ownerId={session.userId} onOpenWorkflows={tab => { setWorkflowTab(tab); setPage('workflows'); }} /> : page === 'workflows' ? <WorkflowCenter initialTab={workflowTab} onSchedule={(key) => { setScheduleWorkflow(key); setPage('schedules'); }} /> : page === 'schedules' ? <SchedulePage initialWorkflow={scheduleWorkflow} /> : <NotificationPage items={notifications} refresh={refreshNotifications} onRun={(id) => setNotificationRun(id)} />}
   </Shell></TemporaryDraftOwner.Provider>;
 }
