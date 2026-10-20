@@ -34,7 +34,9 @@ def main() -> None:
         from agent_workflow_runtime.management_agent.__main__ import main as start
         os.environ["DEEPSEEK_API_KEY"] = Path("/run/selfhost/model_key").read_text().strip()
         sys.argv = [sys.argv[0]]
-    start()
+    result = start()
+    if isinstance(result, int):
+        raise SystemExit(result)
 
 
 if __name__ == "__main__":

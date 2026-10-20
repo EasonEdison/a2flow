@@ -122,3 +122,5 @@ private configuration change; service rollback does not roll back completed writ
 The private CA is installation-specific and is not added to the host trust store.
 
 The explicit administrator is account `user_id=1`. The configured specialist / digital employee `101` is an asset classification identity, not an account or login. Bootstrap creates the administrator independently and never assumes a pre-existing user. Administrator names use 3–32 ASCII letters, digits, underscores or hyphens; passwords use 8–256 characters, matching B-side login limits.
+
+For recovery of an existing administrator, follow the explicit [account recovery procedure](../../docs/account-recovery.md). Restart and initialization deliberately do not reset passwords or sessions.
