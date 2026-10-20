@@ -48,6 +48,7 @@ COPY --from=java-build /build/target/classes ./classes
 COPY --from=java-build /build/target/dependency ./dependency
 COPY --from=management-web-build /build/dist /opt/management-static
 COPY deploy/selfhost/java-entrypoint.sh /opt/management/entrypoint.sh
+RUN chmod -R a+rX /opt/management /opt/management-static
 ENTRYPOINT ["sh", "/opt/management/entrypoint.sh"]
 
 FROM nginx:1.28-alpine AS gateway
