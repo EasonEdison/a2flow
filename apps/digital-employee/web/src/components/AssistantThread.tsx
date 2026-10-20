@@ -31,6 +31,7 @@ import { RunReferenceChips } from './WorkActivity';
 import type { RunReference } from '../productApi';
 
 type AssistantThreadProps = {
+  processingComposer?: React.ReactNode;
   draftText: string;
   onDraftTextChange: (text: string) => void;
   runReferences: RunReference[];
@@ -301,7 +302,7 @@ function AssistantMessage({
   </MessagePrimitive.Root>;
 }
 
-function ChatComposer({ disabled, onError, draftText, onDraftTextChange, onSend, runReferences, onRemoveReference, onOpenReference }: Pick<AssistantThreadProps, 'draftText' | 'onDraftTextChange' | 'onSend' | 'runReferences' | 'onRemoveReference' | 'onOpenReference'> & { disabled: boolean; onError: (message: string) => void }) {
+function ChatComposer({ processingComposer, disabled, onError, draftText, onDraftTextChange, onSend, runReferences, onRemoveReference, onOpenReference }: Pick<AssistantThreadProps, 'processingComposer' | 'draftText' | 'onDraftTextChange' | 'onSend' | 'runReferences' | 'onRemoveReference' | 'onOpenReference'> & { disabled: boolean; onError: (message: string) => void }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fillWorkflowIntent = () => {
     const intent = '请帮我创建一个工作流，用于：';
@@ -312,6 +313,7 @@ function ChatComposer({ disabled, onError, draftText, onDraftTextChange, onSend,
   };
   return <><div className="composer-shortcuts"><button type="button" className="secondary"
     disabled={disabled} onClick={fillWorkflowIntent}>创建工作流</button></div>
+    {processingComposer}
     <RunReferenceChips references={runReferences} onRemove={onRemoveReference} onOpen={onOpenReference} />
     <form className="aui-composer" onSubmit={event => { event.preventDefault(); if (!disabled && draftText.trim()) void onSend(draftText); }}>
       <textarea ref={inputRef} aria-label="消息" placeholder="输入消息，描述你想完成的工作" maxLength={4000}
@@ -333,7 +335,7 @@ function ThreadBody({
   onCardActionStateChange,
   isRunning,
   isSendDisabled,
-  draftText, onDraftTextChange, onSend, runReferences, onRemoveReference, onOpenReference,
+  processingComposer, draftText, onDraftTextChange, onSend, runReferences, onRemoveReference, onOpenReference,
 }: AssistantThreadProps) {
   const consumedEffects = useRef(new Set<string>());
   const composerText = useRef(draftText);
@@ -388,7 +390,7 @@ function ThreadBody({
       </ThreadPrimitive.Viewport>
         <div className="aui-thread-footer">
           {error ? <p className="chat-error" role="alert">{error}</p> : null}
-          <ChatComposer disabled={isRunning || isSendDisabled} onError={onComposerError} draftText={draftText} onDraftTextChange={onDraftTextChange} onSend={onSend} runReferences={runReferences} onRemoveReference={onRemoveReference} onOpenReference={onOpenReference} />
+          <ChatComposer processingComposer={processingComposer} disabled={isRunning || isSendDisabled} onError={onComposerError} draftText={draftText} onDraftTextChange={onDraftTextChange} onSend={onSend} runReferences={runReferences} onRemoveReference={onRemoveReference} onOpenReference={onOpenReference} />
         </div>
     </ThreadPrimitive.Root>;
 }

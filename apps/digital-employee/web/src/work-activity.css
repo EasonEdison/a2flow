@@ -91,3 +91,25 @@
   .reference-label { flex: 1; }
   .reference-remove { min-height: 36px; min-width: 36px; }
 }
+
+.processing-composer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; margin-bottom: 10px; background: #f0f5ff; border-radius: 9px; color: #254f9d; font-size: 13px; }
+.processing-composer strong, .processing-composer small { display: block; overflow-wrap: anywhere; }
+.processing-composer small { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.activity-processing-actions { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.activity-processing-actions button { text-align: left; overflow-wrap: anywhere; color: var(--primary); }
+.processing-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.processing-heading small { color: var(--muted); }
+.processing-detail h3 { overflow-wrap: anywhere; }
+.processing-detail .muted { font-size: 13px; line-height: 1.7; }
+.processing-operations { list-style: none; padding: 0; }
+.processing-operations li { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.processing-operations li > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.processing-operations small { color: var(--muted); font-size: 11px; }
+.processing-operations details { margin-top: 10px; font-size: 12px; }
+.processing-operations pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--surface, #f5f7fa); padding: 12px; border-radius: 6px; }
+.processing-confirm { margin-top: 18px; padding: 16px; border-radius: 9px; background: #f6f8fb; }
+.processing-confirm label { display: block; font-size: 13px; margin-bottom: 10px; }
+.processing-confirm textarea { width: 100%; min-height: 90px; padding: 10px; }
+.processing-confirm p, .processing-resolution p { font-size: 13px; line-height: 1.7; }
+.processing-resolution { padding: 16px; background: #edf8f2; border-radius: 9px; }
+.processing-message-link { margin-top: 10px; }
