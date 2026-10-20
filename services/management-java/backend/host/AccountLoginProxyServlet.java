@@ -14,6 +14,9 @@ import jakarta.servlet.http.HttpServletResponse;
 public final class AccountLoginProxyServlet extends HttpServlet {
     private final URI upstream;
     private final ManagementHttpPolicy policy;
+    private final java.util.Set<String> trustedProxies = java.util.Arrays.stream(
+            System.getenv().getOrDefault("A2FLOW_AUTH_TRUSTED_PROXIES", "").split(","))
+            .map(String::trim).filter(value -> !value.isEmpty()).collect(java.util.stream.Collectors.toSet());
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
             .followRedirects(HttpClient.Redirect.NEVER).build();
 
@@ -51,6 +54,14 @@ public final class AccountLoginProxyServlet extends HttpServlet {
                 if (values.size() > 1) throw new SecurityException("AMBIGUOUS_REQUEST_HEADER");
                 if (!values.isEmpty()) builder.header(header, values.get(0));
             }
+            // Preserve the client address only from explicitly trusted reverse proxies.
+            String clientAddress = request.getRemoteAddr();
+            if (trustedProxies.contains(clientAddress)) {
+                var forwarded = java.util.Collections.list(request.getHeaders("X-A2Flow-Client-IP"));
+                if (forwarded.size() > 1) throw new SecurityException("AMBIGUOUS_REQUEST_HEADER");
+                if (!forwarded.isEmpty()) clientAddress = forwarded.get(0);
+            }
+            builder.header("X-A2Flow-Client-IP", clientAddress);
             var reply = client.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
             byte[] content;
             try (var input = reply.body()) {
@@ -63,6 +74,8 @@ public final class AccountLoginProxyServlet extends HttpServlet {
             }
             response.setStatus(reply.statusCode());
             reply.headers().firstValue("Content-Type").ifPresent(response::setContentType);
+            reply.headers().firstValue("Retry-After").ifPresent(value -> response.setHeader("Retry-After", value));
+            reply.headers().firstValue("X-Request-ID").ifPresent(value -> response.setHeader("X-Request-ID", value));
             if (location != null) response.setHeader("Location", location);
             for (String cookie : reply.headers().allValues("Set-Cookie")) {
                 if (cookie.startsWith("a2flow_management_session=")) response.addHeader("Set-Cookie", cookie);
