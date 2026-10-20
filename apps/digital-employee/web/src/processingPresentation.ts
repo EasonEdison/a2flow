@@ -39,7 +39,7 @@ export function operationPresentation(operation: Operation) {
   const returned = operation.status === 'RETURNED' && envelope.success === true;
   const label = labels[operation.abilityKey];
   const kind = text(output.kind);
-  const title = text(output.title) || text(body.title);
+  const title = text(output.title) || text(body.title) || text(object(body.manuscript).title);
   const markdown = text(output.bodyMarkdown) || text(output.body);
   const artifact = operation.abilityKey.startsWith('content.artifact.');
   const name = artifact && kind === 'MANUSCRIPT'
