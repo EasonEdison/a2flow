@@ -19,6 +19,7 @@ import re
 import secrets
 import stat
 import sys
+import traceback
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -258,4 +259,6 @@ if __name__ == "__main__":
         # No SQL, DSN, role password or production-like traceback is published.
         detail = ": " + str(error) if isinstance(error, AssertionError) else ""
         print("Capability approval probe failed: " + type(error).__name__ + detail, file=sys.stderr)
+        for frame in traceback.extract_tb(error.__traceback__):
+            print(f"  {Path(frame.filename).name}:{frame.lineno} in {frame.name}", file=sys.stderr)
         raise SystemExit(1) from None

@@ -8,5 +8,6 @@ COPY deploy/mvp/model-requirements.lock /tmp/model.lock
 RUN pip install --no-cache-dir --no-deps -r /tmp/model.lock
 COPY packages/rpc-contracts /tmp/rpc-contracts
 RUN pip install --no-cache-dir /tmp/rpc-contracts
+RUN pip install --no-cache-dir jsonschema==4.26.0
 ENV PYTHONPATH=/probe:/probe/packages/contracts/src:/probe/packages/asset-store/src:/probe/services/agent-workflow-runtime/src:/probe/services/scheduler-mq/src:/probe/services/skill-registry/src:/probe/services/capability-registry/src:/probe/services/a2ui-composer/src
 CMD ["python", "openspec/changes/portfolio-runtime-outbox/probe.py"]

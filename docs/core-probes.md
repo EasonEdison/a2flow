@@ -24,8 +24,9 @@ probe to emit its success result and checks that PostgreSQL probe schemas are go
 Requirements: Python 3.11+, Docker with a local Linux engine and about 1.5 GiB
 available RAM for the disposable containers. The dependency image uses the
 existing runtime/scheduler locks; its Dockerfile reconciles the recorded psycopg
-patch version to the scheduler's 3.3.6 and adds the existing model SDK lock without
-changing the pinned gRPC/runtime dependencies. Building needs package-registry access;
+patch version to the scheduler's 3.3.6, adds the existing model SDK lock and the
+self-host `jsonschema==4.26.0` pin without changing the pinned gRPC/runtime
+dependencies. Building needs package-registry access;
 the probes themselves run in a network namespace with no external interface.
 
 From the repository root:

@@ -98,3 +98,30 @@ Revoking INSERT failed closed before transport. The probe removed its table and
 role; the runner removed PostgreSQL and the private credentials directory.
 `requestedProbes=capability-approval` explicitly identifies this as a focused run,
 not the final expanded gate. No external business/model call occurred.
+
+## Final candidate integration checks
+
+Candidate `942c2502172c06218194dd2a6b322430a3130267` compiled 611 Java sources with
+JDK 17 through the public Maven command. All 573 backend/proto/POM input files
+were hash-compared with the committed archive. The updated Java suite passed
+41 real PostgreSQL approval checks and 107 package restoration checks.
+
+The first sequential Python suite exposed a DSN-file reuse problem that the
+focused run did not reproduce. The runner now gives each probe a unique private
+DSN/env filename, mounts only that probe's DSN and removes it after completion.
+No-network probes receive no private file mount. The next run passed all three
+database probes, then correctly failed because the old outbox dependency image
+did not include jsonschema. Its public Dockerfile now includes the same 4.26.0
+pin as self-host. These failed attempts are not reported as successful gates.
+
+After these fixes, one complete sequential Python suite passed with
+`requestedProbes=all`: account cross-process 32 attempts (7 admitted, 25 limited),
+outbox 15, actual capability executor/PG 70, Chat 227, Workflow 41 and A2UI 38.
+Source was `942c250` plus probe-only Chat commit `739a2f` and this branch's final
+runner/dependency changes. Dependency image:
+`sha256:d87f6cef2b23ebfcae9bac8fd0566e805c3caef1112a092173bb052a8c67f76c`.
+
+Both final JSON reports confirm cleanup. All task probe containers were absent
+after completion; previous self-host containers stayed stopped and volumes were
+preserved. No application key, production data, external business call or model
+call was used. Remote GitHub execution remains unverified.

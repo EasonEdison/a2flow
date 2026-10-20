@@ -144,16 +144,19 @@ def postgres_probes(args, report: dict) -> None:
         for name, database, entry in probes:
             if args.python_probe != "all" and name != args.python_probe:
                 continue
-            dsn_file = private / "probe.dsn"
-            probe_env = private / "probe.env"
+            # Use distinct files so bind mounts cannot alias credentials across
+            # sequential probes on VM-backed engines.
+            dsn_file = private / f"{name}.dsn"
+            probe_env = private / f"{name}.env"
             if database:
                 command([*docker, "exec", pg, "createdb", "-U", "probe", database])
                 dsn = f"host=127.0.0.1 dbname={database} user=probe password={password} connect_timeout=5"
                 dsn_file.write_text(dsn)
                 dsn_file.chmod(0o600)
+                entry = [f"/private/{name}.dsn" if value == "/private/probe.dsn" else value
+                         for value in entry]
                 probe_env.write_text("A2FLOW_PROBE_DATABASE_URL=" + dsn + "\n")
             else:
-                dsn_file.unlink(missing_ok=True)
                 probe_env.write_text("")
             probe_env.chmod(0o600)
             output = command([
@@ -163,7 +166,8 @@ def postgres_probes(args, report: dict) -> None:
                 "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                 "--tmpfs", "/tmp:rw,size=128m,mode=1777", "--user", f"{os.getuid()}:{os.getgid()}",
                 "--mount", f"type=bind,src={args.source_root},dst=/workspace,readonly",
-                "--mount", f"type=bind,src={private},dst=/private,readonly",
+                *(["--mount", f"type=bind,src={dsn_file},dst=/private/{name}.dsn,readonly"]
+                  if database else []),
                 "--workdir", "/workspace", "--env-file", str(probe_env),
                 "--env", "PYTHONDONTWRITEBYTECODE=1",
                 "--env", "PYTHONPATH=" + ":".join("/workspace/" + path for path in paths),
@@ -191,6 +195,8 @@ def postgres_probes(args, report: dict) -> None:
             # Each script removes its own schema; independently verify this.
             if database:
                 check_schemas_removed(docker, pg, database)
+                dsn_file.unlink()
+            probe_env.unlink()
 
 
 def check_schemas_removed(docker: list[str], pg: str, database: str) -> None:
