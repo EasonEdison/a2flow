@@ -18,8 +18,8 @@ from a2flow_scheduler.streams import RedisStreamTransport, StreamChannel
 
 COMMANDS: TypeAdapter[WorkflowCommand] = TypeAdapter(WorkflowCommand)
 
-# The card store owns this psycopg transaction: never commit or close it here.
-_CARD_ENQUEUE_SQL = """
+# The caller owns this psycopg transaction: never commit or close it here.
+_ENQUEUE_SQL = """
 INSERT INTO scheduler_outbox (message_id, channel, payload)
 VALUES (%s, %s, %s::jsonb)
 ON CONFLICT (message_id) DO UPDATE SET message_id = EXCLUDED.message_id
@@ -36,13 +36,13 @@ def command_channel(command: WorkflowCommand) -> StreamChannel:
     )
 
 
-def enqueue_on_card_transaction(
+def enqueue_on_transaction(
     connection: Connection[tuple[object, ...]],
     command: WorkflowCommand,
 ) -> None:
     if (
         connection.execute(
-            _CARD_ENQUEUE_SQL,
+            _ENQUEUE_SQL,
             (
                 command.message_id,
                 command_channel(command).value,
@@ -52,6 +52,10 @@ def enqueue_on_card_transaction(
         is None
     ):
         raise ValueError("OUTBOX_MESSAGE_ID_CONFLICT")
+
+
+# Existing card completion callers retain their explicit transaction API.
+enqueue_on_card_transaction = enqueue_on_transaction
 
 
 class PostgresOutbox:
@@ -188,6 +192,41 @@ class PostgresOutbox:
                 .where(
                     OutboxRow.message_id == candidates.c.message_id,
                 )
+                .values(reconciled_at=func.now())
+                .returning(cast(OutboxRow.payload, Text))
+            ).scalars()
+            return [COMMANDS.validate_json(payload) for payload in payloads]
+
+    def uncertain_notifications(self, limit: int = 50) -> list[WorkflowCommand]:
+        """Recover local delivery only; external send ambiguity is never replayed."""
+        with self.transaction() as session:
+            session.execute(
+                update(OutboxRow)
+                .where(
+                    OutboxRow.channel == "notifications",
+                    OutboxRow.state == "dispatching",
+                    OutboxRow.claimed_at < func.now() - timedelta(minutes=5),
+                )
+                .values(state="unknown", error_code="DISPATCH_INTERRUPTED")
+            )
+            candidates = (
+                select(OutboxRow.message_id)
+                .where(
+                    OutboxRow.channel == "notifications",
+                    OutboxRow.state == "unknown",
+                    or_(OutboxRow.error_code.is_(None), OutboxRow.error_code !=
+                        "LOCAL_NOTIFICATION_RESTORED_EXTERNAL_UNCONFIRMED"),
+                    or_(OutboxRow.reconciled_at.is_(None),
+                        OutboxRow.reconciled_at < func.now() - timedelta(seconds=30)),
+                )
+                .order_by(func.coalesce(OutboxRow.reconciled_at, OutboxRow.created_at))
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+                .cte("notification_candidates")
+            )
+            payloads = session.execute(
+                update(OutboxRow)
+                .where(OutboxRow.message_id == candidates.c.message_id)
                 .values(reconciled_at=func.now())
                 .returning(cast(OutboxRow.payload, Text))
             ).scalars()

@@ -101,7 +101,8 @@ def runtime():
     validator = bundle_validator()
     return RpcWorkflowHost(
         rpc=RpcClient.from_environment(os.environ),
-        completion_observer=completed_card, event_sink=SchedulerEventSink(dsn),
+        completion_observer=completed_card,
+        transactional_event_writer=SchedulerEventSink().publish,
         conninfo=dsn, database=os.environ["A2FLOW_DATABASE_NAME"],
         environment="PRT", namespace=os.environ["A2FLOW_ASSET_NAMESPACE"],
         bundle_validator=validator,
