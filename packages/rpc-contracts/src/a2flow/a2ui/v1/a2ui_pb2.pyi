@@ -366,6 +366,7 @@ class ActRequest(google.protobuf.message.Message):
     CORRELATION_ID_FIELD_NUMBER: builtins.int
     IDEMPOTENCY_KEY_FIELD_NUMBER: builtins.int
     ACTION_MESSAGE_JSON_FIELD_NUMBER: builtins.int
+    APPROVAL_RECEIPT_FIELD_NUMBER: builtins.int
     correlation_id: builtins.str
     idempotency_key: builtins.str
     action_message_json: builtins.bytes
@@ -373,6 +374,10 @@ class ActRequest(google.protobuf.message.Message):
     def context(self) -> a2flow.capability.v1.capability_pb2.ExecutionContext: ...
     @property
     def card(self) -> Global___TrustedCard: ...
+    @property
+    def approval_receipt(self) -> a2flow.capability.v1.capability_pb2.ApprovalReceipt:
+        """Host-only confirmation of the frozen mapped business request."""
+
     def __init__(
         self,
         *,
@@ -381,11 +386,36 @@ class ActRequest(google.protobuf.message.Message):
         correlation_id: builtins.str = ...,
         idempotency_key: builtins.str = ...,
         action_message_json: builtins.bytes = ...,
+        approval_receipt: a2flow.capability.v1.capability_pb2.ApprovalReceipt | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["card", b"card", "context", b"context"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["action_message_json", b"action_message_json", "card", b"card", "context", b"context", "correlation_id", b"correlation_id", "idempotency_key", b"idempotency_key"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["approval_receipt", b"approval_receipt", "card", b"card", "context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["action_message_json", b"action_message_json", "approval_receipt", b"approval_receipt", "card", b"card", "context", b"context", "correlation_id", b"correlation_id", "idempotency_key", b"idempotency_key"]) -> None: ...
 
 Global___ActRequest: typing_extensions.TypeAlias = ActRequest
+
+@typing.final
+class PreparedAction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CAPABILITY_FIELD_NUMBER: builtins.int
+    ARGUMENTS_JSON_FIELD_NUMBER: builtins.int
+    BINDING_ID_FIELD_NUMBER: builtins.int
+    arguments_json: builtins.bytes
+    """Canonical UTF-8 business arguments; preflight never invokes transport."""
+    binding_id: builtins.str
+    @property
+    def capability(self) -> a2flow.capability.v1.capability_pb2.ResolveResponse: ...
+    def __init__(
+        self,
+        *,
+        capability: a2flow.capability.v1.capability_pb2.ResolveResponse | None = ...,
+        arguments_json: builtins.bytes = ...,
+        binding_id: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["capability", b"capability"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["arguments_json", b"arguments_json", "binding_id", b"binding_id", "capability", b"capability"]) -> None: ...
+
+Global___PreparedAction: typing_extensions.TypeAlias = PreparedAction
 
 @typing.final
 class ActionDescriptor(google.protobuf.message.Message):

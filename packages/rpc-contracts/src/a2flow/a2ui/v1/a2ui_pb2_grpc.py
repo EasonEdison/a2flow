@@ -49,6 +49,11 @@ class A2uiExecutionStub(object):
                 request_serializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.ActRequest.SerializeToString,
                 response_deserializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.RuntimeResponse.FromString,
                 _registered_method=True)
+        self.PrepareAct = channel.unary_unary(
+                '/a2flow.a2ui.v1.A2uiExecution/PrepareAct',
+                request_serializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.ActRequest.SerializeToString,
+                response_deserializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.PreparedAction.FromString,
+                _registered_method=True)
         self.DescribeGenerationSource = channel.unary_unary(
                 '/a2flow.a2ui.v1.A2uiExecution/DescribeGenerationSource',
                 request_serializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.DescribeGenerationSourceRequest.SerializeToString,
@@ -77,6 +82,12 @@ class A2uiExecutionServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def Act(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def PrepareAct(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -111,6 +122,11 @@ def add_A2uiExecutionServicer_to_server(servicer, server):
                     servicer.Act,
                     request_deserializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.ActRequest.FromString,
                     response_serializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.RuntimeResponse.SerializeToString,
+            ),
+            'PrepareAct': grpc.unary_unary_rpc_method_handler(
+                    servicer.PrepareAct,
+                    request_deserializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.ActRequest.FromString,
+                    response_serializer=a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.PreparedAction.SerializeToString,
             ),
             'DescribeGenerationSource': grpc.unary_unary_rpc_method_handler(
                     servicer.DescribeGenerationSource,
@@ -204,6 +220,33 @@ class A2uiExecution(object):
             '/a2flow.a2ui.v1.A2uiExecution/Act',
             a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.ActRequest.SerializeToString,
             a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.RuntimeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PrepareAct(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/a2flow.a2ui.v1.A2uiExecution/PrepareAct',
+            a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.ActRequest.SerializeToString,
+            a2flow_dot_a2ui_dot_v1_dot_a2ui__pb2.PreparedAction.FromString,
             options,
             channel_credentials,
             insecure,
