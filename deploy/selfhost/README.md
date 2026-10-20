@@ -7,7 +7,8 @@ ONLINE receives a separate empty publication database, not an ONLINE execution c
 
 ## Requirements and build
 
-Use Docker Engine/Compose v2 or Docker Desktop, Python 3.11+, OpenSSL, and enough disk
+Use Linux or macOS with Docker Engine/Compose v2 or Docker Desktop, Python 3.11+,
+OpenSSL, and enough disk
 for Node/JDK/Python layers (plan at least 12 GB) and at least 4 GB memory for builds.
 Do not build Java/npm on a low-memory serving host; build the same reviewed source
 elsewhere and import the resulting images. No private SDK image is required.
@@ -57,7 +58,11 @@ and a new directory; never delete an installed configuration to "retry". Repeati
 the three initialization commands for the **same** installation is a verification,
 not password recovery. A changed migration digest requires an explicit migration.
 
-Normal restart uses `docker compose ... restart` or `stop` followed by `up -d`.
+For a full-stack restart, use `docker compose ... stop` followed by `up -d --no-build --force-recreate`
+with the same Compose file and environment. Named volumes and private configuration
+are retained; do not use `down -v`. This starts the shared gateway network
+namespace before its dependent services. Individual application services can restart
+while the gateway remains running.
 No command automatically publishes assets, starts a workflow or replays business work.
 Runtime's existing idempotent table-readiness setup is retained. Named PostgreSQL and
 Redis volumes retain records. `down -v` destroys data and is not a restart command.
