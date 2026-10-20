@@ -113,3 +113,26 @@ regular B account; the original administrator remains available. M create/publis
 with a real model was verified in the fresh self-host installation above. No full
 unit suite was run under the owner's validation scope. No scale/HA, adversarial
 penetration or external-provider unknown-outcome retry claim is made.
+
+
+## Public authenticated management follow-up — 2026-10-20
+
+After the operator signed in with the existing administrator, one normal browser
+conversation requested an independent temporary-interaction acceptance workflow.
+The agent reused two published Skills and the built-in summary, completed 23 tool
+calls and returned the saved PRT result. The prior public-M limitation above is
+closed by this follow-up.
+
+Read-only authoritative checks found exactly three successful management mutations:
+workflow create, draft update and PRT deploy. All target the new workflow. Its
+release state contains one build and one deployment, with PRT build version one;
+this is not a claim that the separate formal-version array has an entry. The two
+reused Skills retain their previous release timestamps and were not republished.
+
+The regular-member B preset catalog displays the new workflow. Full refresh of
+the management conversation retains the same completed turn and publication.
+The 36 existing runtime documents retain their pre-check ordered digest; the new
+workflow was not started, no business capability was called and no schedule was
+created. Screenshots and read-only receipt evidence are retained privately.
+This follow-up changes only acceptance documentation; deployed application code
+remains unchanged.
