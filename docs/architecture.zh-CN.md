@@ -1,3 +1,5 @@
+> 历史设计快照（2026-09-07），不代表当前实现合同。请先阅读[当前架构](current-architecture.md)；下文部分语言、版本与执行范围决策已被后续实现更新。
+
 # A2Flow 平台架构
 
 [English](architecture.en.md) · [文档目录](README.md) · [项目首页](../README.zh-CN.md)

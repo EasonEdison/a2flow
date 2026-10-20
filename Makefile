@@ -14,3 +14,10 @@ lint-python:
 
 format-check-python:
 	$(PYTHON) -m ruff format --check $(PYTHON_QUALITY_FILES)
+
+.PHONY: check-repository check-compose
+check-repository:
+	$(PYTHON) scripts/check_repository.py
+
+check-compose:
+	$(PYTHON) scripts/check_compose.py

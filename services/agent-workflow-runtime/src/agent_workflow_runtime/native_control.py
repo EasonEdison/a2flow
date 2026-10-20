@@ -285,14 +285,15 @@ class ControlledRunRunner:
 
     def _record_failure(self, run, graph, error: BaseException) -> None:
         """Publish failure facts without replaying or undoing completed Actions."""
-        if isinstance(graph, RunGraphBinding):
-            try:
-                failed = self.lifecycle.fail(run.owner, run.run_id)
-                if failed is None:
-                    return  # Never replace STOPPED, SUCCEEDED or prior FAILED.
-                run = failed
-            except Exception:
-                error.add_note("RUN_FAILURE_STATE_SAVE_UNCONFIRMED")
+        # Allocation precedes graph construction. Setup failures must also
+        # terminate the run, even when no graph binding exists yet.
+        try:
+            failed = self.lifecycle.fail(run.owner, run.run_id)
+            if failed is None:
+                return  # Never replace STOPPED, SUCCEEDED or prior FAILED.
+            run = failed
+        except Exception:
+            error.add_note("RUN_FAILURE_STATE_SAVE_UNCONFIRMED")
         if isinstance(graph, RunGraphBinding) and graph.failure_observer is not None:
             try:
                 graph.failure_observer(error)

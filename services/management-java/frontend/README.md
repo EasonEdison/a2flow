@@ -4,7 +4,7 @@ Run `npm ci`, `npm test`, and `npm run build` (which includes strict TypeScript 
 
 The `/management` shell mounts the migrated Skill, Ability, component, A2UI Catalog/Application and Workflow pages. The A2UI five-stage editor remains intact. Styles include only management selectors from the source page styles and use Ant Design's public prefix.
 
-This delivery is manual authoring only. M-side Agent assistants, generation/chat and AI debug evidence are paused; their requests fail explicitly before network activity. Manual editing, deterministic validation/previews, binding and direct publishing remain available. Runtime A2UI confirmation is unaffected. Environments are PRT/ONLINE; existing Java method and field names containing preprod remain compatibility identifiers.
+The current management console includes manual authoring and the conversation-based asset creation flow. The Python agent calls the Java management/publication boundary; see the [current architecture](../../../docs/current-architecture.md). Historical paused-generation statements describe earlier releases, not the current console. Environments are PRT/ONLINE; names containing preprod may remain compatibility identifiers.
 
 Component previews load trusted published JavaScript bundles in CommonJS, AMD, global, or top-level namespace format. The local loader is not a security sandbox. It reports failed downloads, unknown dependencies, missing component exports and render errors. Bundles receive React, ReactDOM, safe JSON helpers and `@a2flow/image` (`Image` and default export, native HTML image attributes). Private image/CDN modules are not provided: such bundles must be rebuilt against the public image interface. No private CDN rewriting or telemetry is carried over.
 

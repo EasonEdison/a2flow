@@ -504,9 +504,11 @@ def create_app(
         return token
 
     # ---- auth ----
+    # Synchronous handlers use FastAPI's bounded worker pool for PostgreSQL
+    # and scrypt; neither may block the event loop serving active chats.
 
     @app.post("/api/auth/register")
-    async def register(request: Request, body: RegisterRequest):
+    def register(request: Request, body: RegisterRequest):
         if not _USERNAME.fullmatch(body.username):
             raise BsideError("INVALID_USERNAME", 400)
         if len(body.password) < 8:
@@ -520,7 +522,7 @@ def create_app(
         return response
 
     @app.post("/api/auth/login")
-    async def login(request: Request, body: LoginRequest):
+    def login(request: Request, body: LoginRequest):
         record = users.find_by_username(body.username)
         if record is None:
             auth.verify_password(body.password, dummy_hash, pepper=pepper)
@@ -537,7 +539,7 @@ def create_app(
         return response
 
     @app.post("/api/auth/logout")
-    async def logout(request: Request):
+    def logout(request: Request):
         token = parse_session_token(request.cookies.get(SESSION_COOKIE))
         if token is not None:
             sessions.delete(auth.hash_session_token(token))
