@@ -370,6 +370,11 @@ def create_app(
 
     async def execute_chat_card_action(user_id: int, conversation_id: int,
                                        card_id: str, body: ChatCardAction) -> dict:
+        processing_context = None
+        if processing_tasks is not None:
+            processing_context = await asyncio.to_thread(
+                processing_tasks.context_for_card, user_id=user_id, environment=environment,
+                conversation_id=str(conversation_id), card_id=card_id)
         response = await asyncio.to_thread(
             chat_action, user_id, str(conversation_id), card_id, body.model_dump())
         marker = response.get("continuation")
@@ -386,11 +391,6 @@ def create_app(
                 or display.get("protocolProfile") != "a2flow.temporary.v1"
                 or display.get("definitionSource") != "TEMPORARY"):
             raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
-        processing_context = None
-        if processing_tasks is not None:
-            processing_context = await asyncio.to_thread(
-                processing_tasks.context_for_card, user_id=user_id, environment=environment,
-                conversation_id=str(conversation_id), card_id=card_id)
         created, input_message, assistant_message = await asyncio.to_thread(
             messages.claim_interaction_continuation, user_id=user_id,
             conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"])
