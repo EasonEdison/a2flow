@@ -14,8 +14,9 @@ Application source: `4927929058d1b69f7e1fb42560f67644c44a5d9d`.
   final summary and completed notice all passed. Read-only facts confirm one run,
   one resume command, three completed outbox commands and two distinct notices.
 - Public M/B admission: shared login quota, forged forwarding headers and foreign
-  Origin rejection passed. Successful M sign-in was not repeated publicly; its
-  full authenticated create/publish path passed in the isolated self-host stack.
+  Origin rejection passed. A follow-up public administrator sign-in and management
+  conversation created a new workflow, compiled it and published PRT build version
+  one; the regular-member B catalog displayed it. Refresh retained the same result.
 
 See [regression](regression.md) for evidence. This is not a load/HA benchmark,
 penetration test, full dependency audit or proof of exactly-once external delivery.
