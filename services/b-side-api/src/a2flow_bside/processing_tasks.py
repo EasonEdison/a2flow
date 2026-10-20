@@ -278,6 +278,14 @@ class ProcessingTasksRepository:
         return {'status': row['status'], 'operationId': row['operation_id'], 'requestId': row['request_id'],
                 'replayed': replayed, 'result': row['result'], 'errorCode': row['error_code']}
 
+    @staticmethod
+    def _delivery(connection: Any, task_id: str) -> str | None:
+        row = connection.execute(
+            "SELECT m.content->>'delivery' delivery FROM processing_turns t "
+            "JOIN messages m ON m.id=t.assistant_message_id AND m.conversation_id=t.conversation_id "
+            "WHERE t.task_id=%s ORDER BY t.input_message_id DESC LIMIT 1", (task_id,)).fetchone()
+        return row['delivery'] if row else None
+
     def get(self, *, user_id: int, environment: str, task_id: str) -> dict[str, Any]:
         require_user_id(user_id)
         with self._factory() as connection:
@@ -285,9 +293,10 @@ class ProcessingTasksRepository:
                                      (user_id, environment, task_id)).fetchone()
             if row is None:
                 raise BsideError('PROCESSING_TASK_NOT_FOUND', 404)
+            delivery = self._delivery(connection, task_id)
             operations = connection.execute('SELECT * FROM processing_operations WHERE task_id=%s ORDER BY created_at,operation_id LIMIT 100',
                                             (task_id,)).fetchall()
-        return {**_context(row), 'createdAt': _time(row['created_at']), 'updatedAt': _time(row['updated_at']),
+        return {**_context(row), 'deliveryStatus': delivery, 'createdAt': _time(row['created_at']), 'updatedAt': _time(row['updated_at']),
                 'resultSummary': row['result_summary'], 'resolutionSummary': row['resolution_summary'],
                 'resolvedAt': _time(row['resolved_at']), 'resolutionSource': 'USER_CONFIRMATION' if row['resolved_at'] else None,
                 'operations': [{'operationId': o['operation_id'], 'abilityKey': o['ability_key'], 'status': o['status'],
@@ -307,6 +316,7 @@ class ProcessingTasksRepository:
                 if row['resolution_summary'] != summary.strip():
                     raise BsideError('PROCESSING_RESOLUTION_CONFLICT', 409)
             elif (row['status'] != 'RESULT_RECORDED'
+                  or self._delivery(connection, task_id) not in {'completed', 'waiting_action'}
                   or self._waiting_card(connection, (user_id, environment, row['conversation_id']), task_id)
                   or connection.execute(
                     "SELECT 1 FROM processing_operations WHERE task_id=%s AND status IN ('RUNNING','UNKNOWN','FAILED')", (task_id,)).fetchone()):

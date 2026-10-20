@@ -1,3 +1,4 @@
+import { processingStatus, taskState } from '../processingPresentation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiErrorMessage, productApi, type ProcessingTaskSummary, type ActivityGroup, type RunReference, type WorkActivity, type WorkActivityPage } from '../productApi';
 import { displayTime } from './RunHistory';
@@ -95,7 +96,16 @@ export function WorkActivitySidebar({ state, refresh, changePage, onClose, onOpe
               {item.summary ? <p className="activity-summary">{item.summary}</p> : null}
               {notices.map(attention => <div className={`activity-attention ${attention.kind}`} key={attention.attentionId}>
                 <strong>{attention.title}</strong>{attention.summary && attention.summary !== attention.title ? <p>{attention.summary}</p> : null}
-                {attention.kind === 'business' ? <div className="activity-processing-actions"><button className="quiet" onClick={() => onProcess(item, attention.attentionId, attention.title)}>处理此异常</button>{attention.processingTasks?.map(task => <button className="quiet" key={task.taskId} onClick={() => onProcessingTask(task)}>查看处理：{task.objective}</button>)}</div> : null}
+                {attention.kind === 'business' ? <div className="activity-processing-actions">
+                  {!attention.processingTasks?.length ? <><span className="processing-state open">待处理</span><button className="quiet" onClick={() => onProcess(item, attention.attentionId, attention.title)}>处理此异常</button></> : <>
+                    {attention.processingTasks.map(task => <button className="activity-processing-task" key={task.taskId} onClick={() => onProcessingTask(task)} aria-label={`查看处理记录：${processingStatus[taskState(task)] || '状态待核实'}`}>
+                      <span className={`processing-state ${taskState(task).toLowerCase()}`}>{processingStatus[taskState(task)] || '状态待核实'}</span>
+                      <span className="processing-task-caption">{task.resolutionSummary || '查看进展与处理结果'}</span>
+                      <small>{displayTime(task.updatedAt)} · {taskState(task) === 'WAITING_INPUT' ? '去补参 →' : '查看处理 →'}</small>
+                    </button>)}
+                    <button className="quiet" onClick={() => onProcess(item, attention.attentionId, attention.title)}>发起另一项处理</button>
+                  </>}
+                </div> : null}
                 {attention.acknowledged ? <small>已查看 · 不代表业务已处理</small> : attention.kind !== 'waiting' ? <button className="quiet" disabled={Boolean(acknowledging)} onClick={async () => {
                   setAcknowledging(attention.attentionId); setAckError('');
                   try { await productApi.acknowledgeActivity(item.activityId, attention.attentionId); refresh(); }

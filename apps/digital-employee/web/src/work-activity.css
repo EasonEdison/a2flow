@@ -113,3 +113,37 @@
 .processing-confirm p, .processing-resolution p { font-size: 13px; line-height: 1.7; }
 .processing-resolution { padding: 16px; background: #edf8f2; border-radius: 9px; }
 .processing-message-link { margin-top: 10px; }
+
+/* Handling records lead with business results; protocol details remain available. */
+.processing-title { margin: 18px 0 8px; font-size: 23px; letter-spacing: -.02em; }
+.processing-guidance { font-size: 13px; line-height: 1.7; color: var(--muted); }
+.processing-objective { margin: 16px 0 24px; font-size: 13px; color: var(--muted); }
+.processing-objective p { overflow-wrap: anywhere; line-height: 1.7; }
+.processing-result-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.processing-result-heading h4 { margin: 0; font-size: 15px; }
+.processing-result-heading span { font-size: 12px; color: var(--muted); }
+.processing-operations { display: grid; gap: 12px; margin: 14px 0 24px; }
+.processing-operations li.processing-operation { padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.processing-operation-title strong { font-size: 15px; }
+.processing-operation-title span { font-size: 11px; color: var(--muted); }
+.processing-operations .processing-result-title { margin: 14px 0 8px; font-size: 14px; line-height: 1.6; color: var(--text); }
+.processing-result-audience { font-size: 12px; line-height: 1.6; color: var(--muted); }
+.processing-identifiers { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 14px; margin: 12px 0; font-size: 12px; }
+.processing-identifiers dt { color: var(--muted); }
+.processing-identifiers dd { margin: 0; overflow-wrap: anywhere; }
+.processing-operations .processing-content { margin-top: 14px; color: var(--primary); }
+.processing-markdown { display: block; max-height: 420px; overflow: auto; padding: 10px 2px; color: var(--text); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.processing-markdown h1, .processing-markdown h2, .processing-markdown h3 { font-size: 16px; }
+.processing-markdown table { display: block; max-width: 100%; overflow: auto; }
+.processing-technical { color: var(--muted); }
+.processing-state { display: inline-flex; align-items: center; width: fit-content; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; color: #4e617a; background: #edf1f6; }
+.processing-state.running { color: #2457a8; background: #eaf1ff; }
+.processing-state.waiting_input, .processing-state.result_recorded { color: #8a5a0a; background: #fff4d9; }
+.processing-state.unknown, .processing-state.failed, .processing-state.interrupted { color: #a33f37; background: #fff0ed; }
+.processing-state.resolved { color: #1f7652; background: #eaf7ef; }
+.activity-processing-actions { display: grid; gap: 8px; margin-top: 12px; }
+.activity-processing-actions button.activity-processing-task { display: grid; gap: 8px; width: 100%; text-align: left; padding: 12px; background: #fff; border: 1px solid #dee5ef; border-radius: 9px; }
+.processing-task-caption { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.6; color: var(--text); }
+.activity-processing-task small { font-size: 11px; color: var(--muted); }
+.activity-processing-task:hover { border-color: var(--primary); }
+@media (max-width: 700px) { .processing-operations li.processing-operation { padding: 14px; } .processing-identifiers { grid-template-columns: 1fr; gap: 4px; } .processing-identifiers dd { margin-bottom: 6px; } }
