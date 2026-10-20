@@ -66,3 +66,35 @@ containers; they are not recorded as passes.
 
 No full unit suite, model call, live business operation, deployment, or repeated
 full self-host installation was performed for this CI slice.
+
+## Approved extension checkpoint
+
+The runner now shares its disposable PostgreSQL resource context between Python
+and Java suites. First execution of the Java database path with the public
+`eclipse-temurin:17-jre-jammy` image passed 41 approval checks (`postgres: true`)
+and 107 package checks. PostgreSQL and JRE shared only a `network none` namespace;
+no port was published. Probe schemas and containers were removed.
+
+The probe dependency image was rebuilt with only the existing model SDK lock
+added. Image `f6240760c7cf8436caa2992148d27f3ba4b4c78454b47fa6416801188152fff0`
+imported the packages with networking disabled: OpenAI 3.8.0, grpcio 1.75.1,
+psycopg 3.3.6 and protobuf 6.33.6. This was a dependency preparation check.
+
+The final expanded gate remains pending the coordinated A2UI/Chat/Workflow
+compatibility candidate. Earlier passes do not establish those later changes.
+
+## Actual Python executor focused verification
+
+Against root source `cb5adb3`, the new `verify_capability_approval.py` passed
+70 checks in its own empty PostgreSQL database. It reuses only synthetic plan
+and transport fixtures from the existing executor tests; it does not run the
+unit suite. Eight simultaneous admissions produced one consumption/dispatch and
+seven rejections. A fresh process dispatched zero times for the consumed receipt.
+An injected transport timeout retained the consumption and prevented a retry.
+
+The synthetic execution role had `default_transaction_read_only=on`, only
+`INSERT, SELECT` on the approval table, and no update/delete/truncate privilege.
+Revoking INSERT failed closed before transport. The probe removed its table and
+role; the runner removed PostgreSQL and the private credentials directory.
+`requestedProbes=capability-approval` explicitly identifies this as a focused run,
+not the final expanded gate. No external business/model call occurred.

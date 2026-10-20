@@ -1,6 +1,9 @@
 # Readiness
 
-PASS for scoped source delivery and local execution of the public gate commands.
+The original four-probe scope passed local execution; the approved extension is
+IN PROGRESS pending the final A2UI/Chat/Workflow compatibility candidate.
+
+Original scoped source delivery and local execution:
 Integrate with capability-approval `da2ff11f` and package-restore `9d84cbc6` (or a
 verified descendant). The workflow intentionally requires their probe sources,
 and bootstrap references the approval worker's V003 migration. Do not deploy this

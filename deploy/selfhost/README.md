@@ -60,6 +60,10 @@ not password recovery. A changed migration digest requires an explicit migration
 The `schemas` stage also explicitly installs management V003 approval-consumption
 DDL before application startup. Existing installations must review and apply this
 new migration; restarting a service is not a database migration.
+The execution reader also receives `INSERT, SELECT` on this one approval table;
+it does not receive `UPDATE` or `DELETE`. Its ordinary connections remain
+read-only by default. Only the approval-consumption connection explicitly opens a
+write transaction, bounded by these table privileges.
 
 For a full-stack restart, use `docker compose ... stop` followed by `up -d --no-build --force-recreate`
 with the same Compose file and environment. Named volumes and private configuration

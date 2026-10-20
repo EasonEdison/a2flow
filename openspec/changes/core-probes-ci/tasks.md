@@ -7,3 +7,6 @@
 - [x] Run isolated PostgreSQL and delivered Java probes.
 - [x] Verify failure cleanup, repository checks and workflow syntax.
 - [x] Commit/push this branch for parent integration; no deployment.
+- [x] Extend approved gate to Chat/Workflow/A2UI confirmation and durable Java/Python consumption.
+- [x] Verify actual Python executor with minimal PostgreSQL approval privileges.
+- [ ] Validate the expanded gate against the final joint source and update readiness.

@@ -28,6 +28,22 @@ bootstrap must explicitly apply the approval worker's V003 consumption migration
 after V002. This branch depends on that worker's migration being integrated and
 does not create a second migration or modify approval Java sources.
 
+The approved follow-up extends this same gate with Chat and Workflow write
+confirmation probes, and runs the Java approval probe against real isolated
+PostgreSQL instead of only its in-memory path. The Python image adds the existing
+model SDK lock as a dependency-only layer; probe execution still has no model
+key or network egress. Java uses a public JRE 17 container sharing only its
+disposable PostgreSQL namespace. The same resource context handles cleanup for
+both suites; the Chat/Workflow probes have their own `network none` namespaces.
+
+The final approved extension covers the actual Python capability executor, which
+is the deployed business-dispatch boundary. Its dedicated empty database probe
+checks receipt binding, concurrent consumption, fresh-process replay rejection
+and unknown-result no-retry behavior through a recording transport. Self-host
+bootstrap grants its existing execution-reader role only `INSERT, SELECT` on
+the consumption table; normal connections retain their read-only default. The
+A2UI preflight probe joins Chat/Workflow in a separate no-network container.
+
 ## Validation
 
 Run the existing probes against a new local PostgreSQL container using a source

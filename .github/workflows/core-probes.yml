@@ -36,7 +36,7 @@ concurrency:
 jobs:
   postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       PROBE_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -51,9 +51,9 @@ jobs:
         run: |
           docker build -f openspec/changes/portfolio-runtime-outbox/Dockerfile.probe -t a2flow-core-probes:local .
           docker pull postgres:16.6-bookworm
-      - name: Exercise account admission and outbox on isolated PostgreSQL
-        timeout-minutes: 15
-        run: python scripts/run_core_probes.py --run-id "$PROBE_RUN_ID"
+      - name: Exercise account, outbox, executor and Chat/Workflow/A2UI approval invariants
+        timeout-minutes: 21
+        run: python scripts/run_core_probes.py --run-id "$PROBE_RUN_ID" --probe-timeout 180
       - name: Remove only this run's disposable containers
         if: always()
         run: python scripts/run_core_probes.py --cleanup --run-id "$PROBE_RUN_ID"
@@ -67,7 +67,9 @@ jobs:
           retention-days: 7
   java:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    env:
+      PROBE_RUN_ID: ci-java-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -82,10 +84,16 @@ jobs:
           cache: maven
       - name: Compile management and resolve the existing runtime dependencies
         timeout-minutes: 15
-        run: mvn --batch-mode --no-transfer-progress -f services/management-java/pom.xml -DskipTests compile dependency:copy-dependencies
-      - name: Exercise approval and archive boundaries (no services)
-        timeout-minutes: 7
-        run: python scripts/run_core_probes.py --suite java --probe-timeout 60
+        run: |
+          mvn --batch-mode --no-transfer-progress -f services/management-java/pom.xml -DskipTests compile dependency:copy-dependencies
+          docker pull postgres:16.6-bookworm
+          docker pull eclipse-temurin:17-jre-jammy
+      - name: Exercise durable approval consumption and archive boundaries
+        timeout-minutes: 9
+        run: python scripts/run_core_probes.py --suite java --run-id "$PROBE_RUN_ID" --probe-timeout 60
+      - name: Remove only this run's disposable containers
+        if: always()
+        run: python scripts/run_core_probes.py --cleanup --run-id "$PROBE_RUN_ID"
       - name: Publish synthetic result
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
