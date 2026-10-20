@@ -58,8 +58,9 @@ and a new directory; never delete an installed configuration to "retry". Repeati
 the three initialization commands for the **same** installation is a verification,
 not password recovery. A changed migration digest requires an explicit migration.
 
-For a full-stack restart, use `docker compose ... stop` followed by `up -d --no-build`
-with the same Compose file and environment. This starts the shared gateway network
+For a full-stack restart, use `docker compose ... stop` followed by `up -d --no-build --force-recreate`
+with the same Compose file and environment. Named volumes and private configuration
+are retained; do not use `down -v`. This starts the shared gateway network
 namespace before its dependent services. Individual application services can restart
 while the gateway remains running.
 No command automatically publishes assets, starts a workflow or replays business work.
