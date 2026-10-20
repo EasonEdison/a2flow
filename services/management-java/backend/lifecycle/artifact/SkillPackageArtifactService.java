@@ -4,12 +4,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -21,12 +17,15 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import dev.a2flow.management.support.JsonSupport;
+import dev.a2flow.management.lifecycle.SkillFactoryValidationException;
 import dev.a2flow.management.lifecycle.domain.SkillDraft;
 import dev.a2flow.management.release.ReleaseModels.ReleaseArtifact;
 import dev.a2flow.management.storage.db.repository.SkillFactoryWorkspaceFileRepository;
@@ -47,15 +46,8 @@ public class SkillPackageArtifactService {
     public static final String STORAGE_PROVIDER_LOCAL = "LOCAL";
     private static final String ZIP_SUFFIX = ".zip";
     private static final String ZIP_ENTRY_SEPARATOR = "/";
-    private static final String FILE_URI_SCHEME = "file";
-    private static final String HTTP_URI_SCHEME = "http";
-    private static final String HTTPS_URI_SCHEME = "https";
     private static final String RESTORE_TEMP_DIR = "_restore";
-    private static final String RESTORE_DOWNLOAD_DIR = "_download";
     private static final String RESTORE_UNZIP_DIR = "_unzip";
-    private static final String RESTORE_DOWNLOAD_FILE_NAME = "package.zip";
-    private static final String RESTORE_TEMP_SEPARATOR = "-";
-    private static final String IMPORT_TEMP_MARK = "import";
     private static final String MACOS_RESOURCE_DIR_PREFIX = "__MACOSX/";
     private static final String GIT_DIR_PREFIX = ".git/";
     private static final String GIT_DIR_SEGMENT = "/.git/";
@@ -66,12 +58,7 @@ public class SkillPackageArtifactService {
     private static final String FIELD_FILE_COUNT = "fileCount";
     private static final String FIELD_ZIP_FILE_NAME = "zipFileName";
     private static final String FIELD_LOCAL_BUILD = "localBuild";
-    private static final String ERROR_PACKAGE_URL_INVALID = "packageUrl is invalid";
     private static final String ERROR_PACKAGE_FILE_NOT_FOUND = "package file does not exist";
-    private static final String ERROR_PACKAGE_FILE_OUTSIDE_WORKSPACE_ROOT = "package file outside workspace root";
-    private static final String ERROR_PACKAGE_FILE_NOT_ZIP = "package file must be zip";
-    private static final String ERROR_PACKAGE_URL_SCHEME_NOT_SUPPORTED = "packageUrl scheme is not supported";
-    private static final String ERROR_PACKAGE_DOWNLOAD_EMPTY = "package download is empty";
     private static final String ERROR_PACKAGE_DOWNLOAD_TOO_LARGE = "package download is too large";
     private static final String ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE = "restore path outside workspace";
     private static final String ERROR_ZIP_PACKAGE_EMPTY = "zip package is empty";
@@ -94,9 +81,14 @@ public class SkillPackageArtifactService {
     private static final long DETERMINISTIC_ZIP_ENTRY_TIME = 0L;
 
     private static final long MAX_PACKAGE_BYTES = 100L * 1024L * 1024L;
-    private static final int RESTORE_CONNECT_TIMEOUT_MS = 10_000;
-    private static final int RESTORE_READ_TIMEOUT_MS = 60_000;
     private static final int RESTORE_BUFFER_SIZE = 8192;
+
+    @Value("${A2FLOW_PACKAGE_MAX_EXPANDED_BYTES:33554432}")
+    private long maxExpandedBytes = 33554432L;
+    @Value("${A2FLOW_PACKAGE_MAX_ENTRY_BYTES:8388608}")
+    private long maxEntryBytes = 8388608L;
+    @Value("${A2FLOW_PACKAGE_MAX_ENTRIES:2000}")
+    private int maxEntries = 2000;
 
     @Resource
     private SkillFactoryWorkspaceFileRepository fileRepository;
@@ -199,9 +191,11 @@ public class SkillPackageArtifactService {
         String requiredSkillMd = rootPrefix + "SKILL.md";
         boolean skillMdFound = false;
         int fileCount = 0;
+        ExtractionBudget budget = extractionBudget();
         try (ZipInputStream input = new ZipInputStream(new ByteArrayInputStream(bytes))) {
             ZipEntry entry;
             while ((entry = input.getNextEntry()) != null) {
+                budget.nextEntry();
                 String rawEntryName = StringUtils.defaultString(entry.getName()).replace('\\', '/');
                 if (isUnsafeReleaseEntry(rawEntryName)) {
                     log.warn("SkillFactory发布ZIP包含不安全路径, skillCode:{}, entry:{}",
@@ -210,6 +204,7 @@ public class SkillPackageArtifactService {
                 }
                 String entryName = StringUtils.stripStart(rawEntryName, ZIP_ENTRY_SEPARATOR);
                 if (StringUtils.isBlank(entryName) || isIgnoredZipRelativePath(entryName)) {
+                    budget.copyEntry(input, OutputStream.nullOutputStream());
                     input.closeEntry();
                     continue;
                 }
@@ -221,6 +216,7 @@ public class SkillPackageArtifactService {
                     fileCount++;
                     skillMdFound = skillMdFound || StringUtils.equals(entryName, requiredSkillMd);
                 }
+                budget.copyEntry(input, OutputStream.nullOutputStream());
                 input.closeEntry();
             }
         }
@@ -246,57 +242,16 @@ public class SkillPackageArtifactService {
                 || StringUtils.indexOf(entryName, WINDOWS_DRIVE_SEPARATOR) == WINDOWS_DRIVE_SEPARATOR_INDEX;
     }
 
-    /**
-     * 从 ZIP 包恢复 workspace 文件。
-     *
-     * <p>该方法支持两类包来源：一是 `PACKAGE_BUILD` 产生且位于 workspaceRoot 下的 `file://` 本地包；
-     * 二是对象存储侧暴露的 HTTP/HTTPS ZIP URL。它只负责下载、ZIP entry 路径穿越校验和受控目录替换，
-     * 不负责对象存储鉴权、发布审批或 LangBridge/OpenClaw 注册。
-     */
+    /** Legacy caller-selected URLs/files cannot establish artifact ownership or integrity. */
     public int restorePackage(Path workspaceRoot, Path workspace, String packageUrl, String... rootDirNames)
             throws IOException {
-        Path normalizedWorkspaceRoot = workspaceRoot.normalize();
-        Path normalizedWorkspace = workspace.normalize();
-        if (!normalizedWorkspace.startsWith(normalizedWorkspaceRoot)) {
-            log.warn("SkillFactory包恢复失败，workspace路径越界, workspaceRoot:{}, workspace:{}",
-                    normalizedWorkspaceRoot, normalizedWorkspace);
-            throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
-        }
-        Path tempBaseDir = normalizedWorkspaceRoot
-                .resolve(RESTORE_TEMP_DIR)
-                .resolve(workspace.getFileName() + RESTORE_TEMP_SEPARATOR + System.currentTimeMillis())
-                .normalize();
-        if (!tempBaseDir.startsWith(normalizedWorkspaceRoot)) {
-            log.warn("SkillFactory包恢复失败，临时目录越界, workspaceRoot:{}, tempDir:{}",
-                    normalizedWorkspaceRoot, tempBaseDir);
-            throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
-        }
-        Path unzipDir = tempBaseDir.resolve(RESTORE_UNZIP_DIR).normalize();
-        if (!unzipDir.startsWith(tempBaseDir)) {
-            log.warn("SkillFactory包恢复失败，解压目录越界, tempDir:{}, unzipDir:{}", tempBaseDir, unzipDir);
-            throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
-        }
-        int restoredFileCount = 0;
-        try {
-            Path zipPath = resolvePackageZip(normalizedWorkspaceRoot, tempBaseDir, packageUrl);
-            restoredFileCount = unzipToTemp(zipPath, unzipDir, rootDirNames);
-            if (restoredFileCount <= 0) {
-                log.warn("SkillFactory包恢复失败，ZIP为空, zipPath:{}", zipPath);
-                throw new IllegalArgumentException(ERROR_ZIP_PACKAGE_EMPTY);
-            }
-            replaceWorkspace(normalizedWorkspace, unzipDir);
-            log.info("SkillFactory包恢复完成, workspace:{}, zipPath:{}, restoredFileCount:{}",
-                    normalizedWorkspace, zipPath, restoredFileCount);
-            return restoredFileCount;
-        } finally {
-            deleteRecursivelyIfExists(tempBaseDir);
-        }
+        throw SkillFactoryValidationException.packageRestoreSourceRequired();
     }
 
     /**
-     * 从已经通过受控对象存储客户端下载的不可变 ZIP 恢复 workspace。
+     * 从已经通过数据库归属与摘要校验的不可变 ZIP 恢复 workspace。
      *
-     * <p>ZIP 先完整写入 workspaceRoot 内临时目录并完成 entry 越界校验、空包校验和根目录剥离，
+     * <p>ZIP 从已加载字节流式解压至临时目录，完成展开限额、路径、空包和根目录校验，
      * 成功后才替换目标 workspace；调用方负责在进入本方法前校验 Build artifact 摘要。
      */
     public int restoreImmutablePackage(Path workspaceRoot, Path workspace, byte[] zipBytes,
@@ -312,20 +267,10 @@ public class SkillPackageArtifactService {
         if (!normalizedWorkspace.startsWith(normalizedWorkspaceRoot)) {
             throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
         }
-        Path tempBaseDir = normalizedWorkspaceRoot.resolve(RESTORE_TEMP_DIR)
-                .resolve(workspace.getFileName() + RESTORE_TEMP_SEPARATOR + System.currentTimeMillis())
-                .normalize();
-        Path downloadDir = tempBaseDir.resolve(RESTORE_DOWNLOAD_DIR).normalize();
-        Path unzipDir = tempBaseDir.resolve(RESTORE_UNZIP_DIR).normalize();
-        if (!tempBaseDir.startsWith(normalizedWorkspaceRoot)
-                || !downloadDir.startsWith(tempBaseDir) || !unzipDir.startsWith(tempBaseDir)) {
-            throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
-        }
+        Path tempBaseDir = createRestoreDirectory(normalizedWorkspaceRoot, workspace.getFileName().toString());
+        Path unzipDir = tempBaseDir.resolve(RESTORE_UNZIP_DIR);
         try {
-            Files.createDirectories(downloadDir);
-            Path zipPath = downloadDir.resolve(RESTORE_DOWNLOAD_FILE_NAME).normalize();
-            Files.write(zipPath, zipBytes);
-            int restoredFileCount = unzipToTemp(zipPath, unzipDir, rootDirNames);
+            int restoredFileCount = unzipToTemp(zipBytes, unzipDir, rootDirNames);
             if (restoredFileCount <= 0) {
                 throw new IllegalArgumentException(ERROR_ZIP_PACKAGE_EMPTY);
             }
@@ -341,8 +286,8 @@ public class SkillPackageArtifactService {
     /**
      * 把页面上传的源码 ZIP 导入到当前 workspace。
      *
-     * <p>页面上传 ZIP 是创建/编辑入口，不是最终发布包。这里会先把二进制内容写入 workspaceRoot 下的临时目录，
-     * 再复用 ZIP entry 路径穿越校验和 workspace 替换逻辑，确保导入内容只能落到 SkillFactory 受控目录内。
+     * <p>页面上传 ZIP 是创建/编辑入口，不是最终发布包。从已有字节直接有界解压到临时目录，
+     * 校验完成后才替换 workspace；压缩包不再重复落盘。
      */
     public int importUploadedZip(Path workspaceRoot, Path workspace, String skillCode, String zipFileName,
             byte[] zipBytes) throws IOException {
@@ -354,30 +299,12 @@ public class SkillPackageArtifactService {
                     normalizedWorkspaceRoot, normalizedWorkspace);
             throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
         }
-        Path tempBaseDir = normalizedWorkspaceRoot
-                .resolve(RESTORE_TEMP_DIR)
-                .resolve(workspace.getFileName() + RESTORE_TEMP_SEPARATOR + IMPORT_TEMP_MARK
-                        + RESTORE_TEMP_SEPARATOR + System.currentTimeMillis())
-                .normalize();
-        if (!tempBaseDir.startsWith(normalizedWorkspaceRoot)) {
-            log.warn("SkillFactory导入ZIP失败，临时目录越界, workspaceRoot:{}, tempDir:{}",
-                    normalizedWorkspaceRoot, tempBaseDir);
-            throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
-        }
-        Path downloadDir = tempBaseDir.resolve(RESTORE_DOWNLOAD_DIR).normalize();
-        Path unzipDir = tempBaseDir.resolve(RESTORE_UNZIP_DIR).normalize();
-        if (!downloadDir.startsWith(tempBaseDir) || !unzipDir.startsWith(tempBaseDir)) {
-            log.warn("SkillFactory导入ZIP失败，临时子目录越界, tempDir:{}, downloadDir:{}, unzipDir:{}",
-                    tempBaseDir, downloadDir, unzipDir);
-            throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
-        }
+        Path tempBaseDir = createRestoreDirectory(normalizedWorkspaceRoot, workspace.getFileName().toString());
+        Path unzipDir = tempBaseDir.resolve(RESTORE_UNZIP_DIR);
         try {
-            Files.createDirectories(downloadDir);
-            Path zipPath = downloadDir.resolve(RESTORE_DOWNLOAD_FILE_NAME).normalize();
-            Files.write(zipPath, zipBytes);
             log.info("SkillFactory开始解压导入ZIP, workspace:{}, skillCode:{}, zipFileName:{}, zipBytes:{}",
                     normalizedWorkspace, skillCode, zipFileName, zipBytes.length);
-            int importedFileCount = unzipToTemp(zipPath, unzipDir, workspace.getFileName().toString(),
+            int importedFileCount = unzipToTemp(zipBytes, unzipDir, workspace.getFileName().toString(),
                     StringUtils.defaultString(skillCode), stripZipSuffix(zipFileName));
             if (importedFileCount <= 0) {
                 log.warn("SkillFactory导入ZIP失败，ZIP为空, workspace:{}, zipFileName:{}",
@@ -422,120 +349,96 @@ public class SkillPackageArtifactService {
         return zipPath;
     }
 
-    private Path resolvePackageZip(Path workspaceRoot, Path tempBaseDir, String packageUrl) throws IOException {
-        URI uri = parsePackageUri(packageUrl);
-        String scheme = uri.getScheme();
-        if (FILE_URI_SCHEME.equalsIgnoreCase(scheme)) {
-            return resolveLocalZip(workspaceRoot, uri);
-        }
-        if (HTTP_URI_SCHEME.equalsIgnoreCase(scheme) || HTTPS_URI_SCHEME.equalsIgnoreCase(scheme)) {
-            return downloadRemoteZip(tempBaseDir, uri);
-        }
-        log.warn("SkillFactory包恢复失败，不支持的packageUrl协议, scheme:{}, packageUrl:{}", scheme, packageUrl);
-        throw new IllegalArgumentException(ERROR_PACKAGE_URL_SCHEME_NOT_SUPPORTED);
+    private Path createRestoreDirectory(Path workspaceRoot, String workspaceName) throws IOException {
+        Path restoreRoot = workspaceRoot.resolve(RESTORE_TEMP_DIR);
+        Files.createDirectories(restoreRoot);
+        // Atomic unique directory: concurrent failures cannot clean another request's files.
+        return Files.createTempDirectory(restoreRoot, workspaceName + "-");
     }
 
-    private URI parsePackageUri(String packageUrl) {
-        try {
-            URI uri = new URI(StringUtils.defaultString(packageUrl));
-            if (StringUtils.isBlank(uri.getScheme())) {
-                throw new IllegalArgumentException(ERROR_PACKAGE_URL_INVALID);
-            }
-            return uri;
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException(ERROR_PACKAGE_URL_INVALID, e);
-        }
-    }
-
-    private Path resolveLocalZip(Path workspaceRoot, URI uri) {
-        Path zipPath = Paths.get(uri).normalize();
-        if (!zipPath.startsWith(workspaceRoot)) {
-            log.warn("SkillFactory包恢复失败，ZIP不在workspaceRoot下, workspaceRoot:{}, zipPath:{}",
-                    workspaceRoot, zipPath);
-            throw new IllegalArgumentException(ERROR_PACKAGE_FILE_OUTSIDE_WORKSPACE_ROOT);
-        }
-        if (!Files.isRegularFile(zipPath)) {
-            log.warn("SkillFactory包恢复失败，ZIP不存在, zipPath:{}", zipPath);
-            throw new IllegalArgumentException(ERROR_PACKAGE_FILE_NOT_FOUND);
-        }
-        if (!StringUtils.endsWithIgnoreCase(zipPath.getFileName().toString(), ZIP_SUFFIX)) {
-            log.warn("SkillFactory包恢复失败，文件不是ZIP, zipPath:{}", zipPath);
-            throw new IllegalArgumentException(ERROR_PACKAGE_FILE_NOT_ZIP);
-        }
-        return zipPath;
-    }
-
-    private Path downloadRemoteZip(Path tempBaseDir, URI uri) throws IOException {
-        Path downloadDir = tempBaseDir.resolve(RESTORE_DOWNLOAD_DIR).normalize();
-        if (!downloadDir.startsWith(tempBaseDir)) {
-            log.warn("SkillFactory包恢复失败，下载目录越界, tempDir:{}, downloadDir:{}", tempBaseDir, downloadDir);
-            throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
-        }
-        Files.createDirectories(downloadDir);
-        Path zipPath = downloadDir.resolve(RESTORE_DOWNLOAD_FILE_NAME).normalize();
-        log.info("SkillFactory开始下载远端ZIP包, packageUrl:{}", uri);
-        URLConnection connection = uri.toURL().openConnection();
-        connection.setConnectTimeout(RESTORE_CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(RESTORE_READ_TIMEOUT_MS);
-        long downloadedBytes = 0L;
-        byte[] buffer = new byte[RESTORE_BUFFER_SIZE];
-        try (InputStream inputStream = connection.getInputStream();
-                OutputStream outputStream = Files.newOutputStream(zipPath)) {
-            int len;
-            while ((len = inputStream.read(buffer)) >= 0) {
-                downloadedBytes += len;
-                if (downloadedBytes > MAX_PACKAGE_BYTES) {
-                    log.warn("SkillFactory远端ZIP包下载过大, packageUrl:{}, downloadedBytes:{}, maxBytes:{}",
-                            uri, downloadedBytes, MAX_PACKAGE_BYTES);
-                    throw new IllegalArgumentException(ERROR_PACKAGE_DOWNLOAD_TOO_LARGE);
-                }
-                outputStream.write(buffer, 0, len);
-            }
-        }
-        if (downloadedBytes <= 0) {
-            log.warn("SkillFactory远端ZIP包下载为空, packageUrl:{}", uri);
-            throw new IllegalArgumentException(ERROR_PACKAGE_DOWNLOAD_EMPTY);
-        }
-        if (!StringUtils.endsWithIgnoreCase(uri.getPath(), ZIP_SUFFIX)) {
-            log.info("SkillFactory远端packageUrl未以zip结尾，将继续按ZIP流校验, packageUrl:{}", uri);
-        }
-        log.info("SkillFactory远端ZIP包下载完成, packageUrl:{}, zipPath:{}, bytes:{}",
-                uri, zipPath, downloadedBytes);
-        return zipPath;
-    }
-
-    private int unzipToTemp(Path zipPath, Path tempDir, String... rootDirNames) throws IOException {
+    private int unzipToTemp(byte[] zipBytes, Path tempDir, String... rootDirNames) throws IOException {
         Files.createDirectories(tempDir);
         int restoredFileCount = 0;
-        try (ZipInputStream zipInputStream = new ZipInputStream(Files.newInputStream(zipPath))) {
+        ExtractionBudget budget = extractionBudget();
+        try (ZipInputStream input = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
             ZipEntry entry;
-            while ((entry = zipInputStream.getNextEntry()) != null) {
+            while ((entry = input.getNextEntry()) != null) {
+                budget.nextEntry();
                 String relativePath = restoreRelativePath(entry.getName(), rootDirNames);
-                if (StringUtils.isBlank(relativePath)) {
-                    zipInputStream.closeEntry();
-                    continue;
-                }
-                if (isIgnoredZipRelativePath(relativePath)) {
-                    zipInputStream.closeEntry();
+                if (StringUtils.isBlank(relativePath) || isIgnoredZipRelativePath(relativePath)) {
+                    budget.copyEntry(input, OutputStream.nullOutputStream());
+                    input.closeEntry();
                     continue;
                 }
                 Path target = tempDir.resolve(relativePath).normalize();
                 if (!target.startsWith(tempDir)) {
-                    log.warn("SkillFactory本地包恢复失败，ZIP entry路径越界, zipPath:{}, entry:{}",
-                            zipPath, entry.getName());
                     throw new IllegalArgumentException(ERROR_RESTORE_PATH_OUTSIDE_WORKSPACE);
                 }
                 if (entry.isDirectory()) {
                     Files.createDirectories(target);
+                    budget.copyEntry(input, OutputStream.nullOutputStream());
                 } else {
                     Files.createDirectories(target.getParent());
-                    Files.copy(zipInputStream, target, StandardCopyOption.REPLACE_EXISTING);
+                    try (OutputStream output = Files.newOutputStream(target)) {
+                        budget.copyEntry(input, output);
+                    }
                     restoredFileCount++;
                 }
-                zipInputStream.closeEntry();
+                input.closeEntry();
             }
         }
         return restoredFileCount;
+    }
+
+    @PostConstruct
+    void validateExtractionLimits() {
+        if (maxExpandedBytes <= 0 || maxEntryBytes <= 0 || maxEntryBytes > maxExpandedBytes || maxEntries <= 0) {
+            throw new IllegalArgumentException("PACKAGE_EXTRACTION_LIMITS_INVALID");
+        }
+    }
+
+    private ExtractionBudget extractionBudget() {
+        validateExtractionLimits();
+        return new ExtractionBudget(maxExpandedBytes, maxEntryBytes, maxEntries);
+    }
+
+    /** Count actual streamed bytes, including ignored and directory payloads. */
+    private static final class ExtractionBudget {
+        private final long maxTotal;
+        private final long maxEntry;
+        private final int maxCount;
+        private long total;
+        private int entries;
+
+        private ExtractionBudget(long maxTotal, long maxEntry, int maxCount) {
+            this.maxTotal = maxTotal;
+            this.maxEntry = maxEntry;
+            this.maxCount = maxCount;
+        }
+
+        private void nextEntry() {
+            if (entries >= maxCount) {
+                throw SkillFactoryValidationException.packageLimitExceeded("PACKAGE_ENTRY_COUNT_EXCEEDED");
+            }
+            entries++;
+        }
+
+        private void copyEntry(InputStream input, OutputStream output) throws IOException {
+            long entryBytes = 0;
+            byte[] buffer = new byte[RESTORE_BUFFER_SIZE];
+            int length;
+            while ((length = input.read(buffer)) != -1) {
+                if (length > maxEntry - entryBytes) {
+                    throw SkillFactoryValidationException.packageLimitExceeded("PACKAGE_ENTRY_BYTES_EXCEEDED");
+                }
+                if (length > maxTotal - total) {
+                    throw SkillFactoryValidationException.packageLimitExceeded("PACKAGE_EXPANDED_BYTES_EXCEEDED");
+                }
+                entryBytes += length;
+                total += length;
+                output.write(buffer, 0, length);
+            }
+        }
     }
 
     private String restoreRelativePath(String entryName, String... rootDirNames) {
