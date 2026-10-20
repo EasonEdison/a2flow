@@ -7,7 +7,17 @@ Original scope was committed/pushed through `d91ff27`; parent owns integration a
 deployment. Main baseline remains `5c907ee`. Four-probe source and local command
 validation are recorded in regression.
 
-Approved extension in progress:
+Approved extension completed locally:
+
+- Final application `942c250` + probe-only Chat `739a2f` + C runner/dependency fixes:
+  sequential Python all PASS (account 32 attempts, outbox 15, executor/PG 70,
+  Chat 227, Workflow 41, A2UI 38). Java all PASS (PG 41, package 107).
+- JDK 17 Maven compiled 611 sources. Input manifest
+  `/tmp/a2flow-core-java-input-manifest.json` has 573 exact committed inputs;
+  parent may reuse target at the export below. No Java rebuild is pending.
+- Final reports `/tmp/a2flow-core-probes-final-expanded-results/{postgres,java}.json`.
+- Fixed runner sequential DSN reuse with unique names and per-probe file mounts;
+  no-network probes receive no credential mounts. Added self-host jsonschema pin.
 
 - Actual Python executor + isolated PostgreSQL probe now passed 70 checks against
   root `cb5adb3`; concurrent admission 1/8, fresh-process replay 0 dispatch,
@@ -24,14 +34,13 @@ Approved extension in progress:
 - Java approval now runs its real PostgreSQL path in a public JRE 17 container,
   sharing only a disposable PG namespace. First new runner execution passed 41
   checks on approval `da2ff11f` and package 107 checks on `9d84cbc6`, with cleanup.
-- Parent found an existing A2UI write-action compatibility gap. Architecture and
-  security are updating their probes and contracts. Wait for the final committed
-  joint candidate, then run the full expanded gate once; do not replay every
-  intermediate revision.
+- Parent's A2UI write-action and processing-continuation compatibility fixes are
+  included in the final candidate and probes above. No application fix is pending
+  from this worker; parent owns integration and deployment.
 
 Local source export only (no Git):
 `/tmp/colima-a2flow-selfhost/core-probes-ci`. Maven target under that export contains
-the independently compiled 609-file combined Java build; dependencies are copied
+the independently compiled 611-file combined Java build; dependencies are copied
 into that target, not symlinked to another owner's output. Docker context
 `colima-a2flow-selfhost`; default context is unchanged. Prior self-host containers
 were explicitly stopped at parent's request; do not restart them.
