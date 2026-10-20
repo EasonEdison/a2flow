@@ -389,6 +389,10 @@ class RpcChatAssets(ChatAssets):
             elif self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
             saved = self._card_sink(prepared, json_copy(metadata))
+            if saved["status"] == "UNKNOWN":
+                raise ActionRejected("ACTION_OUTCOME_UNKNOWN")
+            if saved["status"] == "EXECUTING":
+                raise ActionRejected("ACTION_REQUEST_BUSY")
             pending[tool_call_id] = (prepared, json_copy(metadata))
             self._approval_pending = pending
             self._render_observations[saved["cardId"]] = {
