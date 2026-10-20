@@ -593,8 +593,8 @@ export const productApi = {
   updateSchedule: (id: string, value: { expression: string; timezone: string; input: string }) => api(`/api/schedules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ ruleType: 'cron', ruleJson: { expression: value.expression }, timezone: value.timezone, inputText: value.input }), headers: { 'Content-Type': 'application/json' } }),
   scheduleRuns: (id: string, before?: string) => api<{ runs: ScheduleRun[]; nextCursor: string | null }>(`/api/schedules/${encodeURIComponent(id)}/runs${before ? `?before=${encodeURIComponent(before)}` : ''}`),
   deleteSchedule: (id: string) => api(`/api/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  notifications: async (): Promise<{ items: Notification[] }> => {
-    const payload = await api<{ notifications?: Row[] }>('/api/notifications');
+  notifications: async (signal?: AbortSignal): Promise<{ items: Notification[] }> => {
+    const payload = await api<{ notifications?: Row[] }>('/api/notifications', { signal });
     return {
       items: (payload.notifications ?? []).map((row) => ({
         id: idOf(row.id),
