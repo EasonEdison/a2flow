@@ -3,16 +3,25 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 
 from skillweave_contracts import TrustedContext
 from .models import ActionRejected, json_copy
-from .rpc_client import AbilityDescription
+from .rpc_client import AbilityDescription, freeze, thaw
 from .temporary_interaction import TemporaryCandidate, prepare_interaction, validate_submission
 
 
-def argument_bytes(arguments: dict[str, Any]) -> bytes:
-    return json.dumps(arguments, ensure_ascii=False, allow_nan=False,
+def _plain_arguments(arguments: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate and detach the same frozen JSON tree used by the RPC contract."""
+    value = thaw(freeze(arguments))
+    if not isinstance(value, dict):
+        raise ActionRejected("INVALID_JSON")
+    return cast(dict[str, Any], value)
+
+
+def argument_bytes(arguments: Mapping[str, Any]) -> bytes:
+    return json.dumps(_plain_arguments(arguments), ensure_ascii=False, allow_nan=False,
                       sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
@@ -27,9 +36,10 @@ def approval_required(description: AbilityDescription) -> bool:
     return True
 
 
-def prepare_confirmation(description: AbilityDescription, arguments: dict[str, Any]):
+def prepare_confirmation(description: AbilityDescription, arguments: Mapping[str, Any]):
     if not approval_required(description):
         raise ActionRejected("WRITE_CONFIRMATION_NOT_REQUIRED")
+    arguments = _plain_arguments(arguments)
     encoded = argument_bytes(arguments)
     if len(encoded) > 64 * 1024:
         raise ActionRejected("WRITE_CONFIRMATION_PARAMETERS_TOO_LARGE")
@@ -59,11 +69,12 @@ def prepare_confirmation(description: AbilityDescription, arguments: dict[str, A
 
 
 def approval_binding(owner: TrustedContext, scope_id: str, tool_id: str,
-                     ability_key: str, arguments: dict[str, Any], description: AbilityDescription) -> dict[str, Any]:
+                     ability_key: str, arguments: Mapping[str, Any], description: AbilityDescription) -> dict[str, Any]:
     if not scope_id or not tool_id or not approval_required(description):
         raise ActionRejected("WRITE_CONFIRMATION_BINDING_INVALID")
+    arguments = _plain_arguments(arguments)
     return {"assetKey": description.asset_key, "abilityKey": ability_key,
-            "arguments": json_copy(arguments), "receipt": {
+            "arguments": arguments, "receipt": {
                 "user_id": owner.user_id, "environment": owner.environment,
                 "run_id": scope_id, "tool_call_id": tool_id,
                 "action_code": description.action_code,

@@ -29,7 +29,7 @@ from agent_workflow_runtime.chat.cards import ChatCardStore
 from agent_workflow_runtime.chat.rpc_actions import RpcChatActionService
 from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
 from agent_workflow_runtime.models import ActionRejected
-from agent_workflow_runtime.rpc_client import AbilityDescription
+from agent_workflow_runtime.rpc_client import AbilityDescription, PreparedAction, freeze
 from a2flow_bside.processing_tasks import ProcessingTasksRepository
 from test_chat_cards import MemoryStorage
 
@@ -140,7 +140,7 @@ def a2ui_probe():
             def prepare_action(self, owner, trusted, action_message, request_id, **kwargs):
                 self.preflights.append(request_id)
                 check(trusted.app_code == "app" and action_message["action"]["name"] == "save")
-                return SimpleNamespace(description=description, arguments=copy.deepcopy(ARGUMENTS), binding_id="save")
+                return PreparedAction(description=description, arguments=freeze(ARGUMENTS), binding_id="save")
 
             def act(self, owner, trusted, action_message, request_id, **kwargs):
                 self.calls.append(kwargs)
@@ -319,7 +319,37 @@ def continuation_binding_probe():
         check(not connection.committed and not connection.turns and not connection.updates)
 
 
+def frozen_arguments_probe():
+    from agent_workflow_runtime.capability_approval import argument_bytes, approval_binding, prepare_confirmation
+    from types import MappingProxyType
+
+    original = {"selectedPointIds": ["point-1", "point-2"],
+                "nested": {"largeInteger": 2 ** 60, "values": [True, None, 1.25]}}
+    frozen = freeze(original)
+    check(isinstance(frozen, MappingProxyType) and isinstance(frozen["nested"], MappingProxyType))
+    check(isinstance(frozen["selectedPointIds"], tuple))
+    canonical = json.dumps(original, ensure_ascii=False, allow_nan=False,
+                           sort_keys=True, separators=(",", ":")).encode()
+    check(argument_bytes(frozen) == canonical)
+    description = Rpc().description
+    check(prepare_confirmation(description, frozen).interactive)
+    binding = approval_binding(OWNER, "731", "frozen-tool", "ability", frozen, description)
+    check(binding["arguments"] == original and type(binding["arguments"]) is dict)
+    check(type(binding["arguments"]["nested"]) is dict and type(binding["arguments"]["selectedPointIds"]) is list)
+    check(binding["receipt"]["arguments_digest"] == hashlib.sha256(canonical).hexdigest())
+    check(receipt_for(OWNER, "frozen-card", binding)["arguments_digest"] == hashlib.sha256(canonical).hexdigest())
+    for malformed in (MappingProxyType({"nested": object()}), MappingProxyType({1: "invalid-key"}),
+                      MappingProxyType({"nested": float("nan")}), ["not-an-object"]):
+        rejected(lambda malformed=malformed: argument_bytes(malformed))
+
+
 def main():
+    frozen_arguments_probe()
+    from agent_workflow_runtime.chat.loop import _TURN_LOCAL_SKILL_PROMPT
+    check("call the admitted execute_ability directly" in _TURN_LOCAL_SKILL_PROMPT)
+    check("The host executes READ operations or creates the required real write-confirmation card" in _TURN_LOCAL_SKILL_PROMPT)
+    check("Generic confirmed=true input is not a write approval receipt" in _TURN_LOCAL_SKILL_PROMPT)
+    check("Use generate_interaction for missing business inputs, not for platform write approval" in _TURN_LOCAL_SKILL_PROMPT)
     assets, rpc, store, memory, service, factory = fixture("READ")
     read = assets.execute_ability("ability", ARGUMENTS, tool_call_id="tool-read")
     check(read["output"]["recordId"] == "synthetic-result" and len(rpc.calls) == 1)
