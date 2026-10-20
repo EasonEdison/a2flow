@@ -119,7 +119,7 @@ public final class CapabilityGrpcJdbcProbe {
         variant.put("executionBinding", Map.of("bindingType", "GRPC", "target", Map.of("targetKey", "business", "serviceName", "probe.Business", "methodName", "Invoke", "descriptorSetBase64", descriptor, "contextField", "context"), "requestMappingsJson", "{\"quantity\":\"quantity\"}", "contextMappingsJson", "{}", "timeoutMs", timeout));
         variant.put("resultContract", Map.of("technicalOutputSchema", "{\"type\":\"object\",\"properties\":{\"quantity\":{\"type\":\"" + resultType + "\"}},\"required\":[\"quantity\"]}"));
         return new CapabilityActionDraft().setDraftId(ASSET).setRevision(1).setStatus("EDITING")
-                .setDraft(Map.of("basicInfo", Map.of("actionCode", "probe.invoke", "nameCn", "探针", "businessDomain", "test", "description", "合成探针"), "supportedClients", List.of("PC"), "clientVariants", Map.of("PC", variant), "governance", Map.of("sideEffectLevel", "WRITE", "approvalPolicy", "REQUEST")));
+                .setDraft(Map.of("basicInfo", Map.of("actionCode", "probe.invoke", "nameCn", "探针", "businessDomain", "test", "description", "合成探针"), "supportedClients", List.of("PC"), "clientVariants", Map.of("PC", variant), "governance", Map.of("sideEffectLevel", "READ", "approvalPolicy", "REQUEST_APPROVAL")));
     }
     private static void publish(JdbcTemplate jdbc, CapabilityActionDraft draft, String digest, boolean prt) {
         var snapshot = new AssetSnapshot().setAssetType("CAPABILITY_ACTION").setAssetKey(ASSET).setDigest(digest).setPayloadJson(JsonSupport.toJSON(draft));

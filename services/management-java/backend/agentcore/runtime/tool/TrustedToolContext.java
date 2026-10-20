@@ -25,6 +25,8 @@ public final class TrustedToolContext {
     public static final String CLIENT_TYPE = "clientType";
     public static final String REVIEWED_DEMO_APPROVED = "reviewedDemoApproved";
 
+    public static final String CAPABILITY_APPROVAL_RECEIPT = "capabilityApprovalReceipt";
+
     private TrustedToolContext() {
     }
 
@@ -46,6 +48,7 @@ public final class TrustedToolContext {
         context.remove(USER_ID);
         context.remove(CLIENT_TYPE);
         context.remove(REVIEWED_DEMO_APPROVED);
+        context.remove(CAPABILITY_APPROVAL_RECEIPT);
         String releaseEnvironment = engineContext == null ? null : engineContext.getReleaseEnvironment();
         if (StringUtils.isNotBlank(releaseEnvironment)) {
             context.put(RELEASE_ENVIRONMENT, releaseEnvironment);
