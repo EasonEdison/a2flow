@@ -59,12 +59,16 @@ export type ChatApplicationPart = {
 export type ChatPersonalWorkflowPart = { type: 'personal_workflow'; id: string; workflow: PersonalWorkflow };
 export type ChatContentPart = ChatTextPart | ChatApplicationPart | ChatPersonalWorkflowPart;
 export type RunReference = { activityId: string; workflowName: string; createdAt: string; runStatus?: string; resultRevision?: string; observedAt?: string };
+export type ProcessingSelection = { activityId?: string; target?: { activityId: string; attentionId: string }; taskId?: string; label: string; requestId: string };
+export type ProcessingTaskSummary = { taskId: string; conversationId: string; status: string; objective: string; updatedAt: string; resultSummary?: string };
+export type ProcessingTask = ProcessingTaskSummary & { activityId: string; runId: string; attentionId: string; createdAt?: string; resolutionSummary?: string | null; resolvedAt?: string | null; operations: { operationId: string; abilityKey: string; status: string; createdAt?: string; finishedAt?: string; result?: unknown; errorCode?: string }[] };
 export type ActivityGroup = 'attention' | 'running' | 'completed';
-export type WorkAttention = { attentionId: string; kind: 'waiting' | 'failed' | 'business'; title: string; summary: string; nodeId?: string; interactionId?: string; acknowledged: boolean };
+export type WorkAttention = { attentionId: string; kind: 'waiting' | 'failed' | 'business'; title: string; summary: string; nodeId?: string; interactionId?: string; acknowledged: boolean; processingTasks?: ProcessingTaskSummary[] };
 export type WorkActivity = RunReference & { controlRequestId: string; runId: string | null; workflowKey: string; sourceType: 'chat' | 'manual' | 'scheduled' | 'unknown'; updatedAt: string | null; runStatus: string; currentNode: { nodeId: string; title: string; status: string } | null; summary: string | null; attentionItems: WorkAttention[]; group: ActivityGroup; scheduleName?: string | null; scheduledAt?: string | null };
 export type WorkActivityPage = { items: WorkActivity[]; counts: Record<ActivityGroup, number>; nextCursor: string | null; updatedAt: string | null };
 export type Message = {
   runReferences?: RunReference[];
+  processingTaskId?: string;
   id: string;
   role: 'user' | 'assistant';
   text: string;
@@ -81,7 +85,7 @@ export type Message = {
 };
 type ChatStreamBase = { sequence: number; messageId: string; inputMessageId: string };
 export type ChatStreamEvent = ChatStreamBase & (
-  | { type: 'turn_started'; turnId: string }
+  | { type: 'turn_started'; turnId: string; processingTaskId?: string }
   | { type: 'text_delta'; partId: string; modelMessageId?: string | null; text: string }
   | { type: 'reasoning_delta'; modelMessageId?: string | null; text: string }
   | { type: 'tool_call_started'; toolCallId: string; name: string; arguments: Record<string, ChatJson>; startedAt: string }
@@ -333,6 +337,7 @@ export const messageFromContent = (
     id,
     role,
     text: contentText(content),
+    processingTaskId: optionalString((content as Row)?.processingTaskId),
     delivery: textOf((content as Row)?.delivery),
     // Legacy fields remain read-compatible for one release. New UI process rendering uses execution only.
     reasoning: textOf((content as Row)?.reasoning),
@@ -453,8 +458,8 @@ export const productApi = {
       unassignedCards: (payload.unassignedCards ?? []).map(chatCardOf),
     };
   },
-  sendMessage: async (id: string, text: string, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal, runReferences: Pick<RunReference, 'activityId'>[] = []) => {
-    const response = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`, { ...body({ text, runReferences }), signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
+  sendMessage: async (id: string, text: string, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal, runReferences: Pick<RunReference, 'activityId'>[] = [], processing?: ProcessingSelection) => {
+    const response = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`, { ...body({ text, runReferences, ...(processing ? { processingTarget: processing.target, processingTaskId: processing.taskId, processingRequestId: processing.requestId } : {}) }), signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
     if (!response.ok) {
       const error = new Error('发送失败') as ApiError;
       error.code = 'REQUEST_FAILED';
@@ -462,6 +467,8 @@ export const productApi = {
     }
     await readChatStream(response, onEvent);
   },
+  processingTask: (id: string, signal?: AbortSignal) => api<ProcessingTask>(`/api/processing-tasks/${encodeURIComponent(id)}`, { signal }),
+  resolveProcessingTask: (id: string, summary: string) => api<ProcessingTask>(`/api/processing-tasks/${encodeURIComponent(id)}/resolve`, body({ summary })),
   workActivities: (group: ActivityGroup, cursor: string | null = null, signal?: AbortSignal) => {
     const query = new URLSearchParams({ group, limit: '5' });
     if (cursor) query.set('cursor', cursor);

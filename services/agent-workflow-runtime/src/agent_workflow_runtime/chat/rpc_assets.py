@@ -42,6 +42,7 @@ from .assets import (
 )
 from .application_params import validate_application_params
 from .cards import JsonObject, JsonValue
+from .processing import ProcessingProvider, processing_context
 from .render_projection import project_business_state, project_rendered_content
 
 _APPLICATION_QUERY_USAGE = (
@@ -177,10 +178,36 @@ def trusted_card(owner: TrustedContext, card: dict[str, Any],
 
 
 class RpcChatAssets(ChatAssets):
-    def __init__(self, *, rpc: RpcClient, **kwargs: Any) -> None:
+    def __init__(
+        self, *, rpc: RpcClient,
+        processing_provider: ProcessingProvider | None = None,
+        processing_context_value: Mapping[str, Any] | None = None,
+        processing_turn_id: str | None = None, **kwargs: Any,
+    ) -> None:
         super().__init__(operation_registry={}, application_validator=lambda _: True,
                          data_validator=lambda _: True, **kwargs)
         self.rpc = rpc
+        self._processing_context = processing_context(
+            processing_context_value, self.conversation_id,
+        )
+        self._processing_provider = processing_provider
+        self._processing_turn_id = processing_turn_id
+        if self._processing_context is not None:
+            if processing_provider is None or not processing_turn_id:
+                raise ActionRejected("PROCESSING_ADAPTER_REQUIRED")
+            original_sink = self._card_sink
+
+            def bound_sink(prepared: PreparedApplication, metadata: dict[str, Any]) -> dict[str, Any]:
+                bound = {**metadata, "processingTaskId": self._processing_context["taskId"]}
+                saved = original_sink(prepared, bound)
+                processing_provider.bind_card(
+                    user_id=self.owner.user_id, environment=self.owner.environment,
+                    conversation_id=self.conversation_id,
+                    task_id=self._processing_context["taskId"], card_id=saved["cardId"],
+                )
+                return saved
+
+            self._card_sink = bound_sink
         self._action_descriptions: dict[str, str | None] = {}
         self._render_observations: dict[str, dict[str, Any]] = {}
 
@@ -312,9 +339,40 @@ class RpcChatAssets(ChatAssets):
             raise ActionRejected("RPC_PUBLICATION_REQUIRED")
         return cast(dict[str, Any], resolved)
 
-    def execute_ability(self, ability_key: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def execute_ability(
+        self, ability_key: str, arguments: dict[str, Any], *, tool_call_id: str | None = None,
+    ) -> dict[str, Any]:
         record = self._record("ABILITY", ability_key)
         definition = record["definition"]
+        if self._processing_context is not None:
+            if not tool_call_id:
+                raise ActionRejected("TOOL_CALL_ID_REQUIRED")
+            # Resolve canonical identity so asset aliases cannot bypass task dedup.
+            contract = self.rpc.resolve(
+                self.owner, definition["assetKey"], "processing-contract:" + uuid4().hex,
+            )
+            def invoke(request_id: str) -> dict[str, Any]:
+                result = self.rpc.execute(self.owner, definition["assetKey"], arguments, request_id)
+                if result.action_code != contract.action_code:
+                    raise ActionRejected("PROCESSING_ABILITY_BINDING_MISMATCH")
+                return {
+                    "success": result.success, "requestId": result.request_id,
+                    "actionCode": result.action_code, "capabilityVersion": result.capability_version,
+                    "resolvedEnvironment": result.resolved_environment,
+                    "sourceId": result.source_id, "sourceDigest": result.source_digest,
+                    "output": plain(result.data), "errorCode": result.error_code,
+                    "abilityKey": ability_key, "versionId": record["versionId"],
+                }
+            envelope = self._processing_provider.execute_operation(
+                user_id=self.owner.user_id, environment=self.owner.environment,
+                conversation_id=self.conversation_id,
+                task_id=self._processing_context["taskId"],
+                turn_id=self._processing_turn_id, tool_call_id=tool_call_id,
+                ability_key=contract.action_code, arguments=json_copy(arguments), invoke=invoke,
+            )
+            return {"abilityKey": ability_key, "versionId": record["versionId"],
+                    "output": envelope}
+
         result = self.rpc.execute(self.owner, definition["assetKey"], arguments,
                                   "ability:" + uuid4().hex)
         if not result.success:

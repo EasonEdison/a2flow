@@ -59,7 +59,14 @@ WITH facts AS (
  LEFT JOIN LATERAL (
    SELECT jsonb_agg(jsonb_build_object('attentionId',b.attention_id,'kind','business',
      'title',b.title,'summary',b.summary,'nodeId',b.node_id,'evidenceRefs',b.evidence_refs,
-     'acknowledged',a.attention_id IS NOT NULL) ORDER BY b.created_at,b.attention_id) AS items
+      'acknowledged',a.attention_id IS NOT NULL,
+     'processingTasks',COALESCE((SELECT jsonb_agg(t.item ORDER BY t.created_at DESC) FROM (
+       SELECT p.created_at,jsonb_build_object('taskId',p.task_id,'conversationId',p.conversation_id::text,
+         'status',p.status,'objective',left(p.objective,300),'updatedAt',p.updated_at,
+         'resultSummary',p.result_summary) AS item
+       FROM processing_tasks p WHERE p.user_id=b.user_id AND p.environment=b.environment
+         AND p.activity_id=o.control_id AND p.attention_id=b.attention_id
+       ORDER BY p.created_at DESC LIMIT 10) t),'[]'::jsonb)) ORDER BY b.created_at,b.attention_id) AS items
    FROM runtime_workflow_attentions b
    LEFT JOIN work_activity_attention_acks a ON a.user_id=b.user_id AND a.environment=b.environment
      AND a.activity_id=o.control_id AND a.attention_id=b.attention_id
@@ -235,6 +242,15 @@ class WorkActivitiesRepository:
                                      'nodeId':attention['nodeId'],
                                      'availability':'AVAILABLE' if saved else 'UNAVAILABLE',
                                      'toolResult':saved.get('content') if saved else None})
+            processing = connection.execute(
+                "SELECT p.task_id,p.attention_id,p.status,p.objective,p.resolution_summary,p.resolved_at,"
+                "COALESCE((SELECT jsonb_agg(op.item ORDER BY op.created_at) FROM ("
+                "SELECT x.created_at,jsonb_build_object('operationId',x.operation_id,'abilityKey',x.ability_key,"
+                "'status',x.status,'requestId',x.request_id,'createdAt',x.created_at,'finishedAt',x.finished_at,"
+                "'result',x.result,'errorCode',x.error_code) item FROM processing_operations x "
+                "WHERE x.task_id=p.task_id ORDER BY x.created_at LIMIT 100) op),'[]'::jsonb) operations "
+                "FROM processing_tasks p WHERE p.user_id=%s AND p.environment=%s AND p.activity_id=%s "
+                "ORDER BY p.created_at DESC LIMIT 10", (user_id,environment,activity_id)).fetchall()
         result = _item(row)
         document = view['document'] if view else {}
         outputs = document.get('outputs',[])
@@ -242,7 +258,10 @@ class WorkActivitiesRepository:
             if not any(n.get('nodeId')==node_id for n in document.get('nodes',[])):
                 raise BsideError('RESULT_NODE_NOT_FOUND',404)
             outputs = [o for o in outputs if o.get('nodeId')==node_id]
-        saved_result = {'outputs': outputs, 'attentionEvidence': evidence}
+        processing_results = [{'taskId': p['task_id'], 'attentionId': p['attention_id'], 'status': p['status'],
+                               'objective': p['objective'], 'resolutionSummary': p['resolution_summary'],
+                               'resolvedAt': _iso(p['resolved_at']), 'operations': p['operations']} for p in processing]
+        saved_result = {'outputs': outputs, 'attentionEvidence': evidence, 'processingTasks': processing_results}
         serialized = json.dumps(saved_result,ensure_ascii=False,separators=(',',':'))
         # Revision includes the exact saved outputs, not merely a display version.
         result['resultRevision'] += ':' + hashlib.sha256(json.dumps({'result':saved_result,'business':row['business']},

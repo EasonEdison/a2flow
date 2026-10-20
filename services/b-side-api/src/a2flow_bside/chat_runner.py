@@ -23,4 +23,5 @@ class ChatRunner(Protocol):
                       text: str,
                       turn_id: str,
                       run_references: tuple[dict[str, Any], ...] = (),
+                      processing_context: dict[str, Any] | None = None,
                       ) -> AsyncIterator[dict[str, Any]]: ...

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiErrorMessage, productApi, type ActivityGroup, type RunReference, type WorkActivity, type WorkActivityPage } from '../productApi';
+import { apiErrorMessage, productApi, type ProcessingTaskSummary, type ActivityGroup, type RunReference, type WorkActivity, type WorkActivityPage } from '../productApi';
 import { displayTime } from './RunHistory';
 import { Icon } from './Icon';
 
@@ -67,8 +67,8 @@ export function ActivityDialog({ title, onClose, children }: { title: string; on
   </dialog>;
 }
 
-export function WorkActivitySidebar({ state, refresh, changePage, onClose, onOpen, onReference }: ReturnType<typeof useWorkActivities> & {
-  onClose: () => void; onOpen: (item: WorkActivity) => void; onReference: (item: WorkActivity) => void;
+export function WorkActivitySidebar({ state, refresh, changePage, onClose, onOpen, onReference, onProcess, onProcessingTask }: ReturnType<typeof useWorkActivities> & {
+  onClose: () => void; onOpen: (item: WorkActivity) => void; onReference: (item: WorkActivity) => void; onProcess: (item: WorkActivity, attentionId: string, title: string) => void; onProcessingTask: (task: ProcessingTaskSummary) => void;
 }) {
   const [acknowledging, setAcknowledging] = useState('');
   const [ackError, setAckError] = useState('');
@@ -85,7 +85,7 @@ export function WorkActivitySidebar({ state, refresh, changePage, onClose, onOpe
           {group.page && !group.page.items.length && !group.error ? <p className="activity-empty">{empty}</p> : null}
           {group.page?.items.map(item => {
             const waiting = item.attentionItems.some(attention => attention.kind === 'waiting');
-            const notices = item.attentionItems.filter(attention => !attention.acknowledged);
+            const notices = item.attentionItems.filter(attention => !attention.acknowledged || attention.kind === 'business');
             return <article className="activity-row" key={item.activityId}>
               <div className="activity-row-title"><button onClick={() => onOpen(item)}>{item.workflowName || '未命名工作流'}</button><span className={`status ${item.runStatus.toLowerCase()}`}>{statusLabels[item.runStatus] ?? item.runStatus}</span></div>
               <p className="activity-meta"><span>{sourceLabels[item.sourceType] ?? '来源未记录'}</span><time dateTime={item.createdAt} title="运行发起时间（本地时间）">{displayTime(item.createdAt)}</time></p>
@@ -95,7 +95,8 @@ export function WorkActivitySidebar({ state, refresh, changePage, onClose, onOpe
               {item.summary ? <p className="activity-summary">{item.summary}</p> : null}
               {notices.map(attention => <div className={`activity-attention ${attention.kind}`} key={attention.attentionId}>
                 <strong>{attention.title}</strong>{attention.summary && attention.summary !== attention.title ? <p>{attention.summary}</p> : null}
-                {attention.kind !== 'waiting' ? <button className="quiet" disabled={Boolean(acknowledging)} onClick={async () => {
+                {attention.kind === 'business' ? <div className="activity-processing-actions"><button className="quiet" onClick={() => onProcess(item, attention.attentionId, attention.title)}>处理此异常</button>{attention.processingTasks?.map(task => <button className="quiet" key={task.taskId} onClick={() => onProcessingTask(task)}>查看处理：{task.objective}</button>)}</div> : null}
+                {attention.acknowledged ? <small>已查看 · 不代表业务已处理</small> : attention.kind !== 'waiting' ? <button className="quiet" disabled={Boolean(acknowledging)} onClick={async () => {
                   setAcknowledging(attention.attentionId); setAckError('');
                   try { await productApi.acknowledgeActivity(item.activityId, attention.attentionId); refresh(); }
                   catch (error) { setAckError(apiErrorMessage(error, '标记未成功，请重新读取确认状态')); }

@@ -202,6 +202,8 @@ def _validate_metadata(value, conversation_id):
         _reject("INVALID_CARD_METADATA")
     _identifier(copied["controlRequestId"], "INVALID_CARD_METADATA", limit=256)
     _identifier(copied["toolCallId"], "INVALID_CARD_METADATA", limit=256)
+    if "processingTaskId" in copied:
+        _identifier(copied["processingTaskId"], "INVALID_CARD_METADATA", limit=256)
     if copied["conversationId"] != conversation_id:
         _reject("CARD_CONVERSATION_MISMATCH")
     return copied
@@ -554,7 +556,7 @@ class ChatCardStore:
                 display, waiting_status, metadata = update
                 # Only trusted runtime state changes; card and Skill ownership cannot change.
                 for field in ("skillKey", "conversationId", "controlRequestId", "toolCallId",
-                              "applicationKey"):
+                              "applicationKey", "processingTaskId"):
                     if metadata.get(field) != card["binding_metadata"].get(field):
                         _reject("CARD_BINDING_MISMATCH")
                 if display["applicationKey"] != card["display"]["applicationKey"]:

@@ -1,3 +1,4 @@
+import { createUuidV4 } from './secureUuid.mjs';
 import { PersonalWorkflowCard, PersonalWorkflowSteps } from './components/PersonalWorkflowCard';
 import type { PersonalWorkflow } from './personalWorkflow';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -5,7 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './components/Icon';
 import { ActivityDialog, WorkActivitySidebar, useWorkActivities } from './components/WorkActivity';
 import { chatDraftKey, readChatDraft, saveChatDraft } from './chatDraft';
-import type { RunReference, WorkActivity } from './productApi';
+import { ProcessingChip, ProcessingTaskPanel } from './components/ProcessingTask';
+import type { ProcessingSelection, ProcessingTask, RunReference, WorkActivity } from './productApi';
 import { RunHistory, runDisplayName, displayTime } from './components/RunHistory';
 import { NodeCard } from './components/NodeCard';
 import { WorkflowTimeline } from './components/WorkflowTimeline';
@@ -151,9 +153,11 @@ function RunDetail({ runId, onBack, metadata, onUpdated }: { runId: string; onBa
 function ChatPage({ ownerId, onOpenWorkflows }: { ownerId: string; onOpenWorkflows: (tab: WorkflowTab) => void }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationId, setConversationId] = useState('');
+  const [incomingProcessing, setIncomingProcessing] = useState<{ conversationId: string; selection: ProcessingSelection } | undefined>();
   const [error, setError] = useState('');
   const initial = useRef<Promise<Conversation[]> | null>(null);
   const selectConversation = useCallback((id: string) => {
+    setIncomingProcessing(undefined);
     setConversationId(id);
     try { sessionStorage.setItem(`a2flow:last-chat:${ownerId}`, id); } catch { /* Draft storage reports its own availability. */ }
   }, [ownerId]);
@@ -168,11 +172,11 @@ function ChatPage({ ownerId, onOpenWorkflows }: { ownerId: string; onOpenWorkflo
       try { const item = await productApi.createConversation(); setConversations(items => [item, ...items]); selectConversation(item.id); }
       catch { setError('新建会话失败'); }
     }}><Icon name="plus" /><span>新建会话</span></button></div>{error ? <p role="alert">{error}</p> : null}{conversations.map(item => <button key={item.id} className={item.id === conversationId ? 'selected' : ''} onClick={() => selectConversation(item.id)}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString()}</small></button>)}</aside>
-    {conversationId ? <ChatConversation key={`${ownerId}:${conversationId}`} ownerId={ownerId} conversationId={conversationId} onOpenWorkflows={onOpenWorkflows} /> : null}
+    {conversationId ? <ChatConversation key={`${ownerId}:${conversationId}`} ownerId={ownerId} conversationId={conversationId} onOpenWorkflows={onOpenWorkflows} incomingProcessing={incomingProcessing?.conversationId === conversationId ? incomingProcessing.selection : undefined} onProcessingSelected={() => setIncomingProcessing(undefined)} onOpenProcessingConversation={task => { setIncomingProcessing(undefined); selectConversation(String(task.conversationId)); }} onProcessingConversation={task => { selectConversation(String(task.conversationId)); setIncomingProcessing({ conversationId: String(task.conversationId), selection: { taskId: task.taskId, activityId: task.activityId, label: task.objective, requestId: createUuidV4() } }); }} /> : null}
   </div>;
 }
 
-function ChatConversation({ ownerId, conversationId, onOpenWorkflows }: { ownerId: string; conversationId: string; onOpenWorkflows: (tab: WorkflowTab) => void }) {
+function ChatConversation({ ownerId, conversationId, onOpenWorkflows, incomingProcessing, onProcessingSelected, onProcessingConversation, onOpenProcessingConversation }: { ownerId: string; conversationId: string; onOpenWorkflows: (tab: WorkflowTab) => void; incomingProcessing?: ProcessingSelection; onProcessingSelected: () => void; onProcessingConversation: (task: ProcessingTask) => void; onOpenProcessingConversation: (task: ProcessingTask) => void }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [unassignedCards, setUnassignedCards] = useState<ChatCard[]>([]);
   const [busy, setBusy] = useState(false);
@@ -193,6 +197,9 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows }: { ownerI
   const [workflowStartUnconfirmed, setWorkflowStartUnconfirmed] = useState(false);
   const draftKey = chatDraftKey(ownerId, conversationId);
   const initialDraft = useRef(readChatDraft(draftKey));
+  const [processing, setProcessing] = useState<ProcessingSelection | undefined>(initialDraft.current.processing);
+  const [selectedTaskId, setSelectedTaskId] = useState('');
+  useEffect(() => { if (incomingProcessing) { setProcessing(incomingProcessing); onProcessingSelected(); } }, [incomingProcessing, onProcessingSelected]);
   const [draftText, setDraftText] = useState(initialDraft.current.text);
   const [runReferences, setRunReferences] = useState<RunReference[]>(initialDraft.current.references);
   const [draftStorageError, setDraftStorageError] = useState('');
@@ -211,11 +218,11 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows }: { ownerI
     return () => media.removeEventListener('change', resize);
   }, []);
   useEffect(() => {
-    setDraftStorageError(saveChatDraft(draftKey, draftText, runReferences) ? '' : '浏览器暂时无法保存草稿，请在刷新前复制输入内容。');
-  }, [draftKey, draftText, runReferences]);
+    setDraftStorageError(saveChatDraft(draftKey, draftText, runReferences, processing) ? '' : '浏览器暂时无法保存草稿，请在刷新前复制输入内容。');
+  }, [draftKey, draftText, runReferences, processing]);
   const addRunReference = (item: WorkActivity) => {
     if (runReferences.some(reference => reference.activityId === item.activityId)) return;
-    if (runReferences.length >= 3) { setError('一次最多引用 3 次运行，请先移除一个引用。'); return; }
+    if (new Set([...runReferences.map(reference => reference.activityId), ...(processing?.target?.activityId || processing?.activityId ? [processing.target?.activityId || processing.activityId!] : []), item.activityId]).size > 3) { setError('一次最多引用 3 次运行，请先移除一个引用。'); return; }
     setError('');
     setRunReferences(current => [...current, { activityId: item.activityId, workflowName: item.workflowName, createdAt: item.createdAt }]);
     if (compactActivity) setActivityOpen(false);
@@ -293,19 +300,20 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows }: { ownerI
     controller.current = abort;
     setBusy(true); setError('');
     const sentReferences = runReferences;
+    const sentProcessing = processing;
     let accepted = false;
     try {
       await productApi.sendMessage(conversationId, text, event => {
         if (abort.signal.aborted) return;
-        if (event.type === 'turn_started' && !accepted) { accepted = true; setDraftText(current => current.trim() === text ? '' : current); setRunReferences(current => current.filter(reference => !sentReferences.some(sent => sent.activityId === reference.activityId))); }
+        if (event.type === 'turn_started' && !accepted) { accepted = true; setProcessing(current => current?.requestId === sentProcessing?.requestId ? undefined : current); setDraftText(current => current.trim() === text ? '' : current); setRunReferences(current => current.filter(reference => !sentReferences.some(sent => sent.activityId === reference.activityId))); }
         setMessages(items => {
           let next = items;
           if (event.type === 'turn_started') {
             const createdAt = new Date().toISOString();
             next = items.filter(item => item.id !== event.inputMessageId && item.id !== event.messageId).concat([
-              { id: event.inputMessageId, role: 'user', text, createdAt, runReferences: sentReferences },
+              { id: event.inputMessageId, role: 'user', text, createdAt, runReferences: sentReferences, processingTaskId: event.processingTaskId },
               applyChatStreamEvent(
-                { id: event.messageId, role: 'assistant', text: '', delivery: 'running', createdAt },
+                { id: event.messageId, role: 'assistant', text: '', delivery: 'running', createdAt, processingTaskId: event.processingTaskId },
                 event,
               ),
             ]);
@@ -322,13 +330,13 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows }: { ownerI
           });
         });
         if (event.type === 'error') setError('本轮未成功完成，请查看保存的状态；不会自动重试。');
-      }, abort.signal, sentReferences.map(({ activityId }) => ({ activityId })));
+      }, abort.signal, sentReferences.map(({ activityId }) => ({ activityId })), sentProcessing);
     } catch { if (!abort.signal.aborted) { setLoaded(false); setError('连接中断或发送状态未确认。请刷新页面查看已保存状态，不要重复发送原消息。'); } }
     finally {
       sending.current = false;
       if (!abort.signal.aborted) { await load(); setBusy(false); }
     }
-  }, [conversationId, load, loaded, pending, runReferences]);
+  }, [conversationId, load, loaded, pending, runReferences, processing]);
   const runPersonalWorkflow = async (workflow: PersonalWorkflow, requirement: string) => {
     if (workflowStartInFlight.current || workflowStartUnconfirmed || busy || pending || !loaded || activeCardActions.current.size) return;
     workflowStartInFlight.current = true;
@@ -349,15 +357,21 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows }: { ownerI
     } finally { workflowStartInFlight.current = false; setStartingWorkflow(false); }
   };
   const renderMessageExtras = useCallback((message: Message) => <>
+    {message.processingTaskId ? <button className="secondary processing-message-link" onClick={() => setSelectedTaskId(message.processingTaskId!)}>查看本次处理记录</button> : null}
     {message.event?.type === 'workflow_confirm' && (!message.delivery || message.delivery === 'completed') ? <section className="workflow-confirm"><strong>确认运行工作流 {message.event.title}？</strong><p>工作流仅在你明确确认后启动。</p><button className="primary" onClick={async () => {
       try { const result = await productApi.startRun(message.event!.type === 'workflow_confirm' ? message.event!.workflowKey : '', '来自对话的工作请求', 'chat'); await productApi.attachRun(conversationId, result.runId); setRunId(result.runId); }
       catch { setError('工作流启动状态未确认，请查看工作流列表。'); }
     }}>运行工作流</button><button className="secondary" onClick={() => setMessages(items => items.map(item => item.id === message.id ? { ...item, event: undefined } : item))}>取消</button></section> : null}
     {message.event?.type === 'interaction_required' ? <RunDetail runId={message.event.runId} /> : null}
   </>, [conversationId]);
-  const activitySidebar = <WorkActivitySidebar {...activities} onClose={() => { setActivityOpen(false); activityTrigger.current?.focus(); }} onOpen={setSelectedActivity} onReference={addRunReference} />;
+  const activitySidebar = <WorkActivitySidebar {...activities} onClose={() => { setActivityOpen(false); activityTrigger.current?.focus(); }} onOpen={setSelectedActivity} onReference={addRunReference} onProcessingTask={task => setSelectedTaskId(task.taskId)} onProcess={(item, attentionId, title) => {
+    if (new Set([...runReferences.map(reference => reference.activityId), item.activityId]).size > 3) { setError('处理目标也占用运行引用名额，请先移除一个引用。'); return; }
+    setProcessing({ target: { activityId: item.activityId, attentionId }, label: title, requestId: createUuidV4() });
+    setSelectedActivity(null); setError(''); if (compactActivity) setActivityOpen(false);
+  }} />;
   return <div className={`chat-workspace ${activityOpen && !compactActivity ? 'with-activity' : ''}`}><section className="chat-main"><header className="chat-header"><div><h1>对话</h1><p>描述目标，在这里查看结果并完成确认</p></div><button ref={activityTrigger} className="secondary activity-toggle" aria-expanded={activityOpen} onClick={() => setActivityOpen(value => !value)}><Icon name="workflow" size={17} />工作动态{activities.attentionCount ? <span>{activities.attentionCount}</span> : null}</button></header>
     <AssistantThread
+      processingComposer={processing ? <ProcessingChip selection={processing} onRemove={() => setProcessing(undefined)} /> : null}
       draftText={draftText}
       onDraftTextChange={setDraftText}
       runReferences={runReferences}
@@ -380,7 +394,8 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows }: { ownerI
     />
   </section>
     {activityOpen && !compactActivity ? activitySidebar : null}
-    {activityOpen && compactActivity && !selectedActivity ? <ActivityDialog title="工作动态" onClose={() => setActivityOpen(false)}>{activitySidebar}</ActivityDialog> : null}
+    {activityOpen && compactActivity && !selectedActivity && !selectedTaskId ? <ActivityDialog title="工作动态" onClose={() => setActivityOpen(false)}>{activitySidebar}</ActivityDialog> : null}
+    {selectedTaskId ? <ActivityDialog title="异常处理记录" onClose={() => { setSelectedTaskId(''); activities.refresh(); }}><ProcessingTaskPanel key={selectedTaskId} taskId={selectedTaskId} onOpenConversation={task => { setSelectedTaskId(''); onOpenProcessingConversation(task); }} onUpdated={activities.refresh} onContinue={task => { setSelectedTaskId(''); onProcessingConversation(task); }} /></ActivityDialog> : null}
     {selectedActivity ? <ActivityDialog title="工作详情" onClose={() => { setSelectedActivity(null); activities.refresh(); }}>
       <div className="activity-detail-actions"><button className="secondary" onClick={() => { addRunReference(selectedActivity); setSelectedActivity(null); }}>在对话中继续</button><p>引用结果后，发送你的问题继续分析。</p></div>
       {selectedActivity.runId ? <RunDetail key={selectedActivity.controlRequestId} runId={selectedActivity.controlRequestId} metadata={{ id: selectedActivity.controlRequestId, workflowKey: selectedActivity.workflowKey, title: selectedActivity.workflowName, status: selectedActivity.runStatus, input: '', createdAt: selectedActivity.createdAt }} onUpdated={activities.refresh} /> : <p role="status">运行尚未关联执行实例，当前状态：{selectedActivity.runStatus}。请关闭详情后刷新工作动态查看。</p>}

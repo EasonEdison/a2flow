@@ -313,7 +313,7 @@ class ChatAssets:
         validate_ability_definition(ability, spec)
         return ability, spec
 
-    def execute_ability(self, ability_key, arguments):
+    def execute_ability(self, ability_key, arguments, *, tool_call_id=None):
         """Execute one model-callable Ability bound by the active Skill."""
 
         ability, spec = self._ability(ability_key, model_call=True)
