@@ -15,6 +15,7 @@ import grpc
 from a2flow.capability.v1.capability_pb2_grpc import add_CapabilityExecutionServicer_to_server
 
 from .executor import CapabilityExecutor
+from .approval import ApprovalGuard, PostgresApprovalStore
 from .models import Environment, JsonObject, JsonValue
 from .releases import PostgresReleaseReader
 from .rpc import CapabilityRpcService, parse_object
@@ -112,7 +113,10 @@ def run(values: Mapping[str, str]) -> None:
             ),
         )
         add_CapabilityExecutionServicer_to_server(
-            CapabilityRpcService(reader, CapabilityExecutor(transport)), server
+            CapabilityRpcService(reader, CapabilityExecutor(transport, ApprovalGuard(PostgresApprovalStore(
+                Path(values["A2FLOW_CAPABILITY_DSN_FILE"]).read_text().strip(),
+                values["A2FLOW_CAPABILITY_DATABASE"],
+            )))), server
         )
         try:
             if configure_listener(server, values) == 0:

@@ -14,6 +14,7 @@ import grpc
 from a2flow.a2ui.v1.a2ui_pb2_grpc import add_A2uiExecutionServicer_to_server
 from a2flow.capability.v1.capability_pb2_grpc import add_CapabilityExecutionServicer_to_server
 from a2flow_capability.executor import CapabilityExecutor
+from a2flow_capability.approval import ApprovalGuard, PostgresApprovalStore
 from a2flow_capability.host import RPC_MAX_IN_FLIGHT, RPC_WORKERS, configure_listener, targets
 from a2flow_capability.invoker import PostgresCapabilityIndex, PublishedCapabilityInvoker
 from a2flow_capability.models import Environment
@@ -44,7 +45,8 @@ def run(values: Mapping[str, str]) -> None:
     transport = GrpcTransport(
         targets(parse_object(Path(values["A2FLOW_CAPABILITY_TARGETS_FILE"]).read_bytes()))
     )
-    executor = CapabilityExecutor(transport)
+    executor = CapabilityExecutor(transport, ApprovalGuard(
+        PostgresApprovalStore(management_dsn, management_database)))
     index = PostgresCapabilityIndex(
         _secret(values["A2FLOW_RUNTIME_ASSET_DSN_FILE"]),
         values["A2FLOW_RUNTIME_ASSET_DATABASE"],
