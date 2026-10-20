@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -15,7 +16,7 @@ import subprocess
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
-SERVICES = ("bootstrap", "management", "accounts", "bside", "runtime", "execution", "content", "management-agent", "scheduler")
+SERVICES = ("gateway", "bootstrap", "management", "accounts", "bside", "runtime", "execution", "content", "management-agent", "scheduler")
 
 
 def write(path: Path, value: object, mode: int = 0o600) -> None:
@@ -35,28 +36,36 @@ def main() -> None:
     parser.add_argument("--prefix", default="a2flow_selfhost")
     parser.add_argument("--port", type=int, default=18080)
     parser.add_argument("--registration-enabled", action="store_true")
+    parser.add_argument("--trusted-edge-ip", action="append", default=[])
     args = parser.parse_args()
-    target = args.directory.expanduser().resolve()
+    trusted_edges = [str(ipaddress.ip_address(value)) for value in args.trusted_edge_ip]
+    target = args.directory.expanduser().absolute()
+    resolved = target.resolve()
     origin = urlsplit(args.origin)
     if (origin.scheme not in {"https", "http"} or not origin.hostname or origin.username or origin.password
             or origin.path or origin.query or origin.fragment
             or (origin.scheme == "http" and origin.hostname not in {"127.0.0.1", "localhost", "::1"})):
         raise ValueError("Use an exact HTTPS origin, or HTTP localhost for local development")
-    if target == ROOT or ROOT in target.parents or target.exists():
+    if resolved == ROOT or ROOT in resolved.parents or target.exists():
         raise ValueError("Choose a new private directory outside the repository")
     if not re.fullmatch(r"[a-z][a-z0-9_]{0,24}", args.prefix) or not 1024 <= args.port <= 65535:
         raise ValueError("Invalid installation prefix or port")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,64}", args.admin_user):
-        raise ValueError("Admin name must be 3-64 letters, digits, dot, underscore or hyphen")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{3,32}", args.admin_user):
+        raise ValueError("Admin name must be 3-32 letters, digits, underscore or hyphen")
     if not shutil.which("openssl"):
         raise ValueError("openssl is required for private mTLS certificates")
     password = args.admin_password_file.read_text().rstrip("\r\n") if args.admin_password_file else getpass.getpass("New administrator password: ")
     key = args.model_key_file.read_text().strip() if args.model_key_file else getpass.getpass("DeepSeek model API key: ")
-    if not 12 <= len(password) <= 128 or not key or len(key) > 4096 or any(ord(c) < 33 or ord(c) > 126 for c in key):
-        raise ValueError("Password must be 12-128 characters; model key must be nonempty printable ASCII")
+    if not 8 <= len(password) <= 256 or not key or len(key) > 4096 or any(ord(c) < 33 or ord(c) > 126 for c in key):
+        raise ValueError("Password must be 8-256 characters; model key must be nonempty printable ASCII")
     target.mkdir(mode=0o700, parents=True)
     for service in SERVICES:
         (target / service).mkdir(mode=0o700)
+    gateway_config = (ROOT / "deploy/selfhost/nginx.conf").read_text()
+    if trusted_edges:
+        directives = "    real_ip_header X-A2Flow-Client-IP;\n" + "".join(f"    set_real_ip_from {value};\n" for value in trusted_edges)
+        gateway_config = gateway_config.replace("    server_name _;\n", "    server_name _;\n" + directives)
+    write(target / "gateway" / "nginx.conf", gateway_config)
     ca = target / "certificate-authority"
     ca.mkdir(mode=0o700)
     def openssl(*arguments: str) -> None:
@@ -68,8 +77,12 @@ def main() -> None:
         openssl("x509", "-req", "-days", "365", "-in", str(ca / f"{kind}.csr"), "-CA", str(ca / "ca.pem"), "-CAkey", str(ca / "ca-key.pem"), "-CAcreateserial", "-extfile", str(ca / f"{kind}.ext"), "-out", str(ca / f"{kind}.pem"))
     for path in ca.iterdir():
         path.chmod(0o600)
-    for service in ("management", "bside", "runtime", "execution", "content", "management-agent"):
-        for filename in ("ca.pem", "server.pem", "server-key.pem", "client.pem", "client-key.pem"):
+    certificate_roles = {"management": ("server", "client"), "execution": ("server", "client"),
+                         "bside": ("client",), "runtime": ("client",),
+                         "management-agent": ("client",), "content": ("server",)}
+    for service, roles in certificate_roles.items():
+        filenames = ["ca.pem", *(name for role in roles for name in (role + ".pem", role + "-key.pem"))]
+        for filename in filenames:
             write(target / service / filename, (ca / filename).read_text())
     names = {kind: args.prefix + "_" + kind for kind in ("bootstrap", "management", "prt", "online", "content", "reader", "accounts")}
     passwords = {kind: secrets.token_urlsafe(36) for kind in names}
@@ -84,7 +97,10 @@ def main() -> None:
     base = {"A2FLOW_ENVIRONMENT": "PRT", "A2FLOW_DATABASE_NAME": names["prt"], "A2FLOW_DATABASE_USER": names["prt"], "A2FLOW_POSTGRES_PASSWORD_FILE": "/run/selfhost/postgres_password", "A2FLOW_ASSET_NAMESPACE": "a2flow-selfhost", "A2FLOW_USER_ID": "1", "A2FLOW_DEEPSEEK_KEY_FILE": "/run/selfhost/model_key", "A2FLOW_PEPPER_FILE": "/run/selfhost/pepper", "A2FLOW_INTERNAL_TOKEN_FILE": "/run/selfhost/internal_token"}
     rpc = {"A2FLOW_ENGINE_RPC_TARGET": "127.0.0.1:8794", "A2FLOW_ENGINE_RPC_MODE": "MTLS", "A2FLOW_ENGINE_RPC_CA_FILE": "/run/selfhost/ca.pem", "A2FLOW_ENGINE_RPC_CERT_FILE": "/run/selfhost/client.pem", "A2FLOW_ENGINE_RPC_KEY_FILE": "/run/selfhost/client-key.pem"}
     for service in ("accounts", "bside", "runtime"):
-        for filename, value in (("postgres_password", passwords["prt"]), ("pepper", pepper), ("internal_token", token), ("model_key", key)):
+        service_secrets = {"postgres_password": passwords["prt"], "pepper": pepper}
+        if service != "accounts":
+            service_secrets.update(internal_token=token, model_key=key)
+        for filename, value in service_secrets.items():
             write(target / service / filename, value, 0o400)
     bside = {**base, **rpc, **auth, "A2FLOW_LISTEN_PORT": "8785", "A2FLOW_BSIDE_DATABASE_NAME": names["prt"], "A2FLOW_BSIDE_ENVIRONMENT": "PRT", "A2FLOW_BSIDE_ASSET_NAMESPACE": "a2flow-selfhost", "A2FLOW_BSIDE_VALIDATOR_FACTORY": "deploy.assets:bundle_validator", "A2FLOW_BSIDE_BROWSER_ORIGIN": args.origin, "A2FLOW_BSIDE_BROWSER_ORIGINS": args.origin, "A2FLOW_BSIDE_SESSION_SECONDS": "7200", "A2FLOW_BSIDE_RUNTIME_URL": "http://127.0.0.1:8782", "A2FLOW_EMPLOYEE_STATIC_DIRECTORY": "/opt/a2flow/static/employee"}
     configs = {"bside": bside, "runtime": {**base, **rpc, "A2FLOW_LISTEN_PORT": "8782"}, "accounts": {**base, **auth, "A2FLOW_LISTEN_PORT": "8780", "A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE": "/run/selfhost/pepper", "A2FLOW_MANAGEMENT_BROWSER_ORIGINS": args.origin}}
@@ -104,7 +120,7 @@ def main() -> None:
     for service, environment in configs.items():
         write(target / service / "config.json", {"environment": environment})
     suffix = "?socketFactory=org.newsclub.net.unix.AFUNIXSocketFactory%24FactoryArg&socketFactoryArg=/run/postgresql/.s.PGSQL.5432&sslmode=disable"
-    java = {"A2FLOW_ENVIRONMENT": "PRT", "A2FLOW_MANAGEMENT_NAMESPACE": "a2flow-management", "A2FLOW_MANAGEMENT_JDBC_URL": "jdbc:postgresql://localhost/" + names["management"] + suffix, "A2FLOW_MANAGEMENT_DB_USER": names["management"], "A2FLOW_MANAGEMENT_DB_PASSWORD": passwords["management"], "A2FLOW_MANAGEMENT_DB_POOL_SIZE": "3", "A2FLOW_ACCOUNT_JDBC_URL": "jdbc:postgresql://localhost/" + names["prt"] + suffix, "A2FLOW_ACCOUNT_DB_USER": names["accounts"], "A2FLOW_ACCOUNT_DB_PASSWORD": passwords["accounts"], "A2FLOW_ACCOUNT_DB_POOL_SIZE": "2", "A2FLOW_MANAGEMENT_CONFIG": "/run/selfhost/management.json", "A2FLOW_MANAGEMENT_PORT": "8790", "A2FLOW_MANAGEMENT_STATIC_DIR": "/opt/management-static", "A2FLOW_MANAGEMENT_BROWSER_ORIGINS": args.origin, "A2FLOW_ACCOUNT_LOGIN_ORIGIN": "http://127.0.0.1:8780", "A2FLOW_RUNTIME_RPC_MODE": "MTLS", "A2FLOW_RUNTIME_RPC_PORT": "8793", "A2FLOW_RUNTIME_RPC_CERT_FILE": "/run/selfhost/server.pem", "A2FLOW_RUNTIME_RPC_KEY_FILE": "/run/selfhost/server-key.pem", "A2FLOW_RUNTIME_RPC_ENGINE_CA_FILE": "/run/selfhost/ca.pem", "A2FLOW_MANAGEMENT_AGENT_TARGET": "127.0.0.1:50055"}
+    java = {"A2FLOW_AUTH_TRUSTED_PROXIES": "127.0.0.1,::1", "A2FLOW_ENVIRONMENT": "PRT", "A2FLOW_MANAGEMENT_NAMESPACE": "a2flow-management", "A2FLOW_MANAGEMENT_JDBC_URL": "jdbc:postgresql://localhost/" + names["management"] + suffix, "A2FLOW_MANAGEMENT_DB_USER": names["management"], "A2FLOW_MANAGEMENT_DB_PASSWORD": passwords["management"], "A2FLOW_MANAGEMENT_DB_POOL_SIZE": "3", "A2FLOW_ACCOUNT_JDBC_URL": "jdbc:postgresql://localhost/" + names["prt"] + suffix, "A2FLOW_ACCOUNT_DB_USER": names["accounts"], "A2FLOW_ACCOUNT_DB_PASSWORD": passwords["accounts"], "A2FLOW_ACCOUNT_DB_POOL_SIZE": "2", "A2FLOW_MANAGEMENT_CONFIG": "/run/selfhost/management.json", "A2FLOW_MANAGEMENT_PORT": "8790", "A2FLOW_MANAGEMENT_STATIC_DIR": "/opt/management-static", "A2FLOW_MANAGEMENT_BROWSER_ORIGINS": args.origin, "A2FLOW_ACCOUNT_LOGIN_ORIGIN": "http://127.0.0.1:8780", "A2FLOW_RUNTIME_RPC_MODE": "MTLS", "A2FLOW_RUNTIME_RPC_PORT": "8793", "A2FLOW_RUNTIME_RPC_CERT_FILE": "/run/selfhost/server.pem", "A2FLOW_RUNTIME_RPC_KEY_FILE": "/run/selfhost/server-key.pem", "A2FLOW_RUNTIME_RPC_ENGINE_CA_FILE": "/run/selfhost/ca.pem", "A2FLOW_MANAGEMENT_AGENT_TARGET": "127.0.0.1:50055"}
     targets["a2ui-execution"] = {"PRT": {**targets["content"]["PRT"], "port": 8794}}
     java["A2FLOW_CAPABILITY_GRPC_TARGETS_JSON"] = json.dumps(targets, separators=(",", ":"))
     for kind in ("prt", "online"):

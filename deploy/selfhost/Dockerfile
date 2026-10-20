@@ -25,7 +25,9 @@ COPY experiments/runtime-phase1/requirements.lock /tmp/runtime.lock
 COPY deploy/mvp/model-requirements.lock /tmp/model.lock
 COPY deploy/mvp/listener-requirements.lock /tmp/listener.lock
 COPY services/agent-workflow-runtime/requirements-http.txt /tmp/http.lock
-RUN python -m pip install --no-cache-dir -r /tmp/runtime.lock -r /tmp/model.lock -r /tmp/listener.lock \
+# Use the scheduler-reviewed PostgreSQL driver consistently across all roles.
+RUN sed -i 's/^psycopg==3.3.5$/psycopg==3.3.6/;s/^psycopg-binary==3.3.5$/psycopg-binary==3.3.6/' /tmp/runtime.lock \
+    && python -m pip install --no-cache-dir -r /tmp/runtime.lock -r /tmp/model.lock -r /tmp/listener.lock \
     && python -m pip install --no-cache-dir --no-deps --require-hashes -r /tmp/http.lock \
     && python -m pip install --no-cache-dir -c /tmp/runtime.lock \
       SQLAlchemy==2.0.54 redis==5.3.1 croniter==6.0.0 jsonschema==4.26.0 \

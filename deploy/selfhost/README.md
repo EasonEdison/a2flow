@@ -103,7 +103,11 @@ through supported management contracts; generated assets do not deploy new servi
 Registration is disabled by default; `--registration-enabled` opts in at initial
 configuration. M/B use the same admission store and pepper. The gateway overwrites
 `X-A2Flow-Client-IP` from its actual peer and removes generic forwarded headers.
-An external TLS proxy must explicitly establish a trusted real-IP chain; do not
+An external TLS proxy must explicitly establish a trusted real-IP chain: pass
+`--trusted-edge-ip EXACT_PEER_IP` when generating the configuration (repeat for
+explicit known peers). This enables nginx real-IP parsing only for those exact
+addresses, before overwriting the backend header. Discover the actual Docker/gateway
+peer address; do not trust an entire Docker CIDR or an arbitrary client. Do not
 forward arbitrary client-supplied identity or IP headers. Without that chain several
 clients can share a proxy IP admission budget. The gateway never publishes internal
 `/api/internal/` calls, PostgreSQL, Redis or gRPC to the host.
@@ -116,3 +120,5 @@ Do not use an invalid placeholder key as evidence of a model-backed run.
 mTLS server/client certificates expire after one year. Rotate through a reviewed
 private configuration change; service rollback does not roll back completed writes.
 The private CA is installation-specific and is not added to the host trust store.
+
+The explicit administrator is account `user_id=1`. The configured specialist / digital employee `101` is an asset classification identity, not an account or login. Bootstrap creates the administrator independently and never assumes a pre-existing user. Administrator names use 3–32 ASCII letters, digits, underscores or hyphens; passwords use 8–256 characters, matching B-side login limits.
