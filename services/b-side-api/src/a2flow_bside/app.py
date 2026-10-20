@@ -392,7 +392,7 @@ def create_app(
         submitted = (isinstance(result, dict) and result.get("status") == "SUBMITTED"
                      and isinstance(result.get("values"), dict))
         write_completed = (isinstance(marker, dict) and marker.get("kind") == "WRITE_APPROVAL"
-                           and isinstance(result, dict))
+                           and "result" in card)
         temporary = (display.get("protocolProfile") == "a2flow.temporary.v1"
                      and display.get("definitionSource") == "TEMPORARY")
         confirmed_java = (write_completed
@@ -400,7 +400,7 @@ def create_app(
         if (not isinstance(marker, dict) or marker.get("cardId") != card_id
                 or not isinstance(marker.get("requestId"), str) or not marker["requestId"]
                 or card.get("cardId") != card_id or card.get("conversationId") != str(conversation_id)
-                or card.get("status") != "COMPLETED" or not isinstance(result, dict)
+                or card.get("status") != "COMPLETED"
                 or not (submitted or write_completed)
                 or not (temporary or confirmed_java)):
             raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)

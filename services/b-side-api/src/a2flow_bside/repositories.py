@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from hashlib import sha256
 from typing import Any, Callable
 
 from psycopg.errors import UniqueViolation
@@ -140,6 +141,10 @@ class MessagesRepository:
         never resumes an incomplete model turn, including after a process crash.
         """
         require_user_id(user_id)
+        # A reusable A2UI card can complete several independently confirmed writes.
+        # A repeated response for the same confirmation must never dispatch twice.
+        reference = ("write:" + sha256((card_id + "\0" + request_id).encode()).hexdigest()
+                     if write_completed else card_id)
         with self._factory() as connection:
             owner = connection.execute(
                 "SELECT user_id FROM conversations WHERE id=%s FOR UPDATE",
@@ -151,7 +156,7 @@ class MessagesRepository:
                 "SELECT id,role,content,ref_kind,ref_id,created_at FROM messages "
                 "WHERE conversation_id=%s AND ref_kind='temporary_interaction' "
                 "AND ref_id=%s ORDER BY id",
-                (conversation_id, card_id),
+                (conversation_id, reference),
             ).fetchall()
             if rows:
                 by_role = {row["role"]: dict(row) for row in rows}
@@ -172,7 +177,7 @@ class MessagesRepository:
                     "INSERT INTO messages (conversation_id,role,content,ref_kind,ref_id) "
                     "VALUES (%s,%s,%s::jsonb,'temporary_interaction',%s) "
                     "RETURNING id,role,content,ref_kind,ref_id,created_at",
-                    (conversation_id, role, json.dumps(content), card_id),
+                    (conversation_id, role, json.dumps(content), reference),
                 ).fetchone()
                 created.append(dict(row))
             return True, created[0], created[1]
