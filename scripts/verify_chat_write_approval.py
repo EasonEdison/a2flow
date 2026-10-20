@@ -227,6 +227,98 @@ def a2ui_probe():
     check(len(rpc.calls) == 1 and store.read(OWNER, "731", card["cardId"])["status"] == "UNKNOWN")
 
 
+def continuation_binding_probe():
+    from a2flow_bside.errors import BsideError
+    from a2flow_bside.interaction_continuation import continuation_reference
+
+    class Connection:
+        def __init__(self, reference, *, wrong_scope=None):
+            self.reference = reference
+            self.messages = {
+                81: {"conversation": 731, "role": "user", "reference": reference},
+                82: {"conversation": 731, "role": "assistant", "reference": reference},
+            }
+            if wrong_scope is not None:
+                self.messages[82][wrong_scope] = {"conversation": 732, "role": "user",
+                                                "reference": "other-confirmation"}[wrong_scope]
+            self.updates, self.turns, self.committed = [], [], False
+            self.task = {"task_id": "task", "activity_id": "activity", "run_id": "run",
+                         "attention_id": "attention", "conversation_id": 731,
+                         "objective": "synthetic continuation", "status": "OPEN"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, kind, value, traceback):
+            self.committed = kind is None
+            if kind is not None:
+                self.updates, self.turns = [], []
+            return False
+
+        def execute(self, sql, parameters):
+            row = None
+            if sql.startswith("SELECT * FROM processing_tasks"):
+                check(parameters == (OWNER.user_id, "PRT", 731, "task"))
+                row = self.task
+            elif sql.startswith("SELECT task_id FROM processing_cards"):
+                check(parameters == (OWNER.user_id, "PRT", 731, "card"))
+                row = {"task_id": "task"}
+            elif sql.startswith("UPDATE messages SET"):
+                check("AND conversation_id=%s AND role=%s" in sql)
+                check("ref_kind='temporary_interaction' AND ref_id=%s" in sql)
+                content, message_id, conversation, role, reference = parameters
+                check(json.loads(content) == {"processingTaskId": "task"})
+                actual = self.messages.get(message_id)
+                if actual == {"conversation": conversation, "role": role, "reference": reference}:
+                    row = {"id": message_id}
+                    self.updates.append((message_id, conversation, role, reference))
+            elif sql.startswith("INSERT INTO processing_turns"):
+                check("ON CONFLICT DO NOTHING" in sql)
+                self.turns.append(parameters)
+            else:
+                raise AssertionError("unexpected continuation SQL")
+            return SimpleNamespace(fetchone=lambda: row)
+
+    def bind(confirmation=None, *, wrong_scope=None):
+        reference = continuation_reference("card", confirmation)
+        connection = Connection(reference, wrong_scope=wrong_scope)
+        repository = ProcessingTasksRepository(lambda: connection, None)
+        def invoke():
+            return repository.bind_continuation(user_id=OWNER.user_id, environment="PRT",
+                conversation_id="731", task_id="task", card_id="card", input_message_id=81,
+                assistant_message_id=82, confirmation_request_id=confirmation)
+        return reference, connection, invoke
+
+    old_reference, ordinary, invoke = bind()
+    check(old_reference == "card")
+    check(invoke()["taskId"] == "task" and ordinary.committed)
+    check(ordinary.updates == [(81, 731, "user", "card"), (82, 731, "assistant", "card")])
+    check(ordinary.turns == [(OWNER.user_id, "PRT", 731, "card:card", "card", "task", 81, 82)])
+
+    reference, first, invoke = bind("confirm-1")
+    check(reference.startswith("write:") and reference != "card")
+    check(invoke()["taskId"] == "task" and first.committed)
+    check(first.updates == [(81, 731, "user", reference), (82, 731, "assistant", reference)])
+    check(first.turns == [(OWNER.user_id, "PRT", 731, "card:" + reference, reference, "task", 81, 82)])
+    same_reference, repeated, invoke = bind("confirm-1")
+    invoke()
+    check(same_reference == reference and repeated.turns == first.turns)
+    next_reference, second, invoke = bind("confirm-2")
+    invoke()
+    check(next_reference != reference and second.turns[0][3] != first.turns[0][3])
+    check(second.turns[0][4] == next_reference and second.turns[0][-2:] == (81, 82))
+
+    for invalid in ("conversation", "role", "reference"):
+        _, connection, invoke = bind("confirm-1", wrong_scope=invalid)
+        try:
+            invoke()
+        except BsideError as error:
+            check(error.code == "PROCESSING_MESSAGE_NOT_FOUND")
+        else:
+            raise AssertionError("incorrect continuation message scope was accepted")
+        check(not connection.committed and not connection.turns and not connection.updates)
+
+
 def main():
     assets, rpc, store, memory, service, factory = fixture("READ")
     read = assets.execute_ability("ability", ARGUMENTS, tool_call_id="tool-read")
@@ -360,6 +452,7 @@ def main():
         modified["approval"]["receipt"][field] = replacement
         check(not eligible(modified))
     a2ui_probe()
+    continuation_binding_probe()
     print(json.dumps({"probe": "chat-write-approval", "result": "PASS", "checks": checks}))
 
 
