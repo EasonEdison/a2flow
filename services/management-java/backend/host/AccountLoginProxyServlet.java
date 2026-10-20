@@ -16,7 +16,8 @@ public final class AccountLoginProxyServlet extends HttpServlet {
     private final ManagementHttpPolicy policy;
     private final java.util.Set<String> trustedProxies = java.util.Arrays.stream(
             System.getenv().getOrDefault("A2FLOW_AUTH_TRUSTED_PROXIES", "").split(","))
-            .map(String::trim).filter(value -> !value.isEmpty()).collect(java.util.stream.Collectors.toSet());
+            .map(String::trim).filter(value -> !value.isEmpty()).map(AccountLoginProxyServlet::normalizedAddress)
+            .collect(java.util.stream.Collectors.toSet());
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
             .followRedirects(HttpClient.Redirect.NEVER).build();
 
@@ -27,6 +28,19 @@ public final class AccountLoginProxyServlet extends HttpServlet {
                 || upstream.getPort() < 1 || !upstream.getPath().isEmpty() || upstream.getUserInfo() != null
                 || upstream.getQuery() != null || upstream.getFragment() != null) {
             throw new IllegalArgumentException("Account upstream must be an explicit loopback HTTP origin");
+        }
+    }
+
+    private static String normalizedAddress(String address) {
+        // Numeric literals only: configuration must never trigger DNS resolution.
+        if (!(address.matches("[0-9]+(?:\\.[0-9]+){3}")
+                || (address.contains(":") && address.matches("[0-9a-fA-F:]+")))) {
+            throw new IllegalArgumentException("Invalid trusted proxy IP");
+        }
+        try {
+            return java.net.InetAddress.getByName(address).getHostAddress();
+        } catch (java.net.UnknownHostException invalid) {
+            throw new IllegalArgumentException("Invalid trusted proxy IP", invalid);
         }
     }
 
@@ -55,11 +69,11 @@ public final class AccountLoginProxyServlet extends HttpServlet {
                 if (!values.isEmpty()) builder.header(header, values.get(0));
             }
             // Preserve the client address only from explicitly trusted reverse proxies.
-            String clientAddress = request.getRemoteAddr();
+            String clientAddress = normalizedAddress(request.getRemoteAddr());
             if (trustedProxies.contains(clientAddress)) {
                 var forwarded = java.util.Collections.list(request.getHeaders("X-A2Flow-Client-IP"));
-                if (forwarded.size() > 1) throw new SecurityException("AMBIGUOUS_REQUEST_HEADER");
-                if (!forwarded.isEmpty()) clientAddress = forwarded.get(0);
+                if (forwarded.size() != 1) throw new SecurityException("CLIENT_ADDRESS_REQUIRED");
+                clientAddress = normalizedAddress(forwarded.get(0));
             }
             builder.header("X-A2Flow-Client-IP", clientAddress);
             var reply = client.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
@@ -76,6 +90,9 @@ public final class AccountLoginProxyServlet extends HttpServlet {
             reply.headers().firstValue("Content-Type").ifPresent(response::setContentType);
             reply.headers().firstValue("Retry-After").ifPresent(value -> response.setHeader("Retry-After", value));
             reply.headers().firstValue("X-Request-ID").ifPresent(value -> response.setHeader("X-Request-ID", value));
+            for (String header : java.util.List.of("Content-Security-Policy", "Referrer-Policy")) {
+                reply.headers().firstValue(header).ifPresent(value -> response.setHeader(header, value));
+            }
             if (location != null) response.setHeader("Location", location);
             for (String cookie : reply.headers().allValues("Set-Cookie")) {
                 if (cookie.startsWith("a2flow_management_session=")) response.addHeader("Set-Cookie", cookie);
