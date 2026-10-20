@@ -136,3 +136,25 @@ workflow was not started, no business capability was called and no schedule was
 created. Screenshots and read-only receipt evidence are retained privately.
 This follow-up changes only acceptance documentation; deployed application code
 remains unchanged.
+
+
+## Execute the conversation-generated workflow — 2026-10-20
+
+At the operator's request, the new workflow from the public management follow-up
+was started once through the regular-member B UI. No opinion was supplied at
+start. Its first Skill generated a required temporary opinion form and waited;
+the waiting notification and activity entry were delivered. Reloading the page
+restored the same form through the pending activity entry.
+
+One form submission automatically resumed the original node, then ran the receipt
+node and built-in summary. All three completed. The summary quoted the submitted
+opinion exactly and verified the downstream repetition matched. The form became
+read-only. Without a further reload, the unread counter advanced from three to
+four (two older notices plus this run's waiting/completed pair), and the activity
+moved to completed. The notification page displayed both new timestamps.
+
+Read-only persistence checks confirmed one start ownership, one consumed resume
+command, three completed outbox entries and exactly two notices for this run.
+The prior 36 runtime documents retained their original ordered digest; all five
+existing schedules remained disabled. This new run made no business data writes.
+Application source and deployment were unchanged; only this evidence was added.
