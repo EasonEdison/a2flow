@@ -1,10 +1,22 @@
 # Readiness
 
-READY for controlled deployment from the reviewed integrated source. Public image
-builds, isolated failure-window checks and the fresh model-backed lifecycle passed:
-create/publish PRT, wait on a generated form, retain that form through full-stack
-recreation, submit once, automatically summarize, and update notifications.
+READY for the scoped delivery, deployed and publicly verified on 2026-10-20.
+Application source: `4927929058d1b69f7e1fb42560f67644c44a5d9d`.
 
-NOT YET COMPLETE for public delivery: main integration, HTTPS application
-activation and public acceptance remain pending. See [regression](regression.md)
-for evidence and limits. Certificate provisioning alone is not app deployment.
+- Fresh self-host: public images built; explicit bootstrap repeated safely; real
+  management conversation created and published PRT assets; the same generated
+  form survived whole-stack recreation and one submission completed the workflow.
+- Existing installation: five services updated with per-service rollback and
+  preserved launch/resource settings; ordinary TLS verification and HTTP redirect
+  passed; existing run documents and disabled schedules remained unchanged.
+- Public B acceptance: a regular member ran a previously published, non-business
+  interaction workflow. Waiting notice, persisted form, one automatic continuation,
+  final summary and completed notice all passed. Read-only facts confirm one run,
+  one resume command, three completed outbox commands and two distinct notices.
+- Public M/B admission: shared login quota, forged forwarding headers and foreign
+  Origin rejection passed. Successful M sign-in was not repeated publicly; its
+  full authenticated create/publish path passed in the isolated self-host stack.
+
+See [regression](regression.md) for evidence. This is not a load/HA benchmark,
+penetration test, full dependency audit or proof of exactly-once external delivery.
+External provider outcomes that remain unknown are not automatically resent.

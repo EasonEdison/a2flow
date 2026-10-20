@@ -63,3 +63,53 @@ with nginx reload hook passed. Application HTTPS activation, final source
 integration, existing-data comparison and public acceptance remain pending.
 No general HA, volumetric DoS, business exactly-once or disaster-recovery SLA is
 claimed by these checks.
+
+
+## Integrated deployment and public acceptance — 2026-10-20
+
+Application commit `4927929058d1b69f7e1fb42560f67644c44a5d9d` was merged to
+main and both configured remotes. Project checks and typed-subset CI completed
+successfully. The exact outgoing 67 files passed secret/private-pattern scans;
+650 compiled Java/frontend inputs matched integrated source, all 67 changed release
+files matched main, and all seven served B assets matched the accepted build.
+
+B, account login, Runtime, Scheduler and Java management services were recreated
+from captured per-service configuration. Actual images/entry points, read-only
+mounts and resource/security settings were retained; Scheduler retains its 128 MiB
+limit. All five services were running with zero restarts after deployment. The
+account admission migration was applied explicitly and the real database role's
+SELECT/INSERT/DELETE privileges were checked. No existing account was reset or
+promoted. Ordinary TLS verification, automatic HTTP redirect, login pages and
+internal-route blocking passed. Certificate renewal dry-run and reload hook passed.
+
+A synthetic nonexistent username alternated between M and B: eight responses were
+invalid credentials, the ninth was 429 with a positive Retry-After. Changing
+untrusted forwarding headers did not escape the shared quota. Both surfaces
+rejected a foreign Origin before credential checking. Existing self-registration
+policy was retained; the operator registered and logged in a regular member through
+the public B UI. Secure/HttpOnly/SameSite cookie settings were verified in source
+and active configuration; raw successful Set-Cookie values were not collected.
+
+Using that member, the published two-step temporary-interaction acceptance flow
+was started once. The page received its waiting notification without reloading,
+and the activity rail showed the same pending run. A full page refresh preserved
+the form. Submitting a single short acceptance comment automatically completed
+the collection node, next-node receipt and final summary. The original form became
+read-only. The unread count changed from one to two without another reload;
+the rail moved from pending to completed. Opening the completion notification read
+back the saved result and exact submitted comment.
+
+Read-only database evidence confirmed one start, one consumed resume command,
+three completed outbox entries (waiting/resume/completed) and two notices
+(waiting/completed). All 35 pre-existing run documents retained their exact
+ordered digest; five existing schedules remained disabled. No prior business run
+was replayed and the acceptance flow made no business writes. The independently
+built local self-host stack was stopped after evidence capture; temporary model
+key copies and synthetic administrator input were removed, persistent volumes
+and non-secret evidence retained.
+
+Public authenticated M creation was not repeated because the operator used a new
+regular B account; the original administrator remains available. M create/publish
+with a real model was verified in the fresh self-host installation above. No full
+unit suite was run under the owner's validation scope. No scale/HA, adversarial
+penetration or external-provider unknown-outcome retry claim is made.
