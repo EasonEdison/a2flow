@@ -1,7 +1,10 @@
-# Implementation
+# Tasks
 
-- [ ] Persist scoped tasks, message/card bindings and operation claims.
-- [ ] Wire Chat context and actual ability receipts through existing Skill admission.
-- [ ] Add explicit handling entry, result view and human conclusion.
-- [ ] Build and review exact changes; integrate and deploy with rollback.
-- [ ] Validate scheduled attention, missing-input continuation and linked real results publicly.
+- [x] Inventory existing published content capabilities and document the handling boundary.
+- [x] Persist explicit owner-scoped tasks, message relations, card bindings and operation claims.
+- [x] Attach processing context through the SDK middleware and keep ordinary Chat unbound.
+- [x] Add right-rail processing entry, receipts, original-conversation navigation and explicit confirmation UI.
+- [x] Review authorization, duplicate requests, uncertain operations and card-binding failure paths.
+- [x] Build the frontend, check actual SDK compatibility and run bounded PostgreSQL/HTTP probes.
+- [x] Integrate and deploy the B-side source and static assets with additive schema changes.
+- [x] Validate scheduled anomaly, missing input, automatic continuation, real business writes and persisted association publicly.
