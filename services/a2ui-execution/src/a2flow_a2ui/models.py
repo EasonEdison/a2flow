@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Protocol
 
+from a2flow.capability.v1.capability_pb2 import ApprovalReceipt
+from a2flow_capability.compiler import CompiledCapability
 from a2flow_capability.models import (
     Environment,
     ExecutionResult,
@@ -543,7 +545,20 @@ class PublishedApplicationReader(Protocol):
     def current(self, app_code: str, context: TrustedContext) -> PublishedApplication: ...
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedAction:
+    asset_key: str
+    capability: CompiledCapability
+    arguments: JsonObject
+    binding_id: str
+
+
 class CapabilityInvoker(Protocol):
+    def prepare_action_code(
+        self, action_code: str, arguments: JsonObject, context: TrustedContext,
+    ) -> tuple[str, CompiledCapability]: ...
+
     def execute_action_code(
-        self, action_code: str, arguments: JsonObject, context: TrustedContext
+        self, action_code: str, arguments: JsonObject, context: TrustedContext,
+        *, approval_receipt: ApprovalReceipt | None = None,
     ) -> ExecutionResult: ...

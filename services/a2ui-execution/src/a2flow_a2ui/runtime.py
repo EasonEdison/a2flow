@@ -15,6 +15,7 @@ from decimal import Decimal, InvalidOperation
 from typing import cast
 from zoneinfo import ZoneInfo
 
+from a2flow.capability.v1.capability_pb2 import ApprovalReceipt
 from a2flow_capability.models import ExecutionResult, JsonObject, JsonValue, TrustedContext
 
 from .generation import (
@@ -60,6 +61,7 @@ from .models import (
     MappingSource,
     PublishedApplication,
     PublishedApplicationReader,
+    PreparedAction,
     RequestMapping,
     RequestTransformType,
     ResultAdapter,
@@ -777,14 +779,10 @@ class A2uiRuntimeService:
             generated_definition=artifact,
         )
 
-    def act(
-        self,
-        card: TrustedCard,
-        correlation_id: str,
-        idempotency_key: str,
-        action_message: JsonObject,
-        context: TrustedContext,
-    ) -> RuntimeResult:
+    def _prepare_action(
+        self, card: TrustedCard, correlation_id: str, idempotency_key: str,
+        action_message: JsonObject, context: TrustedContext,
+    ) -> tuple[PublishedApplication, SurfaceLedger, ActionBinding, JsonObject, JsonObject, JsonObject]:
         self._check_context(context)
         if card.user_id != context.user_id or context.request_id != idempotency_key:
             raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
@@ -818,14 +816,39 @@ class A2uiRuntimeService:
             trusted=trusted,
             previous=None,
         )
+        return published, ledger, binding, action_context, trusted, arguments
+
+    def prepare_action(
+        self, card: TrustedCard, correlation_id: str, idempotency_key: str,
+        action_message: JsonObject, context: TrustedContext,
+    ) -> PreparedAction:
+        """Validate and map the current published action, without a business call."""
+        _, _, binding, _, _, arguments = self._prepare_action(
+            card, correlation_id, idempotency_key, action_message, context)
+        key, compiled = self._capabilities.prepare_action_code(
+            binding.capability.action_code, arguments, _child_context(context, binding.binding_id))
+        return PreparedAction(key, compiled, copy.deepcopy(arguments), binding.binding_id)
+
+    def act(
+        self, card: TrustedCard, correlation_id: str, idempotency_key: str,
+        action_message: JsonObject, context: TrustedContext,
+        *, approval_receipt: ApprovalReceipt | None = None,
+    ) -> RuntimeResult:
+        # Remap against the current publication. A stale/changed confirmation is rejected
+        # by the final capability guard before dispatch; never substitute frozen arguments.
+        published, ledger, binding, action_context, trusted, arguments = self._prepare_action(
+            card, correlation_id, idempotency_key, action_message, context)
+        build, artifact = published.build, card.generated_definition
         observable_arguments = observable_request(
             binding.request_mappings,
             action=action_context,
             params=card.params,
             trusted=trusted,
         )
+        options = {} if approval_receipt is None else {"approval_receipt": approval_receipt}
         result = self._capabilities.execute_action_code(
-            binding.capability.action_code, arguments, _child_context(context, binding.binding_id)
+            binding.capability.action_code, arguments, _child_context(context, binding.binding_id),
+            **options,
         )
         if result.action_code != binding.capability.action_code:
             raise A2uiError("A2UI_CAPABILITY_RESULT_INVALID")
