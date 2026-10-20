@@ -101,6 +101,7 @@ def schemas(dsn: Any, names: dict[str, str], config: dict[str, Any]) -> None:
         if connection.execute("SELECT to_regclass('public.a2flow_java_management_schema_history')").fetchone()[0] is None:
             raise ValueError("Run management-migrate before schemas")
     apply_file(dsn("management"), "services/management-java/backend/storage/db/migration/V002__management_agent_tool_receipts.sql")
+    apply_file(dsn("management"), "services/management-java/backend/storage/db/migration/V003__capability_approval_consumption.sql")
     for kind in ("prt", "online"):
         PostgresAssetRepository(dsn(kind), environment=kind.upper(), database=names[kind], validator=bundle_validator()).setup()
         apply_file(dsn(kind), "services/management-java/backend/storage/db/runtime-publication/V001__publication_receipts.sql")
