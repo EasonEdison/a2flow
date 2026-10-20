@@ -19,7 +19,7 @@ from typing import Callable, Literal
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 
 from . import auth
@@ -100,9 +100,32 @@ class RunReference(BaseModel):
     activityId: str = Field(min_length=1, max_length=256)
 
 
+class ProcessingTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    activityId: str = Field(min_length=1, max_length=256)
+    attentionId: str = Field(min_length=1, max_length=256)
+
+
+class ProcessingResolution(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    summary: str = Field(min_length=1, max_length=2000)
+
+
 class MessageSend(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     runReferences: list[RunReference] = Field(default_factory=list, max_length=3)
+
+    processingTarget: ProcessingTarget | None = None
+    processingTaskId: str | None = Field(default=None, min_length=1, max_length=128)
+    processingRequestId: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_.:-]{1,128}$")
+
+    @model_validator(mode="after")
+    def processing_target(self):
+        if self.processingTarget is not None and self.processingTaskId is not None:
+            raise ValueError("PROCESSING_TARGET_CONFLICT")
+        if bool(self.processingTarget or self.processingTaskId) != bool(self.processingRequestId):
+            raise ValueError("PROCESSING_REQUEST_ID_REQUIRED")
+        return self
 
     @field_validator("text")
     @classmethod
@@ -297,6 +320,7 @@ def create_app(
     memory_view=None,
     memory_replace=None,
     work_activities=None,
+    processing_tasks=None,
     chat_cards=None,
     chat_action=None,
     browser_origins: tuple[str, ...] = (),
@@ -362,14 +386,26 @@ def create_app(
                 or display.get("protocolProfile") != "a2flow.temporary.v1"
                 or display.get("definitionSource") != "TEMPORARY"):
             raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
+        processing_context = None
+        if processing_tasks is not None:
+            processing_context = await asyncio.to_thread(
+                processing_tasks.context_for_card, user_id=user_id, environment=environment,
+                conversation_id=str(conversation_id), card_id=card_id)
         created, input_message, assistant_message = await asyncio.to_thread(
             messages.claim_interaction_continuation, user_id=user_id,
             conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"])
+        if processing_context is not None:
+            processing_context = await asyncio.to_thread(
+                processing_tasks.bind_continuation, user_id=user_id, environment=environment,
+                conversation_id=str(conversation_id), task_id=processing_context["taskId"],
+                card_id=card_id, input_message_id=input_message["id"],
+                assistant_message_id=assistant_message["id"])
         if created:
             delivery = ChatDelivery(
                 messages=messages, runner=chat_runner, user_id=user_id,
                 conversation_id=conversation_id, text=input_message["content"]["text"],
-                input_message=input_message, assistant_message=assistant_message)
+                input_message=input_message, assistant_message=assistant_message,
+                processing_context=processing_context)
             delivery.detach()  # History polling consumes this turn; no unused SSE queue.
             prior = tuple(app.state.chat_turns.get(conversation_id, ()))
             task = asyncio.create_task(continue_interaction(delivery, prior))
@@ -571,31 +607,67 @@ def create_app(
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
             raise BsideError("NOT_FOUND", 404)
+        processing_context = None
+        processing_activity = None
+        if body.processingTarget is not None or body.processingTaskId is not None:
+            if processing_tasks is None:
+                raise BsideError("PROCESSING_UNAVAILABLE", 503)
+            if body.processingTaskId is not None:
+                processing_context = await asyncio.to_thread(
+                    processing_tasks.get_context, user_id=identity.userId, environment=environment,
+                    conversation_id=str(conversation_id), task_id=body.processingTaskId)
+                processing_activity = processing_context["activityId"]
+            else:
+                processing_activity = body.processingTarget.activityId
         references = []
         seen = set()
-        for reference in body.runReferences:
-            if reference.activityId in seen:
+        activity_ids = [r.activityId for r in body.runReferences]
+        if processing_activity is not None and processing_activity not in activity_ids:
+            activity_ids.append(processing_activity)
+        if len(activity_ids) > 3:
+            raise BsideError("TOO_MANY_RUN_REFERENCES", 400)
+        for activity_id in activity_ids:
+            if activity_id in seen:
                 raise BsideError("DUPLICATE_RUN_REFERENCE", 400)
-            seen.add(reference.activityId)
+            seen.add(activity_id)
             if work_activities is None:
                 raise BsideError("WORK_ACTIVITIES_UNAVAILABLE", 503)
             snapshot = await asyncio.to_thread(
                 work_activities.get_result, user_id=identity.userId,
-                environment=environment, activity_id=reference.activityId, limit=8000)
-            # Three fully encoded attachments fit the runner's shared 36 KiB budget.
+                environment=environment, activity_id=activity_id, limit=8000)
             references.append(_bounded_run_reference(snapshot))
-        input_message = messages.append(
-            conversation_id=conversation_id, role="user",
-            content={"text": body.text, "delivery": "submitted", "runReferences": references})
-
-        assistant_message = messages.append(
-            conversation_id=conversation_id, role="assistant",
-            content={"text": "", "delivery": "running", "parts": []})
+        if processing_activity is not None:
+            created, processing_context, input_message, assistant_message = await asyncio.to_thread(
+                processing_tasks.begin_turn, user_id=identity.userId, environment=environment,
+                conversation_id=str(conversation_id), request_id=body.processingRequestId,
+                text=body.text, references=references,
+                target=body.processingTarget.model_dump() if body.processingTarget else None,
+                task_id=body.processingTaskId)
+            if not created:
+                async def accepted_turn():
+                    ids = {"turnId": str(input_message["id"]), "inputMessageId": str(input_message["id"]),
+                           "messageId": str(assistant_message["id"]), "processingTaskId": processing_context["taskId"]}
+                    yield "data: " + json.dumps({"type": "turn_started", "sequence": 1, **ids,
+                                                "replayed": True}) + "\n\n"
+                    content = assistant_message["content"]
+                    completed = content.get("delivery") in {"completed", "waiting_action"}
+                    yield "data: " + json.dumps({"type": "done" if completed else "error", "sequence": 2,
+                        **ids, "content": content, "code": None if completed else
+                        content.get("errorCode", "PROCESSING_TURN_ALREADY_ACCEPTED")}) + "\n\n"
+                return StreamingResponse(accepted_turn(), media_type="text/event-stream",
+                                         headers={"Cache-Control": "no-store"})
+        else:
+            input_message = messages.append(
+                conversation_id=conversation_id, role="user",
+                content={"text": body.text, "delivery": "submitted", "runReferences": references})
+            assistant_message = messages.append(
+                conversation_id=conversation_id, role="assistant",
+                content={"text": "", "delivery": "running", "parts": []})
         delivery = ChatDelivery(
             messages=messages, runner=chat_runner, user_id=identity.userId,
             conversation_id=conversation_id, text=body.text,
             input_message=input_message, assistant_message=assistant_message,
-            run_references=references)
+            run_references=references, processing_context=processing_context)
         task = asyncio.create_task(delivery.produce())
         retain_task(task, conversation_id)
         return ChatStreamingResponse(delivery)
@@ -637,6 +709,21 @@ def create_app(
             content={"text": "工作流已启动，等待你的确认。"},
             ref_kind="run", ref_id=body.runId)
         return {"id": row["id"]}
+
+    @app.get("/api/processing-tasks/{task_id}")
+    async def processing_task(task_id: str, identity: RequestIdentity = Depends(identity)):
+        if processing_tasks is None:
+            raise BsideError("PROCESSING_UNAVAILABLE", 503)
+        return await asyncio.to_thread(processing_tasks.get, user_id=identity.userId,
+                                       environment=environment, task_id=task_id)
+
+    @app.post("/api/processing-tasks/{task_id}/resolve")
+    async def resolve_processing_task(task_id: str, body: ProcessingResolution,
+                                      identity: RequestIdentity = Depends(identity)):
+        if processing_tasks is None:
+            raise BsideError("PROCESSING_UNAVAILABLE", 503)
+        return await asyncio.to_thread(processing_tasks.resolve, user_id=identity.userId,
+                                       environment=environment, task_id=task_id, summary=body.summary)
 
     # ---- committed work activities (read-only except reminder acknowledgement) ----
 

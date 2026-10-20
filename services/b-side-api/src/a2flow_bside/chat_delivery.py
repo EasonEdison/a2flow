@@ -95,11 +95,12 @@ def _identifier(value: object, *, limit: int = 256) -> str | None:
 
 class ChatDelivery:
     def __init__(self, *, messages, runner, user_id, conversation_id, text,
-                 input_message, assistant_message, run_references=()):
+                 input_message, assistant_message, run_references=(), processing_context=None):
         self.messages, self.runner = messages, runner
         self.user_id, self.conversation_id, self.text = user_id, conversation_id, text
         self.input_id, self.assistant_id = input_message['id'], assistant_message['id']
         self.run_references = copy.deepcopy(list(run_references))
+        self.processing_context = copy.deepcopy(processing_context)
         self.turn_id = str(self.input_id)
         self.execution: ExecutionProjection = {
             "schemaVersion": "v1",
@@ -115,6 +116,8 @@ class ChatDelivery:
         }
         if isinstance(assistant_message.get("content", {}).get("continuation"), dict):
             self.content["continuation"] = copy.deepcopy(assistant_message["content"]["continuation"])
+        if self.processing_context is not None:
+            self.content["processingTaskId"] = self.processing_context["taskId"]
         self.parts: list[ContentPart] = self.content["parts"]
         self._live_cards: dict[str, JsonObject] = {}
         self._text_part_count = 0
@@ -400,11 +403,15 @@ class ChatDelivery:
         last_save = time.monotonic()
         iterator = None
         try:
-            await self.emit({"type": "turn_started", "turnId": self.turn_id})
+            await self.emit({"type": "turn_started", "turnId": self.turn_id,
+                             **({"processingTaskId": self.processing_context["taskId"]}
+                                if self.processing_context is not None else {})})
             arguments = dict(user_id=self.user_id, conversation_id=self.conversation_id,
                              text=self.text, turn_id=str(self.input_id))
             if self.run_references:
                 arguments["run_references"] = self.run_references
+            if self.processing_context is not None:
+                arguments["processing_context"] = self.processing_context
             iterator = self.runner.iterate(**arguments)
             async for event in iterator:
                 kind = event.get("type")

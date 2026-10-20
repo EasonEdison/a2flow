@@ -104,3 +104,62 @@ CREATE TABLE IF NOT EXISTS work_activity_attention_acks (
     acknowledged_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY(user_id, environment, activity_id, attention_id)
 );
+
+-- Follow-up processing is separate from workflow state and reminder acknowledgement.
+CREATE TABLE IF NOT EXISTS processing_tasks (
+    task_id text PRIMARY KEY,
+    user_id bigint NOT NULL,
+    environment text NOT NULL CHECK(environment IN ('PRT','ONLINE')),
+    conversation_id bigint NOT NULL REFERENCES conversations(id),
+    activity_id text NOT NULL,
+    run_id text NOT NULL,
+    attention_id text NOT NULL,
+    objective text NOT NULL,
+    origin_message_id bigint REFERENCES messages(id),
+    status text NOT NULL CHECK(status IN ('OPEN','WAITING_INPUT','RESULT_RECORDED','FAILED','UNKNOWN','RESOLVED')),
+    result_summary text,
+    resolution_summary text,
+    resolved_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS processing_tasks_attention
+    ON processing_tasks(user_id,environment,activity_id,attention_id,created_at DESC);
+CREATE TABLE IF NOT EXISTS processing_turns (
+    user_id bigint NOT NULL,
+    environment text NOT NULL,
+    conversation_id bigint NOT NULL REFERENCES conversations(id),
+    request_id text NOT NULL,
+    request_digest text NOT NULL,
+    task_id text NOT NULL REFERENCES processing_tasks(task_id),
+    input_message_id bigint NOT NULL REFERENCES messages(id),
+    assistant_message_id bigint NOT NULL REFERENCES messages(id),
+    PRIMARY KEY(user_id,environment,conversation_id,request_id),
+    UNIQUE(input_message_id),
+    UNIQUE(assistant_message_id)
+);
+CREATE TABLE IF NOT EXISTS processing_cards (
+    user_id bigint NOT NULL,
+    environment text NOT NULL,
+    conversation_id bigint NOT NULL REFERENCES conversations(id),
+    card_id text NOT NULL,
+    task_id text NOT NULL REFERENCES processing_tasks(task_id),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(user_id,environment,conversation_id,card_id)
+);
+CREATE TABLE IF NOT EXISTS processing_operations (
+    operation_id text PRIMARY KEY,
+    task_id text NOT NULL REFERENCES processing_tasks(task_id),
+    operation_digest text NOT NULL,
+    ability_key text NOT NULL,
+    arguments jsonb NOT NULL,
+    turn_id text NOT NULL,
+    tool_call_id text NOT NULL,
+    request_id text UNIQUE NOT NULL,
+    status text NOT NULL CHECK(status IN ('RUNNING','RETURNED','FAILED','UNKNOWN')),
+    result jsonb,
+    error_code text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz,
+    UNIQUE(task_id,operation_digest)
+);
