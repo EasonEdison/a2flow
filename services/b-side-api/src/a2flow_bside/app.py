@@ -387,23 +387,34 @@ def create_app(
         card = response.get("card", {})
         display = card.get("display", {})
         result = card.get("result", {})
+        # This marker comes only from the trusted action service after it saved
+        # the real write result. User inputs cannot opt into this continuation.
+        submitted = (isinstance(result, dict) and result.get("status") == "SUBMITTED"
+                     and isinstance(result.get("values"), dict))
+        write_completed = (isinstance(marker, dict) and marker.get("kind") == "WRITE_APPROVAL"
+                           and "result" in card)
+        temporary = (display.get("protocolProfile") == "a2flow.temporary.v1"
+                     and display.get("definitionSource") == "TEMPORARY")
+        confirmed_java = (write_completed
+                          and display.get("protocolProfile") == "a2flow.java-rpc.v1")
         if (not isinstance(marker, dict) or marker.get("cardId") != card_id
                 or not isinstance(marker.get("requestId"), str) or not marker["requestId"]
                 or card.get("cardId") != card_id or card.get("conversationId") != str(conversation_id)
-                or card.get("status") != "COMPLETED" or not isinstance(result, dict)
-                or result.get("status") != "SUBMITTED" or not isinstance(result.get("values"), dict)
-                or display.get("protocolProfile") != "a2flow.temporary.v1"
-                or display.get("definitionSource") != "TEMPORARY"):
+                or card.get("status") != "COMPLETED"
+                or not (submitted or write_completed)
+                or not (temporary or confirmed_java)):
             raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
         created, input_message, assistant_message = await asyncio.to_thread(
             messages.claim_interaction_continuation, user_id=user_id,
-            conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"])
+            conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"],
+            write_completed=write_completed)
         if processing_context is not None:
             processing_context = await asyncio.to_thread(
                 processing_tasks.bind_continuation, user_id=user_id, environment=environment,
                 conversation_id=str(conversation_id), task_id=processing_context["taskId"],
                 card_id=card_id, input_message_id=input_message["id"],
-                assistant_message_id=assistant_message["id"])
+                assistant_message_id=assistant_message["id"],
+                confirmation_request_id=marker["requestId"] if write_completed else None)
         if created:
             delivery = ChatDelivery(
                 messages=messages, runner=chat_runner, user_id=user_id,

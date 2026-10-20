@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = (
     "README.md", "README.zh-CN.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md",
     "THIRD_PARTY_NOTICES.md", "docs/README.md", "docs/getting-started.md",
-    "docs/current-architecture.md", "docs/portfolio-walkthrough.md", "docs/quality-roadmap.md",
+    "docs/core-probes.md", "docs/current-architecture.md", "docs/portfolio-walkthrough.md", "docs/quality-roadmap.md",
 )
 RUNTIME = "services/agent-workflow-runtime/src/"
 FORBIDDEN = ("a2flow_bside", "a2flow_content")

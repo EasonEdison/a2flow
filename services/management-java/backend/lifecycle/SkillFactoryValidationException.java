@@ -55,4 +55,21 @@ public class SkillFactoryValidationException extends IllegalArgumentException {
                 "skillCode");
     }
 
+    /** Legacy URL/file recovery does not establish immutable artifact identity. */
+    public static SkillFactoryValidationException packageRestoreSourceRequired() {
+        return new SkillFactoryValidationException("PACKAGE_RESTORE_SOURCE_REQUIRED",
+                "请通过已发布的 PRT Build 或正式版本重置工作区；不支持 URL 或本地文件恢复。", "sourceId");
+    }
+
+    /** Closed ZIP budget errors; never include source URLs or archive content. */
+    public static SkillFactoryValidationException packageLimitExceeded(String code) {
+        String message = switch (code) {
+            case "PACKAGE_ENTRY_COUNT_EXCEEDED" -> "ZIP 条目数量超过限制，请减少文件和目录数量。";
+            case "PACKAGE_ENTRY_BYTES_EXCEEDED" -> "ZIP 单个条目展开后超过大小限制。";
+            case "PACKAGE_EXPANDED_BYTES_EXCEEDED" -> "ZIP 展开后的总大小超过限制。";
+            default -> throw new IllegalArgumentException("UNKNOWN_PACKAGE_LIMIT_CODE");
+        };
+        return new SkillFactoryValidationException(code, message, "package");
+    }
+
 }

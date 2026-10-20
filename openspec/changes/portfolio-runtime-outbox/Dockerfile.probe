@@ -4,7 +4,10 @@ COPY experiments/runtime-phase1/requirements.lock /tmp/runtime.lock
 COPY services/scheduler-mq/requirements.txt /tmp/scheduler.txt
 COPY services/agent-workflow-runtime/requirements-http.txt /tmp/http.txt
 RUN sed -i "s/psycopg==3.3.5/psycopg==3.3.6/; s/psycopg-binary==3.3.5/psycopg-binary==3.3.6/" /tmp/runtime.lock && pip install --no-cache-dir -r /tmp/runtime.lock -r /tmp/scheduler.txt && pip install --no-cache-dir --no-deps -r /tmp/http.txt
+COPY deploy/mvp/model-requirements.lock /tmp/model.lock
+RUN pip install --no-cache-dir --no-deps -r /tmp/model.lock
 COPY packages/rpc-contracts /tmp/rpc-contracts
 RUN pip install --no-cache-dir /tmp/rpc-contracts
+RUN pip install --no-cache-dir jsonschema==4.26.0
 ENV PYTHONPATH=/probe:/probe/packages/contracts/src:/probe/packages/asset-store/src:/probe/services/agent-workflow-runtime/src:/probe/services/scheduler-mq/src:/probe/services/skill-registry/src:/probe/services/capability-registry/src:/probe/services/a2ui-composer/src
 CMD ["python", "openspec/changes/portfolio-runtime-outbox/probe.py"]

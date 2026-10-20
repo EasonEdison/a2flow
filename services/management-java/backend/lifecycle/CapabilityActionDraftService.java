@@ -1224,6 +1224,12 @@ public class CapabilityActionDraftService {
         requireValue(errors, governance, FIELD_APPROVAL_POLICY, "治理.approvalPolicy");
         String sideEffectLevel = stringValue(governance.get(FIELD_SIDE_EFFECT_LEVEL));
         String approvalPolicy = stringValue(governance.get(FIELD_APPROVAL_POLICY));
+        if (sideEffectLevel == null || !java.util.Set.of(SIDE_EFFECT_READ, SIDE_EFFECT_WRITE, SIDE_EFFECT_DESTRUCTIVE).contains(sideEffectLevel)) {
+            errors.add("治理.sideEffectLevel 必须为 READ、WRITE 或 DESTRUCTIVE。");
+        }
+        if (approvalPolicy == null || !java.util.Set.of(APPROVAL_REQUEST, APPROVAL_AUTO_EXECUTE).contains(approvalPolicy)) {
+            errors.add("治理.approvalPolicy 必须为 REQUEST_APPROVAL 或 AUTO_EXECUTE。");
+        }
         if ((SIDE_EFFECT_WRITE.equals(sideEffectLevel) || SIDE_EFFECT_DESTRUCTIVE.equals(sideEffectLevel))
                 && APPROVAL_AUTO_EXECUTE.equals(approvalPolicy)) {
             errors.add("WRITE/DESTRUCTIVE 能力不能使用 AUTO_EXECUTE 审批策略。");

@@ -10,7 +10,7 @@ Start with the [current architecture](docs/current-architecture.md) and [getting
 4. For runtime changes, include a targeted reproduction and evidence for the relevant failure boundary. Do not invoke a live business operation just to get a green check. Explain what was not verified.
 5. Open a pull request with the problem, change, validation and material limitations. Update both home pages when changing capability claims.
 
-CI runs repository checks, two current frontend builds, Java compilation and Compose syntax validation without model keys or production databases. The separate Python quality job is deliberately limited to two typed modules; it is not whole-repository type coverage. Builds do not replace end-to-end acceptance.
+CI runs repository checks, two current frontend builds, Java compilation and Compose syntax validation without model keys or production databases. The separate Python quality job is deliberately limited to two typed modules; it is not whole-repository type coverage. Builds do not replace end-to-end acceptance. The [core invariant probes](docs/core-probes.md) cover isolated PostgreSQL account/outbox and approval consumption, synthetic Chat/Workflow write confirmation, and Java archive guards without model keys or live business calls.
 
 ## Invariants
 

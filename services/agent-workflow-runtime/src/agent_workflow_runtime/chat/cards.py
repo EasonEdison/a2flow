@@ -505,6 +505,103 @@ class ChatCardStore:
             return {"dispatch": True, "card": _public(card),
                     "metadata": deepcopy(card["binding_metadata"])}
 
+    def prepare_action_confirmation(
+        self, owner: TrustedContext, conversation_id: str, card_id: str, request_id: str,
+        action_name: str, inputs: dict[str, Any], *, original: dict[str, Any],
+        prepared: PreparedApplication, approval: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Freeze a pure preflight and show host confirmation on the original card.
+
+        The original bounded display lives in the scoped request record, not inside
+        card metadata. Preparation commits no business claim and completes no node.
+        """
+        owner = _owner(owner, self._environment)
+        conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
+        card_id = _identifier(card_id, "INVALID_CARD_ID", limit=128)
+        request_id = _identifier(request_id, "INVALID_REQUEST_ID", limit=256)
+        action_name = _identifier(action_name, "INVALID_ACTION_NAME")
+        inputs, _ = _json_copy(inputs, "INVALID_ACTION_INPUT", _MAX_INPUT_BYTES)
+        approval, _ = _json_copy(approval, "INVALID_CARD_METADATA", _MAX_METADATA_BYTES)
+        display, status = _validate_prepared(prepared)
+        if display.get("protocolProfile") != "a2flow.temporary.v1" or status != "WAITING_ACTION":
+            _reject("INVALID_CARD_DISPLAY")
+        payload = {"actionName": action_name, "inputs": inputs}
+        scope = _scope(owner, conversation_id)
+        with self._storage.transaction() as transaction:
+            card = transaction.get_card(scope, card_id, lock=True)
+            if card is None:
+                _reject("CARD_NOT_FOUND")
+            prior = transaction.get_request(scope, card_id, request_id, lock=True)
+            if prior is not None:
+                if prior["payload"] != payload:
+                    _reject("ACTION_REQUEST_CONFLICT")
+                if prior["state"] != "FINISHED":
+                    _reject("ACTION_REQUEST_BUSY")
+                return deepcopy(prior["card_snapshot"])
+            if (card["display"].get("protocolProfile") != "a2flow.java-rpc.v1"
+                    or card["status"] not in {"WAITING_ACTION", "DISPLAY_ONLY"}
+                    or not _action_is_bound(card, action_name)):
+                _reject("CARD_NOT_ACTIONABLE")
+            if (original.get("card") != _public(card)
+                    or original.get("metadata") != card["binding_metadata"]):
+                _reject("CARD_BINDING_MISMATCH")
+            from ..capability_approval import receipt_for
+            receipt_for(owner, card_id, approval)
+            origin = {"card": _public(card), "metadata": deepcopy(card["binding_metadata"]),
+                      "actionName": action_name, "inputs": inputs, "approval": approval}
+            previous = card["binding_metadata"]
+            metadata = {
+                "definitionSource": "TEMPORARY", "conversationId": conversation_id,
+                "controlRequestId": previous["controlRequestId"], "toolCallId": previous["toolCallId"],
+                "applicationKey": prepared.application_key, "applicationVersion": prepared.application_version,
+                "approval": approval, "approvalSkillKey": previous["skillKey"],
+                "approvalOriginRequestId": request_id,
+            }
+            for field in ("workflow", "processingTaskId"):
+                if field in previous:
+                    metadata[field] = deepcopy(previous[field])
+            card["display"], card["binding_metadata"] = display, _validate_metadata(metadata, conversation_id)
+            card["status"], card["revision"] = "WAITING_ACTION", card["revision"] + 1
+            card["result"], card["has_result"], card["active_request_id"] = None, False, None
+            request = {"environment": owner.environment, "user_id": owner.user_id,
+                       "conversation_id": conversation_id, "card_id": card_id,
+                       "request_id": request_id, "payload": payload, "state": "FINISHED",
+                       "result": None, "error_code": None,
+                       "finish_payload": {"result": None, "businessSuccess": False, "completes": False,
+                                          "approvalOrigin": origin},
+                       "card_snapshot": _public(card)}
+            transaction.insert_request(request)
+            transaction.update_card(card)
+            transaction.append_observation(scope, "confirmation:" + card_id + ":" + request_id,
+                _event_payload(card, kind="RENDERED", request_id=request_id,
+                               description="写操作尚未执行，等待用户明确确认实际参数",
+                               arguments=approval["arguments"]))
+            return _public(card)
+
+    def get_approval_origin(self, owner: TrustedContext, conversation_id: str, card_id: str) -> dict[str, Any]:
+        owner = _owner(owner, self._environment)
+        conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
+        card_id = _identifier(card_id, "INVALID_CARD_ID", limit=128)
+        scope = _scope(owner, conversation_id)
+        with self._storage.transaction() as transaction:
+            card = transaction.get_card(scope, card_id)
+            if card is None:
+                _reject("CARD_NOT_FOUND")
+            return self._approval_origin(transaction, scope, card)
+
+    @staticmethod
+    def _approval_origin(transaction, scope, card):
+        metadata = card["binding_metadata"]
+        request_id = metadata.get("approvalOriginRequestId")
+        if not isinstance(request_id, str):
+            _reject("WRITE_CONFIRMATION_BINDING_INVALID")
+        request = transaction.get_request(scope, card["card_id"], request_id)
+        origin = (request.get("finish_payload") or {}).get("approvalOrigin") if request else None
+        if (not request or request["state"] != "FINISHED" or not isinstance(origin, dict)
+                or origin.get("approval") != metadata.get("approval")):
+            _reject("WRITE_CONFIRMATION_BINDING_INVALID")
+        return deepcopy(origin)
+
     def finish(self, owner: TrustedContext, conversation_id: str, card_id: str, request_id: str,
                result: Any, business_success: bool, completes: bool, *,
                prepared: PreparedApplication | None = None,
@@ -527,7 +624,9 @@ class ChatCardStore:
         if prepared is not None or binding_metadata is not None:
             display, waiting_status = _validate_prepared(prepared)
             metadata = _validate_metadata(binding_metadata, conversation_id)
-            if display.get("protocolProfile") != "a2flow.java-rpc.v1":
+            if (display.get("protocolProfile") != "a2flow.java-rpc.v1"
+                    and not (display.get("protocolProfile") == "a2flow.temporary.v1"
+                             and isinstance(metadata.get("approval"), dict))):
                 _reject("INVALID_CARD_DISPLAY")
             update = (display, waiting_status, metadata)
             finish_payload["runtimeUpdate"] = {"display": display, "metadata": metadata,
@@ -554,12 +653,27 @@ class ChatCardStore:
                     card["display"], request["payload"]["inputs"])
             else:
                 display, waiting_status, metadata = update
-                # Only trusted runtime state changes; card and Skill ownership cannot change.
-                for field in ("skillKey", "conversationId", "controlRequestId", "toolCallId",
-                              "applicationKey", "processingTaskId"):
-                    if metadata.get(field) != card["binding_metadata"].get(field):
+                expected_metadata, expected_display = card["binding_metadata"], card["display"]
+                if ("approvalOriginRequestId" in expected_metadata
+                        and display.get("protocolProfile") == "a2flow.java-rpc.v1"):
+                    from ..capability_approval import require_confirmation
+                    require_confirmation(card["display"], request["payload"]["actionName"],
+                                         request["payload"]["inputs"])
+                    origin = self._approval_origin(transaction, scope, card)
+                    expected_metadata, expected_display = origin["metadata"], origin["card"]["display"]
+                    if metadata.get("completedApproval") != {
+                        "preflightRequestId": card["binding_metadata"]["approvalOriginRequestId"],
+                        "confirmationRequestId": request_id,
+                    }:
                         _reject("CARD_BINDING_MISMATCH")
-                if display["applicationKey"] != card["display"]["applicationKey"]:
+                # Only trusted runtime state changes; ownership and approval cannot change.
+                for field in ("skillKey", "conversationId", "controlRequestId", "toolCallId",
+                              "applicationKey", "processingTaskId", "approval", "approvalSkillKey",
+                              "approvalProcessingContext", "approvalProcessingTurnId", "workflow",
+                              "definitionSource", "approvalOriginRequestId"):
+                    if metadata.get(field) != expected_metadata.get(field):
+                        _reject("CARD_BINDING_MISMATCH")
+                if display["applicationKey"] != expected_display["applicationKey"]:
                     _reject("CARD_BINDING_MISMATCH")
                 card["display"], card["binding_metadata"] = display, metadata
             card["status"] = ("COMPLETED" if business_success and completes
@@ -642,7 +756,14 @@ class ChatCardStore:
                 return deepcopy(prior["card_snapshot"])
             if card["status"] != "WAITING_ACTION":
                 _reject("CARD_TERMINAL")
-            result = validate_submission(card["display"], action_name, inputs)
+            if "approval" in card["binding_metadata"]:
+                if ("workflow" not in card["binding_metadata"]
+                        or "approvalOriginRequestId" in card["binding_metadata"]):
+                    _reject("WRITE_CONFIRMATION_DISPATCH_REQUIRED")
+                from ..capability_approval import require_confirmation
+                result = require_confirmation(card["display"], action_name, inputs)
+            else:
+                result = validate_submission(card["display"], action_name, inputs)
             prepared = completed_interaction(card["display"], result)
             display, _ = _validate_prepared(prepared)
             card["display"] = display

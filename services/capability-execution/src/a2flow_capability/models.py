@@ -47,6 +47,10 @@ class ExecutionErrorCode(StrEnum):
     CAPABILITY_CLIENT_NOT_SUPPORTED = "CAPABILITY_CLIENT_NOT_SUPPORTED"
     RELEASE_ENVIRONMENT_INVALID = "RELEASE_ENVIRONMENT_INVALID"
     EXECUTION_PLAN_INVALID = "EXECUTION_PLAN_INVALID"
+    APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
+    APPROVAL_INVALID = "APPROVAL_INVALID"
+    APPROVAL_ALREADY_CONSUMED = "APPROVAL_ALREADY_CONSUMED"
+    APPROVAL_STORE_UNAVAILABLE = "APPROVAL_STORE_UNAVAILABLE"
     ARGUMENT_INVALID = "ARGUMENT_INVALID"
     ARGUMENT_TYPE_MISMATCH = "ARGUMENT_TYPE_MISMATCH"
     REQUEST_MAPPING_INVALID = "REQUEST_MAPPING_INVALID"
@@ -225,6 +229,8 @@ class PublishedPlan:
     binding_type: str = "GRPC"
     idempotency: str = "NONE"
     response_policy: str = "ORIGINAL"
+    side_effect_level: str = ""
+    approval_policy: str = ""
 
     def __post_init__(self) -> None:
         _require_text(self.source_id, "source_id", 256)

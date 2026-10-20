@@ -1,0 +1,104 @@
+name: Core invariant probes
+
+on:
+  pull_request:
+    paths:
+      - "services/**"
+      - "packages/**"
+      - "deploy/**"
+      - "contracts/**"
+      - "experiments/runtime-phase1/requirements.lock"
+      - "openspec/changes/portfolio-runtime-outbox/**"
+      - "scripts/**"
+      - ".dockerignore"
+      - ".github/workflows/core-probes.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "packages/**"
+      - "deploy/**"
+      - "contracts/**"
+      - "experiments/runtime-phase1/requirements.lock"
+      - "openspec/changes/portfolio-runtime-outbox/**"
+      - "scripts/**"
+      - ".dockerignore"
+      - ".github/workflows/core-probes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-probes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PROBE_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Build existing probe dependencies (no application secrets)
+        timeout-minutes: 15
+        run: |
+          docker build -f openspec/changes/portfolio-runtime-outbox/Dockerfile.probe -t a2flow-core-probes:local .
+          docker pull postgres:16.6-bookworm
+      - name: Exercise account, outbox, executor and Chat/Workflow/A2UI approval invariants
+        timeout-minutes: 21
+        run: python scripts/run_core_probes.py --run-id "$PROBE_RUN_ID" --probe-timeout 180
+      - name: Remove only this run's disposable containers
+        if: always()
+        run: python scripts/run_core_probes.py --cleanup --run-id "$PROBE_RUN_ID"
+      - name: Publish synthetic result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: postgres-core-probes
+          path: artifacts/core-probes/postgres.json
+          if-no-files-found: warn
+          retention-days: 7
+  java:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PROBE_RUN_ID: ci-java-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Compile management and resolve the existing runtime dependencies
+        timeout-minutes: 15
+        run: |
+          mvn --batch-mode --no-transfer-progress -f services/management-java/pom.xml -DskipTests compile dependency:copy-dependencies
+          docker pull postgres:16.6-bookworm
+          docker pull eclipse-temurin:17-jre-jammy
+      - name: Exercise durable approval consumption and archive boundaries
+        timeout-minutes: 9
+        run: python scripts/run_core_probes.py --suite java --run-id "$PROBE_RUN_ID" --probe-timeout 60
+      - name: Remove only this run's disposable containers
+        if: always()
+        run: python scripts/run_core_probes.py --cleanup --run-id "$PROBE_RUN_ID"
+      - name: Publish synthetic result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: java-core-probes
+          path: artifacts/core-probes/java.json
+          if-no-files-found: warn
+          retention-days: 7

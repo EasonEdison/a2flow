@@ -113,7 +113,6 @@ public class SkillFactoryWorkspaceService {
     private static final String PARAM_FILE_PATH = "filePath";
     private static final String PARAM_CONTENT = "content";
     private static final String PARAM_PACKAGE_TYPE = "packageType";
-    private static final String PARAM_PACKAGE_URL = "packageUrl";
     private static final String PARAM_ZIP_FILE_NAME = "zipFileName";
     private static final String PARAM_ZIP_BASE64 = "zipBase64";
     private static final String PARAM_CREATE_SOURCE = "createSource";
@@ -136,7 +135,6 @@ public class SkillFactoryWorkspaceService {
     private static final String ACTION_RESET_WORKSPACE = "从指定来源重置当前变更";
     private static final String ACTION_SAVE_WORKSPACE = "保存工作区";
     private static final String ACTION_ZIP_IMPORT = "ZIP导入";
-    private static final String ACTION_RESTORE_PACKAGE = "恢复包版本";
     private static final String ACTION_PUBLISH_PREPROD = "发布到预发";
     private static final String ACTION_PUBLISH_ONLINE_CURRENT = "发布当前内容到线上";
     private static final String FILE_SKILL_MD = "SKILL.md";
@@ -166,18 +164,11 @@ public class SkillFactoryWorkspaceService {
     private static final String STATUS_EXTRACTED = "EXTRACTED";
     private static final String STATUS_NOT_REGISTERED = "NOT_REGISTERED";
     private static final String STATUS_IMPORTED = "IMPORTED";
-    private static final String RESTORE_STATUS_RESTORED = "RESTORED";
-    private static final String RESTORE_STATUS_PACKAGE_DOWNLOAD_NOT_CONNECTED = "PACKAGE_DOWNLOAD_NOT_CONNECTED";
     private static final String RESTORE_MESSAGE_PACKAGE_DOWNLOAD_NOT_CONNECTED =
             "PACKAGE_VERSION_RESTORE requires object storage download integration";
-    private static final String RESTORE_MESSAGE_LOCAL_PACKAGE_RESTORED = "local package restored";
-    private static final String RESTORE_MESSAGE_REMOTE_PACKAGE_RESTORED = "remote package restored";
     private static final String CREATE_SOURCE_ZIP_IMPORT = "ZIP_IMPORT";
     private static final String UPLOAD_PACKAGE_URL_PREFIX = "upload://";
     private static final String ZIP_BASE64_DATA_URL_MARKER = "base64,";
-    private static final String LOCAL_FILE_URL_PREFIX = "file:";
-    private static final String HTTP_URL_PREFIX = "http:";
-    private static final String HTTPS_URL_PREFIX = "https:";
     private static final String FIELD_WORKSPACE_ID = "workspaceId";
     private static final String FIELD_TREE_DATA = "treeData";
     private static final String FIELD_CONTENT = "content";
@@ -187,8 +178,6 @@ public class SkillFactoryWorkspaceService {
     private static final String FIELD_FILES = "files";
     private static final String FIELD_SAMPLES = "samples";
     private static final String FIELD_STATUS = "status";
-    private static final String FIELD_PACKAGE_URL = "packageUrl";
-    private static final String FIELD_RESTORE_STATUS = "restoreStatus";
     private static final String FIELD_RESTORED_FILE_COUNT = "restoredFileCount";
     private static final String FIELD_MESSAGE = "message";
     private static final String FIELD_NODE_KEY = "key";
@@ -1121,40 +1110,10 @@ public class SkillFactoryWorkspaceService {
         return result;
     }
 
-    /**
-     * 恢复包版本。
-     *
-     * <p>`file://` 用于恢复 `PACKAGE_BUILD` 产生的本地包，HTTP/HTTPS 用于恢复对象存储暴露的 ZIP URL。
-     * 未确认的对象存储私有协议继续返回明确未接入状态，避免把平台发布链路伪装成已完成。
-     */
-    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    /** Legacy URL recovery is rejected; published BUILD/VERSION reset preserves ownership and digest checks. */
     public Map<String, Object> restorePackage(String workspaceId, String packageUrl, Map<String, String> params)
             throws IOException {
-        log.info("SkillFactory包版本恢复被调用, workspaceId:{}, packageUrl:{}",
-                workspaceId, packageUrl);
-        if (!isSupportedRestorePackageUrl(packageUrl)) {
-            log.info("SkillFactory包版本恢复跳过，packageUrl协议未接入, workspaceId:{}, packageUrl:{}",
-                    workspaceId, packageUrl);
-            Map<String, Object> result = workspaceSummary(workspaceId, params);
-            result.put(FIELD_PACKAGE_URL, StringUtils.defaultString(packageUrl));
-            result.put(FIELD_RESTORE_STATUS, RESTORE_STATUS_PACKAGE_DOWNLOAD_NOT_CONNECTED);
-            result.put(FIELD_MESSAGE, RESTORE_MESSAGE_PACKAGE_DOWNLOAD_NOT_CONNECTED);
-            return result;
-        }
-        requireDraftEditable(workspaceId, ACTION_RESTORE_PACKAGE);
-        Path workspace = requireWorkspace(workspaceId);
-        int restoredFileCount = packageArtifactService.restorePackage(
-                workspaceRepository.workspaceRoot(), workspace, packageUrl, workspaceId,
-                workspaceId);
-        SkillDraft workspaceDO = persistWorkspaceState(workspaceId, params);
-        Map<String, Object> result = workspaceToMap(workspaceDO);
-        result.put(FIELD_PACKAGE_URL, StringUtils.defaultString(packageUrl));
-        result.put(FIELD_RESTORE_STATUS, RESTORE_STATUS_RESTORED);
-        result.put(FIELD_RESTORED_FILE_COUNT, restoredFileCount);
-        result.put(FIELD_MESSAGE, restoreMessage(packageUrl));
-        log.info("SkillFactory包版本恢复完成, workspaceId:{}, restoredFileCount:{}, digest:{}",
-                workspaceId, restoredFileCount, workspaceDO.getFileTreeDigest());
-        return result;
+        throw SkillFactoryValidationException.packageRestoreSourceRequired();
     }
 
     private Map<String, Object> workspaceSummary(String workspaceId, Map<String, String> params) throws IOException {
@@ -1717,12 +1676,6 @@ public class SkillFactoryWorkspaceService {
         return diff.toString();
     }
 
-    private boolean isSupportedRestorePackageUrl(String packageUrl) {
-        return StringUtils.startsWithIgnoreCase(packageUrl, LOCAL_FILE_URL_PREFIX)
-                || StringUtils.startsWithIgnoreCase(packageUrl, HTTP_URL_PREFIX)
-                || StringUtils.startsWithIgnoreCase(packageUrl, HTTPS_URL_PREFIX);
-    }
-
     private byte[] decodeZipBase64(String zipBase64) {
         String normalized = StringUtils.defaultString(zipBase64).trim();
         int markerIndex = StringUtils.indexOfIgnoreCase(normalized, ZIP_BASE64_DATA_URL_MARKER);
@@ -1737,13 +1690,6 @@ public class SkillFactoryWorkspaceService {
                     StringUtils.defaultString(zipBase64).length(), e);
             throw new IllegalArgumentException(ERROR_ZIP_BASE64_INVALID, e);
         }
-    }
-
-    private String restoreMessage(String packageUrl) {
-        if (StringUtils.startsWithIgnoreCase(packageUrl, LOCAL_FILE_URL_PREFIX)) {
-            return RESTORE_MESSAGE_LOCAL_PACKAGE_RESTORED;
-        }
-        return RESTORE_MESSAGE_REMOTE_PACKAGE_RESTORED;
     }
 
     private Map<String, Object> workspaceToMap(SkillDraft workspaceDO) {

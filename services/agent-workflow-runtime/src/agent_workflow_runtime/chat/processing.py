@@ -27,6 +27,7 @@ class ProcessingProvider(Protocol):
         task_id: str, turn_id: str, tool_call_id: str, ability_key: str,
         arguments: Mapping[str, Any],
         invoke: Callable[[str], Mapping[str, Any]],
+        confirmation_card_id: str | None = None,
     ) -> dict[str, Any]: ...
 
     def bind_card(

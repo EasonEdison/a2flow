@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from a2flow_capability.bindings import bind_request
+from a2flow_capability.approval import ApprovalGuard
+from a2flow.capability.v1.capability_pb2 import ApprovalReceipt
 from a2flow_capability.models import (
     CapabilityExecutionError,
     CapabilityTransport,
@@ -20,8 +22,9 @@ from a2flow_capability.models import (
 class CapabilityExecutor:
     """Validate, bind and execute one published gRPC capability plan."""
 
-    def __init__(self, transport: CapabilityTransport) -> None:
+    def __init__(self, transport: CapabilityTransport, approval_guard: ApprovalGuard | None = None) -> None:
         self._transport = transport
+        self._approval = approval_guard or ApprovalGuard()
 
     def prepare(
         self, plan: PublishedPlan, arguments: JsonObject, context: TrustedContext
@@ -35,12 +38,14 @@ class CapabilityExecutor:
         )
 
     def execute(
-        self, plan: PublishedPlan, arguments: JsonObject, context: TrustedContext
+        self, plan: PublishedPlan, arguments: JsonObject, context: TrustedContext,
+        *, approval_receipt: ApprovalReceipt | None = None, arguments_json: bytes | None = None,
     ) -> ExecutionResult:
         """Return Java-compatible stable result semantics without business-code guessing."""
         try:
             self._validate_runtime_client(plan, context)
             prepared = self.prepare(plan, arguments, context)
+            self._approval.admit(plan, arguments, context, approval_receipt, arguments_json)
             data = self._transport.execute(plan, prepared.business_request, context)
             return self._result(plan, context, success=True, data=data)
         except CapabilityExecutionError as failure:

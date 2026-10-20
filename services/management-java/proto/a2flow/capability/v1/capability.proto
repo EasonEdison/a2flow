@@ -22,6 +22,25 @@ message ResolveResponse {
   Environment resolved_environment = 7;
   string source_id = 8;
   string source_digest = 9;
+  string side_effect_level = 10;
+  string approval_policy = 11;
+}
+// Trusted Runtime attestation after a saved, same-user explicit confirmation.
+// Never expose as model arguments. arguments_digest is lowercase SHA-256 of the
+// exact ExecuteRequest.arguments_json bytes, frozen before the confirmation.
+message ApprovalReceipt {
+  string receipt_id = 1;
+  optional int64 user_id = 2;
+  Environment environment = 3;
+  string run_id = 4;
+  string tool_call_id = 5;
+  string action_code = 6;
+  string source_id = 7;
+  string source_digest = 8;
+  string arguments_digest = 9;
+  string confirmation_id = 10;
+  string side_effect_level = 11;
+  string approval_policy = 12;
 }
 message ExecuteRequest {
   string asset_key = 1;
@@ -30,6 +49,7 @@ message ExecuteRequest {
   bytes arguments_json = 3;
   reserved 4, 5;
   reserved "expected_source_id", "expected_source_digest";
+  ApprovalReceipt approval_receipt = 6;
 }
 message ExecuteResponse {
   bool success = 1;

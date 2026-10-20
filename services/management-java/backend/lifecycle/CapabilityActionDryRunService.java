@@ -135,9 +135,6 @@ public class CapabilityActionDryRunService {
         Map<String, Object> trustedContext = new LinkedHashMap<>();
         trustedContext.put(FIELD_AGENT_CONTEXT, agentContext);
         trustedContext.put(TrustedToolContext.TRACE_ID, traceId);
-        trustedContext.put(TrustedToolContext.REVIEWED_DEMO_APPROVED,
-                environment == ReleaseEnvironment.PRT
-                        && assetAuthorizationService.isAdmin(operator));
         ToolContext toolContext = new ToolContext(trustedContext);
 
         log.info("能力中心直接dry-run开始执行, draftId:{}, revision:{}, actionCode:{}, "

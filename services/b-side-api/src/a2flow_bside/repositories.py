@@ -15,6 +15,7 @@ from psycopg.errors import UniqueViolation
 from skillweave_contracts.user_id import require_user_id
 
 from .errors import BsideError
+from .interaction_continuation import continuation_reference
 
 
 def _iso(value):
@@ -132,6 +133,7 @@ class MessagesRepository:
 
     def claim_interaction_continuation(
         self, *, user_id: int, conversation_id: int, card_id: str, request_id: str,
+        write_completed: bool = False,
     ) -> tuple[bool, dict[str, Any], dict[str, Any]]:
         """Create one follow-up pair per submitted card under the conversation lock.
 
@@ -139,6 +141,9 @@ class MessagesRepository:
         never resumes an incomplete model turn, including after a process crash.
         """
         require_user_id(user_id)
+        # A reusable A2UI card can complete several independently confirmed writes.
+        # A repeated response for the same confirmation must never dispatch twice.
+        reference = continuation_reference(card_id, request_id if write_completed else None)
         with self._factory() as connection:
             owner = connection.execute(
                 "SELECT user_id FROM conversations WHERE id=%s FOR UPDATE",
@@ -150,7 +155,7 @@ class MessagesRepository:
                 "SELECT id,role,content,ref_kind,ref_id,created_at FROM messages "
                 "WHERE conversation_id=%s AND ref_kind='temporary_interaction' "
                 "AND ref_id=%s ORDER BY id",
-                (conversation_id, card_id),
+                (conversation_id, reference),
             ).fetchall()
             if rows:
                 by_role = {row["role"]: dict(row) for row in rows}
@@ -159,7 +164,8 @@ class MessagesRepository:
                 return False, by_role["user"], by_role["assistant"]
             marker = {"cardId": card_id, "requestId": request_id}
             contents = (
-                ("user", {"text": "临时交互已提交，请根据已保存的交互结果继续。",
+                ("user", {"text": ("写操作已完成，请根据已保存的真实执行结果继续。" if write_completed
+                                   else "临时交互已提交，请根据已保存的交互结果继续。"),
                           "delivery": "submitted"}),
                 ("assistant", {"text": "", "delivery": "running", "parts": [],
                                "continuation": marker}),
@@ -170,7 +176,7 @@ class MessagesRepository:
                     "INSERT INTO messages (conversation_id,role,content,ref_kind,ref_id) "
                     "VALUES (%s,%s,%s::jsonb,'temporary_interaction',%s) "
                     "RETURNING id,role,content,ref_kind,ref_id,created_at",
-                    (conversation_id, role, json.dumps(content), card_id),
+                    (conversation_id, role, json.dumps(content), reference),
                 ).fetchone()
                 created.append(dict(row))
             return True, created[0], created[1]

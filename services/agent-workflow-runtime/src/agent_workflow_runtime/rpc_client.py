@@ -13,7 +13,7 @@ from pathlib import Path
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TypeAlias, TypeVar, Union, cast
+from typing import Any, TypeAlias, TypeVar, Union, cast
 from urllib.parse import urlsplit
 
 import grpc
@@ -60,7 +60,7 @@ def thaw(value: JsonValue) -> object:
 
 
 def _encode(value: object) -> bytes:
-    return json.dumps(thaw(freeze(value)), ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+    return json.dumps(thaw(freeze(value)), ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def _decode(value: bytes | str) -> JsonValue:
@@ -262,6 +262,15 @@ class AbilityDescription:
     resolved_environment: str
     source_id: str
     source_digest: str
+    side_effect_level: str = ""
+    approval_policy: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedAction:
+    description: AbilityDescription
+    arguments: JsonObject
+    binding_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -434,7 +443,7 @@ class RpcClient:
             raise RpcFailure("RPC_RELEASE_MISMATCH")
         return AbilityDescription(value.asset_key, value.action_code, value.capability_version, value.description,
                                   _object(value.input_schema_json), _decode(value.key_output_fields_json), environment,
-                                  value.source_id, value.source_digest)
+                                  value.source_id, value.source_digest, value.side_effect_level, value.approval_policy)
 
     def activate(self, owner: TrustedContext, app_code: str, params: JsonObject,
                  request_id: str) -> RuntimeResult:
@@ -467,31 +476,63 @@ class RpcClient:
             raise RpcFailure("A2UI_GENERATED_DEFINITION_MISMATCH")
         return result
 
-    def act(self, owner: TrustedContext, card: TrustedCard, action_message: JsonObject, request_id: str,
-            *, correlation_id: str) -> RuntimeResult:
-        context = self._context(owner, request_id)
+    def _act_request(self, owner: TrustedContext, card: TrustedCard,
+                     action_message: JsonObject, request_id: str, correlation_id: str):
         if card.user_id != owner.user_id:
             raise RpcFailure("A2UI_CARD_CONTEXT_MISMATCH")
         trusted = ui.TrustedCard(user_id=card.user_id, app_code=card.app_code,
-                                 params_json=_encode(card.params),
-                                 snapshot_json=_encode(card.snapshot))
-        expected_code = card.app_code
+                                params_json=_encode(card.params), snapshot_json=_encode(card.snapshot))
         if card.generated_definition is not None:
             trusted.generated_definition.CopyFrom(_generated_wire(card.generated_definition))
             trusted.scope.CopyFrom(_scope(cast(GenerationScope, card.scope)))
-            expected_code = card.generated_definition.origin_app_code
-        value = self._call(self._ui.Act, ui.ActRequest(context=context, card=trusted,
-                correlation_id=correlation_id, idempotency_key=request_id,
-                action_message_json=_encode(action_message)))
+        return ui.ActRequest(context=self._context(owner, request_id), card=trusted,
+                             correlation_id=correlation_id, idempotency_key=request_id,
+                             action_message_json=_encode(action_message))
+
+    def prepare_action(self, owner: TrustedContext, card: TrustedCard,
+                       action_message: JsonObject, request_id: str,
+                       *, correlation_id: str) -> PreparedAction:
+        value = self._call(self._ui.PrepareAct, self._act_request(
+            owner, card, action_message, request_id, correlation_id))
+        capability = value.capability
+        environment = _environment(capability.resolved_environment)
+        if (environment != owner.environment or not all((capability.asset_key,
+                capability.action_code, capability.source_id, capability.source_digest, value.binding_id))):
+            raise RpcFailure("RPC_RELEASE_MISMATCH")
+        description = AbilityDescription(
+            capability.asset_key, capability.action_code, capability.capability_version,
+            capability.description, _object(capability.input_schema_json),
+            _decode(capability.key_output_fields_json), environment, capability.source_id,
+            capability.source_digest, capability.side_effect_level, capability.approval_policy)
+        return PreparedAction(description, _object(value.arguments_json), value.binding_id)
+
+    def _approval_wire(self, owner: TrustedContext, approval_receipt: dict[str, Any]):
+        receipt = dict(approval_receipt)
+        if receipt.get("user_id") != owner.user_id or receipt.get("environment") != owner.environment:
+            raise RpcFailure("WRITE_CONFIRMATION_BINDING_INVALID")
+        receipt["environment"] = cap.Environment.Value(owner.environment)
+        return cap.ApprovalReceipt(**receipt)
+
+    def act(self, owner: TrustedContext, card: TrustedCard, action_message: JsonObject, request_id: str,
+            *, correlation_id: str, approval_receipt: dict[str, Any] | None = None) -> RuntimeResult:
+        request = self._act_request(owner, card, action_message, request_id, correlation_id)
+        if approval_receipt is not None:
+            request.approval_receipt.CopyFrom(self._approval_wire(owner, approval_receipt))
+        value = self._call(self._ui.Act, request)
+        expected_code = (card.generated_definition.origin_app_code
+                         if card.generated_definition is not None else card.app_code)
         result = self._result(value, owner, expected_code)
         if result.generated_definition != card.generated_definition:
             raise RpcFailure("A2UI_GENERATED_DEFINITION_MISMATCH")
         return result
 
     def execute(self, owner: TrustedContext, asset_key: str, arguments: JsonObject,
-                request_id: str) -> AbilityResult:
-        value = self._call(self._cap.Execute, cap.ExecuteRequest(asset_key=asset_key, context=self._context(owner, request_id),
-                    arguments_json=_encode(arguments)))
+                request_id: str, *, approval_receipt: dict[str, Any] | None = None) -> AbilityResult:
+        request = cap.ExecuteRequest(asset_key=asset_key, context=self._context(owner, request_id),
+                                     arguments_json=_encode(arguments))
+        if approval_receipt is not None:
+            request.approval_receipt.CopyFrom(self._approval_wire(owner, approval_receipt))
+        value = self._call(self._cap.Execute, request)
         environment = _environment(value.resolved_environment)
         if (environment != owner.environment or value.request_id != request_id
                 or not value.source_id or not value.source_digest or not value.action_code):

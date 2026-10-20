@@ -166,6 +166,13 @@ def compile_capability(
     if response_policy != "ORIGINAL":
         raise CapabilityCompileError("only ORIGINAL responsePolicy is supported")
 
+    governance = _object(_required(root, "governance", "draft"), "governance")
+    side_effect = _required_string(governance, "sideEffectLevel", "governance")
+    approval_policy = _required_string(governance, "approvalPolicy", "governance")
+    if (side_effect not in {"READ", "WRITE", "DESTRUCTIVE"}
+            or approval_policy not in {"AUTO_EXECUTE", "REQUEST_APPROVAL"}
+            or (side_effect != "READ" and approval_policy != "REQUEST_APPROVAL")):
+        raise CapabilityCompileError("unsupported capability governance")
     input_schema = _top_level_input_schema(fields)
     description = _first_nonblank(model_contract.get("description"), basic.get("description"))
     key_output_fields = _key_output_fields(result_contract.get("keyOutputFields"))
@@ -197,6 +204,8 @@ def compile_capability(
             binding_type="GRPC",
             idempotency=idempotency,
             response_policy=response_policy,
+            side_effect_level=side_effect,
+            approval_policy=approval_policy,
         )
     except ValueError as error:
         raise CapabilityCompileError(str(error)) from error

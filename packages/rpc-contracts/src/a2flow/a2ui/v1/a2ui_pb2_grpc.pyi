@@ -73,6 +73,22 @@ _A2uiExecutionActType = typing_extensions.TypeVar(
     ],
 )
 
+_A2uiExecutionPrepareActType = typing_extensions.TypeVar(
+    '_A2uiExecutionPrepareActType',
+    grpc.UnaryUnaryMultiCallable[
+        a2flow.a2ui.v1.a2ui_pb2.ActRequest,
+        a2flow.a2ui.v1.a2ui_pb2.PreparedAction,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        a2flow.a2ui.v1.a2ui_pb2.ActRequest,
+        a2flow.a2ui.v1.a2ui_pb2.PreparedAction,
+    ],
+    default=grpc.UnaryUnaryMultiCallable[
+        a2flow.a2ui.v1.a2ui_pb2.ActRequest,
+        a2flow.a2ui.v1.a2ui_pb2.PreparedAction,
+    ],
+)
+
 _A2uiExecutionDescribeGenerationSourceType = typing_extensions.TypeVar(
     '_A2uiExecutionDescribeGenerationSourceType',
     grpc.UnaryUnaryMultiCallable[
@@ -105,7 +121,7 @@ _A2uiExecutionActivateGeneratedType = typing_extensions.TypeVar(
     ],
 )
 
-class A2uiExecutionStub(typing.Generic[_A2uiExecutionDescribeType, _A2uiExecutionActivateType, _A2uiExecutionActType, _A2uiExecutionDescribeGenerationSourceType, _A2uiExecutionActivateGeneratedType]):
+class A2uiExecutionStub(typing.Generic[_A2uiExecutionDescribeType, _A2uiExecutionActivateType, _A2uiExecutionActType, _A2uiExecutionPrepareActType, _A2uiExecutionDescribeGenerationSourceType, _A2uiExecutionActivateGeneratedType]):
     @typing.overload
     def __init__(self: A2uiExecutionStub[
         grpc.UnaryUnaryMultiCallable[
@@ -119,6 +135,10 @@ class A2uiExecutionStub(typing.Generic[_A2uiExecutionDescribeType, _A2uiExecutio
         grpc.UnaryUnaryMultiCallable[
             a2flow.a2ui.v1.a2ui_pb2.ActRequest,
             a2flow.a2ui.v1.a2ui_pb2.RuntimeResponse,
+        ],
+        grpc.UnaryUnaryMultiCallable[
+            a2flow.a2ui.v1.a2ui_pb2.ActRequest,
+            a2flow.a2ui.v1.a2ui_pb2.PreparedAction,
         ],
         grpc.UnaryUnaryMultiCallable[
             a2flow.a2ui.v1.a2ui_pb2.DescribeGenerationSourceRequest,
@@ -145,6 +165,10 @@ class A2uiExecutionStub(typing.Generic[_A2uiExecutionDescribeType, _A2uiExecutio
             a2flow.a2ui.v1.a2ui_pb2.RuntimeResponse,
         ],
         grpc.aio.UnaryUnaryMultiCallable[
+            a2flow.a2ui.v1.a2ui_pb2.ActRequest,
+            a2flow.a2ui.v1.a2ui_pb2.PreparedAction,
+        ],
+        grpc.aio.UnaryUnaryMultiCallable[
             a2flow.a2ui.v1.a2ui_pb2.DescribeGenerationSourceRequest,
             a2flow.a2ui.v1.a2ui_pb2.GenerationSource,
         ],
@@ -159,6 +183,8 @@ class A2uiExecutionStub(typing.Generic[_A2uiExecutionDescribeType, _A2uiExecutio
     Activate: _A2uiExecutionActivateType
 
     Act: _A2uiExecutionActType
+
+    PrepareAct: _A2uiExecutionPrepareActType
 
     DescribeGenerationSource: _A2uiExecutionDescribeGenerationSourceType
 
@@ -176,6 +202,10 @@ A2uiExecutionAsyncStub: typing_extensions.TypeAlias = A2uiExecutionStub[
     grpc.aio.UnaryUnaryMultiCallable[
         a2flow.a2ui.v1.a2ui_pb2.ActRequest,
         a2flow.a2ui.v1.a2ui_pb2.RuntimeResponse,
+    ],
+    grpc.aio.UnaryUnaryMultiCallable[
+        a2flow.a2ui.v1.a2ui_pb2.ActRequest,
+        a2flow.a2ui.v1.a2ui_pb2.PreparedAction,
     ],
     grpc.aio.UnaryUnaryMultiCallable[
         a2flow.a2ui.v1.a2ui_pb2.DescribeGenerationSourceRequest,
@@ -208,6 +238,13 @@ class A2uiExecutionServicer(metaclass=abc.ABCMeta):
         request: a2flow.a2ui.v1.a2ui_pb2.ActRequest,
         context: _ServicerContext,
     ) -> typing.Union[a2flow.a2ui.v1.a2ui_pb2.RuntimeResponse, collections.abc.Awaitable[a2flow.a2ui.v1.a2ui_pb2.RuntimeResponse]]: ...
+
+    @abc.abstractmethod
+    def PrepareAct(
+        self,
+        request: a2flow.a2ui.v1.a2ui_pb2.ActRequest,
+        context: _ServicerContext,
+    ) -> typing.Union[a2flow.a2ui.v1.a2ui_pb2.PreparedAction, collections.abc.Awaitable[a2flow.a2ui.v1.a2ui_pb2.PreparedAction]]: ...
 
     @abc.abstractmethod
     def DescribeGenerationSource(

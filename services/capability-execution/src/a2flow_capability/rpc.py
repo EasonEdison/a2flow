@@ -135,6 +135,8 @@ class CapabilityRpcService(rpc.CapabilityExecutionServicer):
                 resolved_environment=pb.Environment.Value(plan.resolved_environment.value),
                 source_id=plan.source_id,
                 source_digest=plan.source_digest,
+                side_effect_level=plan.side_effect_level,
+                approval_policy=plan.approval_policy,
             )
 
         return invoke(context, operation)
@@ -151,7 +153,11 @@ class CapabilityRpcService(rpc.CapabilityExecutionServicer):
             plan = compiled.plan
             if not context.is_active():
                 raise RequestCancelled
-            result = self._executor.execute(plan, arguments, owner)
+            result = self._executor.execute(
+                plan, arguments, owner,
+                approval_receipt=request.approval_receipt if request.HasField("approval_receipt") else None,
+                arguments_json=request.arguments_json,
+            )
             return pb.ExecuteResponse(
                 success=result.success,
                 action_code=result.action_code,

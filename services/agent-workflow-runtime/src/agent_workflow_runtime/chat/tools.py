@@ -231,6 +231,8 @@ def build_chat_tools(
         value = chat_assets.execute_ability(
             abilityKey, arguments, tool_call_id=runtime.tool_call_id,
         )
+        if "approvalCard" in value:
+            return _rendered(value["approvalCard"], value["approvalCard"]["display"]["applicationKey"])
         return json.dumps(value["output"], ensure_ascii=False, sort_keys=True), {
             "abilityKey": value["abilityKey"],
             "versionId": value["versionId"],

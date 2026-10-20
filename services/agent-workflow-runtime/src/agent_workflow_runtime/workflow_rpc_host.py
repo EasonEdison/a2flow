@@ -133,7 +133,14 @@ def tools_for(
         """Run an Ability bound by the current node Skill."""
         assets.validate_context(runtime.context)
         assets.current()
-        value = assets.execute_ability(abilityKey, arguments)
+        if not runtime.tool_call_id:
+            raise ActionRejected("TOOL_CALL_ID_REQUIRED")
+        receipt = actions.confirm_write(assets, abilityKey, arguments, runtime.tool_call_id)
+        # Restoring an interrupt completes the prior turn and clears its admission.
+        # Recheck the current node Skill before executing the confirmed capability.
+        assets.current()
+        value = assets.execute_ability(abilityKey, arguments, tool_call_id=runtime.tool_call_id,
+                                       approval_receipt=receipt)
         return json.dumps(value["output"], ensure_ascii=False), {
             "abilityKey": abilityKey,
             "versionId": value["versionId"],

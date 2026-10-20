@@ -20,9 +20,11 @@ from ..a2ui_generation import A2uiGenerator, require_supported_source
 from ..a2ui_generation_progress import generation_trace
 from ..temporary_generation import InteractionGenerator
 from ..temporary_interaction import prepare_interaction
+from ..capability_approval import approval_required, approval_binding, prepare_confirmation
 from ..models import json_copy
 from ..models import ActionRejected
 from ..rpc_client import (
+    AbilityDescription,
     ApplicationDescription,
     GeneratedDefinition,
     GenerationScope,
@@ -339,11 +341,82 @@ class RpcChatAssets(ChatAssets):
             raise ActionRejected("RPC_PUBLICATION_REQUIRED")
         return cast(dict[str, Any], resolved)
 
+    def prepare_approval(
+        self, ability_key: str, arguments: dict[str, Any], tool_call_id: str | None,
+        *, description: AbilityDescription | None = None, asset_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Persist a host-authored confirmation; model arguments cannot grant authority."""
+        if description is None:
+            record = self._record("ABILITY", ability_key)
+            asset_key = record["definition"]["assetKey"]
+            description = self.rpc.resolve(self.owner, asset_key, "approval-contract:" + uuid4().hex)
+        if asset_key != description.asset_key:
+            raise ActionRejected("WRITE_CONFIRMATION_BINDING_INVALID")
+        if not approval_required(description):
+            return None
+        if not tool_call_id:
+            raise ActionRejected("TOOL_CALL_ID_REQUIRED")
+        with self._render_lock:
+            prepared = prepare_confirmation(description, arguments)
+            scope = self.generation_scope()
+            observation = {
+                "description": "等待用户明确确认写操作；尚未发送业务请求",
+                "arguments": json_copy(arguments),
+                "preparedContent": project_rendered_content(prepared.display()["snapshotMessages"]),
+            }
+            metadata = {
+                "definitionSource": "TEMPORARY", "conversationId": self.conversation_id,
+                "controlRequestId": self.control_request_id, "toolCallId": tool_call_id,
+                "applicationKey": prepared.application_key,
+                "applicationVersion": prepared.application_version,
+                "observation": observation,
+                "approval": approval_binding(self.owner, scope.workflow_run_id or self.conversation_id,
+                                             tool_call_id, ability_key, arguments, description),
+            }
+            if self._admission is not None:
+                metadata["approvalSkillKey"] = self._admission.skill_key
+            if self._processing_context is not None:
+                metadata["approvalProcessingContext"] = json_copy(self._processing_context)
+                metadata["approvalProcessingTurnId"] = self._processing_turn_id
+            pending = getattr(self, "_approval_pending", {})
+            prior = pending.get(tool_call_id)
+            if prior is not None:
+                if prior[1] != metadata:
+                    raise ActionRejected("WRITE_CONFIRMATION_BINDING_INVALID")
+                # The sink verifies immutable save identity and returns the current
+                # persisted card, including a completed confirmation after resume.
+                prepared, metadata = prior
+            elif self._waiting_action is not None:
+                raise ActionRejected("INTERACTION_REQUIRED")
+            saved = self._card_sink(prepared, json_copy(metadata))
+            if saved["status"] == "UNKNOWN":
+                raise ActionRejected("ACTION_OUTCOME_UNKNOWN")
+            if saved["status"] == "EXECUTING":
+                raise ActionRejected("ACTION_REQUEST_BUSY")
+            pending[tool_call_id] = (prepared, json_copy(metadata))
+            self._approval_pending = pending
+            self._render_observations[saved["cardId"]] = {
+                "cardId": saved["cardId"], "applicationKey": prepared.application_key,
+                "arguments": observation["arguments"], "preparedContent": observation["preparedContent"],
+            }
+            if saved["status"] == "WAITING_ACTION":
+                self._waiting_action = saved
+            elif self._waiting_action is not None and self._waiting_action["cardId"] == saved["cardId"]:
+                self._waiting_action = None
+            return saved
+
     def execute_ability(
         self, ability_key: str, arguments: dict[str, Any], *, tool_call_id: str | None = None,
+        approval_receipt: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         record = self._record("ABILITY", ability_key)
         definition = record["definition"]
+        if approval_receipt is None:
+            approval_card = self.prepare_approval(ability_key, arguments, tool_call_id)
+            if approval_card is not None:
+                return {"abilityKey": ability_key, "versionId": record["versionId"],
+                        "approvalCard": approval_card, "output": {"status": "AWAITING_APPROVAL"}}
+        rpc_options = {} if approval_receipt is None else {"approval_receipt": approval_receipt}
         if self._processing_context is not None:
             if not tool_call_id:
                 raise ActionRejected("TOOL_CALL_ID_REQUIRED")
@@ -352,7 +425,7 @@ class RpcChatAssets(ChatAssets):
                 self.owner, definition["assetKey"], "processing-contract:" + uuid4().hex,
             )
             def invoke(request_id: str) -> dict[str, Any]:
-                result = self.rpc.execute(self.owner, definition["assetKey"], arguments, request_id)
+                result = self.rpc.execute(self.owner, definition["assetKey"], arguments, request_id, **rpc_options)
                 if result.action_code != contract.action_code:
                     raise ActionRejected("PROCESSING_ABILITY_BINDING_MISMATCH")
                 return {
@@ -369,12 +442,14 @@ class RpcChatAssets(ChatAssets):
                 task_id=self._processing_context["taskId"],
                 turn_id=self._processing_turn_id, tool_call_id=tool_call_id,
                 ability_key=contract.action_code, arguments=json_copy(arguments), invoke=invoke,
+                **({} if approval_receipt is None else {
+                    "confirmation_card_id": approval_receipt["confirmation_id"]}),
             )
             return {"abilityKey": ability_key, "versionId": record["versionId"],
                     "output": envelope}
 
         result = self.rpc.execute(self.owner, definition["assetKey"], arguments,
-                                  "ability:" + uuid4().hex)
+                                  "ability:" + uuid4().hex, **rpc_options)
         if not result.success:
             raise ActionRejected(result.error_code or "ABILITY_RESULT_NOT_SUCCESS")
         return {"abilityKey": ability_key, "versionId": record["versionId"],
