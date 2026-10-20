@@ -206,9 +206,56 @@ class ProcessingTasksRepository:
                                    ('RESULT_RECORDED' if has_result else 'OPEN', task_id))
             return _context(self._row(connection, scope, task_id))
 
+    @staticmethod
+    def _confirmed_write(connection: Any, scope: tuple[int, str, int], task_id: str,
+                         card_id: str, turn_id: str, tool_call_id: str,
+                         ability_key: str, encoded: str) -> bool:
+        """Admit only the exact durably claimed card; never infer approval from prose."""
+        if not isinstance(card_id, str) or not card_id or len(card_id) > 128:
+            return False
+        row = connection.execute(
+            "SELECT c.binding_metadata,r.payload FROM processing_cards p "
+            "JOIN chat_a2ui_cards c ON c.user_id=p.user_id AND c.environment=p.environment "
+            "AND c.conversation_id=p.conversation_id::text AND c.card_id=p.card_id "
+            "JOIN chat_a2ui_action_requests r ON r.user_id=c.user_id AND r.environment=c.environment "
+            "AND r.conversation_id=c.conversation_id AND r.card_id=c.card_id "
+            "AND r.request_id=c.active_request_id "
+            "WHERE p.user_id=%s AND p.environment=%s AND p.conversation_id=%s AND p.task_id=%s "
+            "AND p.card_id=%s AND c.status='EXECUTING' AND r.state='CLAIMED'",
+            (*scope, task_id, card_id)).fetchone()
+        if row is None:
+            return False
+        metadata = row['binding_metadata']
+        binding = metadata.get('approval', {})
+        receipt = binding.get('receipt', {})
+        context = metadata.get('approvalProcessingContext', {})
+        if (metadata.get('definitionSource') != 'TEMPORARY'
+                or metadata.get('processingTaskId') != task_id
+                or context.get('taskId') != task_id
+                or context.get('conversationId') != str(scope[2])
+                or metadata.get('approvalProcessingTurnId') != turn_id
+                or metadata.get('toolCallId') != tool_call_id
+                or receipt.get('user_id') != scope[0] or receipt.get('environment') != scope[1]
+                or receipt.get('run_id') != str(scope[2]) or receipt.get('tool_call_id') != tool_call_id
+                or receipt.get('action_code') != ability_key
+                or receipt.get('side_effect_level') not in {'WRITE', 'DESTRUCTIVE'}
+                or receipt.get('approval_policy') != 'REQUEST_APPROVAL'
+                or _json(binding.get('arguments')) != encoded
+                or receipt.get('arguments_digest') != hashlib.sha256(encoded.encode()).hexdigest()
+                or row['payload'] != {'actionName': 'submit', 'inputs': {'confirmation': ['approve']}}):
+            return False
+        return connection.execute(
+            "SELECT 1 FROM processing_cards p JOIN chat_a2ui_cards c ON c.user_id=p.user_id "
+            "AND c.environment=p.environment AND c.conversation_id=p.conversation_id::text "
+            "AND c.card_id=p.card_id WHERE p.user_id=%s AND p.environment=%s "
+            "AND p.conversation_id=%s AND p.task_id=%s AND p.card_id<>%s "
+            "AND c.status IN ('WAITING_ACTION','EXECUTING') LIMIT 1",
+            (*scope, task_id, card_id)).fetchone() is None
+
     def execute_operation(self, *, user_id: int, environment: str, conversation_id: str,
                           task_id: str, turn_id: str, tool_call_id: str, ability_key: str,
-                          arguments: Mapping[str, Any], invoke: Callable[[str], dict[str, Any]]) -> OperationEnvelope:
+                          arguments: Mapping[str, Any], invoke: Callable[[str], dict[str, Any]],
+                          confirmation_card_id: str | None = None) -> OperationEnvelope:
         scope = self._scope(user_id, environment, conversation_id)
         encoded = _json(dict(arguments))
         if len(encoded.encode()) > 262144 or not ability_key or len(ability_key) > 256:
@@ -225,7 +272,14 @@ class ProcessingTasksRepository:
                                        (task_id, digest)).fetchone()
             if prior:
                 return self._envelope(prior, replayed=True)
-            if task['status'] in {'RESOLVED', 'FAILED', 'UNKNOWN', 'WAITING_INPUT'}:
+            confirmed = False
+            if confirmation_card_id is not None:
+                confirmed = self._confirmed_write(connection, scope, task_id, confirmation_card_id,
+                                                  turn_id, tool_call_id, ability_key, encoded)
+                if not confirmed:
+                    raise BsideError('PROCESSING_CONFIRMATION_INVALID', 409)
+            if (task['status'] in {'RESOLVED', 'FAILED', 'UNKNOWN'}
+                    or (task['status'] == 'WAITING_INPUT' and not confirmed)):
                 raise BsideError('PROCESSING_TASK_NOT_EXECUTABLE', 409)
             if connection.execute("SELECT 1 FROM processing_operations WHERE task_id=%s AND status='RUNNING'", (task_id,)).fetchone():
                 raise BsideError('PROCESSING_OPERATION_IN_PROGRESS', 409)
