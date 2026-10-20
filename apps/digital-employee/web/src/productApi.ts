@@ -125,6 +125,9 @@ const friendlyMessages: Record<string, string> = {
   INVALID_PASSWORD: '密码至少需要 8 位',
   USERNAME_TAKEN: '该用户名已被注册',
   INVALID_CREDENTIALS: '用户名或密码错误',
+  AUTH_RATE_LIMITED: '登录或注册尝试过于频繁，请稍后再试',
+  AUTH_GUARD_UNAVAILABLE: '账号服务暂不可用，请稍后再试',
+  REGISTRATION_DISABLED: '当前站点未开放注册，请联系管理员',
   AUTHENTICATION_REQUIRED: '登录已过期，请重新登录',
   UNAUTHENTICATED: '登录已过期，请重新登录',
   REQUEST_FAILED: '请求失败，请稍后再试',
@@ -590,8 +593,8 @@ export const productApi = {
   updateSchedule: (id: string, value: { expression: string; timezone: string; input: string }) => api(`/api/schedules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ ruleType: 'cron', ruleJson: { expression: value.expression }, timezone: value.timezone, inputText: value.input }), headers: { 'Content-Type': 'application/json' } }),
   scheduleRuns: (id: string, before?: string) => api<{ runs: ScheduleRun[]; nextCursor: string | null }>(`/api/schedules/${encodeURIComponent(id)}/runs${before ? `?before=${encodeURIComponent(before)}` : ''}`),
   deleteSchedule: (id: string) => api(`/api/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  notifications: async (): Promise<{ items: Notification[] }> => {
-    const payload = await api<{ notifications?: Row[] }>('/api/notifications');
+  notifications: async (signal?: AbortSignal): Promise<{ items: Notification[] }> => {
+    const payload = await api<{ notifications?: Row[] }>('/api/notifications', { signal });
     return {
       items: (payload.notifications ?? []).map((row) => ({
         id: idOf(row.id),

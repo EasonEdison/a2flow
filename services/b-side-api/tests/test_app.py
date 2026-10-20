@@ -289,12 +289,19 @@ def catalog(user_id):
                                             {"type": "string"}}}}]
 
 
+class FakeAccountGuard:
+    """Explicit test dependency; shared PostgreSQL admission is probed separately."""
+    def admit(self, action, username, scope):
+        pass
+
+
 class Harness:
     def __init__(self, **overrides):
         self.clock = FakeClock()
         users = FakeUsers()
         self.components = {
             "users": users, "sessions": FakeSessions(users),
+            "account_guard": FakeAccountGuard(),
             "conversations": FakeConversations(),
             "messages": FakeMessages(), "schedules": FakeSchedules(),
             "notifications": FakeNotifications(),

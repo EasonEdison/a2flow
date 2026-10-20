@@ -13,15 +13,14 @@ import psycopg
 from pydantic import SecretStr
 
 from hashlib import sha256
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from agent_workflow_runtime.chat.cards import CardCompletion
-from agent_workflow_runtime.events import DomainEvent
 from agent_workflow_runtime.rpc_client import RpcClient
-from a2flow_scheduler.contracts import NotificationCommand, ResumeWorkflow
-from a2flow_scheduler.outbox import PostgresOutbox, enqueue_on_card_transaction
-from a2flow_scheduler.persistence import scheduler_engine
+from a2flow_scheduler.contracts import ResumeWorkflow
+from a2flow_scheduler.outbox import enqueue_on_card_transaction
+from deploy.attended.runtime_events import SchedulerEventSink
 from agent_workflow_runtime.workflow_rpc_host import RpcWorkflowHost
 from agent_workflow_runtime.internal_identity import private_identity
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
@@ -50,32 +49,10 @@ def completed_card(connection: psycopg.Connection[Any], completion: CardCompleti
     ))
 
 
-class SchedulerEventSink:
-    def __init__(self, conninfo: str) -> None:
-        self.outbox = PostgresOutbox(scheduler_engine(conninfo))
-
-    def publish(self, event: DomainEvent) -> None:
-        names: dict[str, Literal["waiting", "completed", "failed", "stopped"]] = {
-            "NODE_WAITING": "waiting", "RUN_FINISHED": "completed",
-            "RUN_FAILED": "failed", "RUN_STOPPED": "stopped",
-        }
-        kind = names.get(event.event_type)
-        if kind is None:
-            return
-        with self.outbox.transaction() as session:
-            self.outbox.enqueue(NotificationCommand(
-                message_id="event:" + str(event.event_id), user_id=event.user_id,
-                run_id=event.run_id, event=kind,
-                title={"waiting": "工作流等待操作", "completed": "工作流已完成",
-                       "failed": "工作流执行失败", "stopped": "工作流已停止"}[kind],
-                body="请查看工作流运行详情。",
-            ), session=session)
-
-
 def create_app_from_environment():
     """Uvicorn factory: reviewed mvp assembly + optional queue event sink."""
     from deploy.mvp import app as mvp
-    sink = SchedulerEventSink(mvp.conninfo)
+    sink = SchedulerEventSink()
     def configuration(reference, owner):
         if reference != "deepseek-v4-flash" or owner.environment != mvp.environment:
             raise RuntimeError("MODEL_CONFIGURATION_NOT_FOUND")
@@ -117,7 +94,7 @@ def create_app_from_environment():
         application_data_validator=mvp.application_data_validator,
         static_directory=os.environ.get("A2FLOW_STATIC_DIRECTORY"),
         unexpected_error_observer=mvp.error_observer,
-        event_sink=sink,
+        transactional_event_writer=sink.publish,
         # Attended B-side and Runtime use the same database and native Store.
         # Setup belongs to the seed command; never create tables per request.
         personal_memory=PersonalMemory(mvp.conninfo),

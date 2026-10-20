@@ -1,11 +1,8 @@
 """Management browser authentication using the shared PostgreSQL accounts."""
 
-from collections import deque
 from datetime import datetime, timedelta, timezone
 from http.cookies import CookieError, SimpleCookie
 import secrets
-import threading
-import time
 from urllib.parse import parse_qs
 
 from dataclasses import dataclass
@@ -20,6 +17,8 @@ from starlette.types import Scope
 from a2flow_bside.auth import (
     hash_password, verify_password, new_session_token, hash_session_token,
 )
+
+from a2flow_bside.account_guard import AccountGuardConfig, AccountGuardError, PostgresAccountGuard
 
 _IDENTITY_HEADERS = frozenset({b"x-a2flow-environment", b"x-a2flow-role",
     b"x-a2flow-roles", b"x-a2flow-user-id", b"x-environment", b"x-role",
@@ -73,7 +72,8 @@ _LOGOUT_PATHS = {"/logout", "/private-preview/logout"}
 
 class AccountAuthentication:
     def __init__(self, *, users: Users, sessions: Sessions, pepper: str,
-                 environment: str, origins: list[str]) -> None:
+                 environment: str, origins: list[str],
+                 account_guard: PostgresAccountGuard | None = None) -> None:
         self.users = users
         self.sessions = sessions
         self.pepper = pepper
@@ -85,8 +85,7 @@ class AccountAuthentication:
             raise RuntimeError("MIXED_MANAGEMENT_BROWSER_ORIGIN_SCHEMES")
         self.secure = all(origin.startswith("https://") for origin in origins)
         self._dummy_hash = hash_password(secrets.token_urlsafe(32), pepper=pepper)
-        self._attempts: deque[tuple[float, str, str]] = deque()
-        self._lock = threading.Lock()
+        self.account_guard = account_guard
 
     def reject_identity(self, scope: Scope) -> None:
         if any(name.lower() in _IDENTITY_HEADERS for name, _ in scope.get("headers", ())):
@@ -139,19 +138,10 @@ class AccountAuthentication:
         return principal
 
     def _admit(self, scope: Scope, username: str) -> bool:
-        # Bounded per-process limiter. Ignore untrusted forwarding headers.
-        client = scope.get("client") or ("unknown", 0)
-        address = client[0]
-        now = time.monotonic()
-        with self._lock:
-            while self._attempts and self._attempts[0][0] < now - 60:
-                self._attempts.popleft()
-            if (len(self._attempts) >= 100 or
-                    sum(item[1] == address for item in self._attempts) >= 20 or
-                    sum(item[2] == username for item in self._attempts) >= 8):
-                return False
-            self._attempts.append((now, address, username))
-            return True
+        if self.account_guard is None:
+            raise AccountGuardError("AUTH_GUARD_UNAVAILABLE", 503)
+        self.account_guard.admit("login", username, scope)
+        return True
 
     def login(self, username: str, password: str, scope: Scope) -> str | None:
         self.reject_identity(scope)
@@ -182,7 +172,10 @@ class AccountAuthentication:
 
 
 def login_page(status: int = 200) -> HTMLResponse:
-    message = "<p role='alert'>账号或密码错误，请稍后重试。</p>" if status != 200 else ""
+    text = {429: "登录尝试过于频繁，请稍后重试。",
+            503: "登录保护服务暂不可用，请稍后重试。",
+            400: "无法确认请求来源，请通过网站入口登录。"}.get(status, "账号或密码错误，请稍后重试。")
+    message = "<p role='alert'>" + text + "</p>" if status != 200 else ""
     response = HTMLResponse(
         "<!doctype html><html lang='zh-CN'><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -215,8 +208,17 @@ def attach_account_browser(app: FastAPI, authentication: AccountAuthentication) 
             response = await call_next(request)
             response.headers["Cache-Control"] = "no-store"
             return response
+        except AccountGuardError as error:
+            response = login_page(error.status)
+            response.headers.update(error.headers())
+            return response
         except AccountError as error:
             return JSONResponse({"error": {"code": error.code}}, status_code=error.status)
+        except Exception as error:
+            failure = PostgresAccountGuard.unavailable("management_account", error)
+            response = login_page(failure.status)
+            response.headers.update(failure.headers())
+            return response
 
     @app.get("/private-preview/login")
     @app.get("/login")
@@ -269,6 +271,7 @@ def create_app(authentication: AccountAuthentication) -> FastAPI:
 
 
 def create_app_from_environment() -> FastAPI:
+    import os
     import psycopg
     from psycopg.rows import dict_row
     from psycopg.conninfo import make_conninfo
@@ -290,13 +293,17 @@ def create_app_from_environment() -> FastAPI:
                         password=_secret("A2FLOW_POSTGRES_PASSWORD_FILE"))
 
     def connection() -> psycopg.Connection[dict[str, Any]]:
-        return psycopg.connect(dsn, row_factory=dict_row)
+        return psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5,
+            options="-c statement_timeout=10000 -c lock_timeout=5000")
 
     pepper = _secret("A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE")
     if len(pepper) < 32:
         raise RuntimeError("SECRET_FILE_INVALID:A2FLOW_MANAGEMENT_PASSWORD_PEPPER_FILE")
+    account_guard = PostgresAccountGuard(connection, pepper=pepper,
+        environment=environment, config=AccountGuardConfig.from_environment(os.environ))
+    account_guard.check_ready()
     authentication = AccountAuthentication(users=UsersRepository(connection),
         sessions=SessionsRepository(connection),
         pepper=pepper,
-        environment=environment, origins=origins)
+        environment=environment, origins=origins, account_guard=account_guard)
     return create_app(authentication)

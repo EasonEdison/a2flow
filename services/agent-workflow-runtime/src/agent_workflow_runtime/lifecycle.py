@@ -10,7 +10,8 @@ from uuid import uuid4
 from skillweave_contracts import TrustedContext, TrustedInvocationContext
 from .models import ActionRejected, json_copy
 from .events import (
-    DomainEvent, EventSink, NullSink, RUN_FINISHED, RUN_STARTED, RUN_STOPPED,
+    DomainEvent, EventSink, NullSink, RUN_FAILED, RUN_FINISHED, RUN_STARTED, RUN_STOPPED,
+    run_event_id,
 )
 
 
@@ -111,9 +112,11 @@ def actual_json(value):
 
 
 class RunLifecycle:
-    def __init__(self, repository: RunLifecyclePort, *, event_sink: EventSink | None = None):
+    def __init__(self, repository: RunLifecyclePort, *, event_sink: EventSink | None = None,
+                 waiting_validator=None):
         self.repository = repository
         self.event_sink = event_sink if event_sink is not None else NullSink()
+        self.waiting_validator = waiting_validator
         self._fatal_lock = Lock()
         self._fatals = {}
 
@@ -123,6 +126,7 @@ class RunLifecycle:
         self.event_sink.publish(DomainEvent.create(
             event_type, run.run_id, run.definition_key,
             run.owner.user_id, run.owner.environment, payload=payload,
+            event_id=run_event_id(event_type, run.run_id, run.owner.user_id, run.owner.environment),
         ))
 
     def observe_fatal(self, owner, run_id, error):
@@ -266,7 +270,7 @@ class RunLifecycle:
             return {"runId": run_id, "threadId": run.thread_id, "status": run.status,
                     "inFlightCallsStillPending": bool(pending), "inFlightCallCount": len(pending)}
 
-    def fail(self, owner, run_id: str) -> RunRecord | None:
+    def fail(self, owner, run_id: str, *, reason: str | None = None) -> RunRecord | None:
         """Close a real graph failure without changing successful business facts."""
         from dataclasses import replace
         with self.repository.run_scope(owner, run_id):
@@ -277,6 +281,7 @@ class RunLifecycle:
                 return None
             failed = replace(run, status="FAILED", revision=run.revision + 1)
             self.repository.put_run(failed)
+            self.publish_event(RUN_FAILED, failed, payload={"reason": reason} if reason else None)
         return failed
 
     def succeed(self, owner, run_id):

@@ -1,0 +1,11 @@
+.git
+**/.git
+**/node_modules
+**/dist
+**/target
+**/__pycache__
+**/.venv
+**/.env
+**/*.key
+**/*-key.pem
+**/.DS_Store

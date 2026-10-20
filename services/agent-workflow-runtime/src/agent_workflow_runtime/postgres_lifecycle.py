@@ -1,6 +1,8 @@
 """Run row locks use their own short transactions, never AF03 savepoints."""
 
 from contextlib import contextmanager
+from collections.abc import Callable
+from typing import Any
 from dataclasses import asdict, fields
 from threading import local
 
@@ -13,6 +15,9 @@ from .lifecycle import RunRecord, RunControl, OperationFact, canonical
 from .models import ActionRejected
 from .postgres import lock_key
 from .workflow_attention import DDL as ATTENTION_DDL
+from .events import DomainEvent
+
+TransactionalEventWriter = Callable[[psycopg.Connection[Any], DomainEvent], None]
 
 
 DDL = (
@@ -95,9 +100,56 @@ def encode_record(record):
 
 
 class PostgresRunRepository:
-    def __init__(self, conninfo, *, connection_factory=psycopg.connect):
+    def __init__(self, conninfo, *, connection_factory=psycopg.connect,
+                 transactional_event_writer: TransactionalEventWriter | None = None):
         self._conninfo, self._connect = conninfo, connection_factory
         self._local = local()
+        self._event_writer = transactional_event_writer
+
+    def publish(self, event: DomainEvent) -> None:
+        """Join the lifecycle transaction; independent waiting events use a short one."""
+        if self._event_writer is None:
+            raise ActionRejected("TRANSACTIONAL_EVENT_WRITER_REQUIRED")
+        owner = TrustedContext(user_id=event.user_id, environment=event.environment)
+        if getattr(self._local, "connection", None) is not None:
+            self._event_writer(self._connection(owner), event)
+        else:
+            with self._transaction(owner):
+                self._event_writer(self._connection(owner), event)
+
+    def waiting_candidates(self, environment: str, *, after=None, limit: int = 3):
+        if environment not in {"PRT", "ONLINE"} or not 1 <= limit <= 10:
+            raise ActionRejected("INVALID_WAITING_SCAN")
+        with self._transaction(None):
+            rows = self._connection(None).execute(
+                """SELECT r.user_id,r.run_id FROM runtime_runs r
+                   WHERE r.environment=%s AND r.document->>'status'='RUNNING'
+                     AND (%s::bigint IS NULL OR (r.user_id,r.run_id) > (%s,%s))
+                     AND EXISTS (SELECT 1 FROM runtime_interactions i
+                         WHERE i.user_id=r.user_id AND i.environment=r.environment
+                           AND i.run_id=r.run_id AND i.document->>'phase'='WAITING'
+                           AND i.document->>'run_active'='true'
+                           AND i.document->>'node_waiting'='true')
+                   ORDER BY r.user_id,r.run_id LIMIT %s""",
+                (environment, None if after is None else after[0],
+                 None if after is None else after[0], "" if after is None else after[1], limit),
+            ).fetchall()
+            return [(row["user_id"], row["run_id"]) for row in rows]
+
+    def waiting_interaction(self, run: RunRecord, reference: dict[str, str]) -> bool:
+        # The caller holds the run lock. Only committed interaction identity authorizes a notice.
+        row = self._connection(run.owner).execute(
+            """SELECT 1 FROM runtime_interactions
+               WHERE user_id=%s AND environment=%s AND run_id=%s AND node_id=%s
+                 AND interaction_id=%s AND document->>'phase'='WAITING'
+                 AND document->>'run_active'='true' AND document->>'node_waiting'='true'
+                 AND document->>'graph_thread_id'=%s AND document->>'application_key'=%s
+                 AND document->>'application_version'=%s""",
+            (run.owner.user_id, run.owner.environment, run.run_id, reference["nodeId"],
+             reference["interactionId"], run.thread_id, reference["applicationKey"],
+             reference["versionId"]),
+        ).fetchone()
+        return row is not None
 
     @contextmanager
     def _transaction(self, owner):

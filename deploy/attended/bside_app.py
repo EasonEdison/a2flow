@@ -17,6 +17,7 @@ from skillweave_contracts import TrustedContext
 
 from a2flow_asset_store import PostgresAssetRepository
 from a2flow_bside.app import create_app
+from a2flow_bside.account_guard import AccountGuardConfig, PostgresAccountGuard
 from a2flow_bside.config import BsideConfig
 from a2flow_bside.repositories import (
     ConversationsRepository,
@@ -229,7 +230,12 @@ def create_app_from_environment():
         processing_provider=processing_tasks,
     )
 
+    account_guard = PostgresAccountGuard(connection_factory, pepper=config.pepper,
+        environment=config.environment, config=AccountGuardConfig.from_environment(os.environ))
+    account_guard.check_ready()
+
     return create_app(
+        account_guard=account_guard,
         users=UsersRepository(connection_factory),
         sessions=SessionsRepository(connection_factory),
         conversations=ConversationsRepository(connection_factory),

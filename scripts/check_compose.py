@@ -26,8 +26,13 @@ def main() -> None:
             "A2FLOW_RELEASE_DIRECTORY": str(temp / "release"),
             "A2FLOW_EXISTING_SECRETS": str(temp / "secrets"),
             "A2FLOW_EXISTING_POSTGRES_SOCKET": "a2flow-syntax-only-socket",
+            "A2FLOW_PRIVATE": str(temp / "selfhost"),
+            "A2FLOW_APP_UID": "1000",
+            "A2FLOW_APP_GID": "1000",
+            "A2FLOW_DB_PREFIX": "a2flow_syntax_only",
         })
         groups = (
+            ("deploy/selfhost/compose.yaml",),
             ("deploy/java-management/compose.yaml",),
             ("deploy/python-execution/compose.yaml",),
             ("deploy/java-management/compose.yaml", "deploy/python-execution/management.override.yaml"),

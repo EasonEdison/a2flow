@@ -3,13 +3,16 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from contextvars import ContextVar
+import logging
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.callbacks import BaseCallbackHandler
 
 from .lifecycle import RunStoppedControl
 from .models import ActionRejected
-from .events import NODE_WAITING, RUN_FAILED
+from .waiting_notifications import publish_waiting_snapshot
+
+LOG = logging.getLogger(__name__)
 
 
 _CURRENT_WORKFLOW_NODE = ContextVar("a2flow_current_workflow_node", default=None)
@@ -256,17 +259,20 @@ class ControlledRunRunner:
             # interrupt means waiting, not a successful completed run.
             self.lifecycle.raise_observed_fatal(run.owner, run.run_id)
             self.lifecycle.assert_active(run.owner, run.run_id)
-            pending = tuple(graph.get_state(
-                {"configurable": {"thread_id": run.thread_id}}
-            ).next or ())
+            snapshot = graph.get_state(
+                {"configurable": {"thread_id": run.thread_id}}, subgraphs=True,
+            )
+            pending = tuple(snapshot.next or ())
             if not result.get("__interrupt__") and not pending:
                 self.lifecycle.succeed(run.owner, run.run_id)
             else:
-                for node_id in pending:
-                    if isinstance(node_id, str):
-                        self.lifecycle.publish_event(
-                            NODE_WAITING, run, payload={"nodeId": node_id},
-                        )
+                try:
+                    publish_waiting_snapshot(self.lifecycle, run, snapshot)
+                except Exception as error:
+                    # Checkpoint is already waiting. Recovery can restore its notice;
+                    # notification failure must not fabricate a graph failure.
+                    LOG.warning("Waiting notification enqueue failed run_id=%s error_type=%s",
+                                run.run_id, type(error).__name__)
             return result
         except RunStoppedControl as signal:
             self.lifecycle.raise_observed_fatal(run.owner, run.run_id)
@@ -288,22 +294,18 @@ class ControlledRunRunner:
         # Allocation precedes graph construction. Setup failures must also
         # terminate the run, even when no graph binding exists yet.
         try:
-            failed = self.lifecycle.fail(run.owner, run.run_id)
+            failed = self.lifecycle.fail(run.owner, run.run_id, reason=type(error).__name__)
             if failed is None:
                 return  # Never replace STOPPED, SUCCEEDED or prior FAILED.
             run = failed
         except Exception:
             error.add_note("RUN_FAILURE_STATE_SAVE_UNCONFIRMED")
+            return  # No independently committed notification may contradict run state.
         if isinstance(graph, RunGraphBinding) and graph.failure_observer is not None:
             try:
                 graph.failure_observer(error)
             except Exception:
                 error.add_note("NODE_FAILURE_OBSERVATION_UNCONFIRMED")
-        try:
-            self.lifecycle.publish_event(
-                RUN_FAILED, run, payload={"reason": type(error).__name__})
-        except Exception:
-            error.add_note("RUN_FAILURE_EVENT_PUBLISH_UNCONFIRMED")
 
     def action(self, run, service, payload):
         """AF04 Action entry cannot silently select the legacy AF03 test path."""

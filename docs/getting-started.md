@@ -62,13 +62,13 @@ With Docker Compose v2 installed:
 python3 scripts/check_compose.py
 ```
 
-The script creates temporary empty environment files and placeholder paths, runs `docker compose config --quiet` for the current Java, Python execution and combined override definitions, then removes only its temporary directory. It does not contact a database, create containers, pull images, provision accounts or print private configuration. This checks syntax only, not image existence or service readiness.
+The script creates temporary empty environment files and placeholder paths, runs `docker compose config --quiet` for the self-hosted, Java operator, Python execution and combined override definitions, then removes only its temporary directory. It does not contact a database, create containers, pull images, provision accounts or print private configuration. This checks syntax only, not image existence or service readiness.
 
 ## 5. Plan a real installation
 
 The current [Java deployment guide](../deploy/java-management/README.zh-CN.md) and [Python execution guide](../deploy/python-execution/README.zh-CN.md) describe an operator-managed topology. They assume an existing PostgreSQL socket volume, account/runtime stores and an image/dependency chain. The older real-chat/attended deployments are assembly history, not interchangeable current installers.
 
-Before a clean full-stack installation can be called reproducible, the project still needs a complete fresh database/bootstrap path, a single published configuration inventory and a verified image build chain. These are tracked in [quality roadmap](quality-roadmap.md). Do not run `prepare.py` on existing databases as a quick-start shortcut.
+Use the separate [self-hosting guide](../deploy/selfhost/README.md) for a fresh database/bootstrap path, configuration inventory and public image build chain. Its explicit initializer refuses to adopt unrelated existing database names and does not reset an existing administrator. Do not run historical `prepare.py` against existing databases as a quick-start shortcut. Current evidence is recorded in [foundations acceptance](../openspec/changes/production-foundations/regression.md).
 
 For a real demonstration, provision the exact trusted browser origin, HTTPS for password login, accounts/roles, PRT assets, model access and mTLS RPC targets. Keep all secret files outside Git. A model response alone is insufficient: inspect the saved run, interaction and business receipt records. There are no default admin credentials.
 
