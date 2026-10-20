@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-from hashlib import sha256
 from typing import Any, Callable
 
 from psycopg.errors import UniqueViolation
 from skillweave_contracts.user_id import require_user_id
 
 from .errors import BsideError
+from .interaction_continuation import continuation_reference
 
 
 def _iso(value):
@@ -143,8 +143,7 @@ class MessagesRepository:
         require_user_id(user_id)
         # A reusable A2UI card can complete several independently confirmed writes.
         # A repeated response for the same confirmation must never dispatch twice.
-        reference = ("write:" + sha256((card_id + "\0" + request_id).encode()).hexdigest()
-                     if write_completed else card_id)
+        reference = continuation_reference(card_id, request_id if write_completed else None)
         with self._factory() as connection:
             owner = connection.execute(
                 "SELECT user_id FROM conversations WHERE id=%s FOR UPDATE",

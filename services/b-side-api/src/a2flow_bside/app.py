@@ -413,7 +413,8 @@ def create_app(
                 processing_tasks.bind_continuation, user_id=user_id, environment=environment,
                 conversation_id=str(conversation_id), task_id=processing_context["taskId"],
                 card_id=card_id, input_message_id=input_message["id"],
-                assistant_message_id=assistant_message["id"])
+                assistant_message_id=assistant_message["id"],
+                confirmation_request_id=marker["requestId"] if write_completed else None)
         if created:
             delivery = ChatDelivery(
                 messages=messages, runner=chat_runner, user_id=user_id,

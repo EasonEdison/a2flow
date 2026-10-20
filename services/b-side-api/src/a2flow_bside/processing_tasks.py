@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping, TypedDict
 
 from skillweave_contracts.user_id import require_user_id
 from .errors import BsideError
+from .interaction_continuation import continuation_reference
 
 
 class ProcessingContext(TypedDict):
@@ -182,8 +183,10 @@ class ProcessingTasksRepository:
 
     def bind_continuation(self, *, user_id: int, environment: str, conversation_id: str,
                           task_id: str, card_id: str, input_message_id: int,
-                          assistant_message_id: int) -> ProcessingContext:
+                          assistant_message_id: int,
+                          confirmation_request_id: str | None = None) -> ProcessingContext:
         scope = self._scope(user_id, environment, conversation_id)
+        reference = continuation_reference(card_id, confirmation_request_id)
         with self._factory() as connection:
             task = self._row(connection, scope, task_id, lock=True)
             card = connection.execute('SELECT task_id FROM processing_cards WHERE user_id=%s AND environment=%s '
@@ -193,12 +196,12 @@ class ProcessingTasksRepository:
             for message_id, role in ((input_message_id, 'user'), (assistant_message_id, 'assistant')):
                 row = connection.execute("UPDATE messages SET content=content || %s::jsonb WHERE id=%s "
                     "AND conversation_id=%s AND role=%s AND ref_kind='temporary_interaction' AND ref_id=%s RETURNING id",
-                    (_json({'processingTaskId': task_id}), message_id, scope[2], role, card_id)).fetchone()
+                    (_json({'processingTaskId': task_id}), message_id, scope[2], role, reference)).fetchone()
                 if row is None:
                     raise BsideError('PROCESSING_MESSAGE_NOT_FOUND', 404)
             connection.execute('INSERT INTO processing_turns(user_id,environment,conversation_id,request_id,'
                 'request_digest,task_id,input_message_id,assistant_message_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) '
-                'ON CONFLICT DO NOTHING', (*scope, 'card:' + card_id, card_id, task_id, input_message_id, assistant_message_id))
+                'ON CONFLICT DO NOTHING', (*scope, 'card:' + reference, reference, task_id, input_message_id, assistant_message_id))
             if task['status'] == 'WAITING_INPUT' and not self._waiting_card(connection, scope, task_id):
                 has_result = connection.execute("SELECT 1 FROM processing_operations WHERE task_id=%s AND status='RETURNED' LIMIT 1",
                                                 (task_id,)).fetchone()
