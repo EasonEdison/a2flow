@@ -19,6 +19,9 @@ from typing import Callable, Literal
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
+
+from .account_guard import AccountGuardError, PostgresAccountGuard
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 
@@ -324,6 +327,7 @@ def create_app(
     chat_cards=None,
     chat_action=None,
     browser_origins: tuple[str, ...] = (),
+    account_guard: PostgresAccountGuard | None = None,
 ):
     from .config import browser_origin as validate_origin
     allowed_origins = tuple(validate_origin(value) for value in (browser_origins or (browser_origin,)))
@@ -469,10 +473,20 @@ def create_app(
                 return JSONResponse({"error": {"code": error.code}},
                                     status_code=error.status)
             if not internal:
-                request.scope["a2flow.bside.identity"] = resolve_identity(
-                    request.cookies.get(SESSION_COOKIE), sessions=sessions,
-                    now=clock)
+                try:
+                    request.scope["a2flow.bside.identity"] = await run_in_threadpool(
+                        resolve_identity, request.cookies.get(SESSION_COOKIE), sessions=sessions,
+                        now=clock)
+                except Exception as error:
+                    failure = PostgresAccountGuard.unavailable("bside_session", error)
+                    return JSONResponse({"error": {"code": failure.code}},
+                                        status_code=failure.status, headers=failure.headers())
         return await call_next(request)
+
+    @app.exception_handler(AccountGuardError)
+    async def account_guard_failure(request: Request, error: AccountGuardError):
+        return JSONResponse({"error": {"code": error.code}},
+                            status_code=error.status, headers=error.headers())
 
     @app.exception_handler(BsideError)
     async def bside_failure(request: Request, error: BsideError):
@@ -496,12 +510,25 @@ def create_app(
 
     def _issue_session(response: JSONResponse, user_id: int) -> str:
         token = auth.new_session_token()
-        sessions.create(
+        account_storage("bside_session_create", sessions.create,
             token_sha256=auth.hash_session_token(token),
             user_id=user_id,
             expires_at=clock() + dt.timedelta(seconds=session_seconds))
         set_session(response, token)
         return token
+
+    def account_storage(operation: str, function, *args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except (BsideError, AccountGuardError):
+            raise
+        except Exception as error:
+            raise PostgresAccountGuard.unavailable(operation, error) from None
+
+    def admit_account(action: str, username: str, request: Request) -> None:
+        if account_guard is None:
+            raise AccountGuardError("AUTH_GUARD_UNAVAILABLE", 503)
+        account_guard.admit(action, username, request.scope)
 
     # ---- auth ----
     # Synchronous handlers use FastAPI's bounded worker pool for PostgreSQL
@@ -513,7 +540,8 @@ def create_app(
             raise BsideError("INVALID_USERNAME", 400)
         if len(body.password) < 8:
             raise BsideError("INVALID_PASSWORD", 400)
-        user_id = users.create(
+        admit_account("register", body.username, request)
+        user_id = account_storage("bside_register", users.create,
             username=body.username,
             password_hash=auth.hash_password(body.password, pepper=pepper))
         response = JSONResponse(
@@ -523,7 +551,8 @@ def create_app(
 
     @app.post("/api/auth/login")
     def login(request: Request, body: LoginRequest):
-        record = users.find_by_username(body.username)
+        admit_account("login", body.username, request)
+        record = account_storage("bside_login", users.find_by_username, body.username)
         if record is None:
             auth.verify_password(body.password, dummy_hash, pepper=pepper)
             raise BsideError("INVALID_CREDENTIALS", 401)
@@ -542,7 +571,7 @@ def create_app(
     def logout(request: Request):
         token = parse_session_token(request.cookies.get(SESSION_COOKIE))
         if token is not None:
-            sessions.delete(auth.hash_session_token(token))
+            account_storage("bside_logout", sessions.delete, auth.hash_session_token(token))
         response = JSONResponse({"ok": True})
         clear_session(response)
         return response
