@@ -63,6 +63,10 @@ WITH facts AS (
      'processingTasks',COALESCE((SELECT jsonb_agg(t.item ORDER BY t.created_at DESC) FROM (
        SELECT p.created_at,jsonb_build_object('taskId',p.task_id,'conversationId',p.conversation_id::text,
          'status',p.status,'objective',left(p.objective,300),'updatedAt',p.updated_at,
+         'resolutionSummary',p.resolution_summary,
+         'deliveryStatus',(SELECT m.content->>'delivery' FROM processing_turns pt
+           JOIN messages m ON m.id=pt.assistant_message_id AND m.conversation_id=pt.conversation_id
+           WHERE pt.task_id=p.task_id ORDER BY pt.input_message_id DESC LIMIT 1),
          'resultSummary',p.result_summary) AS item
        FROM processing_tasks p WHERE p.user_id=b.user_id AND p.environment=b.environment
          AND p.activity_id=o.control_id AND p.attention_id=b.attention_id
