@@ -125,3 +125,19 @@ Both final JSON reports confirm cleanup. All task probe containers were absent
 after completion; previous self-host containers stayed stopped and volumes were
 preserved. No application key, production data, external business call or model
 call was used. Remote GitHub execution remains unverified.
+
+## Production Spring startup regression
+
+GitHub subsequently passed all three workflows on `dd73ce8`, but live startup
+found the approval guard/store outside the composition root's explicit imports.
+The new `ManagementContextStartupProbe` first failed against the unpatched classes
+with the same `NoSuchBeanDefinitionException: CapabilityApprovalGuard`.
+
+After adding only the two explicit imports to `RuntimeRpcConfiguration`, the full
+JDK 17 Maven build compiled 611 sources. The complete Java runner then passed:
+production context 8, PostgreSQL approval 41 and archive guards 107 checks.
+The startup probe uses the production web context class and configuration,
+without mocks or replacement beans. It verifies the real PostgreSQL store bean,
+actual Hikari connection and loopback gRPC listener lifecycle, then closes both.
+It does not start the HTTP host, publish assets, invoke a business RPC or validate
+public TLS. CI now requires this third Java probe. The updated GitHub run is pending.

@@ -88,7 +88,7 @@ jobs:
           mvn --batch-mode --no-transfer-progress -f services/management-java/pom.xml -DskipTests compile dependency:copy-dependencies
           docker pull postgres:16.6-bookworm
           docker pull eclipse-temurin:17-jre-jammy
-      - name: Exercise durable approval consumption and archive boundaries
+      - name: Exercise production context startup, approval consumption and archive boundaries
         timeout-minutes: 9
         run: python scripts/run_core_probes.py --suite java --run-id "$PROBE_RUN_ID" --probe-timeout 60
       - name: Remove only this run's disposable containers

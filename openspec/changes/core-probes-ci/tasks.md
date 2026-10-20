@@ -10,3 +10,5 @@
 - [x] Extend approved gate to Chat/Workflow/A2UI confirmation and durable Java/Python consumption.
 - [x] Verify actual Python executor with minimal PostgreSQL approval privileges.
 - [x] Validate the expanded gate against the final joint source and update readiness.
+- [x] Reproduce missing Spring approval bean with the real composition root.
+- [x] Verify explicit production bean registration and add startup to the required CI gate.

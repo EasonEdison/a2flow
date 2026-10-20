@@ -3,6 +3,15 @@
 Owner: `portfolio_onboarding`, branch `codex/main-brain-v2/core-probes-ci`,
 worktree `/home/admin/OpenSource/repos/.parallel/main-brain-v2/core-probes-ci`.
 
+Latest follow-up: main `dd73ce8` actually passed GitHub but public Java startup
+failed for missing CapabilityApprovalGuard bean; parent rolled M back. Fixed only
+RuntimeRpcConfiguration explicit imports of real guard + PG store. Added real
+production web-context startup probe (no replacement beans). Negative old-classes
+check reproduced missing guard; new full JDK17 Maven 611 compiled, Java three-probe
+gate passed 8 startup + 41 approval/PG + 107 archive. Reports:
+`/tmp/a2flow-management-context-{negative,positive}/java.json`.
+No application behavior or approval semantics changed. Parent owns deployment.
+
 Original scope was committed/pushed through `d91ff27`; parent owns integration and
 deployment. Main baseline remains `5c907ee`. Four-probe source and local command
 validation are recorded in regression.

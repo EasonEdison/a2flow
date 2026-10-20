@@ -6,12 +6,14 @@ import io.grpc.Server;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
 import dev.a2flow.management.agentcore.runtime.tool.CapabilityActionExecutor;
 import dev.a2flow.management.agentcore.runtime.tool.CapabilityActionToolProvider;
 
 /** Explicit host assembly; shared listener serves Ability and A2UI, not the management HTTP protocol. */
 @Configuration
+@Import({CapabilityApprovalGuard.class, PostgresCapabilityApprovalStore.class})
 public class RuntimeRpcConfiguration {
     @Bean(destroyMethod = "close")
     public GrpcTargetRegistry grpcTargetRegistry(Environment environment) {

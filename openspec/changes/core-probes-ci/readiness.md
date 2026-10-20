@@ -1,27 +1,25 @@
 # Readiness
 
-READY for coordinated source integration. The approved expanded gate passed
-locally against application candidate `942c2502172c06218194dd2a6b322430a3130267`
-plus the probe-only Chat update `739a2f185b6b125763192edd9b0f12a01fe81630` and
-this branch's final runner/dependency fixes.
+READY for coordinated source integration of the management startup fix; deployment
+and public acceptance remain the parent task's responsibility.
 
-- Python: account guard, outbox 15, actual executor/PG 70, Chat 227, Workflow 41
-  and A2UI 38 checks all passed in one sequential suite.
-- Java: JDK 17 compiled 611 sources; durable approval 41 and package restore 107
-  checks passed. All 573 committed Java input files matched the build export.
-- Containers, temporary classes and private files were cleaned. No model or live
-  business call occurred. See [regression](regression.md) for exact boundaries.
+The first expanded gate was actually green on GitHub for
+`dd73ce8a60493ab6030fcf75f1073e390e375b47`:
+[Core invariant probes](https://github.com/EasonEdison/a2flow/actions/runs/39418947462),
+[Project checks](https://github.com/EasonEdison/a2flow/actions/runs/39418947366) and
+[Python quality](https://github.com/EasonEdison/a2flow/actions/runs/39418947418).
+That evidence did not cover production Spring composition. Public deployment
+subsequently found missing approval bean registration; the host was rolled back.
 
-Original scoped source delivery and local execution:
-Integrate with capability-approval `da2ff11f` and package-restore `9d84cbc6` (or a
-verified descendant). The workflow intentionally requires their probe sources,
-and bootstrap references the approval worker's V003 migration. Do not deploy this
-branch alone without those dependencies.
+The added startup probe first reproduced the exact missing-guard failure against
+unpatched compiled classes. After explicitly importing the real guard/store in
+`RuntimeRpcConfiguration`, a full JDK 17 build compiled 611 sources and the whole
+Java gate passed: production context 8, durable PostgreSQL approval 41, and package
+restore 107. The actual Hikari pool and loopback gRPC lifecycle started and closed;
+no application bean was replaced and no business call occurred.
 
-The two PostgreSQL probes, timeout/collision cleanup, full combined JDK 17 Maven
-compilation, both Java probe mains, repeated V003 application and static checks
-passed locally. See [regression](regression.md). A remote GitHub Actions run remains
-unverified and distinct from this source delivery/local command evidence.
-
-No deployment is part of this branch. The GitHub workflow itself has not yet
-executed remotely; local success does not imply a green GitHub run.
+The updated startup gate has passed locally but has not yet run on GitHub. The
+previous six Python probes were unchanged by this Java wiring correction.
+See [regression](regression.md) for source/evidence boundaries. Containers, private
+credentials and temporary classes were removed; previous self-host volumes and
+stopped containers were preserved. No deployment was performed by this worker.

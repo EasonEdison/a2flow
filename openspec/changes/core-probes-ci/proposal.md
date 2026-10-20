@@ -51,3 +51,16 @@ export, check that no container/private DSN survives, and exercise a controlled
 failure to confirm nonzero exit and cleanup. Run Java probes once their owners
 deliver them. Check workflow syntax, repository links and `git diff --check`.
 GitHub execution is a separate result from local execution of identical commands.
+
+## Production context wiring correction
+
+Public deployment found that the manual management composition root imports the
+executor but intentionally does not scan the capability RPC package. The new
+approval guard/store annotations therefore never registered Spring beans.
+Explicitly import those two real components in `RuntimeRpcConfiguration`; do not
+expand scanning or change approval behavior. Add a required Java probe using the
+same `AnnotationConfigWebApplicationContext` and `ManualManagementConfiguration`
+as the host, with real isolated PostgreSQL and the actual loopback gRPC lifecycle,
+no replacement beans. Verify the unpatched classes fail for missing guard, then
+the patched full Maven build starts and closes its pool/listener. This is context
+startup coverage; it does not replace public HTTP/mTLS deployment acceptance.
