@@ -1,3 +1,5 @@
+> Historical design snapshot (2026-09-07), not the current implementation contract. Start with [current architecture](current-architecture.md). Several language, version and execution-scope decisions below have since changed.
+
 # A2Flow Platform Architecture
 
 [中文](architecture.zh-CN.md) · [Documentation](README.md) · [Project home](../README.md)

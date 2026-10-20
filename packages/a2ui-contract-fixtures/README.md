@@ -1,3 +1,5 @@
+> Historical synthetic contract fixtures. Some version-reset expectations below predate the current runtime policy; see [current architecture](../../docs/current-architecture.md). Passing these fixtures is not current end-to-end acceptance.
+
 # A2UI Application contract fixtures
 
 Status: PROVISIONAL / Phase 1 contract evidence for baseline SW-P1-20260907.2. These files are independently authored synthetic examples. They are not copied business assets, production schemas, an approved protocol version, or runtime evidence.

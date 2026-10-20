@@ -1,47 +1,79 @@
 # A2Flow
 
-**用交互式界面连接 Agent、Skill 与工作流。**
+**让 Agent 通过工作流和交互界面完成业务任务，并留下可核对的结果。**
 
-中文 | [English](README.md)
+[English](README.md) · [开始使用](docs/getting-started.md) · [当前架构](docs/current-architecture.md) · [贡献指南](CONTRIBUTING.md) · [MIT 许可证](LICENSE)
 
-A2Flow 是一个通用 AI 应用平台，将可复用的 Skill、业务能力、A2UI Application 和多 Skill Workflow 连接到数字员工的对话与交互体验。
+A2Flow 关注的不只是生成一段回答，而是：模型如何复用技能和业务工具，在缺少信息时向用户收集输入，继续同一个任务，并准确说明哪些操作已经发生。
 
-架构分为四个管理平台——Skill 注册、业务能力注册、A2UI 编排、Workflow 编排——以及数字员工前后端、业务无关的 Python Agent/Workflow Runtime。
+管理端支持对话创建与发布资产；业务端支持对话创建个人工作流、运行预制工作流和定时执行已发布预制工作流。Chat 与 Workflow 都可生成会话内的临时交互，用户提交后自动继续。工作流的保存结果和业务异常可引用到对话，继续处理时不必重跑原业务。
 
-## 架构速览
+## 一条完整场景
 
-- **配置与发布**：管理可复用资产，共享发布能力和环境感知的配置解析。
-- **执行**：采用 Deep Agents SDK 承载 Agent，LangGraph 承载多 Skill 图执行，PostgreSQL 作为唯一关系型持久化方案。
-- **交互**：按 Application 配置展示 A2UI，或暂停等待绑定到具体节点的必需交互。
-- **复用**：同一 Skill 经 `use_skill` 用于对话与 Workflow；业务能力和 Application 通过受控 Tools 调用。
-- **隔离**：PRT 与 ONLINE 资产数据库分离；ONLINE 根据可信 userId 在 ONLINE 版本之间灰度。
+```text
+定时工作流 → 通过已注册业务能力查询 → 主动报告异常
+  → 右侧工作动态 → 用户选择在对话中处理
+  → 临时表单补充缺参 → 提交一次 → 原任务继续
+  → 调用既有能力保存复核草稿 → 查看关联执行回执
+```
 
-这些是已确认的架构方向，不代表所有能力均已交付。
+保存草稿不等于解决异常，“已查看”不等于业务处理完成；页面和数据均区分这些状态。
 
-## 文档
+## 本地体验
 
-- [完整平台架构 — 中文](docs/architecture.zh-CN.md)
-- [Complete architecture — English](docs/architecture.en.md)
-- [文档目录 / Documentation index](docs/README.md)
-- [工作流分工](docs/workstreams.md)
-- [已确认的第一阶段基线](openspec/changes/skillweave-phase1/baseline.md)
+需要 Python 3.11+（仓库检查）以及 Node 22.12+、npm（前端）。
 
-## 当前状态
+```sh
+git clone https://github.com/EasonEdison/a2flow.git
+cd a2flow
+python3 scripts/check_repository.py
+cd apps/digital-employee/web
+npm ci --ignore-scripts --no-audit --no-fund
+npm run build
+npm run preview
+```
 
-截至 2026-09-07，优先实施 Python Agent/Workflow 引擎。仓库已有共享契约与注册核心模块、A2UI fixtures、独立框架实验；完整 M 端编辑器、数字员工产品和可部署 Runtime 尚未交付。
+打开 **http://127.0.0.1:4173/employee/?preview=fixture**。页面会明确提示为模拟展示，可查看工作流卡片与状态；不调用模型、数据库或业务服务，也不是完整登录产品的替代品。[开始使用](docs/getting-started.md)说明当前管理端构建和真实运行前提。
 
-Runtime 实验记录了 31 个通过的测试和有限范围的 PostgreSQL 跨进程验证。产品验收仍为 **NO READY**：真实模型、完整交互与控制链、多实例冲突等仍需建设。详见[准出状态](openspec/changes/oss-agent-workflow-runtime/readiness.md)、[回归证据](openspec/changes/oss-agent-workflow-runtime/regression.md)和[实验说明](experiments/runtime-phase1/README.md)。
+**完整自托管仍需要操作者装配。** 现有 Compose 依赖已配置的数据库、账号、私有配置与 mTLS 证书，不是全新机器的一键安装器。不要在已有数据上直接重跑历史初始化脚本。
 
-## 仓库目录
+## 已实现范围
 
-| 目录 | 内容 |
+状态快照：2026-10-20。验收证据对应具体链路，不代表整个系统已经达到生产级准出。
+
+| 能力 | 范围与证据 |
 | --- | --- |
-| `docs/` | 中英文架构指南与协作导览 |
-| `packages/contracts/` | 公共 schema 候选与已批准的 Python 适配 |
-| `packages/a2ui-contract-fixtures/` | 合成 Application fixtures 与校验 |
-| `services/skill-registry/` | Skill 注册核心模块 |
-| `services/capability-registry/` | 业务能力注册核心模块 |
-| `experiments/runtime-phase1/` | Agent/Workflow 框架可行性实验 |
-| `openspec/changes/` | 方案、任务、规范与证据 |
+| 管理端手工/对话创建 | Java 管理控制面与 Python Agent，创建/复用资产并发布到 PRT。[验收](openspec/changes/management-agent-prt-authoring/readiness.md) |
+| 临时交互 | Chat/Workflow 模型生成表单，合法提交后自动继续所属任务。[验收](openspec/changes/temporary-generated-interactions/readiness.md) |
+| 个人工作流 | 对话生成、注册到“我的工作流”并执行。[验收](openspec/changes/personal-workflows-in-chat/readiness.md) |
+| 业务能力节点 | 模型组织入参，缺参通过临时交互补齐。[验收](openspec/changes/workflow-capability-nodes/readiness.md) |
+| 工作动态与处理结果 | 手动/定时结果、异常进入对话，显式处理并关联回执。[验收](openspec/changes/oss-workflow-attention-handling/readiness.md) |
+| 当前执行限制 | 产品加载器支持 1–8 个顺序节点及可选总结；不宣称支持任意 DAG。 |
 
-源码与示例均根据脱敏需求和公开资料独立编写。首期单机运行是部署选择，不是高可用已完成的声明。
+历史方案还讨论了并行图等目标。判断当前能力请看[实现导览](docs/current-architecture.md)，不要把提案当成上线事实。
+
+## 值得深入看的工程设计
+
+- **控制面与执行分离**：Java 管理资产编写、校验和发布，Python 负责模型与工作流执行；业务数据归独立业务服务。
+- **真实使用框架**：Deep Agents 提供模型/工具循环，LangGraph 提供图、检查点和中断；平台负责可信身份、资产解析、执行准入和产品状态。
+- **统一工具入口**：同一个 Skill 在 Chat/Workflow 中均通过 `use_skill` 使用；身份与环境由服务端提供，模型不能任意指定。
+- **明确失败语义**：停止禁止后续执行，不撤销已发出的业务写操作；不确定结果不自动重试。控制请求去重不等于业务 exactly-once。
+- **可追踪证据**：区分源码验证、部署和运行验收；尚无公开压力基准或高可用保证。
+
+## 代码入口
+
+| 目录 | 职责 |
+| --- | --- |
+| `services/management-java/` | 当前 Java 资产管理与管理端 React 页面 |
+| `services/agent-workflow-runtime/` | 通用 Agent/Workflow 引擎 |
+| `services/b-side-api/` | 对话、工作动态、处理任务 API |
+| `apps/digital-employee/web/` | 当前业务端 React 页面 |
+| `services/scheduler-mq/` | 定时与事件投递 |
+| `services/a2ui-execution/`、`services/capability-execution/` | 展示和业务执行边界 |
+| `services/content-service/` | 独立的内容业务示例 |
+| `packages/` | 共享契约、持久化与示例 |
+| `openspec/changes/` | 方案、决策和验收记录 |
+
+[面试与源码讲解](docs/portfolio-walkthrough.md) · [已知问题与改进顺序](docs/quality-roadmap.md) · [安全说明](SECURITY.md) · [文档索引](docs/README.md)
+
+A2Flow 自有代码使用 MIT 许可证；内嵌组件与依赖保留各自许可，见[第三方声明](THIRD_PARTY_NOTICES.md)。

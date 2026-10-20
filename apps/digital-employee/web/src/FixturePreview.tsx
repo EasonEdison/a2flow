@@ -336,11 +336,11 @@ export function FixturePreview() {
             </p>
           ) : null}
           <footer className="main-footer">
-            生成的内容保留在本次运行中，不会发布到外部平台。
+            {fixtureMode ? '此为本地模拟展示，刷新后重置；不会保存记录或发布到外部平台。' : '生成的内容保留在本次运行中，不会发布到外部平台。'}
           </footer>
         </main>
 
-        <WorkflowSidebar run={run} onNew={newRun} />
+        <WorkflowSidebar run={run} onNew={newRun} fixture={fixtureMode} />
       </div>
     </div>
   );
