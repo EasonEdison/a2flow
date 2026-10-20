@@ -57,6 +57,9 @@ accounts/assets on repetition. A partial configuration generation requires inspe
 and a new directory; never delete an installed configuration to "retry". Repeating
 the three initialization commands for the **same** installation is a verification,
 not password recovery. A changed migration digest requires an explicit migration.
+The `schemas` stage also explicitly installs management V003 approval-consumption
+DDL before application startup. Existing installations must review and apply this
+new migration; restarting a service is not a database migration.
 
 For a full-stack restart, use `docker compose ... stop` followed by `up -d --no-build --force-recreate`
 with the same Compose file and environment. Named volumes and private configuration
