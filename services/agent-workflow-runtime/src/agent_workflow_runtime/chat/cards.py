@@ -527,7 +527,9 @@ class ChatCardStore:
         if prepared is not None or binding_metadata is not None:
             display, waiting_status = _validate_prepared(prepared)
             metadata = _validate_metadata(binding_metadata, conversation_id)
-            if display.get("protocolProfile") != "a2flow.java-rpc.v1":
+            if (display.get("protocolProfile") != "a2flow.java-rpc.v1"
+                    and not (display.get("protocolProfile") == "a2flow.temporary.v1"
+                             and isinstance(metadata.get("approval"), dict))):
                 _reject("INVALID_CARD_DISPLAY")
             update = (display, waiting_status, metadata)
             finish_payload["runtimeUpdate"] = {"display": display, "metadata": metadata,
@@ -556,7 +558,9 @@ class ChatCardStore:
                 display, waiting_status, metadata = update
                 # Only trusted runtime state changes; card and Skill ownership cannot change.
                 for field in ("skillKey", "conversationId", "controlRequestId", "toolCallId",
-                              "applicationKey", "processingTaskId"):
+                              "applicationKey", "processingTaskId", "approval", "approvalSkillKey",
+                              "approvalProcessingContext", "approvalProcessingTurnId", "workflow",
+                              "definitionSource"):
                     if metadata.get(field) != card["binding_metadata"].get(field):
                         _reject("CARD_BINDING_MISMATCH")
                 if display["applicationKey"] != card["display"]["applicationKey"]:
@@ -642,7 +646,13 @@ class ChatCardStore:
                 return deepcopy(prior["card_snapshot"])
             if card["status"] != "WAITING_ACTION":
                 _reject("CARD_TERMINAL")
-            result = validate_submission(card["display"], action_name, inputs)
+            if "approval" in card["binding_metadata"]:
+                if "workflow" not in card["binding_metadata"]:
+                    _reject("WRITE_CONFIRMATION_DISPATCH_REQUIRED")
+                from ..capability_approval import require_confirmation
+                result = require_confirmation(card["display"], action_name, inputs)
+            else:
+                result = validate_submission(card["display"], action_name, inputs)
             prepared = completed_interaction(card["display"], result)
             display, _ = _validate_prepared(prepared)
             card["display"] = display

@@ -10,6 +10,8 @@ from typing import Any, NotRequired, TypedDict, cast
 from skillweave_contracts import TrustedContext
 
 from ..models import ActionRejected
+from ..capability_approval import receipt_for, require_confirmation
+from ..temporary_interaction import completed_interaction
 from ..rpc_client import ComposerDraftEffect, RpcFailure
 from .cards import ActionObservation, ChatCardStore, JsonObject, JsonValue
 from .rpc_assets import RpcChatAssets, plain, prepare_result, runtime_metadata, trusted_card
@@ -66,6 +68,9 @@ class RpcChatActionService:
                 ) -> ChatActionResponse:
         saved = self.store.get_binding(owner, conversation_id, card_id)
         card, metadata = saved["card"], saved["metadata"]
+        if "approval" in metadata:
+            return self._approve(owner, conversation_id, card_id, request_id, action_name,
+                                 inputs, card, metadata, dispatch_admission)
         if card["display"].get("protocolProfile") == "a2flow.temporary.v1":
             with dispatch_admission() if dispatch_admission is not None else nullcontext():
                 completed = self.store.submit_interaction(
@@ -180,4 +185,65 @@ class RpcChatActionService:
                 owner, conversation_id, card_id, request_id,
                 "ACTION_OUTCOME_UNKNOWN", observation=observation,
             )
+            raise ActionRejected("ACTION_OUTCOME_UNKNOWN") from None
+
+    def _approve(
+        self, owner: TrustedContext, conversation_id: str, card_id: str,
+        request_id: str, action_name: str, inputs: dict[str, Any], card: dict[str, Any],
+        metadata: dict[str, Any],
+        dispatch_admission: Callable[[], AbstractContextManager[Any]] | None,
+    ) -> ChatActionResponse:
+        def response(value: dict[str, Any]) -> ChatActionResponse:
+            result = _response(value, request_id)
+            if "workflow" not in metadata and value["status"] == "COMPLETED":
+                result["continuation"] = {"cardId": card_id, "requestId": request_id,
+                                          "kind": "WRITE_APPROVAL"}
+            return result
+
+        prior = self.store.replay(owner, conversation_id, card_id, request_id, action_name, inputs)
+        if prior is not None:
+            return response(prior)
+        submitted = require_confirmation(card["display"], action_name, inputs)
+        if "workflow" in metadata:
+            with dispatch_admission() if dispatch_admission is not None else nullcontext():
+                return response(self.store.submit_interaction(
+                    owner, conversation_id, card_id, request_id, action_name, inputs))
+        binding = metadata["approval"]
+        receipt = receipt_for(owner, card_id, binding)
+        if (receipt["run_id"] != conversation_id
+                or receipt["tool_call_id"] != metadata["toolCallId"]):
+            raise ActionRejected("WRITE_CONFIRMATION_BINDING_INVALID")
+        assets = self.assets_factory(
+            owner, conversation_id, metadata["controlRequestId"],
+            processing_context=metadata.get("approvalProcessingContext"),
+            processing_turn_id=metadata.get("approvalProcessingTurnId"),
+        )
+        assets.admit_skill(metadata["approvalSkillKey"])
+        prepared = completed_interaction(card["display"], submitted)
+        with dispatch_admission() if dispatch_admission is not None else nullcontext():
+            claim = self.store.claim(owner, conversation_id, card_id, request_id, action_name, inputs)
+        if not claim["dispatch"]:
+            return response(claim["card"])
+        # Only a durable user claim reaches this internal receipt-bearing call.
+        try:
+            value = assets.execute_ability(binding["abilityKey"], binding["arguments"],
+                tool_call_id=metadata["toolCallId"], approval_receipt=receipt)
+            output = value["output"]
+            if metadata.get("approvalProcessingContext") is not None:
+                if output.get("status") != "RETURNED":
+                    return response(self.store.fail(owner, conversation_id, card_id,
+                                                   request_id, "ACTION_OUTCOME_UNKNOWN"))
+            observation = ActionObservation(
+                description="用户已确认写操作；以下为真实业务执行回执，不得重复执行相同操作",
+                arguments=binding["arguments"], result=output,
+                capability_success=True, business_success=True, presentation_status="SUCCEEDED",
+            )
+            finished = self.store.finish(owner, conversation_id, card_id, request_id,
+                output, True, True, prepared=prepared, binding_metadata=metadata,
+                observation=observation)
+            return response(finished)
+        except Exception as error:
+            LOG.error("chat_write_confirmation_failed exception_type=%s request_id=%s",
+                      type(error).__name__, request_id)
+            self.store.fail(owner, conversation_id, card_id, request_id, "ACTION_OUTCOME_UNKNOWN")
             raise ActionRejected("ACTION_OUTCOME_UNKNOWN") from None
