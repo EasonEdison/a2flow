@@ -228,7 +228,9 @@ def build_chat_tools(
     ):
         """Run one registered Ability bound by the active conversation Skill."""
         chat_assets.validate_context(runtime.context)
-        value = chat_assets.execute_ability(abilityKey, arguments)
+        value = chat_assets.execute_ability(
+            abilityKey, arguments, tool_call_id=runtime.tool_call_id,
+        )
         return json.dumps(value["output"], ensure_ascii=False, sort_keys=True), {
             "abilityKey": value["abilityKey"],
             "versionId": value["versionId"],

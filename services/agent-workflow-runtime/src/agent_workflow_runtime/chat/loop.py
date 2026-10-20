@@ -54,6 +54,9 @@ from .events import (
 from .personal_workflows import (
     PERSONAL_TOOL_VALIDATORS, PERSONAL_WORKFLOW_PROMPT, build_personal_workflow_tools,
 )
+from .processing import (
+    PROCESSING_PROMPT, ProcessingContextMiddleware, processing_context,
+)
 from .workflow_results import (
     WORKFLOW_RESULT_VALIDATORS, WORKFLOW_RESULTS_PROMPT, WorkflowRunProvider,
     WorkflowReferenceMiddleware, build_workflow_result_tools,
@@ -668,6 +671,7 @@ class ChatLoop:
         observation_loader: ObservationLoader | None = None,
         workflow_run_provider: WorkflowRunProvider | None = None,
         run_references: Sequence[Mapping[str, Any]] = (),
+        processing_context_value: Mapping[str, Any] | None = None,
     ):
         require_owner(owner)
         if type(conversation_id) is not str or not conversation_id:
@@ -696,6 +700,7 @@ class ChatLoop:
         self._observation_loader: ObservationLoader | None = observation_loader
         self._workflow_run_provider = workflow_run_provider
         self._run_references = run_references
+        self._processing_context = processing_context(processing_context_value, conversation_id)
         self._history = [
             HumanMessage(content=str(text)) if role == "user"
             else AIMessage(content=str(text)) for role, text in (history or [])
@@ -740,6 +745,10 @@ class ChatLoop:
                 ))
             from ..personal_memory import PersonalMemoryMiddleware
             middleware = [_ToolExecutionEvents(self._emitter)]
+            if self._processing_context is not None:
+                middleware.append(ProcessingContextMiddleware(
+                    user_message.id, self._processing_context,
+                ))
             if self._workflow_run_provider is not None or self._run_references:
                 middleware.append(WorkflowReferenceMiddleware(
                     user_message.id, self._run_references,
@@ -774,7 +783,7 @@ class ChatLoop:
                 validators.update(PERSONAL_TOOL_VALIDATORS)
             if self._workflow_run_provider is not None:
                 validators.update(WORKFLOW_RESULT_VALIDATORS)
-            system_prompt = self._system_prompt or ""
+            system_prompt = (self._system_prompt or "") + PROCESSING_PROMPT
             if self._personal_workflows is not None:
                 system_prompt += PERSONAL_WORKFLOW_PROMPT
             if self._workflow_run_provider is not None or self._run_references:
