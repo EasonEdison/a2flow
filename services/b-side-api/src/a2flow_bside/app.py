@@ -387,11 +387,17 @@ def create_app(
         card = response.get("card", {})
         display = card.get("display", {})
         result = card.get("result", {})
+        # This marker comes only from the trusted action service after it saved
+        # the real write result. User inputs cannot opt into this continuation.
+        submitted = (isinstance(result, dict) and result.get("status") == "SUBMITTED"
+                     and isinstance(result.get("values"), dict))
+        write_completed = (isinstance(marker, dict) and marker.get("kind") == "WRITE_APPROVAL"
+                           and isinstance(result, dict))
         if (not isinstance(marker, dict) or marker.get("cardId") != card_id
                 or not isinstance(marker.get("requestId"), str) or not marker["requestId"]
                 or card.get("cardId") != card_id or card.get("conversationId") != str(conversation_id)
                 or card.get("status") != "COMPLETED" or not isinstance(result, dict)
-                or result.get("status") != "SUBMITTED" or not isinstance(result.get("values"), dict)
+                or not (submitted or write_completed)
                 or display.get("protocolProfile") != "a2flow.temporary.v1"
                 or display.get("definitionSource") != "TEMPORARY"):
             raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)

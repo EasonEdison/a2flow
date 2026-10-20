@@ -13,7 +13,7 @@ from pathlib import Path
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TypeAlias, TypeVar, Union, cast
+from typing import Any, TypeAlias, TypeVar, Union, cast
 from urllib.parse import urlsplit
 
 import grpc
@@ -60,7 +60,7 @@ def thaw(value: JsonValue) -> object:
 
 
 def _encode(value: object) -> bytes:
-    return json.dumps(thaw(freeze(value)), ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+    return json.dumps(thaw(freeze(value)), ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def _decode(value: bytes | str) -> JsonValue:
@@ -262,6 +262,8 @@ class AbilityDescription:
     resolved_environment: str
     source_id: str
     source_digest: str
+    side_effect_level: str = ""
+    approval_policy: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -434,7 +436,7 @@ class RpcClient:
             raise RpcFailure("RPC_RELEASE_MISMATCH")
         return AbilityDescription(value.asset_key, value.action_code, value.capability_version, value.description,
                                   _object(value.input_schema_json), _decode(value.key_output_fields_json), environment,
-                                  value.source_id, value.source_digest)
+                                  value.source_id, value.source_digest, value.side_effect_level, value.approval_policy)
 
     def activate(self, owner: TrustedContext, app_code: str, params: JsonObject,
                  request_id: str) -> RuntimeResult:
@@ -489,9 +491,16 @@ class RpcClient:
         return result
 
     def execute(self, owner: TrustedContext, asset_key: str, arguments: JsonObject,
-                request_id: str) -> AbilityResult:
-        value = self._call(self._cap.Execute, cap.ExecuteRequest(asset_key=asset_key, context=self._context(owner, request_id),
-                    arguments_json=_encode(arguments)))
+                request_id: str, *, approval_receipt: dict[str, Any] | None = None) -> AbilityResult:
+        request = cap.ExecuteRequest(asset_key=asset_key, context=self._context(owner, request_id),
+                                     arguments_json=_encode(arguments))
+        if approval_receipt is not None:
+            receipt = dict(approval_receipt)
+            if receipt.get("user_id") != owner.user_id or receipt.get("environment") != owner.environment:
+                raise RpcFailure("WRITE_CONFIRMATION_BINDING_INVALID")
+            receipt["environment"] = cap.Environment.Value(owner.environment)
+            request.approval_receipt.CopyFrom(cap.ApprovalReceipt(**receipt))
+        value = self._call(self._cap.Execute, request)
         environment = _environment(value.resolved_environment)
         if (environment != owner.environment or value.request_id != request_id
                 or not value.source_id or not value.source_digest or not value.action_code):

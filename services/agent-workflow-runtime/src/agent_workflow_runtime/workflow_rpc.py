@@ -225,10 +225,11 @@ class WorkflowCapabilityAssets(WorkflowAssets):
             raise ActionRejected("ABILITY_BINDING_MISMATCH")
         return description
 
-    def execute_fixed(self, arguments: dict[str, Any], request_id: str) -> AbilityResult:
+    def execute_fixed(self, arguments: dict[str, Any], request_id: str,
+                      *, approval_receipt: dict[str, Any] | None = None) -> AbilityResult:
         record = self.capability_record()
         result = self.rpc.execute(self.owner, record["definition"]["assetKey"],
-                                  arguments, request_id)
+                                  arguments, request_id, approval_receipt=approval_receipt)
         if result.action_code != self.ability_key:
             raise ActionRejected("ABILITY_BINDING_MISMATCH")
         return result
@@ -501,6 +502,32 @@ class WorkflowActions(ActionService):
             card = assets.generate_application(app_code, params, intent, tool_call_id, generator)
             tool_name = "generate_a2ui"
         return self._render_card(assets, card, app_code, tool_call_id, tool_name)
+
+    def confirm_write(
+        self, assets: WorkflowAssets, ability_key: str, arguments: dict[str, Any],
+        tool_call_id: str, *, description: AbilityDescription | None = None,
+    ) -> dict[str, Any] | None:
+        """A host-authored persisted confirmation precedes business admission."""
+        from .capability_approval import receipt_for
+        self.lifecycle.assert_active(self.run.owner, self.run.run_id)
+        card = assets.prepare_approval(
+            ability_key, arguments, tool_call_id,
+            description=description,
+            asset_key=None if description is None else description.asset_key,
+        )
+        if card is None:
+            return None
+        self._render_card(assets, card, card["display"]["applicationKey"],
+                          tool_call_id, "execute_ability")
+        binding = self.store.get_binding(self.run.owner, assets.conversation_id, card["cardId"])
+        saved = binding["card"]
+        result = saved.get("result")
+        if (saved["status"] != "COMPLETED" or type(result) is not dict
+                or result.get("status") != "SUBMITTED"
+                or result.get("values") != {"confirmation": ["approve"]}):
+            raise ActionRejected("WRITE_CONFIRMATION_REQUIRED")
+        self.lifecycle.assert_active(self.run.owner, self.run.run_id)
+        return receipt_for(self.run.owner, card["cardId"], binding["metadata"]["approval"])
 
     def render_interaction(
         self, assets: WorkflowAssets, data: dict[str, Any], intent: str,

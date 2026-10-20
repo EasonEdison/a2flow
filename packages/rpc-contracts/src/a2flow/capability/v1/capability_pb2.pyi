@@ -95,6 +95,8 @@ class ResolveResponse(google.protobuf.message.Message):
     RESOLVED_ENVIRONMENT_FIELD_NUMBER: builtins.int
     SOURCE_ID_FIELD_NUMBER: builtins.int
     SOURCE_DIGEST_FIELD_NUMBER: builtins.int
+    SIDE_EFFECT_LEVEL_FIELD_NUMBER: builtins.int
+    APPROVAL_POLICY_FIELD_NUMBER: builtins.int
     asset_key: builtins.str
     action_code: builtins.str
     capability_version: builtins.int
@@ -104,6 +106,8 @@ class ResolveResponse(google.protobuf.message.Message):
     resolved_environment: Global___Environment.ValueType
     source_id: builtins.str
     source_digest: builtins.str
+    side_effect_level: builtins.str
+    approval_policy: builtins.str
     def __init__(
         self,
         *,
@@ -116,10 +120,67 @@ class ResolveResponse(google.protobuf.message.Message):
         resolved_environment: Global___Environment.ValueType = ...,
         source_id: builtins.str = ...,
         source_digest: builtins.str = ...,
+        side_effect_level: builtins.str = ...,
+        approval_policy: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["action_code", b"action_code", "asset_key", b"asset_key", "capability_version", b"capability_version", "description", b"description", "input_schema_json", b"input_schema_json", "key_output_fields_json", b"key_output_fields_json", "resolved_environment", b"resolved_environment", "source_digest", b"source_digest", "source_id", b"source_id"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["action_code", b"action_code", "approval_policy", b"approval_policy", "asset_key", b"asset_key", "capability_version", b"capability_version", "description", b"description", "input_schema_json", b"input_schema_json", "key_output_fields_json", b"key_output_fields_json", "resolved_environment", b"resolved_environment", "side_effect_level", b"side_effect_level", "source_digest", b"source_digest", "source_id", b"source_id"]) -> None: ...
 
 Global___ResolveResponse: typing_extensions.TypeAlias = ResolveResponse
+
+@typing.final
+class ApprovalReceipt(google.protobuf.message.Message):
+    """Trusted Runtime attestation after a saved, same-user explicit confirmation.
+    Never expose as model arguments. arguments_digest is lowercase SHA-256 of the
+    exact ExecuteRequest.arguments_json bytes, frozen before the confirmation.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECEIPT_ID_FIELD_NUMBER: builtins.int
+    USER_ID_FIELD_NUMBER: builtins.int
+    ENVIRONMENT_FIELD_NUMBER: builtins.int
+    RUN_ID_FIELD_NUMBER: builtins.int
+    TOOL_CALL_ID_FIELD_NUMBER: builtins.int
+    ACTION_CODE_FIELD_NUMBER: builtins.int
+    SOURCE_ID_FIELD_NUMBER: builtins.int
+    SOURCE_DIGEST_FIELD_NUMBER: builtins.int
+    ARGUMENTS_DIGEST_FIELD_NUMBER: builtins.int
+    CONFIRMATION_ID_FIELD_NUMBER: builtins.int
+    SIDE_EFFECT_LEVEL_FIELD_NUMBER: builtins.int
+    APPROVAL_POLICY_FIELD_NUMBER: builtins.int
+    receipt_id: builtins.str
+    user_id: builtins.int
+    environment: Global___Environment.ValueType
+    run_id: builtins.str
+    tool_call_id: builtins.str
+    action_code: builtins.str
+    source_id: builtins.str
+    source_digest: builtins.str
+    arguments_digest: builtins.str
+    confirmation_id: builtins.str
+    side_effect_level: builtins.str
+    approval_policy: builtins.str
+    def __init__(
+        self,
+        *,
+        receipt_id: builtins.str = ...,
+        user_id: builtins.int | None = ...,
+        environment: Global___Environment.ValueType = ...,
+        run_id: builtins.str = ...,
+        tool_call_id: builtins.str = ...,
+        action_code: builtins.str = ...,
+        source_id: builtins.str = ...,
+        source_digest: builtins.str = ...,
+        arguments_digest: builtins.str = ...,
+        confirmation_id: builtins.str = ...,
+        side_effect_level: builtins.str = ...,
+        approval_policy: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_user_id", b"_user_id", "user_id", b"user_id"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_user_id", b"_user_id", "action_code", b"action_code", "approval_policy", b"approval_policy", "arguments_digest", b"arguments_digest", "confirmation_id", b"confirmation_id", "environment", b"environment", "receipt_id", b"receipt_id", "run_id", b"run_id", "side_effect_level", b"side_effect_level", "source_digest", b"source_digest", "source_id", b"source_id", "tool_call_id", b"tool_call_id", "user_id", b"user_id"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_user_id", b"_user_id"]) -> typing.Literal["user_id"] | None: ...
+
+Global___ApprovalReceipt: typing_extensions.TypeAlias = ApprovalReceipt
 
 @typing.final
 class ExecuteRequest(google.protobuf.message.Message):
@@ -128,20 +189,24 @@ class ExecuteRequest(google.protobuf.message.Message):
     ASSET_KEY_FIELD_NUMBER: builtins.int
     CONTEXT_FIELD_NUMBER: builtins.int
     ARGUMENTS_JSON_FIELD_NUMBER: builtins.int
+    APPROVAL_RECEIPT_FIELD_NUMBER: builtins.int
     asset_key: builtins.str
     arguments_json: builtins.bytes
     """Raw UTF-8 JSON, not google.protobuf.Struct: exact integers must not pass through double."""
     @property
     def context(self) -> Global___ExecutionContext: ...
+    @property
+    def approval_receipt(self) -> Global___ApprovalReceipt: ...
     def __init__(
         self,
         *,
         asset_key: builtins.str = ...,
         context: Global___ExecutionContext | None = ...,
         arguments_json: builtins.bytes = ...,
+        approval_receipt: Global___ApprovalReceipt | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["context", b"context"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["arguments_json", b"arguments_json", "asset_key", b"asset_key", "context", b"context"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["approval_receipt", b"approval_receipt", "context", b"context"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["approval_receipt", b"approval_receipt", "arguments_json", b"arguments_json", "asset_key", b"asset_key", "context", b"context"]) -> None: ...
 
 Global___ExecuteRequest: typing_extensions.TypeAlias = ExecuteRequest
 

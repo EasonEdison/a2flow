@@ -254,11 +254,19 @@ def build_capability_graph(
             if not valid:
                 raise ActionRejected("WORKFLOW_CAPABILITY_PARAMETERS_INVALID")
             request_id = operation_id(run.run_id, node_id)
+            token = _CURRENT_WORKFLOW_NODE.set(context)
+            try:
+                receipt = actions.confirm_write(
+                    assets, ability_key, arguments, "capability-write:" + node_id,
+                    description=description,
+                )
+            finally:
+                _CURRENT_WORKFLOW_NODE.reset(token)
             # A pre-existing IN_FLIGHT/UNCONFIRMED fact never reaches this admission.
             # A concurrent caller loses the unique operation reservation before dispatch.
             lifecycle.admit(run.owner, run.run_id, node_id, "TOOL", operation_id=request_id)
             try:
-                reply = assets.execute_fixed(arguments, request_id)
+                reply = assets.execute_fixed(arguments, request_id, approval_receipt=receipt)
                 status: Literal["SUCCEEDED", "FAILED", "UNKNOWN"] = (
                     "SUCCEEDED" if reply.success else
                     "UNKNOWN" if reply.error_code in {"TRANSPORT_TIMEOUT", "TRANSPORT_ERROR"}
