@@ -18,6 +18,6 @@ Include the affected commit, component, minimal synthetic reproduction, expected
 
 ## Known limitations
 
-B-side authentication is moved off the event loop and malformed session tokens are rejected, but application-wide login/registration rate limiting and admission policy are not yet unified. A bounded worker pool is not a brute-force or denial-of-service defense. Configure and verify the intended perimeter/admission policy before exposing registrations to untrusted traffic.
+M/B share PostgreSQL-backed login and registration admission before password hashing. Budgets survive process restart; trusted proxies must be configured explicitly and overwrite the dedicated client address header. Authentication storage failures return a safe 503, not an in-memory bypass. New self-hosted installs disable public registration by default. See [account policy](deploy/accounts/README.md) and [operator account recovery](docs/account-recovery.md). These application controls are not a volumetric denial-of-service defense.
 
 No independent penetration test, compliance certification, disaster-recovery drill or high-availability certification is claimed. See [quality roadmap](docs/quality-roadmap.md) for the explicit remaining engineering work.

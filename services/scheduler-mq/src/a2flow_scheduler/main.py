@@ -14,7 +14,7 @@ import psycopg
 from redis import Redis
 
 from a2flow_scheduler.contracts import NotificationCommand
-from a2flow_scheduler.delivery import consume_one, reconcile_unknown
+from a2flow_scheduler.delivery import consume_one, reconcile_notifications, reconcile_unknown
 from a2flow_scheduler.ingress import BsideCommandClient
 from a2flow_scheduler.lark import LarkWebhookClient
 from a2flow_scheduler.outbox import PostgresOutbox
@@ -119,6 +119,7 @@ def main() -> None:
                     if not consume_one(outbox, transport, channel, ingress, sender):
                         break
             reconcile_unknown(outbox, ingress)
+            reconcile_notifications(outbox, external_sender_configured=sender is not None)
         except Exception as exc:
             # Do not log credentials, payloads or provider response bodies.
             LOG.error("Scheduler pass failed: %s", type(exc).__name__)

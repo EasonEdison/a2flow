@@ -8,3 +8,7 @@ configure shared budgets, registration policy and exact trusted proxies; ensure
 every proxy overwrites/preserves only the verified client-IP header; then verify
 public TLS, normal account flows, throttling and fail-closed responses. This
 workstream does not perform deployment or alter existing users.
+
+The public isolated reproducer and synthetic operator-recovery transaction are
+verified and documented in `docs/account-recovery.md`. This adds no claim of public
+TLS/proxy acceptance, backup restorability or production password recovery.

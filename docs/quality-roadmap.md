@@ -16,21 +16,17 @@ Review baseline: `01010a63` (2026-10-20). This is a source/evidence audit, not a
 
 ## Remaining issues, in priority order
 
-### P1 — Fresh full-stack reproducibility
+### Foundations follow-up
 
-`deploy/java-management/prepare.py` assumes existing accounts/runtime state and creates roles/databases; current Compose requires an existing socket volume and private image/config/certificate chain. A new user cannot safely treat this as a fresh installer.
+The three P1 findings above have a scoped follow-up implementation:
 
-Next deliverable: a separate idempotent bootstrap for an empty installation, documented complete configuration inventory and publicly buildable image chain. Acceptance must start with an empty isolated database, create an administrator explicitly, publish an example asset, run the model-backed missing-input journey, restart and read the saved result. Existing data must remain untouched. Until then, the documented quick start is source validation and an explicitly synthetic UI preview.
+| Original issue | Implementation and evidence |
+| --- | --- |
+| Fresh installation | Independent [self-host bootstrap](../deploy/selfhost/README.md), public build stages, explicit admin and configuration inventory; preserved operator deployment |
+| State/event transaction gap | Injected same-transaction outbox writer, stable lifecycle IDs, idempotent delivery recovery, and read-only native waiting recovery; [failure-window checks](../openspec/changes/portfolio-runtime-outbox/regression.md) |
+| Public account protection | Shared PostgreSQL admission, registration policy, exact trusted proxy chain, HTTPS deployment template and account recovery; [guard checks](../openspec/changes/oss-account-abuse-guards/regression.md) |
 
-### P1 — State/event transaction gap
-
-`lifecycle.py` publishes events while its run-state transaction is still open; `SchedulerEventSink` in `deploy/attended/runtime_app.py` commits in a separate transaction. The state commit can fail after a notification was saved. This is a confirmed code-level failure window, not an observed production incident.
-
-Next deliverable: write an event outbox in the same transaction as the lifecycle state, then deliver with stable event identities and consumer deduplication. Verify failures before/after both commits and process restart. This is a cross-service delivery contract change; it is not fixed by adding an unbounded retry or claiming exactly-once.
-
-### P1 — Public authentication hardening
-
-B-side registration/login still lacks a unified rate/admission policy. Moving blocking work off the loop does not prevent worker exhaustion. Shared proxy IPs, intended registration audience and thresholds need an explicit policy; deploy/account's existing limits should not be copied without considering B traffic. Public password access also needs verified HTTPS, exact origin/proxy configuration and a recovery procedure. No host/security policy changes are made by this source-quality change.
+The [foundations readiness record](../openspec/changes/production-foundations/readiness.md) distinguishes implemented source, fresh-install verification and public deployment. Do not interpret this table as a general security or availability certification. Model keys, DNS/TLS ownership and a configured business domain remain operator inputs; no universal default credentials or automatic business adapters are provided.
 
 ### P2 — Verification depth and maintainability
 

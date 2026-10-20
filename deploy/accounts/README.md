@@ -77,3 +77,14 @@ for that environment/action; this is opportunistic cleanup, not a background
 retention job. Database failures return 503 with a server-generated
 `X-Request-ID`; the corresponding log contains only the operation, correlation
 identifier and exception type, never exception details or request data.
+
+
+## Recovery and reproducible verification
+
+See [operator account recovery](../../docs/account-recovery.md) for the explicit
+single-administrator transaction, current-pepper requirements and M/B session
+revocation. It does not add a Web password-reset flow or recover plaintext passwords.
+The [isolated public probe](../../scripts/verify_account_guard.py) requires an
+owner-only DSN file and an empty, explicitly named local probe database. It covers
+shared quotas, proxy boundaries and synthetic password recovery without contacting
+an existing installation or a model.

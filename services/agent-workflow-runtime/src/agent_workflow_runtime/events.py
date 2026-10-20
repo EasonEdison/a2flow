@@ -9,7 +9,8 @@ only: never credentials, model text or business secrets.
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+import json
 from skillweave_contracts.user_id import require_user_id
 
 RUN_STARTED = "RUN_STARTED"
@@ -38,9 +39,9 @@ class DomainEvent:
 
     @classmethod
     def create(cls, event_type, run_id, workflow_key, user_id, environment, *,
-               payload=None, occurred_at=None):
+               payload=None, occurred_at=None, event_id: UUID | None = None):
         return cls(
-            event_id=uuid4(),
+            event_id=uuid4() if event_id is None else event_id,
             event_type=event_type,
             run_id=run_id,
             workflow_key=workflow_key,
@@ -50,6 +51,17 @@ class DomainEvent:
             else datetime.now(timezone.utc),
             payload=dict(payload or {}),
         )
+
+
+def run_event_id(event_type: str, run_id: str, user_id: int, environment: str) -> UUID | None:
+    """Stable identity only for the one start/terminal transition of each run."""
+    if event_type not in {RUN_STARTED, RUN_FINISHED, RUN_STOPPED, RUN_FAILED}:
+        return None
+    identity = json.dumps(
+        ["a2flow-runtime-event-v1", str(user_id), environment, run_id, event_type],
+        separators=(",", ":"),
+    )
+    return uuid5(NAMESPACE_URL, identity)
 
 
 class EventSink(Protocol):

@@ -32,6 +32,7 @@ from .chat.application_params import application_params_error_content
 from .chat.rpc_actions import ChatActionResponse
 from .deepseek_model import DeepSeekChat
 from .events import EventSink
+from .postgres_lifecycle import TransactionalEventWriter
 from .lifecycle import RunLifecycle, RunRecord
 from .personal_memory import PersonalMemory
 from .ability_execution import OperationSpec
@@ -82,6 +83,7 @@ class HostOptions(TypedDict, total=False):
     static_directory: str | None
     unexpected_error_observer: Callable[..., None] | None
     event_sink: EventSink | None
+    transactional_event_writer: TransactionalEventWriter | None
     personal_memory: PersonalMemory | None
 
 
@@ -336,7 +338,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
         )
 
     @contextmanager
-    def execution_session(self, owner: TrustedContext) -> Iterator[ExecutionSession]:
+    def execution_session(self, owner: TrustedContext, *, read_only: bool = False) -> Iterator[ExecutionSession]:
         models: list[BaseChatModel] = []
         built: dict[str, WorkflowActions] = {}
         with self._checkpointer_factory() as saver:
@@ -462,6 +464,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
                     predecessor_context,
                     saver,
                     summary_agent=summary_agent,
+                    initialize_view=not read_only,
                 )
                 actions.continuation = LangGraphContinuation(graph, lifecycle=lifecycle)
                 built[run.run_id] = actions
