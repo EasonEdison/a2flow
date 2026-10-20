@@ -107,6 +107,126 @@ def submit(service, card, owner=OWNER, request="request-1", inputs=None):
                            action_name="submit", inputs=inputs or {"confirmation": ["approve"]})
 
 
+def a2ui_probe():
+    from dataclasses import asdict
+    from agent_workflow_runtime.application_runtime import PreparedApplication
+    from agent_workflow_runtime.rpc_client import ReleaseIdentity, RuntimeSession
+
+    def fixture(*, level="WRITE", workflow=False, completes=True, fail=False):
+        memory = MemoryStorage()
+        store = ChatCardStore(None, environment="PRT", _storage=memory)
+        display = {"protocolProfile": "a2flow.java-rpc.v1", "applicationKey": "app",
+                   "applicationVersion": "v1", "snapshotMessages": [], "data": {}, "components": [],
+                   "actions": [{"surfaceId": "main", "componentId": "save", "actionName": "save",
+                                "inputSchema": {"type": "object"}}]}
+        release = ReleaseIdentity("app", "source", "digest", "v1", "PRT")
+        session = RuntimeSession("synthetic-session", "v1", "v0.9.1", "catalog", "1", "catalog-digest")
+        metadata = {"skillKey": "skill", "conversationId": "731", "controlRequestId": "turn:41",
+                    "toolCallId": "render", "applicationKey": "app", "applicationVersion": "v1",
+                    "rpc": {"release": asdict(release), "session": asdict(session), "params": {}}}
+        if workflow:
+            metadata["workflow"] = {"runId": "synthetic-run", "nodeId": "synthetic-node"}
+        card = store.save(OWNER, "731", PreparedApplication("app", "v1", True, json.dumps(display)), metadata)
+        description = Rpc(level).description
+        catalog = SimpleNamespace(protocol_version="v0.9.1", catalog_id="catalog", catalog_revision="1",
+                                  catalog_digest="catalog-digest")
+        action = SimpleNamespace(action_name="save", surface_id="main", component_id="save",
+                                 context_schema={"type": "object"})
+
+        class A2uiRpc:
+            def __init__(self):
+                self.preflights, self.calls = [], []
+
+            def prepare_action(self, owner, trusted, action_message, request_id, **kwargs):
+                self.preflights.append(request_id)
+                check(trusted.app_code == "app" and action_message["action"]["name"] == "save")
+                return SimpleNamespace(description=description, arguments=copy.deepcopy(ARGUMENTS), binding_id="save")
+
+            def act(self, owner, trusted, action_message, request_id, **kwargs):
+                self.calls.append(kwargs)
+                check(trusted.app_code == "app" and action_message["action"]["context"] == ARGUMENTS)
+                if level == "WRITE":
+                    receipt = kwargs["approval_receipt"]
+                    check(receipt["source_digest"] == "digest" and receipt["action_code"] == "demo.write")
+                    check(receipt["arguments_digest"] == hashlib.sha256(json.dumps(ARGUMENTS,
+                        ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+                    check(receipt["run_id"] == ("synthetic-run" if workflow else "731"))
+                if fail:
+                    raise TimeoutError("synthetic unknown")
+                observed = SimpleNamespace(action_code="demo.write", arguments=ARGUMENTS,
+                    result={"recordId": "synthetic-ui-result"}, capability_success=True, business_success=True,
+                    presentation_error_code=None, capability_error_code=None)
+                return SimpleNamespace(release=release, session=session, params={}, executions=(),
+                    generated_definition=None, snapshot=(), catalog=catalog, actions=() if completes else (action,),
+                    interaction_mode="DISPLAY_ONLY" if completes else "INTERACTIVE", business_success=True,
+                    complete_interaction=completes, action_observation=observed, composer_draft_effects=())
+
+        rpc = A2uiRpc()
+        assets = SimpleNamespace(rpc=rpc, admit_skill=lambda key: check(key == "skill"),
+            action_descriptions=lambda: {"demo.write": "synthetic write"},
+            application_description=lambda key: ({}, SimpleNamespace(actions=(action,), catalog=catalog)))
+        service = RpcChatActionService(store, lambda *args, **kwargs: assets)
+        return store, card, rpc, service
+
+    def click(service, card, request="start"):
+        return service.execute(OWNER, "731", card["cardId"], request_id=request, action_name="save",
+            inputs={"surfaceId": "main", "sourceComponentId": "save", "context": ARGUMENTS})
+
+    store, card, rpc, service = fixture(level="READ")
+    result = click(service, card)
+    check(len(rpc.preflights) == 1 and len(rpc.calls) == 1)
+    check(result["card"]["display"]["protocolProfile"] == "a2flow.java-rpc.v1")
+
+    store, card, rpc, service = fixture()
+    pending = click(service, card)
+    check(pending["card"]["cardId"] == card["cardId"] and not rpc.calls)
+    check(pending["card"]["status"] == "WAITING_ACTION" and "continuation" not in pending)
+    check("synthetic-session" not in json.dumps(pending))
+    rejected(lambda: store.get_approval_origin(TrustedContext(9123402, "PRT"), "731", card["cardId"]),
+             "CARD_NOT_FOUND")
+    check(pending["card"]["display"]["protocolProfile"] == "a2flow.temporary.v1")
+    check(click(service, card) == pending and len(rpc.preflights) == 1)
+    rejected(lambda: submit(service, card, inputs={"confirmation": []}))
+    rejected(lambda: store.submit_interaction(OWNER, "731", card["cardId"], "bypass", "submit",
+        {"confirmation": ["approve"]}), "WRITE_CONFIRMATION_DISPATCH_REQUIRED")
+    finished = submit(service, card)
+    check(len(rpc.calls) == 1 and finished["card"]["cardId"] == card["cardId"])
+    check(finished["card"]["display"]["protocolProfile"] == "a2flow.java-rpc.v1")
+    check(finished["card"]["status"] == "COMPLETED" and finished["continuation"]["kind"] == "WRITE_APPROVAL")
+    check(submit(service, card) == finished and len(rpc.calls) == 1)
+    metadata = store.get_binding(OWNER, "731", card["cardId"])["metadata"]
+    check("approval" not in metadata and metadata["completedApproval"]["confirmationRequestId"] == "request-1")
+
+    store, card, rpc, service = fixture(workflow=True)
+    click(service, card)
+    rejected(lambda: store.submit_interaction(OWNER, "731", card["cardId"], "bypass", "submit",
+        {"confirmation": ["approve"]}), "WRITE_CONFIRMATION_DISPATCH_REQUIRED")
+    completed = submit(service, card)
+    metadata = store.get_binding(OWNER, "731", card["cardId"])["metadata"]
+    check(metadata["workflow"] == {"runId": "synthetic-run", "nodeId": "synthetic-node"})
+    check(metadata["workflowCompletionRequestId"] == "request-1")
+    check(completed["card"]["status"] == "COMPLETED" and "continuation" not in completed)
+
+    # A reusable application card must create an independent receipt for each
+    # explicit new save, but never execute the same confirmation twice.
+    store, card, rpc, service = fixture(completes=False)
+    click(service, card, "first-save")
+    first = submit(service, card, request="first-confirm")
+    check(first["card"]["status"] == "WAITING_ACTION" and len(rpc.calls) == 1)
+    click(service, card, "second-save")
+    second = submit(service, card, request="second-confirm")
+    check(second["card"]["status"] == "WAITING_ACTION" and len(rpc.calls) == 2)
+    check(rpc.calls[0]["approval_receipt"]["receipt_id"] != rpc.calls[1]["approval_receipt"]["receipt_id"])
+    check(rpc.calls[0]["approval_receipt"]["tool_call_id"] != rpc.calls[1]["approval_receipt"]["tool_call_id"])
+    check(submit(service, card, request="second-confirm") == second and len(rpc.calls) == 2)
+
+    store, card, rpc, service = fixture(fail=True)
+    click(service, card)
+    rejected(lambda: submit(service, card), "ACTION_OUTCOME_UNKNOWN")
+    rejected(lambda: submit(service, card), "ACTION_OUTCOME_UNKNOWN")
+    check(len(rpc.calls) == 1 and store.read(OWNER, "731", card["cardId"])["status"] == "UNKNOWN")
+
+
 def main():
     assets, rpc, store, memory, service, factory = fixture("READ")
     read = assets.execute_ability("ability", ARGUMENTS, tool_call_id="tool-read")
@@ -198,6 +318,7 @@ def main():
     rejected(lambda: submit(service, card), "ACTION_OUTCOME_UNKNOWN")
     rejected(lambda: submit(service, card), "ACTION_OUTCOME_UNKNOWN")
     check(len(rpc.calls) == 1 and store.read(OWNER, "731", card["cardId"])["status"] == "UNKNOWN")
+    rejected(lambda: assets.prepare_approval("ability", ARGUMENTS, "unknown"), "ACTION_OUTCOME_UNKNOWN")
 
     # Same-owner durable claim and frozen arguments are mandatory for handling
     # tasks. A second waiting card blocks this exception to WAITING_INPUT.
@@ -238,6 +359,7 @@ def main():
         modified = copy.deepcopy(metadata)
         modified["approval"]["receipt"][field] = replacement
         check(not eligible(modified))
+    a2ui_probe()
     print(json.dumps({"probe": "chat-write-approval", "result": "PASS", "checks": checks}))
 
 
