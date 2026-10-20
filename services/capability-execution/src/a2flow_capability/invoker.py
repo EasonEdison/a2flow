@@ -12,7 +12,8 @@ from typing import Protocol
 
 import psycopg
 
-from .compiler import compile_capability
+from a2flow.capability.v1.capability_pb2 import ApprovalReceipt
+from .compiler import CompiledCapability, compile_capability
 from .executor import CapabilityExecutor
 from .models import Environment, ExecutionResult, JsonObject, TrustedContext
 from .releases import PostgresReleaseReader, ReleaseError, ReleaseStorageError
@@ -108,9 +109,9 @@ class PublishedCapabilityInvoker:
         self._executor = executor
         self._index = index
 
-    def execute_action_code(
-        self, action_code: str, arguments: JsonObject, context: TrustedContext
-    ) -> ExecutionResult:
+    def _resolve_action_code(
+        self, action_code: str, context: TrustedContext,
+    ) -> tuple[str, CompiledCapability]:
         key = self._index.asset_key(action_code, context)
         release = self._reader.resolve(key, context)
         compiled = compile_capability(
@@ -123,4 +124,23 @@ class PublishedCapabilityInvoker:
         )
         if compiled.plan.action_code != action_code:
             raise ReleaseError("CAPABILITY_ACTION_CODE_MISMATCH")
-        return self._executor.execute(compiled.plan, arguments, context)
+        return key, compiled
+
+    def prepare_action_code(
+        self, action_code: str, arguments: JsonObject, context: TrustedContext,
+    ) -> tuple[str, CompiledCapability]:
+        key, compiled = self._resolve_action_code(action_code, context)
+        self._executor.prepare(compiled.plan, arguments, context)
+        return key, compiled
+
+    def execute_action_code(
+        self, action_code: str, arguments: JsonObject, context: TrustedContext,
+        *, approval_receipt: ApprovalReceipt | None = None,
+    ) -> ExecutionResult:
+        _, compiled = self._resolve_action_code(action_code, context)
+        options = {} if approval_receipt is None else {
+            "approval_receipt": approval_receipt,
+            "arguments_json": json.dumps(arguments, ensure_ascii=False, allow_nan=False,
+                                         sort_keys=True, separators=(",", ":")).encode("utf-8"),
+        }
+        return self._executor.execute(compiled.plan, arguments, context, **options)

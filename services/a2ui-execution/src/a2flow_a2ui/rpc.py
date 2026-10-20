@@ -347,35 +347,59 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
             stage="activate",
         )
 
+    def _trusted_action_card(self, request: a2ui_pb2.ActRequest) -> TrustedCard:
+        card = request.card
+        if not card.HasField("user_id") or (
+            not card.app_code and not card.HasField("generated_definition")
+        ):
+            raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
+        trusted = TrustedCard(
+            card.user_id,
+            card.app_code,
+            _object(card.params_json),
+            _messages(card.snapshot_json),
+            _definition_model(card.generated_definition)
+            if card.HasField("generated_definition")
+            else None,
+            _scope(card.scope) if card.HasField("scope") else None,
+        )
+        return trusted
+
+    def PrepareAct(
+        self, request: a2ui_pb2.ActRequest, context: grpc.ServicerContext,
+    ) -> a2ui_pb2.PreparedAction:
+        def prepare() -> a2ui_pb2.PreparedAction:
+            result = self._service.prepare_action(
+                self._trusted_action_card(request), request.correlation_id,
+                request.idempotency_key, _object(request.action_message_json),
+                _context(request.context),
+            )
+            compiled, plan = result.capability, result.capability.plan
+            description = capability_pb2.ResolveResponse(
+                asset_key=result.asset_key, action_code=plan.action_code,
+                capability_version=plan.capability_version, description=compiled.description,
+                input_schema_json=json.dumps(compiled.input_schema, allow_nan=False),
+                key_output_fields_json=json.dumps(compiled.key_output_fields, allow_nan=False),
+                resolved_environment=capability_pb2.Environment.Value(plan.resolved_environment.value),
+                source_id=plan.source_id, source_digest=plan.source_digest,
+                side_effect_level=plan.side_effect_level, approval_policy=plan.approval_policy,
+            )
+            return a2ui_pb2.PreparedAction(capability=description, binding_id=result.binding_id,
+                arguments_json=json.dumps(result.arguments, ensure_ascii=False, allow_nan=False,
+                                          sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        return self._respond(context, prepare, stage="prepare_act")
+
     def Act(
         self, request: a2ui_pb2.ActRequest, context: grpc.ServicerContext
     ) -> a2ui_pb2.RuntimeResponse:
         def execute() -> a2ui_pb2.RuntimeResponse:
-            card = request.card
-            if not card.HasField("user_id") or (
-                not card.app_code and not card.HasField("generated_definition")
-            ):
-                raise A2uiError("A2UI_CARD_CONTEXT_MISMATCH")
-            trusted = TrustedCard(
-                card.user_id,
-                card.app_code,
-                _object(card.params_json),
-                _messages(card.snapshot_json),
-                _definition_model(card.generated_definition)
-                if card.HasField("generated_definition")
-                else None,
-                _scope(card.scope) if card.HasField("scope") else None,
-            )
-            return _response(
-                self._service.act(
-                    trusted,
-                    request.correlation_id,
-                    request.idempotency_key,
-                    _object(request.action_message_json),
-                    _context(request.context),
-                )
-            )
-
+            options = ({} if not request.HasField("approval_receipt")
+                       else {"approval_receipt": request.approval_receipt})
+            return _response(self._service.act(
+                self._trusted_action_card(request), request.correlation_id,
+                request.idempotency_key, _object(request.action_message_json),
+                _context(request.context), **options,
+            ))
         return self._respond(context, execute, stage="act")
 
     def _respond(
@@ -395,6 +419,8 @@ class A2uiRpcService(a2ui_pb2_grpc.A2uiExecutionServicer):
                 error.code,
             )
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, error.code)
+        except CapabilityExecutionError as error:
+            context.abort(grpc.StatusCode.FAILED_PRECONDITION, error.code.value)
         except ReleaseStorageError as error:
             LOG.warning(
                 "a2ui_rpc_failed stage=%s exception_type=%s error_code=%s",

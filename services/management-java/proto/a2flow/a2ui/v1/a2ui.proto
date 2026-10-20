@@ -96,6 +96,14 @@ message ActRequest {
   reserved "runtime_session_token", "app_build_id", "expected_surface_revision";
   string idempotency_key = 7;
   bytes action_message_json = 8;
+  // Host-only confirmation of the frozen mapped business request.
+  a2flow.capability.v1.ApprovalReceipt approval_receipt = 9;
+}
+message PreparedAction {
+  a2flow.capability.v1.ResolveResponse capability = 1;
+  // Canonical UTF-8 business arguments; preflight never invokes transport.
+  bytes arguments_json = 2;
+  string binding_id = 3;
 }
 message ActionDescriptor {
   string surface_id = 1;
@@ -153,6 +161,7 @@ service A2uiExecution {
   rpc Describe(DescribeRequest) returns (DescribeResponse);
   rpc Activate(ActivateRequest) returns (RuntimeResponse);
   rpc Act(ActRequest) returns (RuntimeResponse);
+  rpc PrepareAct(ActRequest) returns (PreparedAction);
   rpc DescribeGenerationSource(DescribeGenerationSourceRequest) returns (GenerationSource);
   rpc ActivateGenerated(ActivateGeneratedRequest) returns (RuntimeResponse);
 }
