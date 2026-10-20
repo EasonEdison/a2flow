@@ -388,8 +388,8 @@ class RpcChatAssets(ChatAssets):
                 prepared, metadata = prior
             elif self._waiting_action is not None:
                 raise ActionRejected("INTERACTION_REQUIRED")
-            saved = self._card_sink(prepared, metadata)
-            pending[tool_call_id] = (prepared, metadata)
+            saved = self._card_sink(prepared, json_copy(metadata))
+            pending[tool_call_id] = (prepared, json_copy(metadata))
             self._approval_pending = pending
             self._render_observations[saved["cardId"]] = {
                 "cardId": saved["cardId"], "applicationKey": prepared.application_key,
