@@ -10,6 +10,7 @@ import httpx
 from fastapi import FastAPI
 from a2flow_bside.auth import hash_password, hash_session_token, new_session_token
 from deploy.accounts.app import AccountAuthentication, AccountError, create_app
+from a2flow_bside.account_guard import AccountGuardError
 
 
 class Users:
@@ -40,12 +41,21 @@ class Sessions:
         self.rows.pop(digest, None)
 
 
+class FakeAccountGuard:
+    """Explicit test guard for account/session behavior, not a production fallback."""
+    blocked = False
+
+    def admit(self, action, username, scope):
+        if self.blocked:
+            raise AccountGuardError("AUTH_RATE_LIMITED", 429, retry_after=60)
+
+
 class AccountTests(unittest.TestCase):
     def setUp(self):
         self.users = Users()
         self.sessions = Sessions(self.users)
         self.auth = AccountAuthentication(users=self.users, sessions=self.sessions,
-            pepper="test-pepper", environment="PRT", origins=["http://test"])
+            pepper="test-pepper", environment="PRT", origins=["http://test"], account_guard=FakeAccountGuard())
         self.scope = {"headers": [(b"origin", b"http://test")], "method": "POST"}
 
     def test_concurrent_tokens_and_repository_restart(self):
@@ -53,7 +63,7 @@ class AccountTests(unittest.TestCase):
             tokens = list(pool.map(lambda name: self.auth.login(name, "test-password", self.scope), ["admin", "reader"]))
         self.assertEqual(len(set(tokens)), 2)
         restarted = AccountAuthentication(users=self.users, sessions=self.sessions,
-            pepper="test-pepper", environment="PRT", origins=["http://test"])
+            pepper="test-pepper", environment="PRT", origins=["http://test"], account_guard=FakeAccountGuard())
         for token, uid in zip(tokens, [101, 202]):
             scope = {"headers": [(b"cookie", ("a2flow_management_session=" + token).encode())]}
             self.assertEqual(restarted(scope).user_id, uid)
@@ -96,9 +106,10 @@ class AccountTests(unittest.TestCase):
         scope = {"headers": [(b"cookie", ("a2flow_management_session=" + token).encode())]}
         self.users.rows["admin"]["role"] = "USER"
         self.assertEqual(self.auth(scope).roles, frozenset({"USER"}))
-        for _ in range(8):
-            self.auth.login("admin", "wrong", self.scope)
-        self.assertIsNone(self.auth.login("admin", "test-password", self.scope))
+        self.auth.account_guard.blocked = True
+        with self.assertRaises(AccountGuardError) as limited:
+            self.auth.login("admin", "test-password", self.scope)
+        self.assertEqual(limited.exception.status, 429)
         self.users.rows["admin"]["role"] = "INVALID"
         with self.assertRaises(AccountError):
             self.auth(scope)
@@ -121,7 +132,7 @@ class AccountTests(unittest.TestCase):
     def test_browser_form_security_and_secure_cookie(self):
         async def run():
             auth = AccountAuthentication(users=self.users, sessions=self.sessions,
-                pepper="test-pepper", environment="PRT", origins=["https://test"])
+                pepper="test-pepper", environment="PRT", origins=["https://test"], account_guard=FakeAccountGuard())
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(auth)),
                                           base_url="https://test") as client:
                 headers = {"origin": "https://test", "content-type": "application/x-www-form-urlencoded"}
