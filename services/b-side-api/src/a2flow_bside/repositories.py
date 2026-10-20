@@ -132,6 +132,7 @@ class MessagesRepository:
 
     def claim_interaction_continuation(
         self, *, user_id: int, conversation_id: int, card_id: str, request_id: str,
+        write_completed: bool = False,
     ) -> tuple[bool, dict[str, Any], dict[str, Any]]:
         """Create one follow-up pair per submitted card under the conversation lock.
 
@@ -159,7 +160,8 @@ class MessagesRepository:
                 return False, by_role["user"], by_role["assistant"]
             marker = {"cardId": card_id, "requestId": request_id}
             contents = (
-                ("user", {"text": "临时交互已提交，请根据已保存的交互结果继续。",
+                ("user", {"text": ("写操作已完成，请根据已保存的真实执行结果继续。" if write_completed
+                                   else "临时交互已提交，请根据已保存的交互结果继续。"),
                           "delivery": "submitted"}),
                 ("assistant", {"text": "", "delivery": "running", "parts": [],
                                "continuation": marker}),

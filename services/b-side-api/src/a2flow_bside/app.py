@@ -393,17 +393,21 @@ def create_app(
                      and isinstance(result.get("values"), dict))
         write_completed = (isinstance(marker, dict) and marker.get("kind") == "WRITE_APPROVAL"
                            and isinstance(result, dict))
+        temporary = (display.get("protocolProfile") == "a2flow.temporary.v1"
+                     and display.get("definitionSource") == "TEMPORARY")
+        confirmed_java = (write_completed
+                          and display.get("protocolProfile") == "a2flow.java-rpc.v1")
         if (not isinstance(marker, dict) or marker.get("cardId") != card_id
                 or not isinstance(marker.get("requestId"), str) or not marker["requestId"]
                 or card.get("cardId") != card_id or card.get("conversationId") != str(conversation_id)
                 or card.get("status") != "COMPLETED" or not isinstance(result, dict)
                 or not (submitted or write_completed)
-                or display.get("protocolProfile") != "a2flow.temporary.v1"
-                or display.get("definitionSource") != "TEMPORARY"):
+                or not (temporary or confirmed_java)):
             raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
         created, input_message, assistant_message = await asyncio.to_thread(
             messages.claim_interaction_continuation, user_id=user_id,
-            conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"])
+            conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"],
+            write_completed=write_completed)
         if processing_context is not None:
             processing_context = await asyncio.to_thread(
                 processing_tasks.bind_continuation, user_id=user_id, environment=environment,
