@@ -7,6 +7,8 @@ replace [full self-host acceptance](../openspec/changes/portfolio-selfhost/readi
 
 | Probe | Real boundary checked | Deliberately synthetic |
 | --- | --- | --- |
+| Chat durable delivery | PostgreSQL transactional request/continuation inbox, concurrent dispatch, fresh worker recovery, completed projection repair and parameter-based HTTP endpoints | Scripted runner with explicit execution facts; no model keys or business effects |
+| Chat native recovery | Actual Deep Agents execution completion, persisted public events, advisory lock and abrupt worker exit | Scripted model, no external tools or live operations |
 | Account guard | PostgreSQL cross-process admission, shared M/B limits, trusted proxy parsing, password recovery and session revocation | Account and ASGI requests; no public HTTP server |
 | Runtime outbox | PostgreSQL transaction failure, duplicate/ack recovery, fresh-process delivery, native LangGraph waiting checkpoint recovery | Reference transport/failure injection; no Redis/external sender or business dispatch |
 | Chat/Workflow write approval | Confirmation and continuation contracts through the dedicated Python probes | Fake RPC/model replies and in-memory state, no database or network access |
@@ -39,8 +41,8 @@ docker pull postgres:16.6-bookworm
 python3 scripts/run_core_probes.py --run-id local-core-check
 ```
 
-The runner creates its own PostgreSQL container with a random password, three empty
-databases and RAM-backed storage. No port is published. The three database probes
+The runner creates its own PostgreSQL container with a random password, five empty
+databases and RAM-backed storage. No port is published. The five database probes
 join only that container's network namespace; the Chat/Workflow/A2UI probes run in
 separate `network none` namespaces. Source is mounted read-only; private DSN files are
 owner-only, outside the checkout, and removed on exit. No installation DSN is
@@ -49,7 +51,7 @@ The Python executor probe creates and removes its dedicated synthetic role and
 table. The role retains `default_transaction_read_only=on`; only the consumption
 connection opts into writes, with `INSERT, SELECT` and no update/delete privilege.
 Use `--python-probe capability-approval` for that focused local reproduction.
-CI always selects all six Python probes; the report identifies narrowed runs.
+CI always selects all eight Python probes; the report identifies narrowed runs.
 
 For Colima or another explicitly selected local Docker context, build/pull with
 `docker --context CONTEXT ...`, then pass `--docker-context CONTEXT` to the runner.
