@@ -1,51 +1,114 @@
-"""B-side FastAPI application: accounts, chat, workflows, runs, schedules,
-notifications. All dependencies are injected; create_app performs no I/O."""
+"""B-side HTTP composition: explicit dependencies, guards and lifecycle.
+
+Request models are re-exported for existing imports; domain routers own handlers.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import json
-import logging
-import os
-import hmac
-import queue
 import re
-import threading
-import uuid
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import Callable, Literal
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
+from . import (
+    account_routes,
+    activity_routes,
+    conversation_routes,
+    notification_routes,
+    run_routes,
+    schedule_routes,
+)
 from .account_guard import AccountGuardError, PostgresAccountGuard
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
-from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
-
-from . import auth
 from .chat_runner import ChatRunner
-from .durable_chat import DurableDispatcher
-from .chat_history import has_card_references, hydrate_history
+from .durable_chat import DurableChat, DurableDispatcher
 from .errors import BsideError, RemoteRuntimeError
 from .identity import (
     SESSION_COOKIE,
-    RequestIdentity,
-    parse_session_token,
     require_origin,
     resolve_identity,
 )
-from .runtime_client import RuntimeClient
 from .notification_repository import NotificationsRepository
-from .schedule_history import ScheduleHistoryRepository, ScheduleRunView, ScheduleTrigger
-from croniter import CroniterBadDateError
-from .scheduling import ScheduleRuleError, next_run_after, parse_rule
+from .processing_tasks import ProcessingTasksRepository
+from .repositories import (
+    ConversationsRepository,
+    MessagesRepository,
+    RunOwnershipRepository,
+    SchedulesRepository,
+    SessionsRepository,
+    UsersRepository,
+)
+from .route_dependencies import (
+    ChatAction,
+    ChatCards,
+    JsonObject,
+    MemoryReplace,
+    MemoryView,
+    WorkflowCatalog,
+)
+from .route_models import (
+    ChatCardAction,
+    ConversationCreate,
+    CronRuleInput,
+    InternalResume,
+    InternalRunStart,
+    LoginRequest,
+    MemoryEntry,
+    MemorySettings,
+    MessageSend,
+    ProcessingResolution,
+    ProcessingTarget,
+    RegisterRequest,
+    RunAction,
+    RunRefCreate,
+    RunReference,
+    RunStart,
+    ScheduleCreate,
+    ScheduleUpdate,
+    WorkflowCardAction,
+)
+from .route_support import _bounded_run_reference, _iso, _iterate_thread, _schedule_json
+from .runtime_client import RuntimeClient
+from .schedule_history import (
+    ScheduleHistoryRepository,
+)
+from .work_activities import WorkActivitiesRepository
 
-_USERNAME = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
+__all__ = [
+    "create_app",
+    "MemoryEntry",
+    "MemorySettings",
+    "RegisterRequest",
+    "LoginRequest",
+    "ConversationCreate",
+    "RunReference",
+    "ProcessingTarget",
+    "ProcessingResolution",
+    "MessageSend",
+    "RunStart",
+    "RunRefCreate",
+    "InternalRunStart",
+    "RunAction",
+    "ChatCardAction",
+    "WorkflowCardAction",
+    "InternalResume",
+    "CronRuleInput",
+    "ScheduleCreate",
+    "ScheduleUpdate",
+    "_iso",
+    "_iterate_thread",
+    "_bounded_run_reference",
+    "_schedule_json",
+]
+
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-_LOGGER = logging.getLogger(__name__)
 
 
 def _query_allowed(request: Request) -> bool:
@@ -56,11 +119,17 @@ def _query_allowed(request: Request) -> bool:
     if path == "/api/conversations/messages":
         allowed = {"conversationId"}
     elif re.fullmatch(r"/api/internal/runs/[^/]+/cards/[^/]+/resume-status", path):
-        allowed = {"userId", "environment", "nodeId", "interactionId",
-                   "requestId", "actionRequestId"}
-    elif (re.fullmatch(r"/api/runs/[^/]+/progress", path)
-          or re.fullmatch(
-              r"/api/runs/[^/]+/nodes/[^/]+/executions/[^/]+/(history|stream)", path)):
+        allowed = {
+            "userId",
+            "environment",
+            "nodeId",
+            "interactionId",
+            "requestId",
+            "actionRequestId",
+        }
+    elif re.fullmatch(r"/api/runs/[^/]+/progress", path) or re.fullmatch(
+        r"/api/runs/[^/]+/nodes/[^/]+/executions/[^/]+/(history|stream)", path
+    ):
         allowed = {"after", "limit"}
     elif path == "/api/work-activities":
         allowed = {"group", "cursor", "limit"}
@@ -73,281 +142,57 @@ def _query_allowed(request: Request) -> bool:
     return len(keys) == len(set(keys)) and set(keys) <= allowed
 
 
-class MemoryEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
-    text: str = Field(min_length=1, max_length=1000)
-
-
-class MemorySettings(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    revision: int = Field(ge=0)
-    enabled: bool
-    entries: list[MemoryEntry] = Field(max_length=20)
-
-
-class RegisterRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=1, max_length=256)
-
-
-class LoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=1, max_length=256)
-
-
-class ConversationCreate(BaseModel):
-    title: str | None = Field(default=None, max_length=200)
-
-
-class RunReference(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    activityId: str = Field(min_length=1, max_length=256)
-
-
-class ProcessingTarget(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    activityId: str = Field(min_length=1, max_length=256)
-    attentionId: str = Field(min_length=1, max_length=256)
-
-
-class ProcessingResolution(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    summary: str = Field(min_length=1, max_length=2000)
-
-
-class MessageSend(BaseModel):
-    conversationId: int = Field(gt=0)
-    clientRequestId: str = Field(pattern=r"^[A-Za-z0-9_.:-]{1,128}$")
-    text: str = Field(min_length=1, max_length=4000)
-    runReferences: list[RunReference] = Field(default_factory=list, max_length=3)
-
-    processingTarget: ProcessingTarget | None = None
-    processingTaskId: str | None = Field(default=None, min_length=1, max_length=128)
-    processingRequestId: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_.:-]{1,128}$")
-
-    @model_validator(mode="after")
-    def processing_target(self):
-        if self.processingTarget is not None and self.processingTaskId is not None:
-            raise ValueError("PROCESSING_TARGET_CONFLICT")
-        if bool(self.processingTarget or self.processingTaskId) != bool(self.processingRequestId):
-            raise ValueError("PROCESSING_REQUEST_ID_REQUIRED")
-        return self
-
-    @field_validator("text")
-    @classmethod
-    def nonblank(cls, value):
-        if not value.strip():
-            raise ValueError("MESSAGE_TEXT_REQUIRED")
-        return value
-
-
-class RunStart(BaseModel):
-    sourceType: Literal["manual", "chat"] = "manual"
-    workflowKey: str = Field(min_length=1, max_length=256)
-    input: dict[str, object] | str
-
-
-class RunRefCreate(BaseModel):
-    runId: str = Field(min_length=1, max_length=256)
-
-
-class InternalRunStart(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    requestId: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
-    environment: str = Field(pattern=r"^(PRT|ONLINE)$")
-    userId: int
-    workflowKey: str = Field(min_length=1, max_length=256)
-    input: dict[str, object] | str
-
-    @field_validator("userId", mode="before")
-    @classmethod
-    def parse_user_id(cls, value: object) -> int:
-        return user_id_from_wire(value)
-
-
-class RunAction(BaseModel):
-    nodeId: str = Field(min_length=1, max_length=256)
-    interactionId: str = Field(min_length=1, max_length=256)
-    actionName: str = Field(min_length=1, max_length=256)
-    inputs: dict[str, object] = Field(default_factory=dict)
-
-
-class ChatCardAction(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    requestId: str = Field(min_length=1, max_length=128)
-    actionName: str = Field(min_length=1, max_length=128)
-    inputs: dict[str, object]
-
-
-class WorkflowCardAction(ChatCardAction):
-    nodeId: str = Field(min_length=1, max_length=256)
-    interactionId: str = Field(min_length=1, max_length=256)
-
-
-class InternalResume(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    userId: int
-    environment: Literal["PRT", "ONLINE"]
-    requestId: str = Field(min_length=1, max_length=128)
-    actionRequestId: str = Field(min_length=1, max_length=128)
-    nodeId: str = Field(min_length=1, max_length=256)
-    interactionId: str = Field(min_length=1, max_length=256)
-
-    @field_validator("userId", mode="before")
-    @classmethod
-    def parse_user_id(cls, value: object) -> int:
-        return user_id_from_wire(value)
-
-
-class CronRuleInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    expression: str = Field(min_length=1, max_length=128)
-
-
-class ScheduleCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    workflowKey: str = Field(min_length=1, max_length=256)
-    ruleType: Literal["cron"]
-    ruleJson: CronRuleInput
-    timezone: str | None = Field(default=None, max_length=64)
-    inputText: str = Field(min_length=1, max_length=4000)
-
-
-class ScheduleUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    enabled: bool | None = None
-    ruleType: Literal["cron"] | None = None
-    ruleJson: CronRuleInput | None = None
-    timezone: str | None = Field(default=None, max_length=64)
-    inputText: str | None = Field(default=None, min_length=1, max_length=4000)
-
-
-def _iterate_thread(sync_iter):
-    """Pump a blocking generator into an async stream from a worker thread."""
-    pending = queue.Queue()
-
-    def produce():
-        try:
-            for chunk in sync_iter:
-                pending.put(("chunk", chunk))
-            pending.put(("done", None))
-        except Exception as exc:  # noqa: BLE001
-            pending.put(("error", exc))
-
-    threading.Thread(target=produce, daemon=True).start()
-
-    async def consume():
-        while True:
-            kind, payload = await asyncio.to_thread(pending.get)
-            if kind == "chunk":
-                yield payload
-            elif kind == "error":
-                raise payload
-            else:
-                return
-
-    return consume()
-
-
-def _iso(value):
-    if isinstance(value, dt.datetime):
-        return value.isoformat()
-    if isinstance(value, dict):
-        return {key: _iso(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_iso(item) for item in value]
-    return value
-
-
-def _bounded_run_reference(snapshot: dict) -> dict:
-    """Bound the final JSON attachment, including escaped strings and metadata."""
-    frozen = {key: value for key, value in snapshot.items() if key != "outputs"}
-    page = frozen["resultPage"]
-
-    def encoded_size(value: dict) -> int:
-        try:
-            return len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8"))
-        except (TypeError, ValueError) as error:
-            raise BsideError("INVALID_RUN_REFERENCE_RESULT", 502) from error
-
-    if encoded_size(frozen) <= 11000:
-        return frozen
-
-    def shortened(length: int) -> dict:
-        return {**frozen, "resultPage": page[:length], "truncated": True,
-                "nextOffset": frozen.get("resultOffset", 0) + length}
-
-    if encoded_size(shortened(0)) > 11000:
-        raise BsideError("RUN_REFERENCE_METADATA_TOO_LARGE", 413)
-    low, high = 0, len(page)
-    while low < high:
-        middle = (low + high + 1) // 2
-        if encoded_size(shortened(middle)) <= 11000:
-            low = middle
-        else:
-            high = middle - 1
-    return shortened(low)
-
-
-def _schedule_json(row: dict) -> dict:
-    return {
-        "id": row["id"],
-        "workflowKey": row["workflow_key"],
-        "environment": row["environment"],
-        "ruleType": row["rule_type"],
-        "ruleJson": row["rule_json"],
-        "timezone": row["timezone"],
-        "inputText": row["input_text"],
-        "enabled": row["enabled"],
-        "nextRunAt": _iso(row["next_run_at"]),
-        "lastRunAt": _iso(row["last_run_at"]),
-        "createdAt": _iso(row["created_at"]),
-    }
-
-
 def create_app(
     *,
-    users,
-    sessions,
-    conversations,
-    messages,
-    schedules,
+    users: UsersRepository,
+    sessions: SessionsRepository,
+    conversations: ConversationsRepository,
+    messages: MessagesRepository,
+    schedules: SchedulesRepository,
     notifications: NotificationsRepository,
-    run_ownership,
+    run_ownership: RunOwnershipRepository,
     runtime_client: RuntimeClient,
     chat_runner: ChatRunner,
-    workflow_catalog: Callable[[int], list[dict]],
+    workflow_catalog: WorkflowCatalog,
     pepper: str,
     browser_origin: str,
     environment: str,
     session_seconds: int,
     now: Callable[[], dt.datetime] | None = None,
     schedule_history: ScheduleHistoryRepository | None = None,
-    memory_view=None,
-    memory_replace=None,
-    work_activities=None,
-    processing_tasks=None,
-    chat_cards=None,
-    chat_action=None,
+    memory_view: MemoryView | None = None,
+    memory_replace: MemoryReplace | None = None,
+    work_activities: WorkActivitiesRepository | None = None,
+    processing_tasks: ProcessingTasksRepository | None = None,
+    chat_cards: ChatCards | None = None,
+    chat_action: ChatAction | None = None,
     browser_origins: tuple[str, ...] = (),
     account_guard: PostgresAccountGuard | None = None,
-    durable_chat=None,
-):
+    durable_chat: DurableChat | None = None,
+) -> FastAPI:
     from .config import browser_origin as validate_origin
-    allowed_origins = tuple(validate_origin(value) for value in (browser_origins or (browser_origin,)))
-    if (validate_origin(browser_origin) not in allowed_origins or
-            len({value.split(":", 1)[0] for value in allowed_origins}) != 1):
+
+    allowed_origins = tuple(
+        validate_origin(value) for value in (browser_origins or (browser_origin,))
+    )
+    if (
+        validate_origin(browser_origin) not in allowed_origins
+        or len({value.split(":", 1)[0] for value in allowed_origins}) != 1
+    ):
         raise RuntimeError("INVALID_BSIDE_BROWSER_ORIGINS")
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
-    dummy_hash = auth.hash_password("dummy-timing-password", pepper=pepper)
+
     @asynccontextmanager
-    async def lifespan(app):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         stop = asyncio.Event()
         worker = None
         if durable_chat is not None:
             await asyncio.to_thread(durable_chat.check_ready)
-            worker = asyncio.create_task(DurableDispatcher(durable_chat, messages, chat_runner, processing_tasks).run(stop))
+            worker = asyncio.create_task(
+                DurableDispatcher(
+                    durable_chat, messages, chat_runner, processing_tasks
+                ).run(stop)
+            )
         try:
             yield
         finally:
@@ -355,102 +200,28 @@ def create_app(
             if worker is not None:
                 await worker
             # Card actions stay owned after the HTTP subscriber disconnects.
-            while app.state.chat_tasks:
-                await asyncio.gather(*tuple(app.state.chat_tasks), return_exceptions=True)
+            while chat_tasks:
+                await asyncio.gather(*tuple(chat_tasks), return_exceptions=True)
 
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
-    app.state.chat_tasks = set()
+    chat_tasks: set[asyncio.Task[JsonObject]] = set()
+    app.state.chat_tasks = chat_tasks
 
-    def retain_task(task: asyncio.Task) -> None:
-        app.state.chat_tasks.add(task)
-        def finished(completed: asyncio.Task) -> None:
-            app.state.chat_tasks.discard(completed)
+    def retain_task(task: asyncio.Task[JsonObject]) -> None:
+        chat_tasks.add(task)
+
+        def finished(completed: asyncio.Task[JsonObject]) -> None:
+            chat_tasks.discard(completed)
             # Detached HTTP requests still have an owner that observes failures.
             if not completed.cancelled():
                 completed.exception()
+
         task.add_done_callback(finished)
 
-    async def execute_chat_card_action(user_id: int, conversation_id: int,
-                                       card_id: str, body: ChatCardAction) -> dict:
-        processing_context = None
-        if processing_tasks is not None:
-            processing_context = await asyncio.to_thread(
-                processing_tasks.context_for_card, user_id=user_id, environment=environment,
-                conversation_id=str(conversation_id), card_id=card_id)
-        response = await asyncio.to_thread(
-            chat_action, user_id, str(conversation_id), card_id, body.model_dump())
-        marker = response.get("continuation")
-        if marker is None:
-            return response
-        card = response.get("card", {})
-        display = card.get("display", {})
-        result = card.get("result", {})
-        # This marker comes only from the trusted action service after it saved
-        # the real write result. User inputs cannot opt into this continuation.
-        submitted = (isinstance(result, dict) and result.get("status") == "SUBMITTED"
-                     and isinstance(result.get("values"), dict))
-        write_completed = (isinstance(marker, dict) and marker.get("kind") == "WRITE_APPROVAL"
-                           and "result" in card)
-        temporary = (display.get("protocolProfile") == "a2flow.temporary.v1"
-                     and display.get("definitionSource") == "TEMPORARY")
-        confirmed_java = (write_completed
-                          and display.get("protocolProfile") == "a2flow.java-rpc.v1")
-        if (not isinstance(marker, dict) or marker.get("cardId") != card_id
-                or not isinstance(marker.get("requestId"), str) or not marker["requestId"]
-                or card.get("cardId") != card_id or card.get("conversationId") != str(conversation_id)
-                or card.get("status") != "COMPLETED"
-                or not (submitted or write_completed)
-                or not (temporary or confirmed_java)):
-            raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
-        if durable_chat is None:
-            raise BsideError("CHAT_DURABLE_DISPATCH_UNAVAILABLE", 503)
-        await asyncio.to_thread(durable_chat.materialize, messages, processing_tasks)
-        _, input_message, assistant_message = await asyncio.to_thread(
-            messages.claim_interaction_continuation, user_id=user_id,
-            conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"],
-            write_completed=write_completed)
-        state = assistant_message["content"].get("delivery")
-        status = {"queued": "RUNNING", "running": "RUNNING", "completed": "COMPLETED",
-                  "waiting_action": "COMPLETED", "unconfirmed": "NEEDS_REVIEW", "failed": "FAILED"}.get(state, "UNKNOWN")
-        return {**response, "continuation": {
-            "cardId": card_id, "requestId": marker["requestId"], "status": status,
-            "inputMessageId": str(input_message["id"]),
-            "assistantMessageId": str(assistant_message["id"]),
-        }}
-
-    def identity(request: Request) -> RequestIdentity:
-        value = request.scope.get("a2flow.bside.identity")
-        if not isinstance(value, RequestIdentity):
-            raise BsideError("AUTHENTICATION_REQUIRED", 401)
-        return value
-
-    def set_session(response: JSONResponse, token: str) -> None:
-        response.set_cookie(
-            SESSION_COOKIE, token, max_age=session_seconds, httponly=True,
-            samesite="strict", secure=browser_origin.startswith("https://"),
-            path="/")
-
-    def clear_session(response: JSONResponse) -> None:
-        response.delete_cookie(SESSION_COOKIE, httponly=True,
-                               samesite="strict",
-                               secure=browser_origin.startswith("https://"),
-                               path="/")
-
-    @app.get("/api/memory")
-    async def read_memory(identity: RequestIdentity = Depends(identity)):
-        if memory_view is None:
-            raise BsideError("MEMORY_UNAVAILABLE", 503)
-        return await asyncio.to_thread(memory_view, identity.userId)
-
-    @app.put("/api/memory")
-    async def update_memory(body: MemorySettings,
-                            identity: RequestIdentity = Depends(identity)):
-        if memory_replace is None:
-            raise BsideError("MEMORY_UNAVAILABLE", 503)
-        return await asyncio.to_thread(memory_replace, identity.userId, body.model_dump())
-
     @app.middleware("http")
-    async def bside_guard(request: Request, call_next):
+    async def bside_guard(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         if request.url.path.startswith("/api"):
             internal = request.url.path.startswith("/api/internal/")
             try:
@@ -458,813 +229,119 @@ def create_app(
                     raise BsideError("QUERY_PARAMETERS_NOT_ALLOWED", 400)
                 lowered = {name.lower() for name in request.headers.keys()}
                 if lowered & {
-                        "x-a2flow-environment", "x-a2flow-role",
-                        "x-a2flow-roles", "x-a2flow-user-id", "x-environment",
-                        "x-role", "x-roles", "x-user-id"}:
+                    "x-a2flow-environment",
+                    "x-a2flow-role",
+                    "x-a2flow-roles",
+                    "x-a2flow-user-id",
+                    "x-environment",
+                    "x-role",
+                    "x-roles",
+                    "x-user-id",
+                }:
                     raise BsideError("IDENTITY_FIELDS_NOT_ALLOWED", 400)
                 if request.method in _UNSAFE_METHODS and not internal:
                     require_origin(request.headers, allowed_origins)
             except BsideError as error:
-                return JSONResponse({"error": {"code": error.code}},
-                                    status_code=error.status)
+                return JSONResponse(
+                    {"error": {"code": error.code}}, status_code=error.status
+                )
             if not internal:
                 try:
                     request.scope["a2flow.bside.identity"] = await run_in_threadpool(
-                        resolve_identity, request.cookies.get(SESSION_COOKIE), sessions=sessions,
-                        now=clock)
+                        resolve_identity,
+                        request.cookies.get(SESSION_COOKIE),
+                        sessions=sessions,
+                        now=clock,
+                    )
                 except Exception as error:
                     failure = PostgresAccountGuard.unavailable("bside_session", error)
-                    return JSONResponse({"error": {"code": failure.code}},
-                                        status_code=failure.status, headers=failure.headers())
+                    return JSONResponse(
+                        {"error": {"code": failure.code}},
+                        status_code=failure.status,
+                        headers=failure.headers(),
+                    )
         return await call_next(request)
 
     @app.exception_handler(AccountGuardError)
-    async def account_guard_failure(request: Request, error: AccountGuardError):
-        return JSONResponse({"error": {"code": error.code}},
-                            status_code=error.status, headers=error.headers())
+    async def account_guard_failure(
+        request: Request, error: AccountGuardError
+    ) -> JSONResponse:
+        return JSONResponse(
+            {"error": {"code": error.code}},
+            status_code=error.status,
+            headers=error.headers(),
+        )
 
     @app.exception_handler(BsideError)
-    async def bside_failure(request: Request, error: BsideError):
-        return JSONResponse({"error": {"code": error.code}},
-                            status_code=error.status)
+    async def bside_failure(request: Request, error: BsideError) -> JSONResponse:
+        return JSONResponse({"error": {"code": error.code}}, status_code=error.status)
 
     @app.exception_handler(RemoteRuntimeError)
-    async def runtime_failure(request: Request, error: RemoteRuntimeError):
-        return JSONResponse({"error": {"code": error.code}},
-                            status_code=error.status)
+    async def runtime_failure(
+        request: Request, error: RemoteRuntimeError
+    ) -> JSONResponse:
+        return JSONResponse({"error": {"code": error.code}}, status_code=error.status)
 
     @app.exception_handler(RequestValidationError)
-    async def invalid_input(request: Request, error):
-        return JSONResponse({"error": {"code": "INVALID_INPUT"}},
-                            status_code=400)
+    async def invalid_input(
+        request: Request, error: RequestValidationError
+    ) -> JSONResponse:
+        return JSONResponse({"error": {"code": "INVALID_INPUT"}}, status_code=400)
 
     @app.exception_handler(Exception)
-    async def unexpected(request: Request, error):
-        return JSONResponse({"error": {"code": "INTERNAL_ERROR"}},
-                            status_code=500)
+    async def unexpected(request: Request, error: Exception) -> JSONResponse:
+        return JSONResponse({"error": {"code": "INTERNAL_ERROR"}}, status_code=500)
 
-    def _issue_session(response: JSONResponse, user_id: int) -> str:
-        token = auth.new_session_token()
-        account_storage("bside_session_create", sessions.create,
-            token_sha256=auth.hash_session_token(token),
-            user_id=user_id,
-            expires_at=clock() + dt.timedelta(seconds=session_seconds))
-        set_session(response, token)
-        return token
-
-    def account_storage(operation: str, function, *args, **kwargs):
-        try:
-            return function(*args, **kwargs)
-        except (BsideError, AccountGuardError):
-            raise
-        except Exception as error:
-            raise PostgresAccountGuard.unavailable(operation, error) from None
-
-    def admit_account(action: str, username: str, request: Request) -> None:
-        if account_guard is None:
-            raise AccountGuardError("AUTH_GUARD_UNAVAILABLE", 503)
-        account_guard.admit(action, username, request.scope)
-
-    # ---- auth ----
-    # Synchronous handlers use FastAPI's bounded worker pool for PostgreSQL
-    # and scrypt; neither may block the event loop serving active chats.
-
-    @app.post("/api/auth/register")
-    def register(request: Request, body: RegisterRequest):
-        if not _USERNAME.fullmatch(body.username):
-            raise BsideError("INVALID_USERNAME", 400)
-        if len(body.password) < 8:
-            raise BsideError("INVALID_PASSWORD", 400)
-        admit_account("register", body.username, request)
-        user_id = account_storage("bside_register", users.create,
-            username=body.username,
-            password_hash=auth.hash_password(body.password, pepper=pepper))
-        response = JSONResponse(
-            {"userId": user_id_to_wire(user_id), "username": body.username, "role": "USER"})
-        _issue_session(response, user_id)
-        return response
-
-    @app.post("/api/auth/login")
-    def login(request: Request, body: LoginRequest):
-        admit_account("login", body.username, request)
-        record = account_storage("bside_login", users.find_by_username, body.username)
-        if record is None:
-            auth.verify_password(body.password, dummy_hash, pepper=pepper)
-            raise BsideError("INVALID_CREDENTIALS", 401)
-        if not auth.verify_password(
-                body.password, record["password_hash"], pepper=pepper):
-            raise BsideError("INVALID_CREDENTIALS", 401)
-        response = JSONResponse({
-            "userId": user_id_to_wire(record["user_id"]),
-            "username": record["username"],
-            "role": record["role"],
-        })
-        _issue_session(response, record["user_id"])
-        return response
-
-    @app.post("/api/auth/logout")
-    def logout(request: Request):
-        token = parse_session_token(request.cookies.get(SESSION_COOKIE))
-        if token is not None:
-            account_storage("bside_logout", sessions.delete, auth.hash_session_token(token))
-        response = JSONResponse({"ok": True})
-        clear_session(response)
-        return response
-
-    @app.get("/api/auth/session")
-    async def session(identity: RequestIdentity = Depends(identity)):
-        return {"userId": user_id_to_wire(identity.userId), "username": identity.username,
-                "role": identity.role}
-
-    # ---- conversations ----
-
-    @app.get("/api/conversations")
-    async def list_conversations(
-            identity: RequestIdentity = Depends(identity)):
-        return {"conversations": [
-            {"id": row["id"], "title": row["title"],
-             "createdAt": _iso(row["created_at"])}
-            for row in conversations.list_for(identity.userId)]}
-
-    @app.post("/api/conversations")
-    async def create_conversation(
-            body: ConversationCreate,
-            identity: RequestIdentity = Depends(identity)):
-        row = conversations.create(user_id=identity.userId, title=body.title)
-        return {"id": row["id"], "title": row["title"],
-                "createdAt": _iso(row["created_at"])}
-
-    @app.get("/api/conversations/messages")
-    async def conversation_messages(
-            conversation_id: int = Query(alias="conversationId", gt=0),
-            identity: RequestIdentity = Depends(identity)):
-        owner = conversations.owner(conversation_id)
-        if owner is None or owner != identity.userId:
-            raise BsideError("NOT_FOUND", 404)
-        rows = messages.list_for(conversation_id)
-        cards = []
-        if chat_cards is not None:
-            try:
-                cards = await asyncio.to_thread(
-                    chat_cards, identity.userId, str(conversation_id),
-                )
-                if not isinstance(cards, list):
-                    raise TypeError("CHAT_CARDS_RESULT_INVALID")
-            except Exception as error:
-                raise BsideError("CHAT_HISTORY_CARDS_UNAVAILABLE", 503) from error
-        elif has_card_references(rows):
-            raise BsideError("CHAT_HISTORY_CARDS_UNAVAILABLE", 503)
-        hydrated, unassigned_cards = hydrate_history(rows, cards)
-        return {"messages": [
-            {"id": str(row["id"]), "role": row["role"],
-             "content": row["content"], "refKind": row["ref_kind"],
-             "refId": row["ref_id"], "createdAt": _iso(row["created_at"])}
-            for row in hydrated
-            # A submission triggers the next model turn server-side. Its internal
-            # input record is not a message authored by the user.
-            if not (row["role"] == "user"
-                    and row["ref_kind"] == "temporary_interaction")],
-            "unassignedCards": unassigned_cards}
-
-    @app.post("/api/conversations/messages")
-    async def send_message(
-            body: MessageSend,
-            identity: RequestIdentity = Depends(identity)):
-        conversation_id = body.conversationId
-        owner = conversations.owner(conversation_id)
-        if owner is None or owner != identity.userId:
-            raise BsideError("NOT_FOUND", 404)
-        if durable_chat is None:
-            raise BsideError("CHAT_DURABLE_DISPATCH_UNAVAILABLE", 503)
-        prior = await asyncio.to_thread(durable_chat.request,user_id=identity.userId,
-            conversation_id=conversation_id,request_id=body.clientRequestId,payload=body.model_dump())
-        if prior is not None:
-            return StreamingResponse(durable_chat.stream(prior),media_type="text/event-stream",
-                headers={"Cache-Control":"no-store","X-Accel-Buffering":"no"})
-        processing_context = None
-        processing_activity = None
-        if body.processingTarget is not None or body.processingTaskId is not None:
-            if processing_tasks is None:
-                raise BsideError("PROCESSING_UNAVAILABLE", 503)
-            if body.processingTaskId is not None:
-                processing_context = await asyncio.to_thread(
-                    processing_tasks.get_context, user_id=identity.userId, environment=environment,
-                    conversation_id=str(conversation_id), task_id=body.processingTaskId)
-                processing_activity = processing_context["activityId"]
-            else:
-                processing_activity = body.processingTarget.activityId
-        references = []
-        seen = set()
-        activity_ids = [r.activityId for r in body.runReferences]
-        if processing_activity is not None and processing_activity not in activity_ids:
-            activity_ids.append(processing_activity)
-        if len(activity_ids) > 3:
-            raise BsideError("TOO_MANY_RUN_REFERENCES", 400)
-        for activity_id in activity_ids:
-            if activity_id in seen:
-                raise BsideError("DUPLICATE_RUN_REFERENCE", 400)
-            seen.add(activity_id)
-            if work_activities is None:
-                raise BsideError("WORK_ACTIVITIES_UNAVAILABLE", 503)
-            snapshot = await asyncio.to_thread(
-                work_activities.get_result, user_id=identity.userId,
-                environment=environment, activity_id=activity_id, limit=8000)
-            references.append(_bounded_run_reference(snapshot))
-        if processing_activity is not None:
-            def observe_turn(connection, context, input_message, assistant_message, *, new):
-                if new:
-                    durable_chat.insert_turn(connection, user_id=identity.userId,
-                        conversation_id=conversation_id, request_id="processing:" + body.processingRequestId,
-                        digest=body.processingRequestId, input_message=input_message,
-                        assistant_message=assistant_message, references=references, processing_context=context)
-                durable_chat.record_request(connection,user_id=identity.userId,conversation_id=conversation_id,
-                    request_id=body.clientRequestId,payload=body.model_dump(),
-                    input_message=input_message,assistant_message=assistant_message)
-            created, processing_context, input_message, assistant_message = await asyncio.to_thread(
-                processing_tasks.begin_turn, user_id=identity.userId, environment=environment,
-                conversation_id=str(conversation_id), request_id=body.processingRequestId,
-                text=body.text, references=references,
-                target=body.processingTarget.model_dump() if body.processingTarget else None,
-                task_id=body.processingTaskId, turn_observer=observe_turn)
-            turn = await asyncio.to_thread(durable_chat.request,user_id=identity.userId,
-                conversation_id=conversation_id,request_id=body.clientRequestId,payload=body.model_dump())
-        else:
-            turn = await asyncio.to_thread(durable_chat.receive, user_id=identity.userId,
-                conversation_id=conversation_id, request_id=body.clientRequestId,
-                payload=body.model_dump(), references=references)
-        return StreamingResponse(durable_chat.stream(turn), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
-
-    @app.get("/api/conversations/{conversation_id}/cards")
-    async def conversation_cards(conversation_id: int,
-                                 identity: RequestIdentity = Depends(identity)):
-        if conversations.owner(conversation_id) != identity.userId:
-            raise BsideError("CONVERSATION_NOT_FOUND", 404)
-        if chat_cards is None:
-            raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
-        return {"cards": await asyncio.to_thread(
-            chat_cards, identity.userId, str(conversation_id))}
-
-    @app.post("/api/conversations/{conversation_id}/cards/{card_id}/actions")
-    async def conversation_card_action(conversation_id: int, card_id: str,
-                                       body: ChatCardAction,
-                                       identity: RequestIdentity = Depends(identity)):
-        if conversations.owner(conversation_id) != identity.userId:
-            raise BsideError("CONVERSATION_NOT_FOUND", 404)
-        if chat_action is None:
-            raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
-        task = asyncio.create_task(execute_chat_card_action(
-            identity.userId, conversation_id, card_id, body))
-        retain_task(task)
-        return await asyncio.shield(task)
-
-    @app.post("/api/conversations/{conversation_id}/run-refs")
-    async def attach_run(
-            conversation_id: int, body: RunRefCreate,
-            identity: RequestIdentity = Depends(identity)):
-        owner = conversations.owner(conversation_id)
-        if owner is None or owner != identity.userId:
-            raise BsideError("NOT_FOUND", 404)
-        if not run_ownership.owned_by(identity.userId, body.runId):
-            raise BsideError("NOT_FOUND", 404)
-        row = messages.append(
-            conversation_id=conversation_id, role="assistant",
-            content={"text": "工作流已启动，等待你的确认。"},
-            ref_kind="run", ref_id=body.runId)
-        return {"id": row["id"]}
-
-    @app.get("/api/processing-tasks/{task_id}")
-    async def processing_task(task_id: str, identity: RequestIdentity = Depends(identity)):
-        if processing_tasks is None:
-            raise BsideError("PROCESSING_UNAVAILABLE", 503)
-        return await asyncio.to_thread(processing_tasks.get, user_id=identity.userId,
-                                       environment=environment, task_id=task_id)
-
-    @app.post("/api/processing-tasks/{task_id}/resolve")
-    async def resolve_processing_task(task_id: str, body: ProcessingResolution,
-                                      identity: RequestIdentity = Depends(identity)):
-        if processing_tasks is None:
-            raise BsideError("PROCESSING_UNAVAILABLE", 503)
-        return await asyncio.to_thread(processing_tasks.resolve, user_id=identity.userId,
-                                       environment=environment, task_id=task_id, summary=body.summary)
-
-    # ---- committed work activities (read-only except reminder acknowledgement) ----
-
-    def _activities():
-        if work_activities is None:
-            raise BsideError("WORK_ACTIVITIES_UNAVAILABLE", 503)
-        return work_activities
-
-    @app.get("/api/work-activities")
-    async def list_work_activities(
-        group: Literal["attention", "running", "completed"] | None = None,
-        cursor: str | None = Query(default=None, max_length=1024),
-        limit: int = Query(default=5, ge=1, le=50),
-        identity: RequestIdentity = Depends(identity),
-    ):
-        return await asyncio.to_thread(
-            _activities().list_runs, user_id=identity.userId, environment=environment,
-            group=group, cursor=cursor, limit=limit)
-
-    @app.get("/api/work-activities/{activity_id}/result")
-    async def work_activity_result(
-        activity_id: str, nodeId: str | None = None,
-        offset: int = Query(default=0, ge=0), limit: int = Query(default=12000, ge=1, le=12000),
-        identity: RequestIdentity = Depends(identity),
-    ):
-        return await asyncio.to_thread(
-            _activities().get_result, user_id=identity.userId, environment=environment,
-            activity_id=activity_id, node_id=nodeId, offset=offset, limit=limit)
-
-    @app.get("/api/work-activities/{activity_id}")
-    async def work_activity_detail(activity_id: str, identity: RequestIdentity = Depends(identity)):
-        return await asyncio.to_thread(
-            _activities().get, user_id=identity.userId, environment=environment, activity_id=activity_id)
-
-    @app.post("/api/work-activities/{activity_id}/attention/{attention_id}/ack")
-    async def work_activity_ack(activity_id: str, attention_id: str,
-                                identity: RequestIdentity = Depends(identity)):
-        return await asyncio.to_thread(
-            _activities().acknowledge, user_id=identity.userId, environment=environment,
-            activity_id=activity_id, attention_id=attention_id)
-
-    # ---- workflows catalog ----
-
-    @app.get("/api/workflows")
-    async def workflows(identity: RequestIdentity = Depends(identity)):
-        return {"workflows": list(workflow_catalog(identity.userId))}
-
-    # ---- runs (proxied runtime control; ownership recorded per control id) ----
-
-    def _require_run_owner(control_id: str, owner_user: int) -> None:
-        recorded = run_ownership.owner(control_id)
-        if recorded is None:
-            raise BsideError("NOT_FOUND", 404)
-        if recorded != owner_user:
-            raise BsideError("NOT_FOUND", 404)
-
-    def _runtime(user_id: int):
-        return runtime_client.for_user(user_id, environment)
-
-    def _resolve_run_id(control_id: str, user_id: int) -> str:
-        view = _runtime(user_id).control(control_id)
-        run_id = view.get("runId") or view.get("run_id")
-        if not isinstance(run_id, str) or not run_id:
-            raise BsideError("RUN_NOT_RESOLVED", 409)
-        run_ownership.bind_run_id(control_id, run_id)
-        return run_id
-
-    def _resolve_inputs(workflow_key: str, user_id: int, raw_input):
-        # Every start, including object inputs, must resolve the caller's catalog.
-        # Scheduled runs carry a plain prompt; wrap it into the workflow's
-        # single required string property when it has one.
-        entry = next(
-            (item for item in workflow_catalog(user_id)
-             if item.get("definitionKey") == workflow_key),
-            None,
+    app.include_router(
+        account_routes.create_router(
+            users=users,
+            sessions=sessions,
+            pepper=pepper,
+            browser_origin=browser_origin,
+            session_seconds=session_seconds,
+            clock=clock,
+            account_guard=account_guard,
+            memory_view=memory_view,
+            memory_replace=memory_replace,
         )
-        if entry is None:
-            raise BsideError("WORKFLOW_NOT_FOUND", 404)
-        if not isinstance(raw_input, str):
-            return raw_input
-        schema = entry.get("inputSchema") or {}
-        required = schema.get("required") or []
-        properties = schema.get("properties") or {}
-        if (len(required) == 1
-                and properties.get(required[0], {}).get("type") == "string"):
-            return {required[0]: raw_input}
-        raise BsideError("INVALID_INPUT", 400)
-
-    async def _start_for(
-        user_id: int, workflow_key: str, raw_input: dict[str, object] | str, source_type: str = "manual",
-    ) -> dict[str, str]:
-        control_id = uuid.uuid4().hex
-        inputs = await asyncio.to_thread(
-            _resolve_inputs, workflow_key, user_id, raw_input,
+    )
+    app.include_router(
+        conversation_routes.create_router(
+            conversations=conversations,
+            messages=messages,
+            run_ownership=run_ownership,
+            environment=environment,
+            work_activities=work_activities,
+            processing_tasks=processing_tasks,
+            chat_cards=chat_cards,
+            chat_action=chat_action,
+            durable_chat=durable_chat,
+            retain_task=retain_task,
         )
-        await asyncio.to_thread(
-            run_ownership.reserve, control_id=control_id, user_id=user_id,
-            workflow_key=workflow_key, environment=environment, source_type=source_type,
+    )
+    app.include_router(
+        activity_routes.create_router(
+            environment=environment,
+            work_activities=work_activities,
+            processing_tasks=processing_tasks,
         )
-        runtime = _runtime(user_id)
-        try:
-            view = await asyncio.to_thread(runtime.start, control_id, workflow_key, inputs)
-        except Exception as start_error:
-            _LOGGER.warning(
-                "Runtime start failed category=%s control_id=%s",
-                type(start_error).__name__, control_id,
-            )
-            if (
-                not isinstance(start_error, RemoteRuntimeError)
-                or start_error.code != "RUNTIME_UNREACHABLE"
-            ):
-                raise
-            # A failed HTTP response does not prove failed admission. Read the
-            # same durable control once; never submit the business start again.
-            try:
-                view = await asyncio.to_thread(runtime.control, control_id)
-                if (
-                    view.get("controlRequestId") != control_id
-                    or not isinstance(view.get("runId"), str)
-                    or not view["runId"]
-                ):
-                    raise ValueError("INVALID_CONTROL_ADMISSION")
-            except Exception as query_error:
-                _LOGGER.warning(
-                    "Runtime start unresolved category=%s control_id=%s",
-                    type(query_error).__name__, control_id,
-                )
-                # Keep ownership visible in My Runs, but do not claim success.
-                raise start_error from None
-        run_id = view.get("runId")
-        if isinstance(run_id, str) and run_id:
-            await asyncio.to_thread(run_ownership.bind_run_id, control_id, run_id)
-        return {"controlRequestId": control_id, "status": "SUBMITTED"}
-
-    @app.post("/api/runs")
-    async def start_run(body: RunStart,
-                        identity: RequestIdentity = Depends(identity)):
-        return await _start_for(identity.userId, body.workflowKey, body.input, body.sourceType)
-
-    def _require_internal(request: Request) -> None:
-        token = os.environ.get("A2FLOW_BSIDE_INTERNAL_TOKEN")
-        if not token:
-            raise BsideError("INTERNAL_API_DISABLED", 503)
-        provided = request.headers.get("x-a2flow-internal-token") or ""
-        if not hmac.compare_digest(provided, token):
-            raise BsideError("INTERNAL_TOKEN_REQUIRED", 401)
-
-    @app.post("/api/internal/runs")
-    async def internal_start(request: Request, body: InternalRunStart):
-        _require_internal(request)
-        if body.environment != environment:
-            raise BsideError("ENVIRONMENT_MISMATCH", 400)
-        if body.workflowKey.startswith("personal-wf-"):
-            raise BsideError("PERSONAL_WORKFLOW_SCHEDULING_UNSUPPORTED", 400)
-        inputs = _resolve_inputs(body.workflowKey, body.userId, body.input)
-        # Commit ownership before calling Runtime. A timeout must not cause a
-        # new control ID; Runtime's durable allocation deduplicates this ID.
-        await asyncio.to_thread(
-            run_ownership.reserve, control_id=body.requestId,
-            user_id=body.userId, workflow_key=body.workflowKey,
-            environment=environment, source_type="unknown",
+    )
+    app.include_router(
+        run_routes.create_router(
+            environment=environment,
+            run_ownership=run_ownership,
+            runtime_client=runtime_client,
+            workflow_catalog=workflow_catalog,
         )
-        view = await asyncio.to_thread(
-            _runtime(body.userId).start, body.requestId, body.workflowKey, inputs,
+    )
+    app.include_router(
+        schedule_routes.create_router(
+            environment=environment,
+            schedules=schedules,
+            schedule_history=schedule_history,
+            runtime_client=runtime_client,
+            clock=clock,
         )
-        if view.get("runId"):
-            run_ownership.bind_run_id(body.requestId, view["runId"])
-        return {"controlRequestId": body.requestId, "status": "SUBMITTED"}
-
-    @app.get("/api/internal/runs/{request_id}")
-    async def internal_run_status(request: Request, request_id: str):
-        _require_internal(request)
-        owner = run_ownership.owner(request_id)
-        if owner is None:
-            raise BsideError("NOT_FOUND", 404)
-        view = await asyncio.to_thread(_runtime(owner).control, request_id)
-        if view.get("runId"):
-            run_ownership.bind_run_id(request_id, view["runId"])
-        return {"controlRequestId": request_id, "status": "SUBMITTED", "view": view}
-
-    @app.get("/api/runs/{control_id}/cards")
-    async def workflow_cards(
-        control_id: str, identity: RequestIdentity = Depends(identity),
-    ):
-        _require_run_owner(control_id, identity.userId)
-        try:
-            run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
-        except BsideError as error:
-            if error.code == "RUN_NOT_RESOLVED":
-                return {"cards": []}
-            raise
-        except RemoteRuntimeError as error:
-            if error.code == "CONTROL_NOT_FOUND":
-                return {"cards": []}
-            raise
-        return await asyncio.to_thread(_runtime(identity.userId).cards, run_id)
-
-    @app.post("/api/internal/runs/{run_id}/cards/{card_id}/resume")
-    async def internal_resume(
-        request: Request, run_id: str, card_id: str, body: InternalResume,
-    ):
-        _require_internal(request)
-        if body.environment != environment:
-            raise BsideError("ENVIRONMENT_MISMATCH", 400)
-        if run_ownership.owner_by_run(run_id) != body.userId:
-            raise BsideError("NOT_FOUND", 404)
-        await asyncio.to_thread(
-            _runtime(body.userId).resume_card, run_id, card_id,
-            body.model_dump(exclude={"userId", "environment"}),
-        )
-        return {"controlRequestId": body.requestId, "status": "SUBMITTED"}
-
-    @app.get("/api/internal/runs/{run_id}/cards/{card_id}/resume-status")
-    async def internal_resume_status(
-        request: Request, run_id: str, card_id: str, userId: str,
-        nodeId: str, interactionId: str, requestId: str, actionRequestId: str,
-        requested_environment: str = Query(alias="environment"),
-    ):
-        _require_internal(request)
-        owner = user_id_from_wire(userId)
-        if requested_environment != environment:
-            raise BsideError("ENVIRONMENT_MISMATCH", 400)
-        if run_ownership.owner_by_run(run_id) != owner:
-            raise BsideError("NOT_FOUND", 404)
-        return await asyncio.to_thread(
-            _runtime(owner).resume_status, run_id, card_id,
-            {"nodeId": nodeId, "interactionId": interactionId,
-             "requestId": requestId, "actionRequestId": actionRequestId},
-        )
-
-    @app.post("/api/runs/{control_id}/cards/{card_id}/actions")
-    async def workflow_card_action(
-        control_id: str, card_id: str, body: WorkflowCardAction,
-        identity: RequestIdentity = Depends(identity),
-    ):
-        _require_run_owner(control_id, identity.userId)
-        run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
-        return await asyncio.to_thread(
-            _runtime(identity.userId).card_action, run_id, card_id, body.model_dump(),
-        )
-
-    @app.get("/api/runs")
-    async def list_runs(identity: RequestIdentity = Depends(identity)):
-        items = []
-        for row in run_ownership.list_for(identity.userId):
-            item = {
-                "controlRequestId": row["control_id"],
-                "workflowKey": row["workflow_key"],
-                "createdAt": _iso(row["created_at"]),
-            }
-            try:
-                item["view"] = _runtime(identity.userId).control(row["control_id"])
-            except RemoteRuntimeError:
-                item["view"] = None
-            if item["view"] and item["view"].get("runId"):
-                run_ownership.bind_run_id(
-                    row["control_id"], item["view"]["runId"])
-                try:
-                    actual = await asyncio.to_thread(
-                        _runtime(identity.userId).view, item["view"]["runId"],
-                    )
-                    item["lifecycle"] = actual.get("lifecycle")
-                    item["title"] = actual.get("title")
-                    item["requirement"] = actual.get("requirement")
-                except RemoteRuntimeError:
-                    item["lifecycle"] = "UNKNOWN"
-            items.append(item)
-        return {"runs": items}
-
-    @app.get("/api/runs/{run_id}")
-    async def run_detail(run_id: str,
-                         identity: RequestIdentity = Depends(identity)):
-        _require_run_owner(run_id, identity.userId)
-        receipt = _runtime(identity.userId).control(run_id)
-        runtime_run_id = receipt.get("runId") if isinstance(receipt, dict) \
-            else None
-        if runtime_run_id:
-            try:
-                return _runtime(identity.userId).view(runtime_run_id)
-            except RemoteRuntimeError:
-                pass
-        return receipt
-
-    @app.post("/api/runs/{run_id}/stop")
-    async def stop_run(run_id: str,
-                       identity: RequestIdentity = Depends(identity)):
-        _require_run_owner(run_id, identity.userId)
-        runtime_run_id = _resolve_run_id(run_id, identity.userId)
-        return _runtime(identity.userId).stop(
-            runtime_run_id, uuid.uuid4().hex)
-
-    @app.post("/api/runs/{run_id}/actions")
-    async def run_action(run_id: str, body: RunAction,
-                         identity: RequestIdentity = Depends(identity)):
-        _require_run_owner(run_id, identity.userId)
-        runtime_run_id = _resolve_run_id(run_id, identity.userId)
-        return StreamingResponse(
-            _iterate_thread(_runtime(identity.userId).action_stream(
-                runtime_run_id, body.nodeId, {
-                    "controlRequestId": uuid.uuid4().hex,
-                    "inputs": body.inputs,
-                    "interactionId": body.interactionId,
-                    "actionName": body.actionName,
-                })),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache"})
-
-    @app.get("/api/runs/{run_id}/surface")
-    async def run_surface(run_id: str,
-                          identity: RequestIdentity = Depends(identity)):
-        _require_run_owner(run_id, identity.userId)
-        runtime_run_id = _resolve_run_id(run_id, identity.userId)
-        return StreamingResponse(
-            _iterate_thread(_runtime(identity.userId).surface_stream(runtime_run_id)),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache"})
-
-    # Read-only progress uses Runtime's native catalog/history/SSE contracts.
-    def _progress_query(request: Request, *, streaming: bool = False) -> list[tuple[str, str]]:
-        query = request.query_params.multi_items()
-        if request.headers.get("last-event-id") is not None and (
-            not streaming or "after" in request.query_params
-        ):
-            raise BsideError("INVALID_PROGRESS_CURSOR", 400)
-        # Keep all pairs, including duplicate or unknown keys, for native validation.
-        return query
-
-    @app.get("/api/runs/{control_id}/progress")
-    async def run_progress_catalog(
-        request: Request, control_id: str, identity: RequestIdentity = Depends(identity),
-    ) -> dict[str, object]:
-        _require_run_owner(control_id, identity.userId)
-        query = _progress_query(request)
-        # An unbound run returns the existing explicit RUN_NOT_RESOLVED error.
-        run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
-        return await asyncio.to_thread(_runtime(identity.userId).progress_catalog, run_id, query)
-
-    @app.get("/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/history")
-    async def run_progress_history(
-        request: Request, control_id: str, node_id: str, execution_id: str,
-        identity: RequestIdentity = Depends(identity),
-    ) -> dict[str, object]:
-        _require_run_owner(control_id, identity.userId)
-        query = _progress_query(request)
-        run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
-        return await asyncio.to_thread(
-            _runtime(identity.userId).progress_history, run_id, node_id, execution_id, query,
-        )
-
-    @app.get("/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/stream")
-    async def run_progress_stream(
-        request: Request, control_id: str, node_id: str, execution_id: str,
-        identity: RequestIdentity = Depends(identity),
-    ) -> StreamingResponse:
-        _require_run_owner(control_id, identity.userId)
-        query = _progress_query(request, streaming=True)
-        run_id = await asyncio.to_thread(_resolve_run_id, control_id, identity.userId)
-        stream = await asyncio.to_thread(
-            _runtime(identity.userId).progress_stream, run_id, node_id, execution_id,
-            query, request.headers.get("last-event-id"),
-        )
-        # StreamingResponse consumes this sync iterator in its worker pool;
-        # no unbounded queue or synthetic progress events are introduced.
-        return StreamingResponse(
-            stream, media_type="text/event-stream",
-            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
-        )
-
-    # ---- schedules ----
-
-    schedule_status_gate = asyncio.Semaphore(1)
-
-    async def trigger_view(trigger: ScheduleTrigger, user_id: int) -> ScheduleRunView:
-        lifecycle = None
-        if trigger.run_id:
-            try:
-                # Runtime admits bounded reads; list/history share one lane so
-                # opening a schedule page does not consume its whole capacity.
-                async with schedule_status_gate:
-                    actual = await asyncio.to_thread(_runtime(user_id).view, trigger.run_id)
-                lifecycle = actual.get("lifecycle") or "UNKNOWN"
-            except RemoteRuntimeError:
-                lifecycle = "UNKNOWN"
-        return ScheduleRunView(
-            scheduleId=trigger.schedule_id, controlId=trigger.control_id,
-            runId=trigger.run_id, scheduledAt=trigger.scheduled_at,
-            deliveryState=trigger.delivery_state, lifecycle=lifecycle,
-            inputText=trigger.input_text,
-        )
-
-    def _computed_next(rule_type: str, rule_json: dict,
-                       timezone: str) -> dt.datetime:
-        try:
-            rule = parse_rule(rule_type, rule_json, timezone, clock())
-            next_at = next_run_after(rule, clock())
-        except (ScheduleRuleError, CroniterBadDateError):
-            raise BsideError("INVALID_SCHEDULE", 400) from None
-        if next_at is None:
-            raise BsideError("INVALID_SCHEDULE", 400)
-        return next_at
-
-    @app.post("/api/schedules")
-    async def create_schedule(
-            body: ScheduleCreate,
-            identity: RequestIdentity = Depends(identity)):
-        if body.workflowKey.startswith("personal-wf-"):
-            raise BsideError("PERSONAL_WORKFLOW_SCHEDULING_UNSUPPORTED", 400)
-        timezone = body.timezone or "Asia/Shanghai"
-        next_at = _computed_next(body.ruleType, body.ruleJson.model_dump(), timezone)
-        row = schedules.create(
-            user_id=identity.userId, workflow_key=body.workflowKey,
-            environment=environment, rule_type=body.ruleType,
-            rule_json=body.ruleJson.model_dump(), timezone=timezone,
-            input_text=body.inputText, next_run_at=next_at)
-        return _schedule_json(row)
-
-    @app.get("/api/schedules")
-    async def list_schedules(
-            identity: RequestIdentity = Depends(identity)):
-        rows = [
-            _schedule_json(row)
-            for row in schedules.list_for(identity.userId)]
-        if schedule_history is not None:
-            triggers = await asyncio.to_thread(
-                schedule_history.read, identity.userId, environment)
-            visible = {str(row["id"]) for row in rows}
-            latest_runs = await asyncio.gather(*(
-                trigger_view(trigger, identity.userId)
-                for trigger in triggers if trigger.schedule_id in visible
-            ))
-            by_schedule = {item.scheduleId: item for item in latest_runs}
-            for row in rows:
-                row["latestRun"] = by_schedule.get(str(row["id"]))
-        return {"schedules": rows}
-
-    @app.get("/api/schedules/{schedule_id}/runs")
-    async def schedule_runs(
-        schedule_id: int, before: dt.datetime | None = None,
-        identity: RequestIdentity = Depends(identity),
-    ):
-        row = schedules.get(schedule_id)
-        if row is None or row["user_id"] != identity.userId or row["environment"] != environment:
-            raise BsideError("NOT_FOUND", 404)
-        if schedule_history is None:
-            raise BsideError("SCHEDULE_HISTORY_UNAVAILABLE", 503)
-        if before is not None and before.utcoffset() is None:
-            raise BsideError("INVALID_SCHEDULE_CURSOR", 400)
-        triggers = await asyncio.to_thread(
-            schedule_history.read, identity.userId, environment,
-            schedule_id=schedule_id, before=before, limit=11,
-        )
-        return {
-            "runs": await asyncio.gather(*(
-                trigger_view(item, identity.userId) for item in triggers[:10]
-            )),
-            "nextCursor": triggers[9].scheduled_at if len(triggers) > 10 else None,
-        }
-
-    @app.patch("/api/schedules/{schedule_id}")
-    async def update_schedule(
-            schedule_id: int, body: ScheduleUpdate,
-            identity: RequestIdentity = Depends(identity)):
-        row = schedules.get(schedule_id)
-        if row is None or row["user_id"] != identity.userId:
-            raise BsideError("NOT_FOUND", 404)
-        if row["workflow_key"].startswith("personal-wf-"):
-            raise BsideError("PERSONAL_WORKFLOW_SCHEDULING_UNSUPPORTED", 400)
-        fields = {}
-        if body.enabled is not None:
-            fields["enabled"] = body.enabled
-        if body.inputText is not None:
-            fields["input_text"] = body.inputText
-        rule_changed = (body.ruleType is not None
-                        or body.ruleJson is not None
-                        or body.timezone is not None)
-        reenabled = body.enabled is True and not row["enabled"]
-        if rule_changed or reenabled:
-            rule_type = body.ruleType or row["rule_type"]
-            rule_json = body.ruleJson.model_dump() if body.ruleJson is not None \
-                else row["rule_json"]
-            timezone = body.timezone or row["timezone"]
-            fields["rule_type"] = rule_type
-            fields["rule_json"] = rule_json
-            fields["timezone"] = timezone
-            fields["next_run_at"] = _computed_next(
-                rule_type, rule_json, timezone)
-        updated = schedules.update(
-            schedule_id, identity.userId, **fields)
-        if updated is None:
-            raise BsideError("NOT_FOUND", 404)
-        return _schedule_json(updated)
-
-    @app.delete("/api/schedules/{schedule_id}")
-    async def delete_schedule(
-            schedule_id: int,
-            identity: RequestIdentity = Depends(identity)):
-        if not schedules.delete(schedule_id, identity.userId):
-            raise BsideError("NOT_FOUND", 404)
-        return {"ok": True}
-
-    # ---- notifications ----
-
-    @app.get("/api/notifications")
-    async def list_notifications(
-            identity: RequestIdentity = Depends(identity)):
-        return {"notifications": [
-            {"id": row.id, "kind": row.kind, "title": row.title,
-             "body": row.body, "refType": row.ref_type,
-             "refId": row.ref_id, "read": row.read,
-             "createdAt": row.created_at.isoformat()}
-            for row in notifications.list_for(identity.userId)]}
-
-    @app.post("/api/notifications/{notification_id}/read")
-    async def mark_notification_read(
-            notification_id: int,
-            identity: RequestIdentity = Depends(identity)):
-        if not notifications.mark_read(notification_id, identity.userId):
-            raise BsideError("NOT_FOUND", 404)
-        return {"ok": True}
-
+    )
+    app.include_router(notification_routes.create_router(notifications=notifications))
     return app
