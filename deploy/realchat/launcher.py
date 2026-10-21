@@ -15,6 +15,7 @@ from fastapi import FastAPI
 if TYPE_CHECKING:
     from a2flow_asset_store import BundleValidator
     from a2flow_asset_store.personal_workflows import PersonalWorkflowRepository
+    from agent_workflow_runtime.internal_identity import VerifiedIdentity
     from pydantic import SecretStr
     from skillweave_contracts import TrustedContext
 import sys
@@ -86,7 +87,7 @@ def bside() -> FastAPI:
     return app
 
 
-def runtime() -> FastAPI:
+def runtime() -> VerifiedIdentity:
     from agent_workflow_runtime.internal_identity import private_identity
     from agent_workflow_runtime.model_factory import DeepSeekModelFactory
     from agent_workflow_runtime.personal_memory import PersonalMemory
