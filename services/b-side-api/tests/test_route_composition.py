@@ -179,5 +179,31 @@ class ProductionCompositionTests(unittest.TestCase):
         self.assertEqual("/employee", app.routes[-1].path)
 
 
+class RuntimeCompositionTests(unittest.TestCase):
+    def test_realchat_constructs_native_host_without_external_calls(self):
+        from agent_workflow_runtime.mvp_host import VerifiedIdentity
+        from agent_workflow_runtime.rpc_client import RpcClient
+        from deploy.realchat import launcher
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "A2FLOW_DATABASE_URL": "host=127.0.0.1 dbname=composition_probe user=probe",
+                    "A2FLOW_DATABASE_NAME": "composition_probe",
+                    "A2FLOW_ASSET_NAMESPACE": "composition-probe",
+                },
+                clear=True,
+            ),
+            patch.object(RpcClient, "from_environment", return_value=object()),
+            patch("psycopg.connect", side_effect=AssertionError("unexpected database access")),
+            patch("socket.socket.connect", side_effect=AssertionError("unexpected network access")),
+        ):
+            wrapped = launcher.runtime()
+        self.assertIsInstance(wrapped, VerifiedIdentity)
+        expected = FIXTURE.with_name("runtime-routes-b5785c5.json")
+        self.assertEqual(json.loads(expected.read_text()), contract(wrapped.app))
+
+
 if __name__ == "__main__":
     unittest.main()
