@@ -12,7 +12,6 @@ from threading import BoundedSemaphore
 from time import monotonic
 
 import anyio
-from fastapi import Request
 from starlette.responses import StreamingResponse
 from starlette.requests import ClientDisconnect
 
@@ -36,6 +35,7 @@ class LeaseStream(StreamingResponse):
                          headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no",
                                   "X-Progress-Lease-Seconds": str(lease_seconds)})
         self.release, self.lease_seconds, self.send_timeout = release, lease_seconds, send_timeout
+        self._owned_iterator = iterator
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         async def limited_send(message: Message) -> None:
@@ -50,7 +50,7 @@ class LeaseStream(StreamingResponse):
             try:
                 with anyio.CancelScope(shield=True):
                     with anyio.move_on_after(1):
-                        await self.body_iterator.aclose()
+                        await self._owned_iterator.aclose()
             finally:
                 self.release()
 

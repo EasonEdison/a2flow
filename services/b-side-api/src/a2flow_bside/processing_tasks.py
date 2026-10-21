@@ -14,7 +14,7 @@ from typing import Any, Callable, Mapping, TypedDict, Protocol
 
 from skillweave_contracts.user_id import require_user_id
 from .errors import BsideError
-from .persistence_types import ConnectionFactory, DatabaseConnection, DatabaseRow, MessageRecord
+from .persistence_types import ConnectionFactory, DatabaseConnection, DatabaseRow, MessageRecord, message_record
 from .work_activities import WorkActivitiesRepository
 from .interaction_continuation import continuation_reference
 
@@ -124,14 +124,15 @@ class ProcessingTasksRepository:
             if prior:
                 if prior['request_digest'] != digest:
                     raise BsideError('PROCESSING_REQUEST_CONFLICT', 409)
-                rows = connection.execute('SELECT * FROM messages WHERE id IN (%s,%s) ORDER BY id',
+                prior_rows = connection.execute('SELECT * FROM messages WHERE id IN (%s,%s) ORDER BY id',
                                           (prior['input_message_id'], prior['assistant_message_id'])).fetchall()
                 context = _context(self._row(connection, scope, prior['task_id']))
                 if turn_observer is not None:
-                    turn_observer(connection, context, MessageRecord(**rows[0]), MessageRecord(**rows[1]), new=False)
-                return False, context, MessageRecord(**rows[0]), MessageRecord(**rows[1])
+                    turn_observer(connection, context, message_record(prior_rows[0]), message_record(prior_rows[1]), new=False)
+                return False, context, message_record(prior_rows[0]), message_record(prior_rows[1])
             if target:
                 task_id = 'handling-' + uuid.uuid4().hex
+                assert activity is not None
                 task = connection.execute('INSERT INTO processing_tasks '
                     '(task_id,user_id,environment,conversation_id,activity_id,run_id,attention_id,objective,status) '
                     "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'OPEN') RETURNING *",
@@ -140,13 +141,14 @@ class ProcessingTasksRepository:
                 task = self._row(connection, scope, str(task_id), lock=True)
                 if task['status'] in {'RESOLVED', 'FAILED', 'UNKNOWN'}:
                     raise BsideError('PROCESSING_TASK_NOT_CONTINUABLE', 409)
+            assert task is not None
             context = _context(task)
             contents = [('user', {'text': text, 'delivery': 'submitted', 'runReferences': references,
                                   'processingTaskId': task_id}),
                         ('assistant', {'text': '', 'delivery': 'running', 'parts': [], 'processingTaskId': task_id})]
             rows: list[MessageRecord] = []
             for role, content in contents:
-                rows.append(MessageRecord(**connection.execute('INSERT INTO messages(conversation_id,role,content) '
+                rows.append(message_record(connection.execute('INSERT INTO messages(conversation_id,role,content) '
                     'VALUES (%s,%s,%s::jsonb) RETURNING *', (scope[2], role, _json(content))).fetchone()))
             connection.execute('INSERT INTO processing_turns(user_id,environment,conversation_id,request_id,'
                 'request_digest,task_id,input_message_id,assistant_message_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',
@@ -176,6 +178,7 @@ class ProcessingTasksRepository:
                                'VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING', (*scope, card_id, task_id))
             row = connection.execute('SELECT task_id FROM processing_cards WHERE user_id=%s AND environment=%s '
                                      'AND conversation_id=%s AND card_id=%s', (*scope, card_id)).fetchone()
+            assert row is not None
             if row['task_id'] != task_id:
                 raise BsideError('PROCESSING_CARD_CONFLICT', 409)
             if saved_card['status'] == 'WAITING_ACTION':
@@ -273,7 +276,7 @@ class ProcessingTasksRepository:
 
     def execute_operation(self, *, user_id: int, environment: str, conversation_id: str,
                           task_id: str, turn_id: str, tool_call_id: str, ability_key: str,
-                          arguments: Mapping[str, Any], invoke: Callable[[str], dict[str, Any]],
+                          arguments: Mapping[str, Any], invoke: Callable[[str], Mapping[str, Any]],
                           confirmation_card_id: str | None = None) -> OperationEnvelope:
         scope = self._scope(user_id, environment, conversation_id)
         encoded = _json(dict(arguments))
@@ -344,6 +347,7 @@ class ProcessingTasksRepository:
             summary = ability_key + ('：已返回执行结果，待确认' if status == 'RETURNED' else '：执行失败' if status == 'FAILED' else '：执行结果未知')
             connection.execute('UPDATE processing_tasks SET status=%s,result_summary=%s,updated_at=now() WHERE task_id=%s',
                                (task_status, summary, task_id))
+            assert row is not None
             return self._envelope(row, replayed=False)
 
     @staticmethod

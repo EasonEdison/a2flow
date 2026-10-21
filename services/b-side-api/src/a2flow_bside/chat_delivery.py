@@ -9,8 +9,8 @@ import asyncio
 import copy
 import json
 import time
-from collections.abc import AsyncIterator
-from typing import Any, Literal, TypeAlias, TypedDict, Protocol, cast
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any, Literal, TypeAlias, TypedDict, Protocol, NotRequired, cast
 
 from starlette.responses import StreamingResponse
 from starlette.types import Scope, Receive, Send
@@ -105,6 +105,15 @@ def _identifier(value: object, *, limit: int = 256) -> str | None:
     return value if isinstance(value, str) and 0 < len(value) <= limit else None
 
 
+class RunnerArguments(TypedDict):
+    user_id: int
+    conversation_id: int
+    text: str
+    turn_id: str
+    run_references: NotRequired[tuple[dict[str, Any], ...]]
+    processing_context: NotRequired[ProcessingContext]
+
+
 class ChatDelivery:
     def __init__(self, *, messages: MessageProjection, runner: ChatStream,
                  user_id: int, conversation_id: int, text: str,
@@ -144,6 +153,8 @@ class ChatDelivery:
         )
         self.detached = False
         self.sequence = 0
+        # Native delivery and durable journaling supply the same explicit event sink.
+        self.emit: Callable[[dict[str, Any]], Awaitable[None]] = self._emit
 
     def _model_delta(
         self, event: dict[str, Any], key: Literal["text", "reasoning"],
@@ -401,7 +412,7 @@ class ChatDelivery:
             # authoritative whenever a matching part already exists.
             self._append_text_part(final_content, final_id)
 
-    async def emit(self, event: dict[str, Any]) -> None:
+    async def _emit(self, event: dict[str, Any]) -> None:
         self.sequence += 1
         if not self.detached:
             await self.pending.put({**event, "sequence": self.sequence,

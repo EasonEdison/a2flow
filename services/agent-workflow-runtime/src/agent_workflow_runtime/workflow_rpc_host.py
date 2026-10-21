@@ -345,7 +345,7 @@ class RpcWorkflowHost(MvpRuntimeHost):
         )
 
     @contextmanager
-    def execution_session(self, owner: TrustedContext, *, read_only: bool = False) -> Iterator[ExecutionSession]:
+    def execution_session(self, owner: TrustedContext, *, read_only: bool = False) -> Iterator[ExecutionSession[WorkflowActions]]:
         models: list[BaseChatModel] = []
         built: dict[str, WorkflowActions] = {}
         with self._checkpointer_factory() as saver:

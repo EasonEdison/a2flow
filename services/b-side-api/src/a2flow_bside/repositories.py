@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-from typing import Any, Callable
+from typing import Any
 
 from psycopg.errors import UniqueViolation
 from skillweave_contracts.user_id import require_user_id
 
 from .errors import BsideError
-from .persistence_types import ConnectionFactory, MessageRecord
+from .persistence_types import ConnectionFactory, MessageRecord, message_record
 from .interaction_continuation import continuation_reference
 
 
@@ -130,7 +130,7 @@ class MessagesRepository:
                 "RETURNING id, role, content, ref_kind, ref_id, created_at",
                 (conversation_id, role, json.dumps(content), ref_kind,
                  ref_id)).fetchone()
-        return MessageRecord(**row)
+        return message_record(row)
 
     def claim_interaction_continuation(
         self, *, user_id: int, conversation_id: int, card_id: str, request_id: str,
@@ -159,7 +159,7 @@ class MessagesRepository:
                 (conversation_id, reference),
             ).fetchall()
             if rows:
-                by_role = {row["role"]: MessageRecord(**row) for row in rows}
+                by_role = {row["role"]: message_record(row) for row in rows}
                 if len(rows) != 2 or set(by_role) != {"user", "assistant"}:
                     raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
                 return False, by_role["user"], by_role["assistant"]
@@ -179,7 +179,7 @@ class MessagesRepository:
                     "RETURNING id,role,content,ref_kind,ref_id,created_at",
                     (conversation_id, role, json.dumps(content), reference),
                 ).fetchone()
-                created.append(MessageRecord(**row))
+                created.append(message_record(row))
             return True, created[0], created[1]
 
     def list_for(self, conversation_id: int, limit: int = 200) -> list[MessageRecord]:
@@ -189,7 +189,7 @@ class MessagesRepository:
                 "FROM messages WHERE conversation_id = %s "
                 "ORDER BY id DESC LIMIT %s) recent ORDER BY id ASC",
                 (conversation_id, limit)).fetchall()
-        return [MessageRecord(**row) for row in rows]
+        return [message_record(row) for row in rows]
 
     def update_delivery(self, *, conversation_id: int, message_id: int,
                         content: dict) -> None:
@@ -215,7 +215,7 @@ class MessagesRepository:
                 "AND NOT (m.content ? 'delivery') ORDER BY m.id",
                 (user_id, conversation_id, before_id),
             ).fetchall()
-        return [MessageRecord(**row) for row in rows]
+        return [message_record(row) for row in rows]
 
 
 class SchedulesRepository:

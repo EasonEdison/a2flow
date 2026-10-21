@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol, TYPE_CHECKING
+from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 
@@ -48,8 +48,11 @@ class ProjectionPort(Protocol):
     def restart_identity(self, owner: TrustedContext, run_id: str) -> dict[str, Any]: ...
 
 
+ActionServiceT = TypeVar("ActionServiceT", bound=ActionService, covariant=True)
+
+
 @dataclass(frozen=True)
-class ExecutionSession:
+class ExecutionSession(Generic[ActionServiceT]):
     """Trusted context manager yield value, never accepted from an HTTP request.
 
     The host owns checkpointer connections until the synchronous call ends.
@@ -57,13 +60,13 @@ class ExecutionSession:
     """
 
     runner: ControlledRunRunner
-    action_service: Callable[[RunRecord], ActionService]
+    action_service: Callable[[RunRecord], ActionServiceT]
 
 
 class RuntimeService:
     def __init__(
         self, lifecycle: RunLifecycle, projection: ProjectionPort,
-        execution_session: Callable[[TrustedContext], AbstractContextManager[ExecutionSession]],
+        execution_session: Callable[[TrustedContext], AbstractContextManager[ExecutionSession[ActionService]]],
         resolve_entry: Callable[[TrustedContext, str], str],
         *, progress: PostgresProgress | None = None,
         validate_inputs: Callable[[TrustedContext, str, dict[str, Any]], None] | None = None,
@@ -75,7 +78,7 @@ class RuntimeService:
         self.progress = progress
         self.validate_inputs = validate_inputs
 
-    def _runner(self, session: ExecutionSession) -> ControlledRunRunner:
+    def _runner(self, session: ExecutionSession[ActionService]) -> ControlledRunRunner:
         runner = session.runner
         if not isinstance(runner, ControlledRunRunner) or runner.lifecycle is not self.lifecycle:
             raise ActionRejected("CONTROLLED_SERVICE_BINDING_REQUIRED")

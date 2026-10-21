@@ -7,12 +7,12 @@ import hashlib
 import json
 import logging
 from contextlib import contextmanager
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from agent_workflow_runtime.chat.cards import CardCompletion
 from .chat_runner import ChatRunner
-from .persistence_types import ConnectionFactory, DatabaseConnection, MessageRecord
+from .persistence_types import ConnectionFactory, DatabaseConnection, MessageRecord, message_record
 from .processing_tasks import ProcessingContext, ProcessingTasksRepository
 from .repositories import MessagesRepository
 
@@ -78,6 +78,7 @@ class DurableChat:
             "AND conversation_id=%s AND client_request_id=%s",
             (user_id, self.environment, int(conversation_id), request_id),
         ).fetchone()
+        assert row is not None
         if (
             row["request_digest"] != digest
             or row["input_message_id"] != input_message["id"]
@@ -90,7 +91,7 @@ class DurableChat:
 
     def insert_turn(self, c: DatabaseConnection, *, user_id: int, conversation_id: int,
                     request_id: str, digest: str, input_message: MessageRecord,
-                    assistant_message: MessageRecord, references: tuple[dict[str, Any], ...] = (),
+                    assistant_message: MessageRecord, references: Sequence[dict[str, Any]] = (),
                     processing_context: ProcessingContext | None = None) -> None:
         c.execute(
             "INSERT INTO chat_turns(user_id,environment,conversation_id,request_id,request_digest,"
@@ -127,7 +128,7 @@ class DurableChat:
                 if prior["request_digest"] != digest:
                     raise BsideError("CHAT_REQUEST_CONFLICT", 409)
                 return dict(prior)
-            rows = []
+            rows: list[MessageRecord] = []
             for role, content in [
                 (
                     "user",
@@ -168,12 +169,11 @@ class DurableChat:
                 input_message=rows[0],
                 assistant_message=rows[1],
             )
-            return dict(
-                c.execute(
-                    "SELECT * FROM chat_turns WHERE input_message_id=%s",
-                    (rows[0]["id"],),
-                ).fetchone()
-            )
+            row = c.execute(
+                "SELECT * FROM chat_turns WHERE input_message_id=%s", (rows[0]["id"],)
+            ).fetchone()
+            assert row is not None
+            return dict(row)
 
     def observe_completion(self, connection: DatabaseConnection, completion: CardCompletion) -> None:
         metadata = completion.metadata
@@ -214,7 +214,7 @@ class DurableChat:
                 "SELECT * FROM messages WHERE id IN (%s,%s) ORDER BY id",
                 (turn["input_message_id"], turn["assistant_message_id"]),
             ).fetchall()
-            return MessageRecord(**rows[0]), MessageRecord(**rows[1])
+            return message_record(rows[0]), message_record(rows[1])
 
     def candidates(self) -> list[dict[str, Any]]:
         with self.factory() as c:
@@ -256,10 +256,12 @@ class DurableChat:
         with self.factory() as c:
             c.autocommit = True
             key = "bside-chat:" + self.environment + ":" + str(conversation_id)
-            acquired = c.execute(
+            acquired_row = c.execute(
                 "SELECT pg_try_advisory_lock(hashtextextended(%s,0)) AS acquired",
                 (key,),
-            ).fetchone()["acquired"]
+            ).fetchone()
+            assert acquired_row is not None
+            acquired = acquired_row["acquired"]
             try:
                 yield acquired
             finally:
@@ -360,7 +362,7 @@ class DurableChat:
             return
         while True:
 
-            def read():
+            def read() -> tuple[list[dict[str, Any]], str]:
                 with self.factory() as c:
                     events = c.execute(
                         "SELECT sequence,event FROM chat_turn_events WHERE input_message_id=%s "
@@ -371,6 +373,7 @@ class DurableChat:
                         "SELECT status FROM chat_turns WHERE input_message_id=%s",
                         (input_id,),
                     ).fetchone()
+                    assert current is not None
                     return events, current["status"]
 
             events, status = await asyncio.to_thread(read)
@@ -444,14 +447,14 @@ class DurableChat:
                     *scope,
                 ),
             ).fetchone()
-            if not changed or not review:
+            if not changed or not isinstance(error, BsideError) or not review:
                 return
             rows = c.execute(
                 "SELECT * FROM messages WHERE conversation_id=%s AND ref_kind='temporary_interaction' "
                 "AND ref_id=%s ORDER BY id",
                 (intent["conversation_id"], intent["reference"]),
             ).fetchall()
-            pair = {row["role"]: dict(row) for row in rows}
+            pair = {row["role"]: message_record(row) for row in rows}
             if len(rows) == 2 and set(pair) == {"user", "assistant"}:
                 self.insert_turn(
                     c,
@@ -532,7 +535,7 @@ class _Replay:
         self.events = events
 
     async def iterate(self, *, user_id: int, conversation_id: int, text: str, turn_id: str,
-                      run_references: tuple[dict[str, Any], ...] = (),
+                      run_references: Sequence[dict[str, Any]] = (),
                       processing_context: ProcessingContext | None = None) -> AsyncIterator[dict[str, Any]]:
         for event in self.events:
             yield event
@@ -564,6 +567,7 @@ class DurableDispatcher:
             if not acquired:
                 return
             current = await asyncio.to_thread(self.store.get, turn["input_message_id"])
+            assert current is not None
             if current["status"] not in {"QUEUED", "RUNNING"}:
                 return
             generation = await asyncio.to_thread(
