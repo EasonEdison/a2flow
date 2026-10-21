@@ -22,14 +22,17 @@ if TYPE_CHECKING:
     from .processing_tasks import ProcessingContext
 
 
+# 执行层检查返回权威轮次状态; 已完成时同时提供可重建的公开事件。
 class RuntimeTurnInspection(TypedDict):
     status: Literal["NOT_STARTED", "BUSY", "COMPLETED", "NEEDS_REVIEW"]
     events: list[dict[str, Any]]
 
 
+# 真实执行与已完成事件回放共用迭代接口, 产品层无需识别底层图对象。
 class ChatStream(Protocol):
     """Live runner and completed-event replay both provide this stream."""
 
+    # 普通方法返回异步迭代器; 这里声明输出契约, 不另建模型循环。
     def iterate(
         self,
         *,
@@ -42,9 +45,11 @@ class ChatStream(Protocol):
     ) -> AsyncIterator[dict[str, Any]]: ...
 
 
+# 只有原生执行器负责判断可否执行, 产品租约过期不能证明尚未运行。
 class ChatRunner(ChatStream, Protocol):
     """Native runner additionally provides authoritative execution facts."""
 
+    # 检查与执行共享同一准入边界, 未知结果必须保留待核对状态。
     async def inspect_turn(
         self, *, user_id: int, conversation_id: int, turn_id: str
     ) -> RuntimeTurnInspection:

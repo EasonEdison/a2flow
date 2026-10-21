@@ -37,6 +37,7 @@ from .repositories import (
 from .runtime_client import HttpRuntimeClient
 from .schedule_history import ScheduleHistoryRepository
 
+# 插件工厂引用限定为模块与属性名, 避免把配置当作可执行表达式。
 _FACTORY = re.compile(
     r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*:"
     r"[A-Za-z_][A-Za-z0-9_]*"
@@ -44,6 +45,7 @@ _FACTORY = re.compile(
 
 
 def _load_validator(reference: str) -> BundleValidator:
+    # 先验证工厂定位格式, 再进行受保护配置指定的导入。
     if not isinstance(reference, str) or not _FACTORY.fullmatch(reference):
         raise RuntimeError("INVALID_BSIDE_VALIDATOR_FACTORY")
     module_name, attribute = reference.split(":", 1)
@@ -52,6 +54,7 @@ def _load_validator(reference: str) -> BundleValidator:
         factory: Callable[[], BundleValidator] = getattr(
             importlib.import_module(module_name), attribute
         )
+        # 工厂必须产出具有 validate 接口的验证器, 否则关闭资产装配。
         validator = factory()
     except Exception:
         raise RuntimeError("BSIDE_VALIDATOR_UNAVAILABLE") from None
@@ -60,6 +63,7 @@ def _load_validator(reference: str) -> BundleValidator:
     return validator
 
 
+# 未接入真实 Chat 时明确报错, 不用演示回答伪装可运行。
 class _UnavailableChatRunner:
     """Fail-closed placeholder: chat is unavailable until wired by the
     deployment composition (deploy.attended.bside_app)."""
@@ -84,11 +88,13 @@ class _UnavailableChatRunner:
         run_references: Sequence[Mapping[str, Any]] = (),
         processing_context: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
+        # 流中返回明确不可用事件, 调用方不能把空输出当作执行成功。
         yield {"type": "error", "code": "CHAT_RUNNER_NOT_WIRED"}
 
 
 def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> FastAPI:
     """Uvicorn factory; every value is explicit protected configuration."""
+    # 启动阶段一次性构造配置和资产读取器, 导入模块本身不连接数据库。
     config = BsideConfig.from_environment()
     validator = _load_validator(_required("A2FLOW_BSIDE_VALIDATOR_FACTORY"))
     repository = PostgresAssetRepository(
@@ -97,12 +103,15 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
         database=_required("A2FLOW_BSIDE_DATABASE_NAME"),
         validator=validator,
     )
+    # 基础读取器读取当前环境的有效发布; 个人工作流随后叠加用户隔离。
     base_reader = AssetReader(repository, config.namespace)
 
+    # 目录查询绑定服务端用户和环境, 调用者不能指定其他身份或泳道。
     def workflow_catalog(user_id: int) -> list[dict[str, Any]]:
         owner = TrustedContext.from_mapping({"userId": user_id, "environment": config.environment})
         return [dict(item) for item in reader.list_workflows(owner)]
 
+    # 每次操作获取字典行连接, 并设置连接、语句和锁等待上限。
     def connection_factory() -> DatabaseConnection:
         return psycopg.connect(
             config.conninfo,
@@ -117,6 +126,7 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
         PersonalWorkflowRepository,
     )
 
+    # 组合预制与个人工作流读取器, 共用验证器和环境边界。
     reader = PersonalWorkflowReader(
         base_reader,
         PersonalWorkflowRepository(
@@ -127,6 +137,7 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
         ),
     )
 
+    # 账号防护预算使用同一数据库, 并在服务启动前检查可用性。
     account_guard = PostgresAccountGuard(
         connection_factory,
         pepper=config.pepper,
@@ -135,6 +146,7 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
     )
     account_guard.check_ready()
 
+    # 手动装配 HTTP 服务; 会话、消息、计划和运行归属由各自仓库负责。
     return create_app(
         account_guard=account_guard,
         users=UsersRepository(connection_factory),
@@ -145,6 +157,7 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
         notifications=NotificationsRepository(notification_engine(config.conninfo)),
         schedule_history=ScheduleHistoryRepository(notification_engine(config.conninfo)),
         run_ownership=RunOwnershipRepository(connection_factory),
+        # 执行通过运行服务客户端发起, 产品 API 不自己维护 Agent 循环。
         runtime_client=HttpRuntimeClient(config.runtime_url),
         workflow_catalog=workflow_catalog,
         pepper=config.pepper,
@@ -159,6 +172,7 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
 def _required(name: str) -> str:
     import os
 
+    # 部署必需的配置缺失直接报错, 不猜测插件或资产数据库。
     value = os.environ.get(name)
     if not value:
         raise RuntimeError("MISSING_BSIDE_CONFIGURATION:" + name)

@@ -23,6 +23,7 @@ from .repositories import MessagesRepository
 _LOG = logging.getLogger(__name__)
 
 
+# 使用排序键和固定分隔符序列化, 幂等摘要不受对象键顺序影响。
 def encoded(value: object) -> str:
     return json.dumps(
         value,
@@ -33,15 +34,18 @@ def encoded(value: object) -> str:
     )
 
 
+# 产品层保存接收事实、恢复意图和展示事件, 不维护另一套 Agent 执行图。
 class DurableChat:
     def __init__(self, factory: ConnectionFactory, *, environment: str) -> None:
         self.factory, self.environment = factory, environment
 
+    # 启动前检查持久化接收与续聊表可用, 避免接受无法恢复的请求。
     def check_ready(self) -> None:
         with self.factory() as c:
             c.execute("SELECT input_message_id FROM chat_turns LIMIT 0")
             c.execute("SELECT reference FROM chat_continuations LIMIT 0")
 
+    # 请求号按用户、环境和会话隔离, 并将负载摘要与已保存请求比对。
     def request(
         self, *, user_id: int, conversation_id: int, request_id: str, payload: dict[str, Any]
     ) -> dict[str, Any] | None:
@@ -53,10 +57,12 @@ class DurableChat:
                 "AND r.conversation_id=%s AND r.client_request_id=%s",
                 (user_id, self.environment, conversation_id, request_id),
             ).fetchone()
+            # 相同请求号搭配不同内容必须报冲突, 不能悄悄复用或覆盖原执行。
             if row and row["request_digest"] != digest:
                 raise BsideError("CHAT_REQUEST_CONFLICT", 409)
             return dict(row) if row else None
 
+    # 在调用方事务中记录客户端请求与消息对, 唯一约束处理并发重发。
     def record_request(
         self,
         c: DatabaseConnection,
@@ -83,11 +89,13 @@ class DurableChat:
                 assistant_message["id"],
             ),
         )
+        # 插入后读回现有映射, 确认冲突记录确实对应同一负载和输入消息。
         row = c.execute(
             "SELECT request_digest,input_message_id FROM chat_requests WHERE user_id=%s AND environment=%s "
             "AND conversation_id=%s AND client_request_id=%s",
             (user_id, self.environment, int(conversation_id), request_id),
         ).fetchone()
+        # 唯一记录必须存在; 摘要或消息不一致时整个事务失败。
         assert row is not None
         if row["request_digest"] != digest or row["input_message_id"] != input_message["id"]:
             raise BsideError("CHAT_REQUEST_CONFLICT", 409)
@@ -96,6 +104,7 @@ class DurableChat:
             (encoded({"clientRequestId": request_id}), input_message["id"]),
         )
 
+    # 轮次与消息使用同一事务保存, 引用及处理上下文冻结为接收时的事实。
     def insert_turn(
         self,
         c: DatabaseConnection,
@@ -126,6 +135,7 @@ class DurableChat:
             ),
         )
 
+    # 普通消息以会话行锁串行准入, 原消息、助手占位和待分发轮次一起提交。
     def receive(
         self,
         *,
@@ -137,12 +147,14 @@ class DurableChat:
     ) -> dict[str, Any]:
         digest = hashlib.sha256(encoded(payload).encode()).hexdigest()
         with self.factory() as c:
+            # 事务内再次检查归属, 不能只依赖路由先前的读取。
             owner = c.execute(
                 "SELECT user_id FROM conversations WHERE id=%s FOR UPDATE",
                 (conversation_id,),
             ).fetchone()
             if owner is None or owner["user_id"] != user_id:
                 raise BsideError("CONVERSATION_NOT_FOUND", 404)
+            # 先找同请求轮次; 已存在时核对摘要并返回, 不插入第二对消息。
             prior = c.execute(
                 "SELECT * FROM chat_turns WHERE user_id=%s AND environment=%s "
                 "AND conversation_id=%s AND request_id=%s",
@@ -152,6 +164,7 @@ class DurableChat:
                 if prior["request_digest"] != digest:
                     raise BsideError("CHAT_REQUEST_CONFLICT", 409)
                 return dict(prior)
+            # 用户消息保存真实输入与引用, 助手消息以 queued 占位等待后台执行。
             rows: list[MessageRecord] = []
             for role, content in [
                 (
@@ -174,6 +187,7 @@ class DurableChat:
                         ).fetchone()
                     )
                 )
+            # 消息成功插入后建立待执行轮次, 外部订阅不直接调模型。
             self.insert_turn(
                 c,
                 user_id=user_id,
@@ -184,6 +198,7 @@ class DurableChat:
                 assistant_message=rows[1],
                 references=references,
             )
+            # 同时登记客户端幂等映射, 确保网络重发能查回同一次准入。
             self.record_request(
                 c,
                 user_id=user_id,
@@ -199,16 +214,20 @@ class DurableChat:
             assert row is not None
             return dict(row)
 
+    # 卡片完成观察沿用动作事务, 将自动续聊意图与真实提交一起保存。
     def observe_completion(
         self, connection: DatabaseConnection, completion: CardCompletion
     ) -> None:
         metadata = completion.metadata
         # Workflow completions are owned by the Workflow outbox, never Chat.
+        # 工作流卡片由 Workflow outbox 恢复, 不能再进入 Chat 重复推进。
         if metadata.get("workflow"):
             return
+        # 仅处理临时交互与写审批, 普通卡片完成不自动生成新对话。
         write = "approval" in metadata or "completedApproval" in metadata
         if not write and metadata.get("definitionSource") != "TEMPORARY":
             return
+        # 写审批按具体确认请求去重, 普通临时表单按卡片去重。
         reference = continuation_reference(
             completion.card_id, completion.request_id if write else None
         )
@@ -227,6 +246,7 @@ class DurableChat:
             ),
         )
 
+    # 按输入消息 ID 查询保存轮次, 供拿锁后的状态复核。
     def get(self, input_id: int) -> dict[str, Any] | None:
         with self.factory() as c:
             row = c.execute(
@@ -234,6 +254,7 @@ class DurableChat:
             ).fetchone()
             return dict(row) if row else None
 
+    # 同事务创建的消息对按 ID 排序读取, 不重建用户输入内容。
     def pair(self, turn: dict[str, Any]) -> tuple[MessageRecord, MessageRecord]:
         with self.factory() as c:
             rows = c.execute(
@@ -242,6 +263,7 @@ class DurableChat:
             ).fetchall()
             return message_record(rows[0]), message_record(rows[1])
 
+    # 有待核对前序轮次时阻止后续消息执行, 避免在未知业务事实之上继续推理。
     def candidates(self) -> list[dict[str, Any]]:
         with self.factory() as c:
             blocked = c.execute(
@@ -252,6 +274,7 @@ class DurableChat:
                 "RETURNING t.assistant_message_id",
                 (self.environment,),
             ).fetchall()
+            # 被前序阻塞的助手投影明确写入原因, 页面不能一直显示正常排队。
             for row in blocked:
                 c.execute(
                     "UPDATE messages SET content=content || %s::jsonb WHERE id=%s",
@@ -265,6 +288,7 @@ class DurableChat:
                         row["assistant_message_id"],
                     ),
                 )
+            # 每个会话只选没有未结束前序的候选, 跨会话仍可并发。
             return [
                 dict(row)
                 for row in c.execute(
@@ -277,9 +301,11 @@ class DurableChat:
                 ).fetchall()
             ]
 
+    # 会话级 PostgreSQL 锁跨事务持有, 只用于产品分发协调。
     @contextmanager
     def lock(self, conversation_id: int) -> Iterator[bool]:
         with self.factory() as c:
+            # 独立连接持有会话锁, 事务提交不会提前释放分发权。
             c.autocommit = True
             key = "bside-chat:" + self.environment + ":" + str(conversation_id)
             acquired_row = c.execute(
@@ -288,12 +314,14 @@ class DurableChat:
             ).fetchone()
             assert acquired_row is not None
             acquired = acquired_row["acquired"]
+            # 无论执行路径如何退出都释放已取得的锁, 未取得时不误解锁。
             try:
                 yield acquired
             finally:
                 if acquired:
                     c.execute("SELECT pg_advisory_unlock(hashtextextended(%s,0))", (key,))
 
+    # 每次接管增加代际, 旧生产者即使仍存活也不能覆盖新投影。
     def claim_generation(self, input_id: int) -> int | None:
         with self.factory() as c:
             row = c.execute(
@@ -303,6 +331,7 @@ class DurableChat:
             ).fetchone()
             return row["dispatch_generation"] if row else None
 
+    # 状态更新受代际与当前状态双重约束, 过期写入者无权推进终态。
     def set_status(self, input_id: int, status: str, generation: int) -> None:
         with self.factory() as c:
             c.execute(
@@ -311,6 +340,7 @@ class DurableChat:
                 (status, input_id, generation),
             )
 
+    # 写消息前锁定对应轮次并核对代际、会话和助手消息身份。
     def save_projection(
         self,
         input_id: int,
@@ -326,6 +356,7 @@ class DurableChat:
                 "AND dispatch_generation=%s AND status IN ('QUEUED','RUNNING') FOR UPDATE",
                 (input_id, generation),
             ).fetchone()
+            # 任一绑定不一致都视为写入者失效, 禁止覆盖别的消息。
             if (
                 row is None
                 or row["assistant_message_id"] != message_id
@@ -337,6 +368,7 @@ class DurableChat:
                 (encoded(content), message_id),
             )
 
+    # 事件日志写入与代际检查共用行锁, 防止丢锁的旧实例继续发布。
     def event(self, input_id: int, event: dict[str, Any], generation: int) -> None:
         with self.factory() as c:
             # Lock the generation row through journal commit, fencing a writer
@@ -346,6 +378,7 @@ class DurableChat:
                 "AND status='RUNNING' FOR UPDATE",
                 (input_id, generation),
             ).fetchone()
+            # 不再拥有当前 RUNNING 代际时直接拒绝, 不把旧结果混入新事件流。
             if row is None:
                 raise RuntimeError("CHAT_DISPATCH_FENCED")
             c.execute(
@@ -354,8 +387,10 @@ class DurableChat:
                 (input_id, event["sequence"], encoded(event)),
             )
 
+    # 订阅者只读事件日志和投影; 断开、刷新或重连都不会执行模型。
     async def stream(self, turn: dict[str, Any]) -> AsyncIterator[str]:
         input_id = turn["input_message_id"]
+        # 轮次开始作为订阅引导事件, 后续从保存日志的下一序号读取。
         cursor = 1
         yield (
             "data: "
@@ -370,8 +405,10 @@ class DurableChat:
             )
             + "\n\n"
         )
+        # 旧版请求没有新轮次日志时只返回现有投影, 不重放原执行。
         if turn.get("status") == "LEGACY":
             _, assistant = await asyncio.to_thread(self.pair, turn)
+            # 旧投影只有明确完成或等待动作才返回正常结束, 其余要求核对。
             completed = assistant["content"].get("delivery") in {
                 "completed",
                 "waiting_action",
@@ -391,6 +428,7 @@ class DurableChat:
                 + "\n\n"
             )
             return
+        # 批量读取游标之后的日志并查询当前轮次状态, 全部在线程中进行。
         while True:
 
             def read() -> tuple[list[dict[str, Any]], str]:
@@ -407,12 +445,14 @@ class DurableChat:
                     assert current is not None
                     return events, current["status"]
 
+            # 按日志序号发出保存事件, 终态事件存在时直接结束订阅。
             events, status = await asyncio.to_thread(read)
             for row in events:
                 cursor = row["sequence"]
                 yield "data: " + json.dumps(row["event"], ensure_ascii=False) + "\n\n"
                 if row["event"].get("type") in {"done", "error"}:
                     return
+            # 终态已保存但终态事件缺失时, 用真实消息投影修复响应。
             if status in {"COMPLETED", "NEEDS_REVIEW"}:
                 # A crash can occur between final projection and event; return a factual snapshot.
                 _, assistant = await asyncio.to_thread(self.pair, turn)
@@ -433,9 +473,11 @@ class DurableChat:
                     + "\n\n"
                 )
                 return
+            # 仍在排队或执行时发送心跳, 只等待事实, 不触发执行重试。
             yield ": pending\n\n"
             await asyncio.sleep(0.4)
 
+    # 扫描尚未物化的续聊意图, 每批有上限, 单条失败不阻塞其他会话。
     def materialize(
         self, messages: MessagesRepository, processing_tasks: ProcessingTasksRepository | None
     ) -> None:
@@ -449,6 +491,7 @@ class DurableChat:
                     (self.environment,),
                 ).fetchall()
             ]
+        # 仅重试本地幂等准备, 物化阶段本身不调用模型或业务工具。
         for intent in intents:
             try:
                 self._materialize_one(intent, messages, processing_tasks)
@@ -457,8 +500,10 @@ class DurableChat:
                 # dispatch happens here. A broken binding cannot starve other chats.
                 self._materialization_failed(intent, error)
 
+    # 可预期的非服务端错误转人工核对, 暂时故障保留待准备并延迟重试。
     def _materialization_failed(self, intent: dict[str, Any], error: Exception) -> None:
         review = isinstance(error, BsideError) and error.status < 500
+        # 恢复状态按完整意图身份更新, 避免不同用户或会话相互影响。
         scope = (
             intent["user_id"],
             self.environment,
@@ -478,6 +523,7 @@ class DurableChat:
                     *scope,
                 ),
             ).fetchone()
+            # 只有明确需要核对且状态更新成功时, 才同步修正关联展示。
             if not changed or not isinstance(error, BsideError) or not review:
                 return
             rows = c.execute(
@@ -485,8 +531,10 @@ class DurableChat:
                 "AND ref_id=%s ORDER BY id",
                 (intent["conversation_id"], intent["reference"]),
             ).fetchall()
+            # 恢复消息必须恰好是一对, 结构不完整时不能制造新的执行输入。
             pair = {row["role"]: message_record(row) for row in rows}
             if len(rows) == 2 and set(pair) == {"user", "assistant"}:
+                # 对已存在的恢复消息幂等登记轮次, 并标为待核对以阻止盲目运行。
                 self.insert_turn(
                     c,
                     user_id=intent["user_id"],
@@ -508,6 +556,7 @@ class DurableChat:
                     ),
                 )
 
+    # 先创建稳定恢复消息, 再绑定处理任务, 最后同事务登记轮次并标记意图完成。
     def _materialize_one(
         self,
         intent: dict[str, Any],
@@ -515,6 +564,7 @@ class DurableChat:
         processing_tasks: ProcessingTasksRepository | None,
     ) -> None:
         # Each step is idempotent. Intent remains durable until binding and dispatch are saved.
+        # 反复物化复用同一卡片确认对应的消息对, 避免崩溃后多发一轮。
         _, user, assistant = messages.claim_interaction_continuation(
             user_id=intent["user_id"],
             conversation_id=intent["conversation_id"],
@@ -523,6 +573,7 @@ class DurableChat:
             write_completed=intent["write_completed"],
         )
         context = None
+        # 仅在卡片确实属于处理任务时恢复任务上下文, 不凭会话猜测归属。
         if processing_tasks is not None:
             context = processing_tasks.context_for_card(
                 user_id=intent["user_id"],
@@ -530,6 +581,7 @@ class DurableChat:
                 conversation_id=str(intent["conversation_id"]),
                 card_id=intent["card_id"],
             )
+            # 写恢复包含确认请求号, 使一次新确认与旧确认重发可以区分。
             if context:
                 context = processing_tasks.bind_continuation(
                     user_id=intent["user_id"],
@@ -543,6 +595,7 @@ class DurableChat:
                     if intent["write_completed"]
                     else None,
                 )
+        # 待执行轮次与物化完成标记一起提交, 避免意图丢失或重复分发。
         with self.factory() as c:
             self.insert_turn(
                 c,
@@ -566,6 +619,7 @@ class DurableChat:
             )
 
 
+# 回放器只消费原生层已完成事件, 修复展示时不再次调用模型或工具。
 class _Replay:
     def __init__(self, events: list[dict[str, Any]]) -> None:
         self.events = events
@@ -584,6 +638,7 @@ class _Replay:
             yield event
 
 
+# 给消息投影附加输入身份及执行代际, 阻止过期任务写入。
 class _FencedProjection:
     def __init__(self, store: DurableChat, input_id: int, generation: int) -> None:
         self.store, self.input_id, self.generation = store, input_id, generation
@@ -600,6 +655,7 @@ class _FencedProjection:
         )
 
 
+# 分发器管理产品收件箱, 原生运行器仍是执行准入和完成事实的权威。
 class DurableDispatcher:
     def __init__(
         self,
@@ -614,30 +670,36 @@ class DurableDispatcher:
             runner,
             processing_tasks,
         )
+        # 内存集合只减少本进程重复调度, 跨进程安全仍由数据库锁和代际保证。
         self.active: set[int] = set()
 
     async def dispatch(self, turn: dict[str, Any]) -> None:
         # Dedicated session lock survives transaction commits; Runtime independently
         # arbitrates actual execution. Lock loss never authorizes business replay.
+        # 先取得会话锁再重新读取当前轮次, 候选扫描结果不直接授权执行。
         with self.store.lock(turn["conversation_id"]) as acquired:
             if not acquired:
                 return
+            # 拿锁后复核轮次仍可处理, 已结束状态不再分配执行代际。
             current = await asyncio.to_thread(self.store.get, turn["input_message_id"])
             assert current is not None
             if current["status"] not in {"QUEUED", "RUNNING"}:
                 return
+            # 领取新代际后构建受保护写入器, 旧代际不能覆盖本轮投影。
             generation = await asyncio.to_thread(
                 self.store.claim_generation, turn["input_message_id"]
             )
             if generation is None:
                 return
             projection = _FencedProjection(self.store, turn["input_message_id"], generation)
+            # 执行前必须问原生运行器：尚未开始、忙碌、已完成还是待核对。
             facts = await self.runner.inspect_turn(
                 user_id=turn["user_id"],
                 conversation_id=turn["conversation_id"],
                 turn_id=str(turn["input_message_id"]),
             )
             state = facts["status"]
+            # 原生层仍在执行时延后查询, 绝不因产品锁空闲就重复发起。
             if state == "BUSY":
                 await asyncio.to_thread(
                     self.store.set_status,
@@ -646,7 +708,9 @@ class DurableDispatcher:
                     generation,
                 )
                 return
+            # 使用原来保存的消息对修复或执行, 不接受新文本替换原轮输入。
             user, assistant = await asyncio.to_thread(self.store.pair, turn)
+            # 原生结果未知时保存未确认展示并阻止后续自动执行。
             if state == "NEEDS_REVIEW":
                 content = {
                     **assistant["content"],
@@ -666,11 +730,13 @@ class DurableDispatcher:
                     generation,
                 )
                 return
+            # 只有明确未开始才能真实执行, 已完成则只回放已保存事件。
             if state not in {"NOT_STARTED", "COMPLETED"}:
                 raise ValueError("INVALID_RUNTIME_TURN_STATUS")
             await asyncio.to_thread(
                 self.store.set_status, turn["input_message_id"], "RUNNING", generation
             )
+            # 复用同一投影器处理新执行和完成回放, 保持展示协议一致。
             delivery = ChatDelivery(
                 messages=projection,
                 runner=_Replay(facts["events"]) if state == "COMPLETED" else self.runner,
@@ -682,8 +748,10 @@ class DurableDispatcher:
                 run_references=turn["run_references"],
                 processing_context=turn["processing_context"],
             )
+            # 持久化分发不依赖内存 HTTP 队列, 事件改写入数据库日志。
             delivery.detach()
 
+            # 先保存非终态公开事件; 最终状态等原生迭代器退出后再由事实确定。
             async def emit(event: dict[str, Any]) -> None:
                 delivery.sequence += 1
                 # Errors remain recoverable through inspect; no premature terminal event.
@@ -701,14 +769,18 @@ class DurableDispatcher:
                     generation,
                 )
 
+            # 显式替换事件接收回调, 消费执行结果并保存展示。
             delivery.emit = emit
             await delivery.produce()
+            # 明确正常结束或等待用户才关闭轮次; 失败继续等待原生检查判定。
             if delivery.content["delivery"] in {"completed", "waiting_action"}:
                 await asyncio.to_thread(self.store.set_status, user["id"], "COMPLETED", generation)
             # Failure deliberately remains RUNNING. The next inspection determines
             # completed projection repair versus NEEDS_REVIEW; never blind retry.
 
+    # 后台循环先物化续聊, 再领取待分发轮次, 停止时等待已开始任务收尾。
     async def run(self, stop: asyncio.Event) -> None:
+        # 异常记录后释放本进程活跃标记, 后续只会重新检查事实而非盲目重跑。
         async def guarded(turn: dict[str, Any]) -> None:
             try:
                 await self.dispatch(turn)
@@ -717,6 +789,7 @@ class DurableDispatcher:
             finally:
                 self.active.discard(turn["input_message_id"])
 
+        # 最多并发八个会话任务, 避免单次扫描耗尽执行资源。
         tasks: set[asyncio.Task[None]] = set()
         try:
             while not stop.is_set():
@@ -727,6 +800,7 @@ class DurableDispatcher:
                 except Exception:
                     _LOG.exception("Chat continuation inbox scan failed")
                 try:
+                    # 候选按保存顺序处理, 活跃轮次不会在同一进程重复创建任务。
                     for turn in await asyncio.to_thread(self.store.candidates):
                         if len(tasks) >= 8:
                             break
@@ -738,10 +812,12 @@ class DurableDispatcher:
                         task.add_done_callback(tasks.discard)
                 except Exception:
                     _LOG.exception("Chat durable inbox scan failed")
+                # 短间隔等待可被停止事件打断, 退出时不强制取消已派发任务。
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=0.5)
                 except asyncio.TimeoutError:
                     pass
+        # 优雅退出等待全部已开始任务, 保留真实晚到结果。
         finally:
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
