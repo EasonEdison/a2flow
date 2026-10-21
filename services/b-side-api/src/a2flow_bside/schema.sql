@@ -163,3 +163,49 @@ CREATE TABLE IF NOT EXISTS processing_operations (
     finished_at timestamptz,
     UNIQUE(task_id,operation_digest)
 );
+
+-- Product dispatch facts are independent of native Agent checkpoints.
+CREATE TABLE IF NOT EXISTS chat_turns (
+ input_message_id bigint PRIMARY KEY REFERENCES messages(id),
+ assistant_message_id bigint UNIQUE NOT NULL REFERENCES messages(id),
+ user_id bigint NOT NULL,
+ environment text NOT NULL CHECK(environment IN ('PRT','ONLINE')),
+ conversation_id bigint NOT NULL REFERENCES conversations(id),
+ request_id text NOT NULL,
+ request_digest text NOT NULL,
+ status text NOT NULL DEFAULT 'QUEUED' CHECK(status IN ('QUEUED','RUNNING','COMPLETED','NEEDS_REVIEW')),
+ run_references jsonb NOT NULL DEFAULT '[]',
+ processing_context jsonb,
+ next_attempt_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(user_id,environment,conversation_id,request_id)
+);
+CREATE INDEX IF NOT EXISTS chat_turns_dispatch ON chat_turns(environment,status,next_attempt_at,input_message_id);
+CREATE TABLE IF NOT EXISTS chat_turn_events (
+ input_message_id bigint NOT NULL REFERENCES chat_turns(input_message_id),
+ sequence integer NOT NULL,
+ event jsonb NOT NULL,
+ PRIMARY KEY(input_message_id,sequence)
+);
+CREATE TABLE IF NOT EXISTS chat_continuations (
+ user_id bigint NOT NULL,
+ environment text NOT NULL CHECK(environment IN ('PRT','ONLINE')),
+ conversation_id bigint NOT NULL REFERENCES conversations(id),
+ reference text NOT NULL,
+ card_id text NOT NULL,
+ request_id text NOT NULL,
+ write_completed boolean NOT NULL,
+ materialized boolean NOT NULL DEFAULT false,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(user_id,environment,conversation_id,reference)
+);
+CREATE TABLE IF NOT EXISTS chat_requests (
+ user_id bigint NOT NULL,
+ environment text NOT NULL CHECK(environment IN ('PRT','ONLINE')),
+ conversation_id bigint NOT NULL REFERENCES conversations(id),
+ client_request_id text NOT NULL,
+ request_digest text NOT NULL,
+ input_message_id bigint NOT NULL REFERENCES messages(id),
+ assistant_message_id bigint NOT NULL REFERENCES messages(id),
+ PRIMARY KEY(user_id,environment,conversation_id,client_request_id)
+);

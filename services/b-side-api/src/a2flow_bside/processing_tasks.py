@@ -88,6 +88,7 @@ class ProcessingTasksRepository:
     def begin_turn(self, *, user_id: int, environment: str, conversation_id: str,
                    request_id: str, text: str, references: list[dict[str, Any]],
                    target: Mapping[str, str] | None = None, task_id: str | None = None,
+                   turn_observer=None,
                    ) -> tuple[bool, ProcessingContext, dict[str, Any], dict[str, Any]]:
         """Atomically create the user/assistant pair and explicit task relation."""
         scope = self._scope(user_id, environment, conversation_id)
@@ -115,7 +116,10 @@ class ProcessingTasksRepository:
                     raise BsideError('PROCESSING_REQUEST_CONFLICT', 409)
                 rows = connection.execute('SELECT * FROM messages WHERE id IN (%s,%s) ORDER BY id',
                                           (prior['input_message_id'], prior['assistant_message_id'])).fetchall()
-                return False, _context(self._row(connection, scope, prior['task_id'])), dict(rows[0]), dict(rows[1])
+                context = _context(self._row(connection, scope, prior['task_id']))
+                if turn_observer is not None:
+                    turn_observer(connection, context, dict(rows[0]), dict(rows[1]), new=False)
+                return False, context, dict(rows[0]), dict(rows[1])
             if target:
                 task_id = 'handling-' + uuid.uuid4().hex
                 task = connection.execute('INSERT INTO processing_tasks '
@@ -140,6 +144,8 @@ class ProcessingTasksRepository:
             if target:
                 connection.execute('UPDATE processing_tasks SET origin_message_id=%s WHERE task_id=%s',
                                    (rows[0]['id'], task_id))
+            if turn_observer is not None:
+                turn_observer(connection, context, rows[0], rows[1], new=True)
             return True, context, rows[0], rows[1]
 
     def bind_card(self, *, user_id: int, environment: str, conversation_id: str,

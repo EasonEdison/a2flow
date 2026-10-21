@@ -295,6 +295,35 @@ class FakeAccountGuard:
         pass
 
 
+class FakeDurableChat:
+    """Explicit HTTP unit seam; real PG dispatch is covered by probe_chat_reliability."""
+    def __init__(self, messages, runner):
+        self.messages, self.runner = messages, runner
+        self.accepted = {}
+
+    def request(self, **kwargs):
+        return self.accepted.get((kwargs['conversation_id'],kwargs['request_id']))
+
+    def receive(self, **kwargs):
+        user=self.messages.append(conversation_id=kwargs['conversation_id'],role='user',
+            content={'text':kwargs['payload']['text'],'delivery':'submitted',
+                     'clientRequestId':kwargs['request_id'],'runReferences':kwargs['references']})
+        assistant=self.messages.append(conversation_id=kwargs['conversation_id'],role='assistant',
+            content={'text':'','delivery':'queued','parts':[]})
+        value={**kwargs,'input':user,'assistant':assistant}
+        self.accepted[(kwargs['conversation_id'],kwargs['request_id'])]=value
+        return value
+
+    async def stream(self, turn):
+        from a2flow_bside.chat_delivery import ChatDelivery
+        delivery=ChatDelivery(messages=self.messages,runner=self.runner,user_id=turn['user_id'],
+            conversation_id=turn['conversation_id'],text=turn['payload']['text'],
+            input_message=turn['input'],assistant_message=turn['assistant'])
+        task=asyncio.create_task(delivery.produce())
+        async for item in delivery.stream(): yield item
+        await task
+
+
 class Harness:
     def __init__(self, **overrides):
         self.clock = FakeClock()
@@ -313,6 +342,7 @@ class Harness:
             "session_seconds": 7200, "now": self.clock,
         }
         self.components.update(overrides)
+        self.components.setdefault("durable_chat", FakeDurableChat(self.components["messages"], self.components["chat_runner"]))
         self.app = create_app(**self.components)
 
     async def client(self):
@@ -466,11 +496,11 @@ class OwnershipTests(unittest.TestCase):
             self.assertEqual(200, created.status_code)
             conversation_id = created.json()["id"]
             cross = await client_b.get(
-                f"/api/conversations/{conversation_id}/messages",
+                f"/api/conversations/messages?conversationId={conversation_id}",
                 cookies=cookies_b)
             self.assertEqual(404, cross.status_code)
             own = await client_a.get(
-                f"/api/conversations/{conversation_id}/messages",
+                f"/api/conversations/messages?conversationId={conversation_id}",
                 cookies=cookies_a)
             self.assertEqual(200, own.status_code)
             self.assertEqual([], own.json()["messages"])
@@ -679,8 +709,8 @@ class ChatSseTests(unittest.TestCase):
                 headers=ORIGIN_HEADERS)
             conversation_id = created.json()["id"]
             sent = await client.post(
-                f"/api/conversations/{conversation_id}/messages",
-                json={"text": "帮我策划一场活动"},
+                "/api/conversations/messages",
+                json={"conversationId": conversation_id, "clientRequestId": "test-request", "text": "帮我策划一场活动"},
                 headers=ORIGIN_HEADERS)
             self.assertEqual(200, sent.status_code)
             self.assertIn("text/event-stream", sent.headers["content-type"])
@@ -696,7 +726,7 @@ class ChatSseTests(unittest.TestCase):
                 [(user_id, conversation_id, "帮我策划一场活动", "1")],
                 [(call[0], call[1], call[2], call[3]) for call in runner.calls])
             history = await client.get(
-                f"/api/conversations/{conversation_id}/messages")
+                f"/api/conversations/messages?conversationId={conversation_id}")
             rows = history.json()["messages"]
             self.assertEqual(["user", "assistant"],
                              [row["role"] for row in rows])
@@ -708,8 +738,8 @@ class ChatSseTests(unittest.TestCase):
                 "activity-package-demo",
                 rows[1]["content"]["events"][0]["workflowKey"])
             empty = await client.post(
-                f"/api/conversations/{conversation_id}/messages",
-                json={"text": ""}, headers=ORIGIN_HEADERS)
+                "/api/conversations/messages",
+                json={"conversationId": conversation_id, "clientRequestId": "test-request", "text": ""}, headers=ORIGIN_HEADERS)
             self.assertEqual(400, empty.status_code)
             self.assertEqual(str(user_id), registered.json()["userId"])
 
@@ -720,8 +750,8 @@ class ChatSseTests(unittest.TestCase):
         harness = Harness()
         async with await harness.client() as client:
             unauthorized = await client.post(
-                "/api/conversations/1/messages",
-                json={"text": "hi"}, headers=ORIGIN_HEADERS)
+                "/api/conversations/messages",
+                json={"conversationId": 1, "clientRequestId": "test-request", "text": "hi"}, headers=ORIGIN_HEADERS)
             self.assertEqual(401, unauthorized.status_code)
             await client.post(
                 "/api/auth/register",
@@ -737,8 +767,8 @@ class ChatSseTests(unittest.TestCase):
                 json={"username": "chat-b", "password": "password-1"},
                 headers=ORIGIN_HEADERS)
             cross = await client.post(
-                f"/api/conversations/{conversation_id}/messages",
-                json={"text": "hi"}, headers=ORIGIN_HEADERS)
+                "/api/conversations/messages",
+                json={"conversationId": conversation_id, "clientRequestId": "test-request", "text": "hi"}, headers=ORIGIN_HEADERS)
             self.assertEqual(404, cross.status_code)
 
     def test_chat_sse_guards(self):
@@ -778,7 +808,7 @@ class RunRefTests(unittest.TestCase):
                 json={"runId": "not-owned"}, headers=ORIGIN_HEADERS)
             self.assertEqual(404, missing.status_code)
             history = await client.get(
-                f"/api/conversations/{conversation_id}/messages")
+                f"/api/conversations/messages?conversationId={conversation_id}")
             rows = history.json()["messages"]
             self.assertEqual(1, len(rows))
             self.assertEqual("run", rows[0]["refKind"])
