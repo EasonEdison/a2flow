@@ -9,6 +9,7 @@ only module that connects the two services.
 from __future__ import annotations
 
 import asyncio
+import json
 import queue
 import threading
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -53,6 +54,18 @@ class ChatLoopRunner:
         self._processing_provider = processing_provider
         self._system_prompt = system_prompt
 
+    async def inspect_turn(
+        self, *, user_id: int, conversation_id: int, turn_id: str,
+    ) -> dict[str, Any]:
+        from skillweave_contracts import TrustedContext
+
+        owner = TrustedContext.from_mapping({
+            "userId": user_id, "environment": self._environment,
+        })
+        return await asyncio.to_thread(
+            self._conversation_store.inspect_turn, owner, str(conversation_id), turn_id,
+        )
+
     async def iterate(
         self, *, user_id: int, conversation_id: int, text: str,
         turn_id: str,
@@ -62,11 +75,6 @@ class ChatLoopRunner:
         from agent_workflow_runtime.chat.events import (
             DONE,
             ERROR,
-            TEXT_DELTA,
-            TOOL_CALL,
-            TOOL_CALL_FINISHED,
-            TOOL_CALL_STARTED,
-            WORKFLOW_CONFIRM,
         )
         from agent_workflow_runtime.chat.loop import ChatLoop
         from agent_workflow_runtime.chat.persistence import ConversationAdmissionError
@@ -82,10 +90,16 @@ class ChatLoopRunner:
         })
         pending = queue.Queue(maxsize=64)
         closed = threading.Event()
+        replay_events: list[dict[str, Any]] = []
         completion: dict[str, dict[str, Any] | None] = {"payload": None}
 
         class Emitter:
             def emit(self, kind, payload):
+                # Capture only the same public application protocol sent to B,
+                # never graph state, runnable config or authentication context.
+                event = _application_event(kind, payload)
+                if event is not None and kind != DONE:
+                    replay_events.append(json.loads(json.dumps(event, allow_nan=False)))
                 # A closed transport must not cancel/replay a model/tool turn.
                 if kind == DONE:
                     completion["payload"] = dict(payload)
@@ -100,7 +114,7 @@ class ChatLoopRunner:
         emitter = Emitter()
         def run():
             with self._conversation_store.session(
-                owner, str(conversation_id), turn_id,
+                owner, str(conversation_id), turn_id, completion_events=replay_events,
             ) as (saver, thread_id):
                 prompt = (self._system_prompt(owner)
                           if callable(self._system_prompt) else self._system_prompt)
@@ -135,6 +149,15 @@ class ChatLoopRunner:
                         user_id, conversation_id, int(turn_id)),
                 )
                 loop.turn(text)
+                if completion["payload"] is None and not any(
+                    event["type"] == "waiting_action" for event in replay_events
+                ):
+                    raise ConversationAdmissionError("TURN_COMPLETION_EVIDENCE_MISSING")
+                # waiting_action is a successful terminal Chat turn too. Its
+                # continuation is a later turn, not replay of this agent run.
+                replay_events.append({"type": "done", **(completion["payload"] or {
+                    "content": "", "finalModelMessageId": None,
+                })})
         def worker():
             try:
                 run()
@@ -168,24 +191,31 @@ class ChatLoopRunner:
                 if kind == "native_completed":
                     yield {"type": "done", **payload}
                     continue
-                if kind in (TEXT_DELTA, "reasoning_delta"):
-                    yield {
-                        "type": kind,
-                        "text": payload.get("text", ""),
-                        "modelMessageId": payload.get("modelMessageId"),
-                    }
-                elif kind == TOOL_CALL:
-                    yield {"type": "tool_call", "tool": payload.get("tool", "")}
-                elif kind in (TOOL_CALL_STARTED, TOOL_CALL_FINISHED, "a2ui_generation_progress"):
-                    yield {"type": kind, **payload}
-                elif kind == WORKFLOW_CONFIRM:
-                    yield {"type": kind, "workflowKey": payload.get("workflowKey"),
-                           "title": payload.get("title")}
-                elif kind in ("application_rendered", "waiting_action", "personal_workflow_created"):
-                    yield {"type": kind, **payload}
-                elif kind == ERROR and not failed:
-                    failed = True
-                    yield {"type": "error", "code": payload.get("code", "CHAT_ERROR")}
+                event = _application_event(kind, payload)
+                if event is not None:
+                    if kind == ERROR:
+                        if failed:
+                            continue
+                        failed = True
+                    yield event
         finally:
             closed.set()
             await asyncio.to_thread(thread.join)
+
+
+def _application_event(kind: str, payload: Mapping[str, Any]) -> dict[str, Any] | None:
+    """One conversion for live delivery and durable projection repair."""
+    if kind in ("text_delta", "reasoning_delta"):
+        return {"type": kind, "text": payload.get("text", ""),
+                "modelMessageId": payload.get("modelMessageId")}
+    if kind == "tool_call":
+        return {"type": kind, "tool": payload.get("tool", "")}
+    if kind in ("tool_call_started", "tool_call_finished", "a2ui_generation_progress",
+                "application_rendered", "waiting_action", "personal_workflow_created"):
+        return {"type": kind, **payload}
+    if kind == "workflow_confirm":
+        return {"type": kind, "workflowKey": payload.get("workflowKey"),
+                "title": payload.get("title")}
+    if kind == "error":
+        return {"type": kind, "code": payload.get("code", "CHAT_ERROR")}
+    return None

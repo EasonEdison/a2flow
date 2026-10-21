@@ -945,7 +945,7 @@ class ChatObservationTests(unittest.TestCase):
 
         class ConversationStore:
             @contextmanager
-            def session(self, owner, conversation_id, turn_id):
+            def session(self, owner, conversation_id, turn_id, *, completion_events=None):
                 del owner, conversation_id, turn_id
                 yield saver, "runner-observation-thread"
 
