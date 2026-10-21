@@ -20,7 +20,7 @@ Explicit additive migration V003 created durable approval consumption. The actua
 - An independent minimal Skill was restored through the normal registered PRT Build source. The UI confirmed restored files/bindings; its single file and digest were unchanged. Existing assets were not reset. Malformed archive and arbitrary URL rejection remain isolated-probe evidence, not public attack attempts.
 - The previous 37 runtime records have the same ordered-document checksum immediately before/after the new acceptance run; five existing schedules remain disabled. The earlier baseline SHA256 serialization was not recovered, so no equality to that different digest is asserted.
 
-Remaining public check: original same-card A2UI approval and continuation after the frozen-parameter fix, including refresh dedup.
+The remaining A2UI public check was completed on 2026-10-21; see final acceptance below.
 
 ## Boundaries
 
@@ -34,3 +34,12 @@ Final application revision: `2811b40757c5be560a4a49245821c8e46517bc1f`. The froz
 B/Runtime serve 2811b40; management serves ac77641; execution serves dd73ce8. Later changes do not modify management/execution production inputs. All four processes are running, with zero restarts and no OOM. M/B HTTPS return 200. Five schedules remain disabled.
 
 READ compatibility is confirmed by the real content.project.get tool success without an approval card; the next write requested its own host confirmation. The original A2UI card remains WAITING_ACTION with no active request. Final same-card submission, approval, continuation and refresh-dedup still require public acceptance. The browser session expired overnight; normal account-owner login is required. No session forgery, credential reset, or database mutation substitutes for this check.
+
+
+## Final A2UI public acceptance (2026-10-21): PASS
+
+After normal owner login, the original reading-selection card was submitted once with two selected points. The same card displayed host-authored approval for the actual reading-confirmation arguments. One explicit confirmation produced one saved business confirmation and one consumed approval receipt. The card returned to its original Java RPC protocol and COMPLETED state, with inputs disabled.
+
+The assistant automatically continued from that saved result. A full page reload preserved the completed card, the single business confirmation and consumed receipt, and exactly one user/assistant continuation pair. The next proposed topic-plan write remained unconfirmed and was not dispatched; it is outside this acceptance scope. No account or database bypass was used.
+
+Together with the earlier Workflow, Chat, READ, package-restore and CI evidence, all scoped acceptance gates are now PASS. This documentation-only closure does not require a new deployment.

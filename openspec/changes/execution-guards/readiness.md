@@ -1,9 +1,11 @@
 # Readiness
 
+READY for the three scoped improvements: approval execution gates, bounded package restoration, and core CI probes.
+
 Source, deployment and CI: PASS at application revision `2811b40757c5be560a4a49245821c8e46517bc1f`.
 
-Public evidence passed: Workflow missing input, separate write approval, automatic summary/notifications; Chat write approval and automatic continuation; READ without confirmation; registered PRT Build restoration.
+Public acceptance: PASS on 2026-10-21. Workflow missing input, separate write approval, automatic summary/notifications; Chat write approval and continuation; READ without confirmation; registered PRT Build restoration; original same-card A2UI approval, real business execution, automatic continuation and full-refresh dedup all passed.
 
-Final acceptance: PENDING. The A2UI frozen-parameter fix is deployed and covered by the actual-type probe; the original public card must still finish submission, approval, continuation and refresh-dedup. On 2026-10-21 the browser session expired; awaiting normal account-owner login. No bypass or database reset substitutes for this evidence.
+The next proposed demonstration write remains unconfirmed and unexecuted. Durable approval consumption prevents repeated dispatch admission; it does not guarantee exactly-once effects in an external business service. Unknown outcomes are not automatically retried.
 
-See [regression](regression.md).
+See [regression](regression.md) for historical failures, repairs, exact CI links and deployment boundaries.
