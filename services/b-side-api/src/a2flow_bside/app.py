@@ -27,7 +27,7 @@ from skillweave_contracts.user_id import user_id_from_wire, user_id_to_wire
 
 from . import auth
 from .chat_runner import ChatRunner
-from .chat_delivery import ChatDelivery, ChatStreamingResponse
+from .durable_chat import DurableDispatcher
 from .chat_history import has_card_references, hydrate_history
 from .errors import BsideError, RemoteRuntimeError
 from .identity import (
@@ -53,7 +53,9 @@ def _query_allowed(request: Request) -> bool:
     if request.method != "GET":
         return False
     path = request.url.path
-    if re.fullmatch(r"/api/internal/runs/[^/]+/cards/[^/]+/resume-status", path):
+    if path == "/api/conversations/messages":
+        allowed = {"conversationId"}
+    elif re.fullmatch(r"/api/internal/runs/[^/]+/cards/[^/]+/resume-status", path):
         allowed = {"userId", "environment", "nodeId", "interactionId",
                    "requestId", "actionRequestId"}
     elif (re.fullmatch(r"/api/runs/[^/]+/progress", path)
@@ -115,6 +117,8 @@ class ProcessingResolution(BaseModel):
 
 
 class MessageSend(BaseModel):
+    conversationId: int = Field(gt=0)
+    clientRequestId: str = Field(pattern=r"^[A-Za-z0-9_.:-]{1,128}$")
     text: str = Field(min_length=1, max_length=4000)
     runReferences: list[RunReference] = Field(default_factory=list, max_length=3)
 
@@ -328,6 +332,7 @@ def create_app(
     chat_action=None,
     browser_origins: tuple[str, ...] = (),
     account_guard: PostgresAccountGuard | None = None,
+    durable_chat=None,
 ):
     from .config import browser_origin as validate_origin
     allowed_origins = tuple(validate_origin(value) for value in (browser_origins or (browser_origin,)))
@@ -338,39 +343,32 @@ def create_app(
     dummy_hash = auth.hash_password("dummy-timing-password", pepper=pepper)
     @asynccontextmanager
     async def lifespan(app):
-        yield
-        # Graceful shutdown waits for owned turns, not HTTP subscribers.
-        while app.state.chat_tasks:
-            await asyncio.gather(*tuple(app.state.chat_tasks), return_exceptions=True)
+        stop = asyncio.Event()
+        worker = None
+        if durable_chat is not None:
+            await asyncio.to_thread(durable_chat.check_ready)
+            worker = asyncio.create_task(DurableDispatcher(durable_chat, messages, chat_runner, processing_tasks).run(stop))
+        try:
+            yield
+        finally:
+            stop.set()
+            if worker is not None:
+                await worker
+            # Card actions stay owned after the HTTP subscriber disconnects.
+            while app.state.chat_tasks:
+                await asyncio.gather(*tuple(app.state.chat_tasks), return_exceptions=True)
 
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.chat_tasks = set()
-    app.state.chat_turns = {}
 
-    def retain_task(task: asyncio.Task, conversation_id: int | None = None) -> None:
+    def retain_task(task: asyncio.Task) -> None:
         app.state.chat_tasks.add(task)
         def finished(completed: asyncio.Task) -> None:
             app.state.chat_tasks.discard(completed)
-            if conversation_id is not None:
-                turns = app.state.chat_turns.get(conversation_id)
-                if turns is not None:
-                    turns.discard(completed)
-                    if not turns:
-                        app.state.chat_turns.pop(conversation_id, None)
             # Detached HTTP requests still have an owner that observes failures.
             if not completed.cancelled():
                 completed.exception()
         task.add_done_callback(finished)
-        if conversation_id is not None:
-            app.state.chat_turns.setdefault(conversation_id, set()).add(task)
-
-    async def continue_interaction(delivery: ChatDelivery, prior: tuple[asyncio.Task, ...]) -> None:
-        # A visible card can be submitted before its producing turn releases the
-        # Runtime conversation lock. Wait only for already-owned local turns;
-        # cross-process admission remains the Runtime's existing authority.
-        if prior:
-            await asyncio.gather(*(asyncio.shield(task) for task in prior), return_exceptions=True)
-        await delivery.produce()
 
     async def execute_chat_card_action(user_id: int, conversation_id: int,
                                        card_id: str, body: ChatCardAction) -> dict:
@@ -404,30 +402,16 @@ def create_app(
                 or not (submitted or write_completed)
                 or not (temporary or confirmed_java)):
             raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
-        created, input_message, assistant_message = await asyncio.to_thread(
+        if durable_chat is None:
+            raise BsideError("CHAT_DURABLE_DISPATCH_UNAVAILABLE", 503)
+        await asyncio.to_thread(durable_chat.materialize, messages, processing_tasks)
+        _, input_message, assistant_message = await asyncio.to_thread(
             messages.claim_interaction_continuation, user_id=user_id,
             conversation_id=conversation_id, card_id=card_id, request_id=marker["requestId"],
             write_completed=write_completed)
-        if processing_context is not None:
-            processing_context = await asyncio.to_thread(
-                processing_tasks.bind_continuation, user_id=user_id, environment=environment,
-                conversation_id=str(conversation_id), task_id=processing_context["taskId"],
-                card_id=card_id, input_message_id=input_message["id"],
-                assistant_message_id=assistant_message["id"],
-                confirmation_request_id=marker["requestId"] if write_completed else None)
-        if created:
-            delivery = ChatDelivery(
-                messages=messages, runner=chat_runner, user_id=user_id,
-                conversation_id=conversation_id, text=input_message["content"]["text"],
-                input_message=input_message, assistant_message=assistant_message,
-                processing_context=processing_context)
-            delivery.detach()  # History polling consumes this turn; no unused SSE queue.
-            prior = tuple(app.state.chat_turns.get(conversation_id, ()))
-            task = asyncio.create_task(continue_interaction(delivery, prior))
-            retain_task(task, conversation_id)
         state = assistant_message["content"].get("delivery")
-        status = {"running": "RUNNING", "completed": "COMPLETED",
-                  "waiting_action": "COMPLETED", "failed": "FAILED"}.get(state, "UNKNOWN")
+        status = {"queued": "RUNNING", "running": "RUNNING", "completed": "COMPLETED",
+                  "waiting_action": "COMPLETED", "unconfirmed": "NEEDS_REVIEW", "failed": "FAILED"}.get(state, "UNKNOWN")
         return {**response, "continuation": {
             "cardId": card_id, "requestId": marker["requestId"], "status": status,
             "inputMessageId": str(input_message["id"]),
@@ -610,9 +594,9 @@ def create_app(
         return {"id": row["id"], "title": row["title"],
                 "createdAt": _iso(row["created_at"])}
 
-    @app.get("/api/conversations/{conversation_id}/messages")
+    @app.get("/api/conversations/messages")
     async def conversation_messages(
-            conversation_id: int,
+            conversation_id: int = Query(alias="conversationId", gt=0),
             identity: RequestIdentity = Depends(identity)):
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
@@ -642,13 +626,21 @@ def create_app(
                     and row["ref_kind"] == "temporary_interaction")],
             "unassignedCards": unassigned_cards}
 
-    @app.post("/api/conversations/{conversation_id}/messages")
+    @app.post("/api/conversations/messages")
     async def send_message(
-            conversation_id: int, body: MessageSend,
+            body: MessageSend,
             identity: RequestIdentity = Depends(identity)):
+        conversation_id = body.conversationId
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
             raise BsideError("NOT_FOUND", 404)
+        if durable_chat is None:
+            raise BsideError("CHAT_DURABLE_DISPATCH_UNAVAILABLE", 503)
+        prior = await asyncio.to_thread(durable_chat.request,user_id=identity.userId,
+            conversation_id=conversation_id,request_id=body.clientRequestId,payload=body.model_dump())
+        if prior is not None:
+            return StreamingResponse(durable_chat.stream(prior),media_type="text/event-stream",
+                headers={"Cache-Control":"no-store","X-Accel-Buffering":"no"})
         processing_context = None
         processing_activity = None
         if body.processingTarget is not None or body.processingTaskId is not None:
@@ -679,40 +671,29 @@ def create_app(
                 environment=environment, activity_id=activity_id, limit=8000)
             references.append(_bounded_run_reference(snapshot))
         if processing_activity is not None:
+            def observe_turn(connection, context, input_message, assistant_message, *, new):
+                if new:
+                    durable_chat.insert_turn(connection, user_id=identity.userId,
+                        conversation_id=conversation_id, request_id="processing:" + body.processingRequestId,
+                        digest=body.processingRequestId, input_message=input_message,
+                        assistant_message=assistant_message, references=references, processing_context=context)
+                durable_chat.record_request(connection,user_id=identity.userId,conversation_id=conversation_id,
+                    request_id=body.clientRequestId,payload=body.model_dump(),
+                    input_message=input_message,assistant_message=assistant_message)
             created, processing_context, input_message, assistant_message = await asyncio.to_thread(
                 processing_tasks.begin_turn, user_id=identity.userId, environment=environment,
                 conversation_id=str(conversation_id), request_id=body.processingRequestId,
                 text=body.text, references=references,
                 target=body.processingTarget.model_dump() if body.processingTarget else None,
-                task_id=body.processingTaskId)
-            if not created:
-                async def accepted_turn():
-                    ids = {"turnId": str(input_message["id"]), "inputMessageId": str(input_message["id"]),
-                           "messageId": str(assistant_message["id"]), "processingTaskId": processing_context["taskId"]}
-                    yield "data: " + json.dumps({"type": "turn_started", "sequence": 1, **ids,
-                                                "replayed": True}) + "\n\n"
-                    content = assistant_message["content"]
-                    completed = content.get("delivery") in {"completed", "waiting_action"}
-                    yield "data: " + json.dumps({"type": "done" if completed else "error", "sequence": 2,
-                        **ids, "content": content, "code": None if completed else
-                        content.get("errorCode", "PROCESSING_TURN_ALREADY_ACCEPTED")}) + "\n\n"
-                return StreamingResponse(accepted_turn(), media_type="text/event-stream",
-                                         headers={"Cache-Control": "no-store"})
+                task_id=body.processingTaskId, turn_observer=observe_turn)
+            turn = await asyncio.to_thread(durable_chat.request,user_id=identity.userId,
+                conversation_id=conversation_id,request_id=body.clientRequestId,payload=body.model_dump())
         else:
-            input_message = messages.append(
-                conversation_id=conversation_id, role="user",
-                content={"text": body.text, "delivery": "submitted", "runReferences": references})
-            assistant_message = messages.append(
-                conversation_id=conversation_id, role="assistant",
-                content={"text": "", "delivery": "running", "parts": []})
-        delivery = ChatDelivery(
-            messages=messages, runner=chat_runner, user_id=identity.userId,
-            conversation_id=conversation_id, text=body.text,
-            input_message=input_message, assistant_message=assistant_message,
-            run_references=references, processing_context=processing_context)
-        task = asyncio.create_task(delivery.produce())
-        retain_task(task, conversation_id)
-        return ChatStreamingResponse(delivery)
+            turn = await asyncio.to_thread(durable_chat.receive, user_id=identity.userId,
+                conversation_id=conversation_id, request_id=body.clientRequestId,
+                payload=body.model_dump(), references=references)
+        return StreamingResponse(durable_chat.stream(turn), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
     @app.get("/api/conversations/{conversation_id}/cards")
     async def conversation_cards(conversation_id: int,

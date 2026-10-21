@@ -56,6 +56,7 @@ Historical specifications also discuss parallel graphs and broader future capabi
 
 - **Java management, Python execution.** Asset authoring/validation/publication is separate from model execution and business services.
 - **Frameworks used directly.** Deep Agents provides the model/tool loop; LangGraph supplies graph/checkpoint/interrupt primitives. Platform code owns authentication, asset resolution, admission and product state.
+- **Durable Chat delivery.** Request identities and a persistent continuation inbox cover accepted-but-not-started work; saved completion events repair lost history without replaying the Agent. Uncertain execution requires review. [Scope and validation](openspec/changes/chat-turn-reliability/readiness.md).
 - **Controlled tools.** The same Skill enters through `use_skill` in Chat and Workflow. Trusted identity and environment come from the service, not model arguments.
 - **Explicit failure semantics.** Stop prevents new work; it does not undo an already dispatched business write. Unknown outcomes are not automatically retried. Control-request deduplication is not business exactly-once.
 - **Evidence over screenshots alone.** Readiness documents separate source checks, deployment and observed execution. There is no published scale benchmark or high-availability guarantee.

@@ -67,6 +67,7 @@ export type WorkAttention = { attentionId: string; kind: 'waiting' | 'failed' | 
 export type WorkActivity = RunReference & { controlRequestId: string; runId: string | null; workflowKey: string; sourceType: 'chat' | 'manual' | 'scheduled' | 'unknown'; updatedAt: string | null; runStatus: string; currentNode: { nodeId: string; title: string; status: string } | null; summary: string | null; attentionItems: WorkAttention[]; group: ActivityGroup; scheduleName?: string | null; scheduledAt?: string | null };
 export type WorkActivityPage = { items: WorkActivity[]; counts: Record<ActivityGroup, number>; nextCursor: string | null; updatedAt: string | null };
 export type Message = {
+  clientRequestId?: string;
   runReferences?: RunReference[];
   processingTaskId?: string;
   id: string;
@@ -340,6 +341,7 @@ export const messageFromContent = (
     id,
     role,
     text: contentText(content),
+    clientRequestId: optionalString((content as Row)?.clientRequestId),
     processingTaskId: optionalString((content as Row)?.processingTaskId),
     delivery: textOf((content as Row)?.delivery),
     // Legacy fields remain read-compatible for one release. New UI process rendering uses execution only.
@@ -447,7 +449,7 @@ export const productApi = {
     return { id: idOf(row.id), title: textOf(row.title) || '新会话', updatedAt: textOf(row.createdAt) };
   },
   messages: async (id: string): Promise<{ items: Message[]; unassignedCards: ChatCard[] }> => {
-    const payload = await api<{ messages?: Row[]; unassignedCards?: unknown[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`);
+    const payload = await api<{ messages?: Row[]; unassignedCards?: unknown[] }>(`/api/conversations/messages?conversationId=${encodeURIComponent(id)}`);
     return {
       items: (payload.messages ?? []).map((row) => {
         const parsed = messageFromContent(
@@ -456,13 +458,13 @@ export const productApi = {
           row.content,
           textOf(row.createdAt),
         );
-        return parsed.event ? parsed : { ...parsed, event: refEvent(row) };
+        return { ...parsed, clientRequestId: textOf(row.clientRequestId) || parsed.clientRequestId, event: parsed.event ?? refEvent(row) };
       }),
       unassignedCards: (payload.unassignedCards ?? []).map(chatCardOf),
     };
   },
-  sendMessage: async (id: string, text: string, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal, runReferences: Pick<RunReference, 'activityId'>[] = [], processing?: ProcessingSelection) => {
-    const response = await fetch(`/api/conversations/${encodeURIComponent(id)}/messages`, { ...body({ text, runReferences, ...(processing ? { processingTarget: processing.target, processingTaskId: processing.taskId, processingRequestId: processing.requestId } : {}) }), signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
+  sendMessage: async (id: string, text: string, onEvent: (event: ChatStreamEvent) => void, signal: AbortSignal | undefined, runReferences: Pick<RunReference, 'activityId'>[] = [], processing: ProcessingSelection | undefined, clientRequestId: string) => {
+    const response = await fetch(`/api/conversations/messages`, { ...body({ conversationId: Number(id), text, clientRequestId, runReferences, ...(processing ? { processingTarget: processing.target, processingTaskId: processing.taskId, processingRequestId: processing.requestId } : {}) }), signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
     if (!response.ok) {
       const error = new Error('发送失败') as ApiError;
       error.code = 'REQUEST_FAILED';

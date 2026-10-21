@@ -20,7 +20,7 @@ const messageDate = (value: string): Date | undefined => {
 };
 
 const assistantStatus = (message: Message): ThreadMessageLike['status'] => {
-  if (message.delivery === 'running') return { type: 'running' };
+  if (message.delivery === 'running' || message.delivery === 'queued') return { type: 'running' };
   if (message.delivery === 'failed' || message.delivery === 'unconfirmed') {
     return { type: 'incomplete', reason: 'error' };
   }

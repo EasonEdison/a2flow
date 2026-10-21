@@ -62,6 +62,9 @@ class ChatVerticalTest(unittest.TestCase):
         kinds = [event["type"] for event in events]
         self.assertLess(kinds.index("application_rendered"), kinds.index("waiting_action"))
         self.assertEqual("done", kinds[-1])
+        recovered = asyncio.run(runner.inspect_turn(
+            user_id=OWNER.user_id, conversation_id=conversation, turn_id="1"))
+        self.assertEqual({"status": "COMPLETED", "events": events}, recovered)
         card = next(event["card"] for event in events if event["type"] == "application_rendered")
         self.assertEqual(card, store.read(OWNER, conversation, card["cardId"]))
         self.assertNotIn("Recent saved Application states", str(model.observed[0]))

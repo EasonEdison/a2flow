@@ -40,7 +40,7 @@ class ChatHistoryApiTests(unittest.TestCase):
             )
 
             response = await client.get(
-                f"/api/conversations/{conversation}/messages",
+                f"/api/conversations/messages?conversationId={conversation}",
             )
 
             self.assertEqual(200, response.status_code)
@@ -66,7 +66,7 @@ class ChatHistoryApiTests(unittest.TestCase):
                     "/api/conversations", headers=ORIGIN_HEADERS, json={},
                 )).json()["id"]
                 response = await client.get(
-                    f"/api/conversations/{conversation}/messages",
+                    f"/api/conversations/messages?conversationId={conversation}",
                 )
                 self.assertEqual(503, response.status_code)
                 self.assertEqual(

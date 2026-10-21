@@ -154,7 +154,10 @@ def create_app_from_environment():
     from agent_workflow_runtime.chat.cards import ChatCardStore
     from agent_workflow_runtime.chat.rpc_actions import RpcChatActionService
     from agent_workflow_runtime.models import ActionRejected
-    card_store = ChatCardStore(conninfo, environment=config.environment)
+    from a2flow_bside.durable_chat import DurableChat
+    durable_chat = DurableChat(connection_factory, environment=config.environment)
+    card_store = ChatCardStore(conninfo, environment=config.environment,
+                               completion_observer=durable_chat.observe_completion)
 
     def assets_factory(
         owner, conversation_id, control_request_id="chat-action", *,
@@ -236,6 +239,7 @@ def create_app_from_environment():
 
     return create_app(
         account_guard=account_guard,
+        durable_chat=durable_chat,
         users=UsersRepository(connection_factory),
         sessions=SessionsRepository(connection_factory),
         conversations=ConversationsRepository(connection_factory),

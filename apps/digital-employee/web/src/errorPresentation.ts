@@ -14,6 +14,7 @@ export function chatErrorPresentation(code: string | undefined): string {
   switch (code) {
     case 'CONVERSATION_BUSY':
       return '会话中已有执行，本次执行未启动；不会自动重试';
+    case 'CHAT_REQUIRES_REVIEW':
     case 'CONVERSATION_REQUIRES_REVIEW':
       return '上次执行结果尚未确认，本次未继续；不会自动重试';
     case 'CHAT_CONTINUATION_UNCONFIRMED':
