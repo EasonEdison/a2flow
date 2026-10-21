@@ -10,6 +10,10 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from .lifecycle import RunStoppedControl
 from .models import ActionRejected
+from .actions import ActionService
+from skillweave_contracts import TrustedContext
+from typing import Any
+from .lifecycle import RunRecord
 from .waiting_notifications import publish_waiting_snapshot
 
 LOG = logging.getLogger(__name__)
@@ -201,7 +205,7 @@ class ControlledRunRunner:
         self.graph_factory = graph_factory
         self.resolve_versions = resolve_versions
 
-    def start(self, owner, control_id, definition_key, inputs, entry_node_id, *, stopped_run_id=None):
+    def start(self, owner: TrustedContext, control_id: str, definition_key: str, inputs: dict[str, Any], entry_node_id: str, *, stopped_run_id: str | None = None) -> dict[str, Any]:
         run, fresh = self.lifecycle.allocate(
             owner, control_id, definition_key, inputs, entry_node_id, self.resolve_versions,
             stopped_run_id=stopped_run_id,
@@ -307,7 +311,7 @@ class ControlledRunRunner:
             except Exception:
                 error.add_note("NODE_FAILURE_OBSERVATION_UNCONFIRMED")
 
-    def action(self, run, service, payload):
+    def action(self, run: RunRecord, service: ActionService, payload: dict[str, Any]) -> object:
         """AF04 Action entry cannot silently select the legacy AF03 test path."""
         if service.lifecycle is not self.lifecycle:
             raise ActionRejected("CONTROLLED_ACTION_BINDING_REQUIRED")

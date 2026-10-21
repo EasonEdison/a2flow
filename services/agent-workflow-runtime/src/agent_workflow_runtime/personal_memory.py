@@ -4,6 +4,8 @@ No automatic extraction, filesystem exposure or second memory database.
 """
 
 from hashlib import sha256
+from typing import TypedDict
+from skillweave_contracts import TrustedContext
 import json
 import re
 
@@ -14,6 +16,17 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import SystemMessage
 
 from .service import require_owner
+
+
+class PreferenceEntry(TypedDict):
+    id: str
+    text: str
+
+
+class PreferenceState(TypedDict):
+    revision: int
+    enabled: bool
+    entries: list[PreferenceEntry]
 
 
 class MemoryConflict(ValueError):
@@ -54,11 +67,11 @@ class PersonalMemory:
                     store.put(namespace, "preferences", value, index=False)
                 return value
 
-    def view(self, owner):
+    def view(self, owner: TrustedContext) -> PreferenceState:
         """User settings may view/delete stored entries even when disabled."""
         return self._access(owner)
 
-    def replace(self, owner, *, revision, enabled, entries):
+    def replace(self, owner: TrustedContext, *, revision: int, enabled: bool, entries: list[PreferenceEntry]) -> PreferenceState:
         if type(revision) is not int or revision < 0 or type(enabled) is not bool:
             raise ValueError("INVALID_MEMORY_SETTINGS")
         if not isinstance(entries, list) or len(entries) > 20:

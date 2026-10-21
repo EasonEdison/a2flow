@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import Lock
 import json
-from typing import Protocol
+from typing import Protocol, Any
 from uuid import uuid4
 
 from skillweave_contracts import TrustedContext, TrustedInvocationContext
@@ -152,7 +152,7 @@ class RunLifecycle:
         if run.status != "RUNNING":
             raise ActionRejected("RUN_NOT_ACTIVE")
 
-    def read(self, owner, run_id):
+    def read(self, owner: TrustedContext, run_id: str) -> RunRecord:
         with self.repository.run_scope(owner, run_id):
             run = self.repository.get_run(owner, run_id)
             if run is None:
@@ -239,7 +239,7 @@ class RunLifecycle:
         self.assert_active(owner, scope.run_id)
         return result
 
-    def stop(self, owner, run_id, control_id):
+    def stop(self, owner: TrustedContext, run_id: str, control_id: str) -> dict[str, Any]:
         from dataclasses import replace
         payload = canonical({"operation": "STOP", "runId": run_id})
         with self.repository.control_scope(owner, control_id):

@@ -4,23 +4,41 @@ Use a new Compose project/volume, never an older identity database. Initializati
 only installs reviewed demo prerequisites; acceptance edits are made in M UI.
 """
 
+from __future__ import annotations
+
 import os
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
+
+from fastapi import FastAPI
+
+if TYPE_CHECKING:
+    from a2flow_asset_store import BundleValidator
+    from a2flow_asset_store.personal_workflows import PersonalWorkflowRepository
+    from agent_workflow_runtime.mvp_host import VerifiedIdentity
+    from pydantic import SecretStr
+    from skillweave_contracts import TrustedContext
 import sys
 
 from psycopg.conninfo import make_conninfo
 
 
-def configure():
-    from deploy.common.config import _secret, _required
+def configure() -> str:
+    from deploy.common.config import _required, _secret
+
     dsn = make_conninfo(
-        host="/run/postgresql", dbname=_required("A2FLOW_DATABASE_NAME"),
+        host="/run/postgresql",
+        dbname=_required("A2FLOW_DATABASE_NAME"),
         user=_required("A2FLOW_DATABASE_USER"),
         password=_secret("A2FLOW_POSTGRES_PASSWORD_FILE"),
     )
     if _required("A2FLOW_ENVIRONMENT") != "PRT":
         raise RuntimeError("REALCHAT_COMPOSE_PRT_ONLY")
-    for name in ("A2FLOW_DATABASE_URL", "A2FLOW_ATTENDED_DATABASE_URL",
-                 "A2FLOW_BSIDE_DATABASE_URL"):
+    for name in (
+        "A2FLOW_DATABASE_URL",
+        "A2FLOW_ATTENDED_DATABASE_URL",
+        "A2FLOW_BSIDE_DATABASE_URL",
+    ):
         os.environ[name] = dsn
     os.environ["DEEPSEEK_API_KEY"] = _secret("A2FLOW_DEEPSEEK_KEY_FILE")
     os.environ["A2FLOW_BSIDE_PEPPER"] = _secret("A2FLOW_PEPPER_FILE")
@@ -28,71 +46,93 @@ def configure():
     return dsn
 
 
-def initialize(dsn):
-    from deploy.attended.seed import main as schemas
-    from deploy.assets import bundle_validator
-    from activity_planning_demo.package_bundle import make_package_bundle
+def initialize(dsn: str) -> None:
     from a2flow_asset_store import PostgresAssetRepository
+    from activity_planning_demo.package_bundle import make_package_bundle
+
+    from deploy.assets import bundle_validator
+    from deploy.attended.seed import main as schemas
+
     schemas()
     database = os.environ["A2FLOW_DATABASE_NAME"]
     namespace = os.environ["A2FLOW_ASSET_NAMESPACE"]
     repository = PostgresAssetRepository(
-        dsn, environment="PRT", database=database, validator=bundle_validator())
+        dsn, environment="PRT", database=database, validator=bundle_validator()
+    )
     repository.setup()
-    repository.import_bundle(make_package_bundle("PRT"),
-                             expected_namespace=namespace, dry_run=False)
+    repository.import_bundle(
+        make_package_bundle("PRT"), expected_namespace=namespace, dry_run=False
+    )
     print("PRT schemas and reviewed prerequisite assets initialized")
 
 
-def personal_workflow_repository(dsn, validator):
+def personal_workflow_repository(
+    dsn: str, validator: BundleValidator
+) -> PersonalWorkflowRepository:
     import psycopg
-    from psycopg.rows import dict_row
     from a2flow_asset_store.personal_workflows import PersonalWorkflowRepository
+    from psycopg.rows import dict_row
+
     return PersonalWorkflowRepository(
-        lambda: psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5,
-                               options="-c statement_timeout=10000 -c lock_timeout=5000"),
-        namespace=os.environ["A2FLOW_ASSET_NAMESPACE"], environment="PRT", validator=validator,
+        lambda: psycopg.connect(
+            dsn,
+            row_factory=dict_row,
+            connect_timeout=5,
+            options="-c statement_timeout=10000 -c lock_timeout=5000",
+        ),
+        namespace=os.environ["A2FLOW_ASSET_NAMESPACE"],
+        environment="PRT",
+        validator=validator,
     )
 
 
-def initialize_personal_workflows(dsn):
+def initialize_personal_workflows(dsn: str) -> None:
     """Explicit schema-only migration; never re-seed or change shared assets."""
     from deploy.assets import bundle_validator
+
     personal_workflow_repository(dsn, bundle_validator()).install()
     print("Personal workflow schema initialized")
 
 
-def bside():
-    from deploy.attended.bside_app import create_app_from_environment
+def bside() -> FastAPI:
     from fastapi.staticfiles import StaticFiles
+
+    from deploy.attended.bside_app import create_app_from_environment
+
     app = create_app_from_environment()
-    app.mount("/employee", StaticFiles(
-        directory=os.environ["A2FLOW_EMPLOYEE_STATIC_DIRECTORY"], html=True),
-        name="employee")
+    app.mount(
+        "/employee",
+        StaticFiles(directory=os.environ["A2FLOW_EMPLOYEE_STATIC_DIRECTORY"], html=True),
+        name="employee",
+    )
     return app
 
 
-def runtime():
-    from deploy.assets import (
-        bundle_validator, application_validator, application_data_validator,
-    )
-    from deploy.mvp.operations import operations
-    from agent_workflow_runtime.workflow_rpc_host import RpcWorkflowHost
-    from agent_workflow_runtime.rpc_client import RpcClient
-    from deploy.attended.runtime_app import completed_card, SchedulerEventSink
+def runtime() -> VerifiedIdentity:
+    from a2ui_composer import application_data_validator, application_validator
     from agent_workflow_runtime.internal_identity import private_identity
     from agent_workflow_runtime.model_factory import DeepSeekModelFactory
     from agent_workflow_runtime.personal_memory import PersonalMemory
+    from agent_workflow_runtime.rpc_client import RpcClient
+    from agent_workflow_runtime.workflow_rpc_host import RpcWorkflowHost
     from pydantic import SecretStr
 
-    def configuration(reference, owner):
+    from deploy.assets import bundle_validator
+    from deploy.attended.runtime_app import completed_card
+    from deploy.attended.runtime_events import SchedulerEventSink
+    from deploy.mvp.operations import operations
+
+    def configuration(reference: str, owner: TrustedContext) -> Mapping[str, object]:
         if reference != "deepseek-v4-flash" or owner.environment != "PRT":
             raise RuntimeError("MODEL_CONFIGURATION_NOT_FOUND")
-        return {"model_id": reference, "credential_ref": "env:DEEPSEEK_API_KEY",
-                "timeout_seconds": 30.0,
-                "options": {"thinking": "disabled", "max_tokens": 4096}}
+        return {
+            "model_id": reference,
+            "credential_ref": "env:DEEPSEEK_API_KEY",
+            "timeout_seconds": 30.0,
+            "options": {"thinking": "disabled", "max_tokens": 4096},
+        }
 
-    def secret(reference, owner):
+    def secret(reference: str, owner: TrustedContext) -> SecretStr:
         if reference != "env:DEEPSEEK_API_KEY" or owner.environment != "PRT":
             raise RuntimeError("MODEL_CREDENTIAL_UNAVAILABLE")
         return SecretStr(os.environ["DEEPSEEK_API_KEY"])
@@ -103,8 +143,10 @@ def runtime():
         rpc=RpcClient.from_environment(os.environ),
         completion_observer=completed_card,
         transactional_event_writer=SchedulerEventSink().publish,
-        conninfo=dsn, database=os.environ["A2FLOW_DATABASE_NAME"],
-        environment="PRT", namespace=os.environ["A2FLOW_ASSET_NAMESPACE"],
+        conninfo=dsn,
+        database=os.environ["A2FLOW_DATABASE_NAME"],
+        environment="PRT",
+        namespace=os.environ["A2FLOW_ASSET_NAMESPACE"],
         bundle_validator=validator,
         personal_workflows=personal_workflow_repository(dsn, validator),
         application_validator=application_validator,
@@ -116,7 +158,7 @@ def runtime():
     ).create_app()
 
 
-def main():
+def main() -> None:
     commands = {
         "bside": "deploy.realchat.launcher:bside",
         "runtime": "deploy.realchat.launcher:runtime",
@@ -136,8 +178,15 @@ def main():
     if not 1024 <= port <= 65535 or str(port) != raw_port:
         raise RuntimeError("INVALID_LISTEN_PORT")
     import uvicorn
-    uvicorn.run(commands[command], factory=True, host="127.0.0.1", port=port,
-                proxy_headers=False, access_log=False)
+
+    uvicorn.run(
+        commands[command],
+        factory=True,
+        host="127.0.0.1",
+        port=port,
+        proxy_headers=False,
+        access_log=False,
+    )
 
 
 if __name__ == "__main__":

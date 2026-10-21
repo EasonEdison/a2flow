@@ -7,6 +7,7 @@ replace [full self-host acceptance](../openspec/changes/portfolio-selfhost/readi
 
 | Probe | Real boundary checked | Deliberately synthetic |
 | --- | --- | --- |
+| Python route composition | Actual generic/attended/realchat B and Runtime assembly, immutable route order and OpenAPI wire contracts | External database/network/model dependencies replaced; no listener |
 | Chat durable delivery | PostgreSQL transactional request/continuation inbox, concurrent dispatch, fresh worker recovery, completed projection repair and parameter-based HTTP endpoints | Scripted runner with explicit execution facts; no model keys or business effects |
 | Chat native recovery | Actual Deep Agents execution completion, persisted public events, advisory lock and abrupt worker exit | Scripted model, no external tools or live operations |
 | Account guard | PostgreSQL cross-process admission, shared M/B limits, trusted proxy parsing, password recovery and session revocation | Account and ASGI requests; no public HTTP server |
@@ -51,7 +52,7 @@ The Python executor probe creates and removes its dedicated synthetic role and
 table. The role retains `default_transaction_read_only=on`; only the consumption
 connection opts into writes, with `INSERT, SELECT` and no update/delete privilege.
 Use `--python-probe capability-approval` for that focused local reproduction.
-CI always selects all eight Python probes; the report identifies narrowed runs.
+CI always selects all nine Python probes; the report identifies narrowed runs.
 
 For Colima or another explicitly selected local Docker context, build/pull with
 `docker --context CONTEXT ...`, then pass `--docker-context CONTEXT` to the runner.
@@ -122,3 +123,10 @@ These probes establish particular invariants, not public HTTPS correctness,
 real-model orchestration quality, general exactly-once business behavior, restore
 readiness or load capacity. Local execution of the same commands and a successful
 GitHub workflow run are separate evidence.
+
+The core job also runs `python scripts/check_python_dependency_types.py` in its
+pinned probe image. It checks the expanded HTTP, persistence and production
+composition scope with real SDK types, without ignoring missing imports. Only
+legacy imported function calls are allowed in the explicitly listed migration
+boundaries; new HTTP and Runtime transport modules remain strict. Dynamic SQL
+values and extensible JSON payloads do not replace service dependency types.

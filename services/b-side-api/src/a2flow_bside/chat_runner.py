@@ -15,19 +15,39 @@ scripted fake. Events are plain JSON-safe dicts:
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Protocol
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator, Literal, Protocol, TypedDict
+
+if TYPE_CHECKING:
+    from .processing_tasks import ProcessingContext
 
 
-class ChatRunner(Protocol):
-    async def iterate(self, *, user_id: int, conversation_id: int,
-                      text: str,
-                      turn_id: str,
-                      run_references: tuple[dict[str, Any], ...] = (),
-                      processing_context: dict[str, Any] | None = None,
-                      ) -> AsyncIterator[dict[str, Any]]: ...
+class RuntimeTurnInspection(TypedDict):
+    status: Literal["NOT_STARTED", "BUSY", "COMPLETED", "NEEDS_REVIEW"]
+    events: list[dict[str, Any]]
 
-    async def inspect_turn(self, *, user_id: int, conversation_id: int,
-                           turn_id: str) -> dict[str, Any]:
+
+class ChatStream(Protocol):
+    """Live runner and completed-event replay both provide this stream."""
+
+    def iterate(
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+        text: str,
+        turn_id: str,
+        run_references: Sequence[Mapping[str, Any]] = (),
+        processing_context: ProcessingContext | None = None,
+    ) -> AsyncIterator[dict[str, Any]]: ...
+
+
+class ChatRunner(ChatStream, Protocol):
+    """Native runner additionally provides authoritative execution facts."""
+
+    async def inspect_turn(
+        self, *, user_id: int, conversation_id: int, turn_id: str
+    ) -> RuntimeTurnInspection:
         """Return NOT_STARTED, BUSY, COMPLETED (with events), or NEEDS_REVIEW.
 
         Inspection shares native execution admission. An expired product lease

@@ -28,7 +28,7 @@ class ProcessingProvider(Protocol):
         arguments: Mapping[str, Any],
         invoke: Callable[[str], Mapping[str, Any]],
         confirmation_card_id: str | None = None,
-    ) -> dict[str, Any]: ...
+    ) -> Mapping[str, Any]: ...
 
     def bind_card(
         self, *, user_id: int, environment: str, conversation_id: str,

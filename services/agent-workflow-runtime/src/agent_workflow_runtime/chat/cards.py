@@ -345,7 +345,7 @@ class ChatCardStore:
         """Create only the isolated card tables; never runs from request paths."""
         self._storage.setup()
 
-    def save(self, owner, conversation_id, prepared, binding_metadata):
+    def save(self, owner: TrustedContext, conversation_id: str, prepared: PreparedApplication, binding_metadata: Mapping[str, Any]) -> dict[str, Any]:
         owner = _owner(owner, self._environment)
         conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
         display, status = _validate_prepared(prepared)
@@ -389,7 +389,7 @@ class ChatCardStore:
                 )
             return _public(stored)
 
-    def list(self, owner, conversation_id):
+    def list(self, owner: TrustedContext, conversation_id: str) -> list[dict[str, Any]]:
         owner = _owner(owner, self._environment)
         conversation_id = _identifier(conversation_id, "INVALID_CONVERSATION_ID")
         with self._storage.transaction() as transaction:

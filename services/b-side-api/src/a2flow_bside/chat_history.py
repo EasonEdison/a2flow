@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any
 
@@ -26,7 +27,9 @@ def _event_card_id(event: dict[str, Any]) -> str | None:
 
 
 def _matching_card(
-    cards: dict[str, dict[str, Any]], card_id: str, turn_id: str | None,
+    cards: dict[str, dict[str, Any]],
+    card_id: str,
+    turn_id: str | None,
 ) -> dict[str, Any] | None:
     card = cards.get(card_id)
     if card is None or turn_id is None or card.get("turnId") != turn_id:
@@ -34,7 +37,7 @@ def _matching_card(
     return deepcopy(card)
 
 
-def has_card_references(rows: list[dict[str, Any]]) -> bool:
+def has_card_references(rows: Sequence[Mapping[str, Any]]) -> bool:
     """Return whether persisted messages explicitly reference a Chat card."""
 
     for row in rows:
@@ -61,16 +64,16 @@ def has_card_references(rows: list[dict[str, Any]]) -> bool:
 
 
 def hydrate_history(
-    rows: list[dict[str, Any]], cards: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rows: Sequence[Mapping[str, Any]],
+    cards: list[dict[str, Any]],
+) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]]]:
     """Attach owner-scoped current cards without mutating messages or card rows."""
 
-    projected = deepcopy(rows)
+    projected = deepcopy(list(rows))
     card_by_id = {
         card_id: card
         for card in cards
-        if isinstance(card, dict)
-        and (card_id := _identifier(card.get("cardId"))) is not None
+        if isinstance(card, dict) and (card_id := _identifier(card.get("cardId"))) is not None
     }
     assigned: set[str] = set()
     for row in projected:
@@ -109,12 +112,8 @@ def hydrate_history(
 
         legacy_cards = []
         for card_id, card in card_by_id.items():
-            if (
-                card_id in assigned
-                or (
-                    card_id not in event_card_ids
-                    and (turn_id is None or card.get("turnId") != turn_id)
-                )
+            if card_id in assigned or (
+                card_id not in event_card_ids and (turn_id is None or card.get("turnId") != turn_id)
             ):
                 continue
             legacy_cards.append(deepcopy(card))
@@ -125,6 +124,5 @@ def hydrate_history(
             content["legacyCards"] = legacy_cards
 
     return projected, [
-        deepcopy(card) for card_id, card in card_by_id.items()
-        if card_id not in assigned
+        deepcopy(card) for card_id, card in card_by_id.items() if card_id not in assigned
     ]
