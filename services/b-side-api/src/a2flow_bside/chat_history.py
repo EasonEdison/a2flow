@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 
@@ -34,7 +35,7 @@ def _matching_card(
     return deepcopy(card)
 
 
-def has_card_references(rows: list[dict[str, Any]]) -> bool:
+def has_card_references(rows: Sequence[Mapping[str, Any]]) -> bool:
     """Return whether persisted messages explicitly reference a Chat card."""
 
     for row in rows:
@@ -61,11 +62,11 @@ def has_card_references(rows: list[dict[str, Any]]) -> bool:
 
 
 def hydrate_history(
-    rows: list[dict[str, Any]], cards: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rows: Sequence[Mapping[str, Any]], cards: list[dict[str, Any]],
+) -> tuple[list[Mapping[str, Any]], list[dict[str, Any]]]:
     """Attach owner-scoped current cards without mutating messages or card rows."""
 
-    projected = deepcopy(rows)
+    projected = deepcopy(list(rows))
     card_by_id = {
         card_id: card
         for card in cards
