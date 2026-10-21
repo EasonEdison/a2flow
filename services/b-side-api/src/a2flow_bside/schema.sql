@@ -173,6 +173,7 @@ CREATE TABLE IF NOT EXISTS chat_turns (
  conversation_id bigint NOT NULL REFERENCES conversations(id),
  request_id text NOT NULL,
  request_digest text NOT NULL,
+ dispatch_generation bigint NOT NULL DEFAULT 0,
  status text NOT NULL DEFAULT 'QUEUED' CHECK(status IN ('QUEUED','RUNNING','COMPLETED','NEEDS_REVIEW')),
  run_references jsonb NOT NULL DEFAULT '[]',
  processing_context jsonb,
@@ -196,6 +197,9 @@ CREATE TABLE IF NOT EXISTS chat_continuations (
  request_id text NOT NULL,
  write_completed boolean NOT NULL,
  materialized boolean NOT NULL DEFAULT false,
+ recovery_status text NOT NULL DEFAULT 'PENDING' CHECK(recovery_status IN ('PENDING','NEEDS_REVIEW')),
+ error_code text,
+ next_attempt_at timestamptz NOT NULL DEFAULT now(),
  created_at timestamptz NOT NULL DEFAULT now(),
  PRIMARY KEY(user_id,environment,conversation_id,reference)
 );

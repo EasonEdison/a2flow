@@ -136,17 +136,19 @@ async def exercise(factory):
     cid = conversation()
     turn = receive(cid)
 
-    class FailProjection(MessagesRepository):
+    class FailProjection(DurableChat):
         failed = False
 
-        def update_delivery(self, **kw):
+        def save_projection(self, input_id, generation, **kw):
             if not self.failed and kw["content"]["delivery"] == "completed":
                 self.failed = True
                 raise RuntimeError("injected projection database failure")
-            return super().update_delivery(**kw)
+            return super().save_projection(input_id, generation, **kw)
 
     before = runner.calls
-    await DurableDispatcher(store, FailProjection(factory), runner).dispatch(turn)
+    await DurableDispatcher(
+        FailProjection(factory, environment="PRT"), messages, runner
+    ).dispatch(turn)
     assert store.get(turn["input_message_id"])["status"] == "RUNNING"
     await DurableDispatcher(store, messages, runner).dispatch(turn)
     assert (
@@ -273,6 +275,79 @@ async def exercise(factory):
             ).fetchone()["n"]
             == 2
         )
+    checks += 4
+    # One invalid continuation binding cannot starve other intents or ordinary turns.
+    poison_cid = conversation()
+    valid_cid = conversation()
+    ordinary = receive(conversation())
+    for case, conv in [("poison", poison_cid), ("valid", valid_cid)]:
+        item = SimpleNamespace(
+            owner=SimpleNamespace(user_id=1),
+            conversation_id=str(conv),
+            card_id="card:" + case,
+            request_id="submit",
+            metadata={"definitionSource": "TEMPORARY"},
+        )
+        with factory() as c:
+            store.observe_completion(c, item)
+
+    class BrokenBinding:
+        def context_for_card(self, **kw):
+            if kw["card_id"] == "card:poison":
+                raise BsideError("PROCESSING_CARD_BINDING_UNCONFIRMED", 409)
+            return None
+
+    store.materialize(messages, BrokenBinding())
+    with factory() as c:
+        poison = c.execute(
+            "SELECT recovery_status,materialized FROM chat_continuations WHERE conversation_id=%s",
+            (poison_cid,),
+        ).fetchone()
+    assert poison["recovery_status"] == "NEEDS_REVIEW" and not poison["materialized"]
+    valid = next(t for t in store.candidates() if t["conversation_id"] == valid_cid)
+    await dispatch.dispatch(valid)
+    await dispatch.dispatch(ordinary)
+    assert store.get(valid["input_message_id"])["status"] == "COMPLETED"
+    assert store.get(ordinary["input_message_id"])["status"] == "COMPLETED"
+    checks += 3
+    # A stale producer whose lock connection died cannot overwrite a newer repair.
+    fenced = receive(conversation())
+    generation1 = store.claim_generation(fenced["input_message_id"])
+    generation2 = store.claim_generation(fenced["input_message_id"])
+    store.set_status(fenced["input_message_id"], "RUNNING", generation2)
+    kwargs = dict(
+        conversation_id=fenced["conversation_id"],
+        message_id=fenced["assistant_message_id"],
+    )
+    store.save_projection(
+        fenced["input_message_id"],
+        generation2,
+        **kwargs,
+        content={"text": "repaired", "delivery": "completed"},
+    )
+    store.set_status(fenced["input_message_id"], "COMPLETED", generation2)
+    for action in [
+        lambda: store.save_projection(
+            fenced["input_message_id"],
+            generation1,
+            **kwargs,
+            content={"text": "", "delivery": "unconfirmed"},
+        ),
+        lambda: store.event(
+            fenced["input_message_id"],
+            {"sequence": 2, "type": "text_delta", "text": "stale"},
+            generation1,
+        ),
+    ]:
+        try:
+            action()
+        except RuntimeError as error:
+            assert str(error) == "CHAT_DISPATCH_FENCED"
+        else:
+            raise AssertionError("stale dispatch projection admitted")
+    store.set_status(fenced["input_message_id"], "NEEDS_REVIEW", generation1)
+    assert store.get(fenced["input_message_id"])["status"] == "COMPLETED"
+    assert store.pair(fenced)[1]["content"]["text"] == "repaired"
     checks += 4
     # Real HTTP composition: request identity, new route, durable lifespan and replay.
     from test_app import Harness, ORIGIN_HEADERS
