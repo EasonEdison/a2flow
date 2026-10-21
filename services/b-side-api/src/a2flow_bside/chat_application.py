@@ -42,9 +42,8 @@ class ChatApplicationService:
         chat_action = self.chat_action
         if chat_action is None:
             raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
-        processing_context = None
         if self.processing_tasks is not None:
-            processing_context = await asyncio.to_thread(
+            await asyncio.to_thread(
                 self.processing_tasks.context_for_card,
                 user_id=user_id,
                 environment=self.environment,
@@ -76,17 +75,13 @@ class ChatApplicationService:
             and isinstance(result.get("values"), dict)
         )
         write_completed = (
-            isinstance(marker, dict)
-            and marker.get("kind") == "WRITE_APPROVAL"
-            and "result" in card
+            isinstance(marker, dict) and marker.get("kind") == "WRITE_APPROVAL" and "result" in card
         )
         temporary = (
             display.get("protocolProfile") == "a2flow.temporary.v1"
             and display.get("definitionSource") == "TEMPORARY"
         )
-        confirmed_java = (
-            write_completed and display.get("protocolProfile") == "a2flow.java-rpc.v1"
-        )
+        confirmed_java = write_completed and display.get("protocolProfile") == "a2flow.java-rpc.v1"
         if (
             not isinstance(marker, dict)
             or marker.get("cardId") != card_id
@@ -101,9 +96,7 @@ class ChatApplicationService:
             raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
         if self.durable_chat is None:
             raise BsideError("CHAT_DURABLE_DISPATCH_UNAVAILABLE", 503)
-        await asyncio.to_thread(
-            self.durable_chat.materialize, self.messages, self.processing_tasks
-        )
+        await asyncio.to_thread(self.durable_chat.materialize, self.messages, self.processing_tasks)
         _, input_message, assistant_message = await asyncio.to_thread(
             self.messages.claim_interaction_continuation,
             user_id=user_id,
@@ -234,10 +227,10 @@ class ChatApplicationService:
                 )
 
             (
-                created,
+                _created,
                 processing_context,
-                input_message,
-                assistant_message,
+                _input_message,
+                _assistant_message,
             ) = await asyncio.to_thread(
                 processing_tasks.begin_turn,
                 user_id=user_id,
@@ -246,9 +239,7 @@ class ChatApplicationService:
                 request_id=processing_request_id,
                 text=body.text,
                 references=references,
-                target=body.processingTarget.model_dump()
-                if body.processingTarget
-                else None,
+                target=body.processingTarget.model_dump() if body.processingTarget else None,
                 task_id=body.processingTaskId,
                 turn_observer=observe_turn,
             )

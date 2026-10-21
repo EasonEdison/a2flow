@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from .errors import BsideError
-from .identity import RequestIdentity
 from .notification_repository import NotificationsRepository
 from .route_dependencies import (
     JsonObject,
 )
-from .route_identity import identity
+from .route_identity import CurrentIdentity
 
 
 def create_router(
@@ -20,9 +19,7 @@ def create_router(
     router = APIRouter()
 
     @router.get("/api/notifications", response_model=None)
-    async def list_notifications(
-        identity: RequestIdentity = Depends(identity),
-    ) -> JsonObject:
+    async def list_notifications(*, identity: CurrentIdentity) -> JsonObject:
         return {
             "notifications": [
                 {
@@ -41,7 +38,7 @@ def create_router(
 
     @router.post("/api/notifications/{notification_id}/read", response_model=None)
     async def mark_notification_read(
-        notification_id: int, identity: RequestIdentity = Depends(identity)
+        *, notification_id: int, identity: CurrentIdentity
     ) -> JsonObject:
         if not notifications.mark_read(notification_id, identity.userId):
             raise BsideError("NOT_FOUND", 404)

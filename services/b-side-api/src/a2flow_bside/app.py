@@ -82,30 +82,30 @@ from .schedule_history import (
 from .work_activities import WorkActivitiesRepository
 
 __all__ = [
-    "create_app",
+    "ChatCardAction",
+    "ConversationCreate",
+    "CronRuleInput",
+    "InternalResume",
+    "InternalRunStart",
+    "LoginRequest",
     "MemoryEntry",
     "MemorySettings",
-    "RegisterRequest",
-    "LoginRequest",
-    "ConversationCreate",
-    "RunReference",
-    "ProcessingTarget",
-    "ProcessingResolution",
     "MessageSend",
-    "RunStart",
-    "RunRefCreate",
-    "InternalRunStart",
+    "ProcessingResolution",
+    "ProcessingTarget",
+    "RegisterRequest",
     "RunAction",
-    "ChatCardAction",
-    "WorkflowCardAction",
-    "InternalResume",
-    "CronRuleInput",
+    "RunRefCreate",
+    "RunReference",
+    "RunStart",
     "ScheduleCreate",
     "ScheduleUpdate",
+    "WorkflowCardAction",
+    "_bounded_run_reference",
     "_iso",
     "_iterate_thread",
-    "_bounded_run_reference",
     "_schedule_json",
+    "create_app",
 ]
 
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -180,7 +180,7 @@ def create_app(
         or len({value.split(":", 1)[0] for value in allowed_origins}) != 1
     ):
         raise RuntimeError("INVALID_BSIDE_BROWSER_ORIGINS")
-    clock = now or (lambda: dt.datetime.now(dt.timezone.utc))
+    clock = now or (lambda: dt.datetime.now(dt.UTC))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -189,9 +189,7 @@ def create_app(
         if durable_chat is not None:
             await asyncio.to_thread(durable_chat.check_ready)
             worker = asyncio.create_task(
-                DurableDispatcher(
-                    durable_chat, messages, chat_runner, processing_tasks
-                ).run(stop)
+                DurableDispatcher(durable_chat, messages, chat_runner, processing_tasks).run(stop)
             )
         try:
             yield
@@ -219,15 +217,13 @@ def create_app(
         task.add_done_callback(finished)
 
     @app.middleware("http")
-    async def bside_guard(
-        request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def bside_guard(request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.url.path.startswith("/api"):
             internal = request.url.path.startswith("/api/internal/")
             try:
                 if request.query_params and not _query_allowed(request):
                     raise BsideError("QUERY_PARAMETERS_NOT_ALLOWED", 400)
-                lowered = {name.lower() for name in request.headers.keys()}
+                lowered = {name.lower() for name in request.headers}
                 if lowered & {
                     "x-a2flow-environment",
                     "x-a2flow-role",
@@ -242,9 +238,7 @@ def create_app(
                 if request.method in _UNSAFE_METHODS and not internal:
                     require_origin(request.headers, allowed_origins)
             except BsideError as error:
-                return JSONResponse(
-                    {"error": {"code": error.code}}, status_code=error.status
-                )
+                return JSONResponse({"error": {"code": error.code}}, status_code=error.status)
             if not internal:
                 try:
                     request.scope["a2flow.bside.identity"] = await run_in_threadpool(
@@ -263,9 +257,7 @@ def create_app(
         return await call_next(request)
 
     @app.exception_handler(AccountGuardError)
-    async def account_guard_failure(
-        request: Request, error: AccountGuardError
-    ) -> JSONResponse:
+    async def account_guard_failure(request: Request, error: AccountGuardError) -> JSONResponse:
         return JSONResponse(
             {"error": {"code": error.code}},
             status_code=error.status,
@@ -277,15 +269,11 @@ def create_app(
         return JSONResponse({"error": {"code": error.code}}, status_code=error.status)
 
     @app.exception_handler(RemoteRuntimeError)
-    async def runtime_failure(
-        request: Request, error: RemoteRuntimeError
-    ) -> JSONResponse:
+    async def runtime_failure(request: Request, error: RemoteRuntimeError) -> JSONResponse:
         return JSONResponse({"error": {"code": error.code}}, status_code=error.status)
 
     @app.exception_handler(RequestValidationError)
-    async def invalid_input(
-        request: Request, error: RequestValidationError
-    ) -> JSONResponse:
+    async def invalid_input(request: Request, error: RequestValidationError) -> JSONResponse:
         return JSONResponse({"error": {"code": "INVALID_INPUT"}}, status_code=400)
 
     @app.exception_handler(Exception)

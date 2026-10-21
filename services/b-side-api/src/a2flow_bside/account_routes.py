@@ -8,14 +8,14 @@ import re
 from collections.abc import Callable
 from typing import ParamSpec, TypeVar
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from skillweave_contracts.user_id import user_id_to_wire
 
 from . import auth
 from .account_guard import AccountGuardError, PostgresAccountGuard
 from .errors import BsideError
-from .identity import SESSION_COOKIE, RequestIdentity, parse_session_token
+from .identity import SESSION_COOKIE, parse_session_token
 from .repositories import (
     SessionsRepository,
     UsersRepository,
@@ -26,7 +26,7 @@ from .route_dependencies import (
     MemoryState,
     MemoryView,
 )
-from .route_identity import identity
+from .route_identity import CurrentIdentity
 from .route_models import (
     LoginRequest,
     MemorySettings,
@@ -74,15 +74,13 @@ def create_router(
         )
 
     @router.get("/api/memory", response_model=None)
-    async def read_memory(identity: RequestIdentity = Depends(identity)) -> MemoryState:
+    async def read_memory(*, identity: CurrentIdentity) -> MemoryState:
         if memory_view is None:
             raise BsideError("MEMORY_UNAVAILABLE", 503)
         return await asyncio.to_thread(memory_view, identity.userId)
 
     @router.put("/api/memory", response_model=None)
-    async def update_memory(
-        body: MemorySettings, identity: RequestIdentity = Depends(identity)
-    ) -> MemoryState:
+    async def update_memory(*, body: MemorySettings, identity: CurrentIdentity) -> MemoryState:
         if memory_replace is None:
             raise BsideError("MEMORY_UNAVAILABLE", 503)
         return await asyncio.to_thread(
@@ -91,9 +89,7 @@ def create_router(
             MemoryState(
                 revision=body.revision,
                 enabled=body.enabled,
-                entries=[
-                    {"id": entry.id, "text": entry.text} for entry in body.entries
-                ],
+                entries=[{"id": entry.id, "text": entry.text} for entry in body.entries],
             ),
         )
 
@@ -125,7 +121,7 @@ def create_router(
         account_guard.admit(action, username, dict(request.scope))
 
     @router.post("/api/auth/register", response_model=None)
-    def register(request: Request, body: RegisterRequest) -> JSONResponse:
+    def register(*, request: Request, body: RegisterRequest) -> JSONResponse:
         if not _USERNAME.fullmatch(body.username):
             raise BsideError("INVALID_USERNAME", 400)
         if len(body.password) < 8:
@@ -148,15 +144,13 @@ def create_router(
         return response
 
     @router.post("/api/auth/login", response_model=None)
-    def login(request: Request, body: LoginRequest) -> JSONResponse:
+    def login(*, request: Request, body: LoginRequest) -> JSONResponse:
         admit_account("login", body.username, request)
         record = account_storage("bside_login", users.find_by_username, body.username)
         if record is None:
             auth.verify_password(body.password, dummy_hash, pepper=pepper)
             raise BsideError("INVALID_CREDENTIALS", 401)
-        if not auth.verify_password(
-            body.password, record["password_hash"], pepper=pepper
-        ):
+        if not auth.verify_password(body.password, record["password_hash"], pepper=pepper):
             raise BsideError("INVALID_CREDENTIALS", 401)
         response = JSONResponse(
             {
@@ -169,18 +163,16 @@ def create_router(
         return response
 
     @router.post("/api/auth/logout", response_model=None)
-    def logout(request: Request) -> JSONResponse:
+    def logout(*, request: Request) -> JSONResponse:
         token = parse_session_token(request.cookies.get(SESSION_COOKIE))
         if token is not None:
-            account_storage(
-                "bside_logout", sessions.delete, auth.hash_session_token(token)
-            )
+            account_storage("bside_logout", sessions.delete, auth.hash_session_token(token))
         response = JSONResponse({"ok": True})
         clear_session(response)
         return response
 
     @router.get("/api/auth/session", response_model=None)
-    async def session(identity: RequestIdentity = Depends(identity)) -> JsonObject:
+    async def session(*, identity: CurrentIdentity) -> JsonObject:
         return {
             "userId": user_id_to_wire(identity.userId),
             "username": identity.username,

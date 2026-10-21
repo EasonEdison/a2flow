@@ -22,7 +22,7 @@ def _iterate_thread(sync_iter: Iterator[str]) -> AsyncIterator[str]:
             for chunk in sync_iter:
                 pending.put(("chunk", chunk))
             pending.put(("done", None))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             pending.put(("error", exc))
 
     threading.Thread(target=produce, daemon=True).start()
@@ -59,9 +59,7 @@ def _bounded_run_reference(snapshot: JsonObject) -> JsonObject:
 
     def encoded_size(value: JsonObject) -> int:
         try:
-            return len(
-                json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
-            )
+            return len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8"))
         except (TypeError, ValueError) as error:
             raise BsideError("INVALID_RUN_REFERENCE_RESULT", 502) from error
 

@@ -59,17 +59,13 @@ class MessageSend(BaseModel):
 
     processingTarget: ProcessingTarget | None = None
     processingTaskId: str | None = Field(default=None, min_length=1, max_length=128)
-    processingRequestId: str | None = Field(
-        default=None, pattern=r"^[A-Za-z0-9_.:-]{1,128}$"
-    )
+    processingRequestId: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_.:-]{1,128}$")
 
     @model_validator(mode="after")
     def processing_target(self) -> Self:
         if self.processingTarget is not None and self.processingTaskId is not None:
             raise ValueError("PROCESSING_TARGET_CONFLICT")
-        if bool(self.processingTarget or self.processingTaskId) != bool(
-            self.processingRequestId
-        ):
+        if bool(self.processingTarget or self.processingTaskId) != bool(self.processingRequestId):
             raise ValueError("PROCESSING_REQUEST_ID_REQUIRED")
         return self
 
