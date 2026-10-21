@@ -6,19 +6,19 @@ import asyncio
 import hashlib
 import json
 import logging
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from collections.abc import AsyncIterator, Iterator, Sequence
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
 if TYPE_CHECKING:
     from agent_workflow_runtime.chat.cards import CardCompletion
+from .chat_delivery import ChatDelivery
 from .chat_runner import ChatRunner
+from .errors import BsideError
+from .interaction_continuation import continuation_reference
 from .persistence_types import ConnectionFactory, DatabaseConnection, MessageRecord, message_record
 from .processing_tasks import ProcessingContext, ProcessingTasksRepository
 from .repositories import MessagesRepository
-
-from .chat_delivery import ChatDelivery
-from .errors import BsideError
-from .interaction_continuation import continuation_reference
 
 _LOG = logging.getLogger(__name__)
 
@@ -42,7 +42,9 @@ class DurableChat:
             c.execute("SELECT input_message_id FROM chat_turns LIMIT 0")
             c.execute("SELECT reference FROM chat_continuations LIMIT 0")
 
-    def request(self, *, user_id: int, conversation_id: int, request_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def request(
+        self, *, user_id: int, conversation_id: int, request_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any] | None:
         digest = hashlib.sha256(encoded(payload).encode()).hexdigest()
         with self.factory() as c:
             row = c.execute(
@@ -55,9 +57,17 @@ class DurableChat:
                 raise BsideError("CHAT_REQUEST_CONFLICT", 409)
             return dict(row) if row else None
 
-    def record_request(self, c: DatabaseConnection, *, user_id: int, conversation_id: int,
-                       request_id: str, payload: dict[str, Any], input_message: MessageRecord,
-                       assistant_message: MessageRecord) -> None:
+    def record_request(
+        self,
+        c: DatabaseConnection,
+        *,
+        user_id: int,
+        conversation_id: int,
+        request_id: str,
+        payload: dict[str, Any],
+        input_message: MessageRecord,
+        assistant_message: MessageRecord,
+    ) -> None:
         digest = hashlib.sha256(encoded(payload).encode()).hexdigest()
         c.execute(
             "INSERT INTO chat_requests(user_id,environment,conversation_id,client_request_id,"
@@ -79,20 +89,26 @@ class DurableChat:
             (user_id, self.environment, int(conversation_id), request_id),
         ).fetchone()
         assert row is not None
-        if (
-            row["request_digest"] != digest
-            or row["input_message_id"] != input_message["id"]
-        ):
+        if row["request_digest"] != digest or row["input_message_id"] != input_message["id"]:
             raise BsideError("CHAT_REQUEST_CONFLICT", 409)
         c.execute(
             "UPDATE messages SET content=content || %s::jsonb WHERE id=%s",
             (encoded({"clientRequestId": request_id}), input_message["id"]),
         )
 
-    def insert_turn(self, c: DatabaseConnection, *, user_id: int, conversation_id: int,
-                    request_id: str, digest: str, input_message: MessageRecord,
-                    assistant_message: MessageRecord, references: Sequence[dict[str, Any]] = (),
-                    processing_context: ProcessingContext | None = None) -> None:
+    def insert_turn(
+        self,
+        c: DatabaseConnection,
+        *,
+        user_id: int,
+        conversation_id: int,
+        request_id: str,
+        digest: str,
+        input_message: MessageRecord,
+        assistant_message: MessageRecord,
+        references: Sequence[dict[str, Any]] = (),
+        processing_context: ProcessingContext | None = None,
+    ) -> None:
         c.execute(
             "INSERT INTO chat_turns(user_id,environment,conversation_id,request_id,request_digest,"
             "input_message_id,assistant_message_id,run_references,processing_context) "
@@ -110,7 +126,15 @@ class DurableChat:
             ),
         )
 
-    def receive(self, *, user_id: int, conversation_id: int, request_id: str, payload: dict[str, Any], references: list[dict[str, Any]]) -> dict[str, Any]:
+    def receive(
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+        request_id: str,
+        payload: dict[str, Any],
+        references: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         digest = hashlib.sha256(encoded(payload).encode()).hexdigest()
         with self.factory() as c:
             owner = c.execute(
@@ -142,7 +166,7 @@ class DurableChat:
                 ("assistant", {"text": "", "delivery": "queued", "parts": []}),
             ]:
                 rows.append(
-                    dict(
+                    message_record(
                         c.execute(
                             "INSERT INTO messages(conversation_id,role,content) "
                             "VALUES (%s,%s,%s::jsonb) RETURNING *",
@@ -175,7 +199,9 @@ class DurableChat:
             assert row is not None
             return dict(row)
 
-    def observe_completion(self, connection: DatabaseConnection, completion: CardCompletion) -> None:
+    def observe_completion(
+        self, connection: DatabaseConnection, completion: CardCompletion
+    ) -> None:
         metadata = completion.metadata
         # Workflow completions are owned by the Workflow outbox, never Chat.
         if metadata.get("workflow"):
@@ -266,9 +292,7 @@ class DurableChat:
                 yield acquired
             finally:
                 if acquired:
-                    c.execute(
-                        "SELECT pg_advisory_unlock(hashtextextended(%s,0))", (key,)
-                    )
+                    c.execute("SELECT pg_advisory_unlock(hashtextextended(%s,0))", (key,))
 
     def claim_generation(self, input_id: int) -> int | None:
         with self.factory() as c:
@@ -287,8 +311,15 @@ class DurableChat:
                 (status, input_id, generation),
             )
 
-    def save_projection(self, input_id: int, generation: int, *, conversation_id: int,
-                        message_id: int, content: dict[str, Any]) -> None:
+    def save_projection(
+        self,
+        input_id: int,
+        generation: int,
+        *,
+        conversation_id: int,
+        message_id: int,
+        content: dict[str, Any],
+    ) -> None:
         with self.factory() as c:
             row = c.execute(
                 "SELECT assistant_message_id,conversation_id FROM chat_turns WHERE input_message_id=%s "
@@ -395,9 +426,7 @@ class DurableChat:
                             "inputMessageId": str(input_id),
                             "messageId": str(turn["assistant_message_id"]),
                             "content": assistant["content"],
-                            "code": None
-                            if status == "COMPLETED"
-                            else "CHAT_REQUIRES_REVIEW",
+                            "code": None if status == "COMPLETED" else "CHAT_REQUIRES_REVIEW",
                         },
                         ensure_ascii=False,
                     )
@@ -407,7 +436,9 @@ class DurableChat:
             yield ": pending\n\n"
             await asyncio.sleep(0.4)
 
-    def materialize(self, messages: MessagesRepository, processing_tasks: ProcessingTasksRepository | None) -> None:
+    def materialize(
+        self, messages: MessagesRepository, processing_tasks: ProcessingTasksRepository | None
+    ) -> None:
         with self.factory() as c:
             intents = [
                 dict(r)
@@ -477,7 +508,12 @@ class DurableChat:
                     ),
                 )
 
-    def _materialize_one(self, intent: dict[str, Any], messages: MessagesRepository, processing_tasks: ProcessingTasksRepository | None) -> None:
+    def _materialize_one(
+        self,
+        intent: dict[str, Any],
+        messages: MessagesRepository,
+        processing_tasks: ProcessingTasksRepository | None,
+    ) -> None:
         # Each step is idempotent. Intent remains durable until binding and dispatch are saved.
         _, user, assistant = messages.claim_interaction_continuation(
             user_id=intent["user_id"],
@@ -534,9 +570,16 @@ class _Replay:
     def __init__(self, events: list[dict[str, Any]]) -> None:
         self.events = events
 
-    async def iterate(self, *, user_id: int, conversation_id: int, text: str, turn_id: str,
-                      run_references: Sequence[dict[str, Any]] = (),
-                      processing_context: ProcessingContext | None = None) -> AsyncIterator[dict[str, Any]]:
+    async def iterate(
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+        text: str,
+        turn_id: str,
+        run_references: Sequence[Mapping[str, Any]] = (),
+        processing_context: ProcessingContext | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         for event in self.events:
             yield event
 
@@ -545,13 +588,26 @@ class _FencedProjection:
     def __init__(self, store: DurableChat, input_id: int, generation: int) -> None:
         self.store, self.input_id, self.generation = store, input_id, generation
 
-    def update_delivery(self, *, conversation_id: int, message_id: int, content: dict[str, Any]) -> None:
-        self.store.save_projection(self.input_id, self.generation, conversation_id=conversation_id, message_id=message_id, content=content)
+    def update_delivery(
+        self, *, conversation_id: int, message_id: int, content: dict[str, Any]
+    ) -> None:
+        self.store.save_projection(
+            self.input_id,
+            self.generation,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            content=content,
+        )
 
 
 class DurableDispatcher:
-    def __init__(self, store: DurableChat, messages: MessagesRepository, runner: ChatRunner,
-                 processing_tasks: ProcessingTasksRepository | None = None) -> None:
+    def __init__(
+        self,
+        store: DurableChat,
+        messages: MessagesRepository,
+        runner: ChatRunner,
+        processing_tasks: ProcessingTasksRepository | None = None,
+    ) -> None:
         self.store, self.messages, self.runner, self.processing_tasks = (
             store,
             messages,
@@ -575,9 +631,7 @@ class DurableDispatcher:
             )
             if generation is None:
                 return
-            projection = _FencedProjection(
-                self.store, turn["input_message_id"], generation
-            )
+            projection = _FencedProjection(self.store, turn["input_message_id"], generation)
             facts = await self.runner.inspect_turn(
                 user_id=turn["user_id"],
                 conversation_id=turn["conversation_id"],
@@ -619,9 +673,7 @@ class DurableDispatcher:
             )
             delivery = ChatDelivery(
                 messages=projection,
-                runner=_Replay(facts["events"])
-                if state == "COMPLETED"
-                else self.runner,
+                runner=_Replay(facts["events"]) if state == "COMPLETED" else self.runner,
                 user_id=turn["user_id"],
                 conversation_id=turn["conversation_id"],
                 text=user["content"]["text"],
@@ -652,9 +704,7 @@ class DurableDispatcher:
             delivery.emit = emit
             await delivery.produce()
             if delivery.content["delivery"] in {"completed", "waiting_action"}:
-                await asyncio.to_thread(
-                    self.store.set_status, user["id"], "COMPLETED", generation
-                )
+                await asyncio.to_thread(self.store.set_status, user["id"], "COMPLETED", generation)
             # Failure deliberately remains RUNNING. The next inspection determines
             # completed projection repair versus NEEDS_REVIEW; never blind retry.
 
