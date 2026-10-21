@@ -23,9 +23,7 @@ from .service import RuntimeService, require_owner
 
 def frame(event: str, value: object, event_id: str | None = None) -> bytes:
     data = encoded(value).decode("utf-8")
-    value = (
-        f"id: {event_id}\n" if event_id else ""
-    ) + f"event: {event}\ndata: {data}\n\n"
+    value = (f"id: {event_id}\n" if event_id else "") + f"event: {event}\ndata: {data}\n\n"
     if len(value.encode("utf-8")) > 256 * 1024:
         raise ActionRejected("PROGRESS_FRAME_TOO_LARGE")
     return value.encode("utf-8")
@@ -143,9 +141,7 @@ def add_progress_routes(
         )
 
     @app.get(path + "/stream")
-    async def stream(
-        request: Request, run_id: str, node_id: str, execution_id: str
-    ) -> Response:
+    async def stream(request: Request, run_id: str, node_id: str, execution_id: str) -> Response:
         who, after, limit = options(request, streaming=True)
         if not subscribers.acquire(blocking=False):
             return error_response(503, "SUBSCRIBER_CAPACITY_EXHAUSTED")
@@ -202,14 +198,10 @@ def add_progress_routes(
                         )
                         return
                     if monotonic() - heartbeat >= 10:
-                        yield frame(
-                            "heartbeat", {"nextCursor": current, "reconnect": True}
-                        )
+                        yield frame("heartbeat", {"nextCursor": current, "reconnect": True})
                         heartbeat = monotonic()
                     await anyio.sleep(0.5)
-                    response = await reads.call(
-                        partial(read, after=current), timeout=read_timeout
-                    )
+                    response = await reads.call(partial(read, after=current), timeout=read_timeout)
                     if response.status_code != 200:
                         yield frame(
                             "error",
@@ -218,8 +210,6 @@ def add_progress_routes(
                         return
                     next_page = json.loads(bytes(response.body))
             except ActionRejected:
-                yield frame(
-                    "error", {"code": "PROGRESS_UNAVAILABLE", "nextCursor": current}
-                )
+                yield frame("error", {"code": "PROGRESS_UNAVAILABLE", "nextCursor": current})
 
         return LeaseStream(observe(), subscribers.release, lease_seconds, send_timeout)

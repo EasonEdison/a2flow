@@ -45,9 +45,7 @@ class ProjectionPort(Protocol):
 
     def run(self, owner: TrustedContext, run_id: str) -> dict[str, Any]: ...
     def control(self, owner: TrustedContext, control_id: str) -> dict[str, Any]: ...
-    def restart_identity(
-        self, owner: TrustedContext, run_id: str
-    ) -> dict[str, Any]: ...
+    def restart_identity(self, owner: TrustedContext, run_id: str) -> dict[str, Any]: ...
 
 
 ActionServiceT = TypeVar("ActionServiceT", bound=ActionService, covariant=True)
@@ -76,8 +74,7 @@ class RuntimeService:
         resolve_entry: Callable[[TrustedContext, str], str],
         *,
         progress: PostgresProgress | None = None,
-        validate_inputs: Callable[[TrustedContext, str, dict[str, Any]], None]
-        | None = None,
+        validate_inputs: Callable[[TrustedContext, str, dict[str, Any]], None] | None = None,
     ) -> None:
         self.lifecycle = lifecycle
         self.projection = projection
@@ -88,10 +85,7 @@ class RuntimeService:
 
     def _runner(self, session: ExecutionSession[ActionService]) -> ControlledRunRunner:
         runner = session.runner
-        if (
-            not isinstance(runner, ControlledRunRunner)
-            or runner.lifecycle is not self.lifecycle
-        ):
+        if not isinstance(runner, ControlledRunRunner) or runner.lifecycle is not self.lifecycle:
             raise ActionRejected("CONTROLLED_SERVICE_BINDING_REQUIRED")
         return runner
 
@@ -100,9 +94,7 @@ class RuntimeService:
 
     def control(self, owner: TrustedContext, control_id: str) -> dict[str, Any]:
         # No execution session, definition resolver, graph, or control lock.
-        return self.projection.control(
-            require_owner(owner), control_identifier(control_id)
-        )
+        return self.projection.control(require_owner(owner), control_identifier(control_id))
 
     def start(
         self,
@@ -133,9 +125,7 @@ class RuntimeService:
         # Never serialize the runner's checkpoint/thread or business outcome.
         return self.inspect(owner, response["runId"])
 
-    def stop(
-        self, owner: TrustedContext, run_id: str, control_id: str
-    ) -> dict[str, Any]:
+    def stop(self, owner: TrustedContext, run_id: str, control_id: str) -> dict[str, Any]:
         require_owner(owner)
         identifier(run_id)
         control_identifier(control_id)
@@ -197,9 +187,7 @@ class RuntimeService:
         ActionRequest.from_mapping(bound)
         run = self.lifecycle.read(owner, run_id)
         if run.status != "RUNNING":
-            raise ActionRejected(
-                "RUN_STOPPED" if run.status == "STOPPED" else "RUN_NOT_ACTIVE"
-            )
+            raise ActionRejected("RUN_STOPPED" if run.status == "STOPPED" else "RUN_NOT_ACTIVE")
         with self.execution_session(owner) as session:
             runner = self._runner(session)
             runner.action(run, session.action_service(run), bound)
@@ -216,9 +204,7 @@ class RuntimeService:
         require_owner(owner)
         if self.progress is None:
             raise ActionRejected("PROGRESS_UNAVAILABLE")
-        return self.progress.catalog(
-            owner, identifier(run_id), after=after, limit=limit
-        )
+        return self.progress.catalog(owner, identifier(run_id), after=after, limit=limit)
 
     def progress_history(
         self,

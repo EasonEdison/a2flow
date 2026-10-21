@@ -11,7 +11,7 @@ from __future__ import annotations
 import importlib
 import os
 import re
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from typing import Any
 
 import psycopg
@@ -48,7 +48,10 @@ def _load_validator(reference: str) -> BundleValidator:
         raise RuntimeError("INVALID_BSIDE_VALIDATOR_FACTORY")
     module_name, attribute = reference.split(":", 1)
     try:
-        factory = getattr(importlib.import_module(module_name), attribute)
+        # Protected plugin factories must produce the concrete bundle validator.
+        factory: Callable[[], BundleValidator] = getattr(
+            importlib.import_module(module_name), attribute
+        )
         validator = factory()
     except Exception:
         raise RuntimeError("BSIDE_VALIDATOR_UNAVAILABLE") from None

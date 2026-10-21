@@ -206,15 +206,11 @@ def create_app(
         or not 0 < read_timeout <= 10
     ):
         raise ValueError("read timeout must be finite and within (0, 10] seconds")
-    if unexpected_error_observer is not None and not callable(
-        unexpected_error_observer
-    ):
+    if unexpected_error_observer is not None and not callable(unexpected_error_observer):
         raise ValueError("unexpected error observer must be callable")
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.add_middleware(BodyLimit)
-    execution = (
-        execution_lane if execution_lane is not None else _Lane(execution_capacity)
-    )
+    execution = execution_lane if execution_lane is not None else _Lane(execution_capacity)
     reads, stops = _Lane(read_capacity), _Lane(stop_capacity)
 
     def owner(request: Request) -> TrustedContext:
@@ -256,16 +252,12 @@ def create_app(
     @app.get("/runtime/controls/{control_id:path}")
     async def control(request: Request, control_id: str) -> JSONResponse:
         who = owner(request)
-        return await reads.call(
-            partial(service.control, who, control_id), timeout=read_timeout
-        )
+        return await reads.call(partial(service.control, who, control_id), timeout=read_timeout)
 
     @app.get("/runtime/runs/{run_id}")
     async def inspect(request: Request, run_id: str) -> JSONResponse:
         who = owner(request)
-        return await reads.call(
-            partial(service.inspect, who, run_id), timeout=read_timeout
-        )
+        return await reads.call(partial(service.inspect, who, run_id), timeout=read_timeout)
 
     @app.get("/runtime/runs/{run_id}/events")
     async def events(request: Request, run_id: str) -> JSONResponse:
@@ -288,9 +280,7 @@ def create_app(
     @app.post("/runtime/runs/{run_id}/stop")
     async def stop(request: Request, run_id: str, body: Control) -> JSONResponse:
         who = owner(request)
-        return await stops.call(
-            partial(service.stop, who, run_id, body.controlRequestId)
-        )
+        return await stops.call(partial(service.stop, who, run_id, body.controlRequestId))
 
     @app.post("/runtime/runs/{run_id}/restart")
     async def restart(request: Request, run_id: str, body: Restart) -> JSONResponse:
@@ -302,9 +292,7 @@ def create_app(
     if not action_stream:
 
         @app.post("/runtime/runs/{run_id}/nodes/{node_id}/actions")
-        async def action(
-            request: Request, run_id: str, node_id: str, body: Action
-        ) -> JSONResponse:
+        async def action(request: Request, run_id: str, node_id: str, body: Action) -> JSONResponse:
             who = owner(request)
             return await execution.call(
                 partial(service.action, who, run_id, node_id, body.model_dump())
@@ -312,7 +300,5 @@ def create_app(
 
     from .progress_http import add_progress_routes
 
-    add_progress_routes(
-        app, service, read_capacity=read_capacity, read_timeout=read_timeout
-    )
+    add_progress_routes(app, service, read_capacity=read_capacity, read_timeout=read_timeout)
     return app

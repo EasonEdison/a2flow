@@ -81,3 +81,15 @@ The current product loader accepts **1–8 sequential nodes plus an optional sum
 The currently demonstrated content/personnel examples use independently maintained example services and synthetic records. New business domains require real registered adapters and permissions; generating a Workflow cannot implement or deploy a new backend service.
 
 For replication limits and priority debt, read [quality roadmap](quality-roadmap.md). For a concise technical presentation, read [portfolio walkthrough](portfolio-walkthrough.md).
+
+## Explicit Python HTTP composition
+
+B HTTP now uses typed domain routers and small Chat/Workflow application services.
+`create_app` retains authentication/query guards, errors and lifespan; it receives
+concrete repositories plus supported typed stream/callback ports. Production
+`deploy.realchat.launcher` still delegates to attended composition. Runtime HTTP
+and progress factories keep their smaller layout with explicit service/lane types.
+See [code navigation](../openspec/changes/python-dependency-routes/navigation.md),
+[scope inventory](../openspec/changes/python-dependency-routes/inventory.md) and
+[verification limits](../openspec/changes/python-dependency-routes/regression.md).
+This is source organization and type coverage, not a new execution engine.

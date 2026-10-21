@@ -67,7 +67,7 @@ class BsideConfig:
     session_seconds: int
     browser_origins: tuple[str, ...] = ()
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         primary = browser_origin(self.browser_origin)
         origins = tuple(browser_origin(value) for value in (self.browser_origins or (primary,)))
         if primary not in origins or len({value.split(":", 1)[0] for value in origins}) != 1:
@@ -76,7 +76,7 @@ class BsideConfig:
         object.__setattr__(self, "browser_origins", origins)
 
     @classmethod
-    def from_environment(cls):
+    def from_environment(cls) -> BsideConfig:
         conninfo = _required("A2FLOW_BSIDE_DATABASE_URL")
         pepper = _required("A2FLOW_BSIDE_PEPPER")
         if len(pepper) < 16:

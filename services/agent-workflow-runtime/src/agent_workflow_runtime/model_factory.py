@@ -35,9 +35,12 @@ class DeepSeekModelFactory:
     """
 
     def __init__(
-        self, resolve_configuration: ModelConfigurationResolver,
-        resolve_secret: ModelSecretResolver, *,
-        http_client: Client | None = None, http_async_client: AsyncClient | None = None,
+        self,
+        resolve_configuration: ModelConfigurationResolver,
+        resolve_secret: ModelSecretResolver,
+        *,
+        http_client: Client | None = None,
+        http_async_client: AsyncClient | None = None,
     ) -> None:
         self._resolve_configuration = resolve_configuration
         self._resolve_secret = resolve_secret
@@ -62,11 +65,14 @@ class DeepSeekModelFactory:
             if not isinstance(secret, SecretStr) or not secret.get_secret_value():
                 raise ModelConfigurationError("MODEL_CREDENTIAL_UNAVAILABLE")
             client_options = {
-                "base_url": configuration.endpoint, "api_key": secret.get_secret_value(),
-                "timeout": configuration.timeout_seconds, "max_retries": 0,
+                "base_url": configuration.endpoint,
+                "api_key": secret.get_secret_value(),
+                "timeout": configuration.timeout_seconds,
+                "max_retries": 0,
             }
             return DeepSeekChat(
-                model_name=configuration.model_id, configuration=configuration,
+                model_name=configuration.model_id,
+                configuration=configuration,
                 client=OpenAI(http_client=self._http_client, **client_options),
                 async_client=AsyncOpenAI(http_client=self._http_async_client, **client_options),
             )
