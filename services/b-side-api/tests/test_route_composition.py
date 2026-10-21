@@ -21,6 +21,15 @@ from test_app import Harness, ORIGIN_HEADERS
 FIXTURE = Path(__file__).with_name("fixtures") / "routes-b5785c5.json"
 
 
+def registered_routes(router):
+    """FastAPI 0.141 retains included routers rather than flattening app.routes."""
+    for route in router.routes:
+        if isinstance(route, APIRoute):
+            yield route
+        elif hasattr(route, "original_router"):
+            yield from registered_routes(route.original_router)
+
+
 def contract(app):
     """Hash each complete schema instead of storing generated documentation noise."""
     schema = app.openapi()
@@ -40,8 +49,7 @@ def contract(app):
                 if isinstance(route.response_class, type)
                 else str(type(route.response_class).__name__),
             }
-            for route in app.routes
-            if isinstance(route, APIRoute)
+            for route in registered_routes(app.router)
         ],
         "paths": {path: digest(spec) for path, spec in schema["paths"].items()},
         "schemas": {
