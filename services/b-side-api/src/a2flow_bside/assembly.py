@@ -10,18 +10,24 @@ from __future__ import annotations
 
 import importlib
 import re
+from collections.abc import AsyncIterator
+from typing import Any
+
+from fastapi import FastAPI
 
 import psycopg
 from psycopg.rows import dict_row
 
 from skillweave_contracts import TrustedContext
 
-from a2flow_asset_store import AssetReader, PostgresAssetRepository
+from a2flow_asset_store import AssetReader, BundleValidator, PostgresAssetRepository
 
 from .app import create_app
 from .account_guard import AccountGuardConfig, PostgresAccountGuard
 import os
 from .config import BsideConfig
+from .chat_runner import ChatRunner, RuntimeTurnInspection
+from .persistence_types import DatabaseConnection
 from .repositories import (
     ConversationsRepository,
     MessagesRepository,
@@ -40,7 +46,7 @@ _FACTORY = re.compile(
 )
 
 
-def _load_validator(reference: str):
+def _load_validator(reference: str) -> BundleValidator:
     if not isinstance(reference, str) or not _FACTORY.fullmatch(reference):
         raise RuntimeError("INVALID_BSIDE_VALIDATOR_FACTORY")
     module_name, attribute = reference.split(":", 1)
@@ -58,11 +64,21 @@ class _UnavailableChatRunner:
     """Fail-closed placeholder: chat is unavailable until wired by the
     deployment composition (deploy.attended.bside_app)."""
 
-    async def iterate(self, *, user_id, conversation_id, text):
+    async def inspect_turn(
+        self, *, user_id: int, conversation_id: int, turn_id: str,
+    ) -> RuntimeTurnInspection:
+        # An unwired engine cannot establish native admission or completed facts.
+        return {"status": "NEEDS_REVIEW", "events": []}
+
+    async def iterate(
+        self, *, user_id: int, conversation_id: int, text: str, turn_id: str,
+        run_references: tuple[dict[str, Any], ...] = (),
+        processing_context: dict[str, Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         yield {"type": "error", "code": "CHAT_RUNNER_NOT_WIRED"}
 
 
-def create_app_from_environment(*, chat_runner=None):
+def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> FastAPI:
     """Uvicorn factory; every value is explicit protected configuration."""
     config = BsideConfig.from_environment()
     validator = _load_validator(
@@ -73,20 +89,21 @@ def create_app_from_environment(*, chat_runner=None):
         database=_required("A2FLOW_BSIDE_DATABASE_NAME"),
         validator=validator,
     )
-    reader = AssetReader(repository, config.namespace)
+    base_reader = AssetReader(repository, config.namespace)
 
-    def workflow_catalog(user_id: int):
+    def workflow_catalog(user_id: int) -> list[dict[str, Any]]:
         owner = TrustedContext.from_mapping({
             "userId": user_id, "environment": config.environment})
         return [dict(item) for item in reader.list_workflows(owner)]
 
-    connection_factory = lambda: psycopg.connect(
-        config.conninfo, row_factory=dict_row, connect_timeout=5,
-        options="-c statement_timeout=10000 -c lock_timeout=5000",
-        application_name="a2flow-b-side-api")
+    def connection_factory() -> DatabaseConnection:
+        return psycopg.connect(
+            config.conninfo, row_factory=dict_row, connect_timeout=5,
+            options="-c statement_timeout=10000 -c lock_timeout=5000",
+            application_name="a2flow-b-side-api")
 
     from a2flow_asset_store.personal_workflows import PersonalWorkflowReader, PersonalWorkflowRepository
-    reader = PersonalWorkflowReader(reader, PersonalWorkflowRepository(
+    reader = PersonalWorkflowReader(base_reader, PersonalWorkflowRepository(
         connection_factory, namespace=config.namespace, environment=config.environment, validator=validator,
     ))
 

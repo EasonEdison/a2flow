@@ -13,11 +13,46 @@ import json
 import queue
 import threading
 from collections.abc import AsyncIterator, Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
+
+from langchain_core.messages import BaseMessage
+from skillweave_contracts import TrustedContext
+
+from a2flow_bside.chat_runner import RuntimeTurnInspection
+from a2flow_asset_store import AssetReader
+from a2flow_asset_store.personal_workflows import PersonalWorkflowReader
+from agent_workflow_runtime.model_factory import DeepSeekModelFactory
+from agent_workflow_runtime.personal_memory import PersonalMemory
+from agent_workflow_runtime.chat.cards import ChatObservation
+from agent_workflow_runtime.chat.persistence import ConversationStore
+from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from agent_workflow_runtime.chat.workflow_results import WorkflowRunProvider
     from agent_workflow_runtime.chat.processing import ProcessingProvider
+
+
+class ChatAssetsFactory(Protocol):
+    """The two supported calls are ordinary admission and task-bound admission."""
+
+    def __call__(
+        self, owner: TrustedContext, conversation_id: str,
+        control_request_id: str = "chat-action", *,
+        processing_context: Mapping[str, Any] | None = None,
+        processing_turn_id: str | None = None,
+    ) -> RpcChatAssets: ...
+
+
+class ChatObservationLoader(Protocol):
+    def __call__(
+        self, owner: TrustedContext, conversation_id: str, *,
+        after_sequence: int, limit: int = 100,
+    ) -> Sequence[ChatObservation]: ...
+
+
+HistoryLoader = Callable[[int, int, int], Sequence[BaseMessage]]
+SystemPrompt = str | Callable[[TrustedContext], str]
 
 
 class ChatLoopRunner:
@@ -26,19 +61,19 @@ class ChatLoopRunner:
     def __init__(
         self,
         *,
-        model_factory,
+        model_factory: DeepSeekModelFactory,
         model_reference: str,
         environment: str,
-        reader,
-        conversation_store,
-        history_loader,
-        personal_memory=None,
-        personal_workflows=None,
-        assets_factory=None,
-        observation_loader=None,
+        reader: AssetReader | PersonalWorkflowReader,
+        conversation_store: ConversationStore,
+        history_loader: HistoryLoader,
+        personal_memory: PersonalMemory | None = None,
+        personal_workflows: PersonalWorkflowReader | None = None,
+        assets_factory: ChatAssetsFactory | None = None,
+        observation_loader: ChatObservationLoader | None = None,
         workflow_run_provider: WorkflowRunProvider | None = None,
         processing_provider: ProcessingProvider | None = None,
-        system_prompt: str | None = None,
+        system_prompt: SystemPrompt | None = None,
     ) -> None:
         self._model_factory = model_factory
         self._model_reference = model_reference
@@ -56,7 +91,7 @@ class ChatLoopRunner:
 
     async def inspect_turn(
         self, *, user_id: int, conversation_id: int, turn_id: str,
-    ) -> dict[str, Any]:
+    ) -> RuntimeTurnInspection:
         from skillweave_contracts import TrustedContext
 
         owner = TrustedContext.from_mapping({
@@ -88,13 +123,13 @@ class ChatLoopRunner:
         owner = TrustedContext.from_mapping({
             "userId": user_id, "environment": self._environment,
         })
-        pending = queue.Queue(maxsize=64)
+        pending: queue.Queue[tuple[str, Mapping[str, Any]]] = queue.Queue(maxsize=64)
         closed = threading.Event()
         replay_events: list[dict[str, Any]] = []
         completion: dict[str, dict[str, Any] | None] = {"payload": None}
 
         class Emitter:
-            def emit(self, kind, payload):
+            def emit(self, kind: str, payload: Mapping[str, Any]) -> None:
                 # Capture only the same public application protocol sent to B,
                 # never graph state, runnable config or authentication context.
                 event = _application_event(kind, payload)
@@ -112,7 +147,7 @@ class ChatLoopRunner:
                         pass
 
         emitter = Emitter()
-        def run():
+        def run() -> None:
             with self._conversation_store.session(
                 owner, str(conversation_id), turn_id, completion_events=replay_events,
             ) as (saver, thread_id):
@@ -158,7 +193,7 @@ class ChatLoopRunner:
                 replay_events.append({"type": "done", **(completion["payload"] or {
                     "content": "", "finalModelMessageId": None,
                 })})
-        def worker():
+        def worker() -> None:
             try:
                 run()
                 emitter.emit("native_completed", completion["payload"] or {
@@ -175,17 +210,17 @@ class ChatLoopRunner:
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
         failed = False
-        def receive():
+        def receive() -> tuple[str, Mapping[str, Any]] | None:
             try:
                 return pending.get(timeout=0.1)
             except queue.Empty:
                 return None
         try:
             while True:
-                event = await asyncio.to_thread(receive)
-                if event is None:
+                queued_event = await asyncio.to_thread(receive)
+                if queued_event is None:
                     continue
-                kind, payload = event
+                kind, payload = queued_event
                 if kind == "worker_finished":
                     return
                 if kind == "native_completed":

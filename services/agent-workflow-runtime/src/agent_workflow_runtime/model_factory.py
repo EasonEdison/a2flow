@@ -1,6 +1,20 @@
 """One DeepSeek SDK-backed factory; no registry, fallback or protocol parser."""
 
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING
+
 from pydantic import SecretStr
+from skillweave_contracts import TrustedContext
+
+if TYPE_CHECKING:
+    from httpx import AsyncClient, Client
+    from .deepseek_model import DeepSeekChat
+    from .model_config import DeepSeekConfiguration
+
+ModelConfigurationResolver = Callable[[str, TrustedContext], Mapping[str, object] | DeepSeekConfiguration]
+ModelSecretResolver = Callable[[str, TrustedContext], SecretStr]
 
 from .model_config import ModelConfigurationError, parse_deepseek_configuration
 from .service import require_owner
@@ -14,14 +28,17 @@ class DeepSeekModelFactory:
     No environment mutation, package installation or automatic provider selection.
     """
 
-    def __init__(self, resolve_configuration, resolve_secret, *,
-                 http_client=None, http_async_client=None):
+    def __init__(
+        self, resolve_configuration: ModelConfigurationResolver,
+        resolve_secret: ModelSecretResolver, *,
+        http_client: Client | None = None, http_async_client: AsyncClient | None = None,
+    ) -> None:
         self._resolve_configuration = resolve_configuration
         self._resolve_secret = resolve_secret
         self._http_client = http_client
         self._http_async_client = http_async_client
 
-    def create(self, logical_reference, owner):
+    def create(self, logical_reference: str, owner: TrustedContext) -> DeepSeekChat:
         require_owner(owner)
         if type(logical_reference) is not str or not logical_reference:
             raise ModelConfigurationError("INVALID_MODEL_REFERENCE")

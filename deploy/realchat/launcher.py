@@ -4,13 +4,25 @@ Use a new Compose project/volume, never an older identity database. Initializati
 only installs reviewed demo prerequisites; acceptance edits are made in M UI.
 """
 
+from __future__ import annotations
+
 import os
+from collections.abc import Mapping
+
+from fastapi import FastAPI
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from a2flow_asset_store import BundleValidator
+    from a2flow_asset_store.personal_workflows import PersonalWorkflowRepository
+    from skillweave_contracts import TrustedContext
+    from pydantic import SecretStr
 import sys
 
 from psycopg.conninfo import make_conninfo
 
 
-def configure():
+def configure() -> str:
     from deploy.common.config import _secret, _required
     dsn = make_conninfo(
         host="/run/postgresql", dbname=_required("A2FLOW_DATABASE_NAME"),
@@ -28,7 +40,7 @@ def configure():
     return dsn
 
 
-def initialize(dsn):
+def initialize(dsn: str) -> None:
     from deploy.attended.seed import main as schemas
     from deploy.assets import bundle_validator
     from activity_planning_demo.package_bundle import make_package_bundle
@@ -44,7 +56,7 @@ def initialize(dsn):
     print("PRT schemas and reviewed prerequisite assets initialized")
 
 
-def personal_workflow_repository(dsn, validator):
+def personal_workflow_repository(dsn: str, validator: BundleValidator) -> PersonalWorkflowRepository:
     import psycopg
     from psycopg.rows import dict_row
     from a2flow_asset_store.personal_workflows import PersonalWorkflowRepository
@@ -55,14 +67,14 @@ def personal_workflow_repository(dsn, validator):
     )
 
 
-def initialize_personal_workflows(dsn):
+def initialize_personal_workflows(dsn: str) -> None:
     """Explicit schema-only migration; never re-seed or change shared assets."""
     from deploy.assets import bundle_validator
     personal_workflow_repository(dsn, bundle_validator()).install()
     print("Personal workflow schema initialized")
 
 
-def bside():
+def bside() -> FastAPI:
     from deploy.attended.bside_app import create_app_from_environment
     from fastapi.staticfiles import StaticFiles
     app = create_app_from_environment()
@@ -72,7 +84,7 @@ def bside():
     return app
 
 
-def runtime():
+def runtime() -> FastAPI:
     from deploy.assets import (
         bundle_validator, application_validator, application_data_validator,
     )
@@ -85,14 +97,14 @@ def runtime():
     from agent_workflow_runtime.personal_memory import PersonalMemory
     from pydantic import SecretStr
 
-    def configuration(reference, owner):
+    def configuration(reference: str, owner: TrustedContext) -> Mapping[str, object]:
         if reference != "deepseek-v4-flash" or owner.environment != "PRT":
             raise RuntimeError("MODEL_CONFIGURATION_NOT_FOUND")
         return {"model_id": reference, "credential_ref": "env:DEEPSEEK_API_KEY",
                 "timeout_seconds": 30.0,
                 "options": {"thinking": "disabled", "max_tokens": 4096}}
 
-    def secret(reference, owner):
+    def secret(reference: str, owner: TrustedContext) -> SecretStr:
         if reference != "env:DEEPSEEK_API_KEY" or owner.environment != "PRT":
             raise RuntimeError("MODEL_CREDENTIAL_UNAVAILABLE")
         return SecretStr(os.environ["DEEPSEEK_API_KEY"])
@@ -116,7 +128,7 @@ def runtime():
     ).create_app()
 
 
-def main():
+def main() -> None:
     commands = {
         "bside": "deploy.realchat.launcher:bside",
         "runtime": "deploy.realchat.launcher:runtime",
