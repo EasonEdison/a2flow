@@ -2,6 +2,11 @@
 
 from functools import partial
 import json
+from collections.abc import AsyncGenerator, Callable
+from starlette.types import Scope, Receive, Send, Message
+from fastapi import FastAPI, Request
+from skillweave_contracts import TrustedContext
+from .service import RuntimeService
 import re
 from threading import BoundedSemaphore
 from time import monotonic
@@ -26,14 +31,14 @@ def frame(event, value, event_id=None):
 
 
 class LeaseStream(StreamingResponse):
-    def __init__(self, iterator, release, lease_seconds, send_timeout):
+    def __init__(self, iterator: AsyncGenerator[bytes, None], release: Callable[[], None], lease_seconds: float, send_timeout: float) -> None:
         super().__init__(iterator, media_type="text/event-stream",
                          headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no",
                                   "X-Progress-Lease-Seconds": str(lease_seconds)})
         self.release, self.lease_seconds, self.send_timeout = release, lease_seconds, send_timeout
 
-    async def __call__(self, scope, receive, send):
-        async def limited_send(message):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def limited_send(message: Message) -> None:
             with anyio.fail_after(self.send_timeout):
                 await send(message)
         try:
@@ -50,8 +55,9 @@ class LeaseStream(StreamingResponse):
                 self.release()
 
 
-def add_progress_routes(app, service, *, read_capacity=2, subscriber_capacity=8,
-                        lease_seconds=60, send_timeout=5, read_timeout=3):
+def add_progress_routes(app: FastAPI, service: RuntimeService, *, read_capacity: int = 2,
+                        subscriber_capacity: int = 8, lease_seconds: float = 60,
+                        send_timeout: float = 5, read_timeout: float = 3) -> None:
     if (type(subscriber_capacity) is not int or not 1 <= subscriber_capacity <= 8
             or type(lease_seconds) not in (int, float) or not 0 < lease_seconds <= 60
             or type(send_timeout) not in (int, float) or not 0 < send_timeout <= 5):
@@ -59,7 +65,7 @@ def add_progress_routes(app, service, *, read_capacity=2, subscriber_capacity=8,
     reads = _Lane(read_capacity)
     subscribers = BoundedSemaphore(subscriber_capacity)
 
-    def options(request, *, streaming=False):
+    def options(request: Request, *, streaming: bool = False) -> tuple[TrustedContext, str | None, int]:
         who = require_owner(request.scope.get("a2flow.trusted_context"))
         pairs = request.query_params.multi_items()
         if len(pairs) != len(dict(pairs)) or set(dict(pairs)) - {"after", "limit"}:
@@ -105,7 +111,7 @@ def add_progress_routes(app, service, *, read_capacity=2, subscriber_capacity=8,
             subscribers.release()
             raise
 
-        async def observe():
+        async def observe() -> AsyncGenerator[bytes, None]:
             current, next_page = after, page
             heartbeat = monotonic()
             last_capture = None

@@ -15,7 +15,11 @@ scripted fake. Events are plain JSON-safe dicts:
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Literal, Protocol, TypedDict
+from typing import Any, AsyncIterator, Literal, Protocol, TypedDict, TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from .processing_tasks import ProcessingContext
 
 
 class RuntimeTurnInspection(TypedDict):
@@ -25,11 +29,11 @@ class RuntimeTurnInspection(TypedDict):
 
 class ChatStream(Protocol):
     """Live runner and completed-event replay both provide this stream."""
-    async def iterate(self, *, user_id: int, conversation_id: int,
+    def iterate(self, *, user_id: int, conversation_id: int,
                       text: str,
                       turn_id: str,
                       run_references: tuple[dict[str, Any], ...] = (),
-                      processing_context: dict[str, Any] | None = None,
+                      processing_context: ProcessingContext | None = None,
                       ) -> AsyncIterator[dict[str, Any]]: ...
 
 class ChatRunner(ChatStream, Protocol):

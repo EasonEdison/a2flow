@@ -2,6 +2,9 @@
 
 from functools import partial
 from typing import Annotated
+from collections.abc import Callable
+from starlette.types import ASGIApp, Scope, Receive, Send, Message
+from skillweave_contracts import TrustedContext
 import threading
 import math
 
@@ -12,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, JsonValue
 
 from .models import ActionRejected
-from .service import control_identifier, require_owner
+from .service import RuntimeService, control_identifier, require_owner
 
 BODY_LIMIT = 64 * 1024
 RESPONSE_LIMIT = 256 * 1024
@@ -53,11 +56,11 @@ ERRORS = {
 }
 
 
-def error_response(status, code):
+def error_response(status: int, code: str) -> JSONResponse:
     return JSONResponse({"error": {"code": code}}, status_code=status)
 
 
-def bounded_response(value):
+def bounded_response(value: object) -> JSONResponse:
     response = JSONResponse(value)
     if len(response.body) > RESPONSE_LIMIT:
         return error_response(507, "OUTPUT_TOO_LARGE")
@@ -67,10 +70,10 @@ def bounded_response(value):
 class BodyLimit:
     """Count actual ASGI bytes before parsing; never trust Content-Length."""
 
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         chunks, size = [], 0
@@ -90,7 +93,7 @@ class BodyLimit:
         body = b"".join(chunks)
         delivered = False
 
-        async def buffered_receive():
+        async def buffered_receive() -> Message:
             nonlocal delivered
             if not delivered:
                 delivered = True
@@ -103,19 +106,19 @@ class BodyLimit:
 class _Lane:
     """Capacity remains owned by a dispatched thread even if its waiter cancels."""
 
-    def __init__(self, capacity):
+    def __init__(self, capacity: int) -> None:
         if type(capacity) is not int or capacity < 1:
             raise ValueError("positive lane capacity required")
         self._slots = threading.BoundedSemaphore(capacity)
         self._limiter = anyio.CapacityLimiter(capacity)
 
-    async def call(self, function, *, timeout=None):
+    async def call(self, function: Callable[[], object], *, timeout: float | None = None) -> JSONResponse:
         if not self._slots.acquire(blocking=False):
             return error_response(503, "CAPACITY_EXHAUSTED")
         lock = threading.Lock()
         state = {"started": False, "released": False}
 
-        def work():
+        def work() -> object:
             with lock:
                 if state["released"]:
                     return None  # cancelled before dispatch; never allocate
@@ -171,10 +174,11 @@ class Action(Restart):
 
 
 def create_app(
-    service, *, execution_capacity=2, read_capacity=2, stop_capacity=1,
-    read_timeout=3, unexpected_error_observer=None, action_stream=False,
-    execution_lane=None,
-):
+    service: RuntimeService, *, execution_capacity: int = 2, read_capacity: int = 2,
+    stop_capacity: int = 1, read_timeout: float = 3,
+    unexpected_error_observer: Callable[[Exception], None] | None = None,
+    action_stream: bool = False, execution_lane: _Lane | None = None,
+) -> FastAPI:
     """Host middleware must set scope['a2flow.trusted_context'] to TrustedContext.
 
     Client headers/body/query cannot populate this scope key. The host is the
@@ -190,22 +194,22 @@ def create_app(
     execution = execution_lane if execution_lane is not None else _Lane(execution_capacity)
     reads, stops = _Lane(read_capacity), _Lane(stop_capacity)
 
-    def owner(request):
+    def owner(request: Request) -> TrustedContext:
         if request.query_params:
             raise ActionRejected("INVALID_SERVICE_INPUT")
         return require_owner(request.scope.get("a2flow.trusted_context"))
 
     @app.exception_handler(RequestValidationError)
-    async def invalid(request, error):
+    async def invalid(request: Request, error: RequestValidationError) -> JSONResponse:
         return error_response(400, "INVALID_INPUT")
 
     @app.exception_handler(ActionRejected)
-    async def rejected(request, error):
+    async def rejected(request: Request, error: ActionRejected) -> JSONResponse:
         status, code = ERRORS.get(str(error), (500, "RUNTIME_ERROR"))
         return error_response(status, code)
 
     @app.exception_handler(Exception)
-    async def unexpected(request, error):
+    async def unexpected(request: Request, error: Exception) -> JSONResponse:
         if unexpected_error_observer is not None:
             try:
                 unexpected_error_observer(error)
@@ -214,26 +218,26 @@ def create_app(
         return error_response(500, "INTERNAL_ERROR")
 
     @app.post("/runtime/runs")
-    async def start(request: Request, body: Start):
+    async def start(request: Request, body: Start) -> JSONResponse:
         who = owner(request)
         return await execution.call(partial(
             service.start, who, body.controlRequestId, body.definitionKey, body.inputs,
         ))
 
     @app.get("/runtime/controls/{control_id:path}")
-    async def control(request: Request, control_id: str):
+    async def control(request: Request, control_id: str) -> JSONResponse:
         who = owner(request)
         return await reads.call(partial(service.control, who, control_id), timeout=read_timeout)
 
     @app.get("/runtime/runs/{run_id}")
-    async def inspect(request: Request, run_id: str):
+    async def inspect(request: Request, run_id: str) -> JSONResponse:
         who = owner(request)
         return await reads.call(partial(service.inspect, who, run_id), timeout=read_timeout)
 
     @app.get("/runtime/runs/{run_id}/events")
-    async def events(request: Request, run_id: str):
+    async def events(request: Request, run_id: str) -> JSONResponse:
         who = owner(request)
-        def observe():
+        def observe() -> dict[str, object]:
             value = service.inspect(who, run_id)
             return {"type": "runtime.snapshot", "observedAt": value["observedAt"],
                     "delivery": "snapshot", "replay": False, "snapshot": value}
@@ -242,18 +246,18 @@ def create_app(
         return await reads.call(observe, timeout=read_timeout)
 
     @app.post("/runtime/runs/{run_id}/stop")
-    async def stop(request: Request, run_id: str, body: Control):
+    async def stop(request: Request, run_id: str, body: Control) -> JSONResponse:
         who = owner(request)
         return await stops.call(partial(service.stop, who, run_id, body.controlRequestId))
 
     @app.post("/runtime/runs/{run_id}/restart")
-    async def restart(request: Request, run_id: str, body: Restart):
+    async def restart(request: Request, run_id: str, body: Restart) -> JSONResponse:
         who = owner(request)
         return await execution.call(partial(service.restart, who, run_id, body.controlRequestId, body.inputs))
 
     if not action_stream:
         @app.post("/runtime/runs/{run_id}/nodes/{node_id}/actions")
-        async def action(request: Request, run_id: str, node_id: str, body: Action):
+        async def action(request: Request, run_id: str, node_id: str, body: Action) -> JSONResponse:
             who = owner(request)
             return await execution.call(partial(service.action, who, run_id, node_id, body.model_dump()))
 

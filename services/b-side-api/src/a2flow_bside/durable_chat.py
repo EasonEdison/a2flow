@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from agent_workflow_runtime.chat.cards import CardCompletion
-from .chat_runner import ChatRunner, RuntimeTurnInspection
+from .chat_runner import ChatRunner
 from .persistence_types import ConnectionFactory, DatabaseConnection, MessageRecord
 from .processing_tasks import ProcessingContext, ProcessingTasksRepository
 from .repositories import MessagesRepository
