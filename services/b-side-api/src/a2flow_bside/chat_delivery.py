@@ -10,9 +10,21 @@ import copy
 import json
 import time
 from collections.abc import AsyncIterator
-from typing import Any, Literal, TypeAlias, TypedDict, cast
+from typing import Any, Literal, TypeAlias, TypedDict, Protocol, cast
 
 from starlette.responses import StreamingResponse
+from starlette.types import Scope, Receive, Send
+from .chat_runner import ChatStream
+from .persistence_types import MessageRecord
+from .processing_tasks import ProcessingContext
+
+
+class MessageProjection(Protocol):
+    """Both direct messages and generation-fenced writes persist projections."""
+
+    def update_delivery(self, *, conversation_id: int, message_id: int,
+                        content: dict[str, Any]) -> None: ...
+
 
 JsonValue: TypeAlias = (
     bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"] | None
@@ -94,8 +106,11 @@ def _identifier(value: object, *, limit: int = 256) -> str | None:
 
 
 class ChatDelivery:
-    def __init__(self, *, messages, runner, user_id, conversation_id, text,
-                 input_message, assistant_message, run_references=(), processing_context=None):
+    def __init__(self, *, messages: MessageProjection, runner: ChatStream,
+                 user_id: int, conversation_id: int, text: str,
+                 input_message: MessageRecord, assistant_message: MessageRecord,
+                 run_references: tuple[dict[str, Any], ...] = (),
+                 processing_context: ProcessingContext | None = None) -> None:
         self.messages, self.runner = messages, runner
         self.user_id, self.conversation_id, self.text = user_id, conversation_id, text
         self.input_id, self.assistant_id = input_message['id'], assistant_message['id']
@@ -537,12 +552,12 @@ class ChatDelivery:
 
 
 class ChatStreamingResponse(StreamingResponse):
-    def __init__(self, delivery):
+    def __init__(self, delivery: ChatDelivery) -> None:
         self.delivery = delivery
         super().__init__(delivery.stream(), media_type="text/event-stream",
                          headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         try:
             await super().__call__(scope, receive, send)
         finally:

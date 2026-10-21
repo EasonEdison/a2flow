@@ -10,10 +10,12 @@ import hashlib
 import json
 import re
 import uuid
-from typing import Any, Callable, Mapping, TypedDict
+from typing import Any, Callable, Mapping, TypedDict, Protocol
 
 from skillweave_contracts.user_id import require_user_id
 from .errors import BsideError
+from .persistence_types import ConnectionFactory, DatabaseConnection, DatabaseRow, MessageRecord
+from .work_activities import WorkActivitiesRepository
 from .interaction_continuation import continuation_reference
 
 
@@ -50,8 +52,16 @@ def _context(row: Mapping[str, Any]) -> ProcessingContext:
             'objective': row['objective'], 'status': row['status']}
 
 
+class ProcessingTurnObserver(Protocol):
+    """Shares the admission transaction; never dispatches model or business work."""
+
+    def __call__(self, connection: DatabaseConnection, context: ProcessingContext,
+                 input_message: MessageRecord, assistant_message: MessageRecord,
+                 *, new: bool) -> None: ...
+
+
 class ProcessingTasksRepository:
-    def __init__(self, connection_factory: Callable[[], Any], work_activities: Any) -> None:
+    def __init__(self, connection_factory: ConnectionFactory, work_activities: WorkActivitiesRepository) -> None:
         self._factory = connection_factory
         self._activities = work_activities
 
@@ -63,7 +73,7 @@ class ProcessingTasksRepository:
         return user_id, environment, int(conversation_id)
 
     @staticmethod
-    def _row(connection: Any, scope: tuple[int, str, int], task_id: str, *, lock: bool = False) -> Any:
+    def _row(connection: DatabaseConnection, scope: tuple[int, str, int], task_id: str, *, lock: bool = False) -> DatabaseRow:
         row = connection.execute('SELECT * FROM processing_tasks WHERE user_id=%s AND environment=%s '
                                  'AND conversation_id=%s AND task_id=%s' + (' FOR UPDATE' if lock else ''),
                                  (*scope, task_id)).fetchone()
@@ -72,7 +82,7 @@ class ProcessingTasksRepository:
         return row
 
     @staticmethod
-    def _waiting_card(connection: Any, scope: tuple[int, str, int], task_id: str) -> bool:
+    def _waiting_card(connection: DatabaseConnection, scope: tuple[int, str, int], task_id: str) -> bool:
         return connection.execute(
             "SELECT 1 FROM processing_cards p JOIN chat_a2ui_cards c ON c.user_id=p.user_id "
             "AND c.environment=p.environment AND c.conversation_id=p.conversation_id::text AND c.card_id=p.card_id "
@@ -88,8 +98,8 @@ class ProcessingTasksRepository:
     def begin_turn(self, *, user_id: int, environment: str, conversation_id: str,
                    request_id: str, text: str, references: list[dict[str, Any]],
                    target: Mapping[str, str] | None = None, task_id: str | None = None,
-                   turn_observer=None,
-                   ) -> tuple[bool, ProcessingContext, dict[str, Any], dict[str, Any]]:
+                   turn_observer: ProcessingTurnObserver | None = None,
+                   ) -> tuple[bool, ProcessingContext, MessageRecord, MessageRecord]:
         """Atomically create the user/assistant pair and explicit task relation."""
         scope = self._scope(user_id, environment, conversation_id)
         if bool(target) == bool(task_id) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', request_id):
@@ -118,8 +128,8 @@ class ProcessingTasksRepository:
                                           (prior['input_message_id'], prior['assistant_message_id'])).fetchall()
                 context = _context(self._row(connection, scope, prior['task_id']))
                 if turn_observer is not None:
-                    turn_observer(connection, context, dict(rows[0]), dict(rows[1]), new=False)
-                return False, context, dict(rows[0]), dict(rows[1])
+                    turn_observer(connection, context, MessageRecord(**rows[0]), MessageRecord(**rows[1]), new=False)
+                return False, context, MessageRecord(**rows[0]), MessageRecord(**rows[1])
             if target:
                 task_id = 'handling-' + uuid.uuid4().hex
                 task = connection.execute('INSERT INTO processing_tasks '
@@ -134,9 +144,9 @@ class ProcessingTasksRepository:
             contents = [('user', {'text': text, 'delivery': 'submitted', 'runReferences': references,
                                   'processingTaskId': task_id}),
                         ('assistant', {'text': '', 'delivery': 'running', 'parts': [], 'processingTaskId': task_id})]
-            rows = []
+            rows: list[MessageRecord] = []
             for role, content in contents:
-                rows.append(dict(connection.execute('INSERT INTO messages(conversation_id,role,content) '
+                rows.append(MessageRecord(**connection.execute('INSERT INTO messages(conversation_id,role,content) '
                     'VALUES (%s,%s,%s::jsonb) RETURNING *', (scope[2], role, _json(content))).fetchone()))
             connection.execute('INSERT INTO processing_turns(user_id,environment,conversation_id,request_id,'
                 'request_digest,task_id,input_message_id,assistant_message_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',
@@ -216,7 +226,7 @@ class ProcessingTasksRepository:
             return _context(self._row(connection, scope, task_id))
 
     @staticmethod
-    def _confirmed_write(connection: Any, scope: tuple[int, str, int], task_id: str,
+    def _confirmed_write(connection: DatabaseConnection, scope: tuple[int, str, int], task_id: str,
                          card_id: str, turn_id: str, tool_call_id: str,
                          ability_key: str, encoded: str) -> bool:
         """Admit only the exact durably claimed card; never infer approval from prose."""
@@ -342,7 +352,7 @@ class ProcessingTasksRepository:
                 'replayed': replayed, 'result': row['result'], 'errorCode': row['error_code']}
 
     @staticmethod
-    def _delivery(connection: Any, task_id: str) -> str | None:
+    def _delivery(connection: DatabaseConnection, task_id: str) -> str | None:
         row = connection.execute(
             "SELECT m.content->>'delivery' delivery FROM processing_turns t "
             "JOIN messages m ON m.id=t.assistant_message_id AND m.conversation_id=t.conversation_id "
