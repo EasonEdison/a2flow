@@ -11,7 +11,7 @@ from __future__ import annotations
 import importlib
 import os
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 import psycopg
@@ -62,15 +62,24 @@ class _UnavailableChatRunner:
     deployment composition (deploy.attended.bside_app)."""
 
     async def inspect_turn(
-        self, *, user_id: int, conversation_id: int, turn_id: str,
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+        turn_id: str,
     ) -> RuntimeTurnInspection:
         # An unwired engine cannot establish native admission or completed facts.
         return {"status": "NEEDS_REVIEW", "events": []}
 
     async def iterate(
-        self, *, user_id: int, conversation_id: int, text: str, turn_id: str,
-        run_references: tuple[dict[str, Any], ...] = (),
-        processing_context: dict[str, Any] | None = None,
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+        text: str,
+        turn_id: str,
+        run_references: Sequence[Mapping[str, Any]] = (),
+        processing_context: Mapping[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         yield {"type": "error", "code": "CHAT_RUNNER_NOT_WIRED"}
 
@@ -78,8 +87,7 @@ class _UnavailableChatRunner:
 def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> FastAPI:
     """Uvicorn factory; every value is explicit protected configuration."""
     config = BsideConfig.from_environment()
-    validator = _load_validator(
-        _required("A2FLOW_BSIDE_VALIDATOR_FACTORY"))
+    validator = _load_validator(_required("A2FLOW_BSIDE_VALIDATOR_FACTORY"))
     repository = PostgresAssetRepository(
         config.conninfo,
         environment=config.environment,
@@ -89,26 +97,39 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
     base_reader = AssetReader(repository, config.namespace)
 
     def workflow_catalog(user_id: int) -> list[dict[str, Any]]:
-        owner = TrustedContext.from_mapping({
-            "userId": user_id, "environment": config.environment})
+        owner = TrustedContext.from_mapping({"userId": user_id, "environment": config.environment})
         return [dict(item) for item in reader.list_workflows(owner)]
 
     def connection_factory() -> DatabaseConnection:
         return psycopg.connect(
-            config.conninfo, row_factory=dict_row, connect_timeout=5,
+            config.conninfo,
+            row_factory=dict_row,
+            connect_timeout=5,
             options="-c statement_timeout=10000 -c lock_timeout=5000",
-            application_name="a2flow-b-side-api")
+            application_name="a2flow-b-side-api",
+        )
 
     from a2flow_asset_store.personal_workflows import (
         PersonalWorkflowReader,
         PersonalWorkflowRepository,
     )
-    reader = PersonalWorkflowReader(base_reader, PersonalWorkflowRepository(
-        connection_factory, namespace=config.namespace, environment=config.environment, validator=validator,
-    ))
 
-    account_guard = PostgresAccountGuard(connection_factory, pepper=config.pepper,
-        environment=config.environment, config=AccountGuardConfig.from_environment(os.environ))
+    reader = PersonalWorkflowReader(
+        base_reader,
+        PersonalWorkflowRepository(
+            connection_factory,
+            namespace=config.namespace,
+            environment=config.environment,
+            validator=validator,
+        ),
+    )
+
+    account_guard = PostgresAccountGuard(
+        connection_factory,
+        pepper=config.pepper,
+        environment=config.environment,
+        config=AccountGuardConfig.from_environment(os.environ),
+    )
     account_guard.check_ready()
 
     return create_app(
@@ -134,6 +155,7 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
 
 def _required(name: str) -> str:
     import os
+
     value = os.environ.get(name)
     if not value:
         raise RuntimeError("MISSING_BSIDE_CONFIGURATION:" + name)

@@ -3,6 +3,7 @@
 SQL field values and open JSON payloads are dynamic at the driver boundary;
 service dependencies themselves never use these bags as a substitute for a type.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
