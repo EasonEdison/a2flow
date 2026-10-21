@@ -97,7 +97,9 @@ class RuntimeService:
         identifier(definition_key)
         if type(inputs) is not dict:
             raise ActionRejected("INVALID_SERVICE_INPUT")
-        inputs = json_copy(inputs)
+        copied_inputs = json_copy(inputs)
+        assert isinstance(copied_inputs, dict)
+        inputs = copied_inputs
         if self.validate_inputs is not None:
             self.validate_inputs(owner, definition_key, inputs)
         entry = identifier(self.resolve_entry(owner, definition_key))
@@ -123,7 +125,9 @@ class RuntimeService:
         control_identifier(control_id)
         if type(inputs) is not dict:
             raise ActionRejected("INVALID_SERVICE_INPUT")
-        inputs = json_copy(inputs)
+        copied_inputs = json_copy(inputs)
+        assert isinstance(copied_inputs, dict)
+        inputs = copied_inputs
         # A narrow identity read, not old inputs/results/version/checkpoint reuse.
         old = self.projection.restart_identity(owner, run_id)
         definition = identifier(old["definitionKey"])

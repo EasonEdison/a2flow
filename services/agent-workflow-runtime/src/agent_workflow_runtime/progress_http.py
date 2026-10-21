@@ -5,6 +5,7 @@ import json
 from collections.abc import AsyncGenerator, Callable
 from starlette.types import Scope, Receive, Send, Message
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from skillweave_contracts import TrustedContext
 from .service import RuntimeService
 import re
@@ -21,7 +22,7 @@ from .progress_writer import encoded
 from .service import require_owner
 
 
-def frame(event, value, event_id=None):
+def frame(event: str, value: object, event_id: str | None = None) -> bytes:
     data = encoded(value).decode("utf-8")
     value = (f"id: {event_id}\n" if event_id else "") + f"event: {event}\ndata: {data}\n\n"
     if len(value.encode("utf-8")) > 256 * 1024:
@@ -82,7 +83,7 @@ def add_progress_routes(app: FastAPI, service: RuntimeService, *, read_capacity:
         return who, after, int(raw_limit)
 
     @app.get("/runtime/runs/{run_id}/progress")
-    async def catalog(request: Request, run_id: str):
+    async def catalog(request: Request, run_id: str) -> JSONResponse:
         who, after, limit = options(request)
         return await reads.call(partial(service.progress_catalog, who, run_id,
                                         after=after, limit=limit), timeout=read_timeout)
@@ -90,13 +91,13 @@ def add_progress_routes(app: FastAPI, service: RuntimeService, *, read_capacity:
     path = "/runtime/runs/{run_id}/nodes/{node_id}/executions/{execution_id}"
 
     @app.get(path + "/history")
-    async def history(request: Request, run_id: str, node_id: str, execution_id: str):
+    async def history(request: Request, run_id: str, node_id: str, execution_id: str) -> JSONResponse:
         who, after, limit = options(request)
         return await reads.call(partial(service.progress_history, who, run_id, node_id, execution_id,
                                         after=after, limit=limit), timeout=read_timeout)
 
     @app.get(path + "/stream")
-    async def stream(request: Request, run_id: str, node_id: str, execution_id: str):
+    async def stream(request: Request, run_id: str, node_id: str, execution_id: str) -> LeaseStream | JSONResponse:
         who, after, limit = options(request, streaming=True)
         if not subscribers.acquire(blocking=False):
             return error_response(503, "SUBSCRIBER_CAPACITY_EXHAUSTED")
@@ -106,7 +107,7 @@ def add_progress_routes(app: FastAPI, service: RuntimeService, *, read_capacity:
             if first.status_code != 200:
                 subscribers.release()
                 return first
-            page = json.loads(first.body)
+            page = json.loads(bytes(first.body))
         except BaseException:
             subscribers.release()
             raise
@@ -126,6 +127,7 @@ def add_progress_routes(app: FastAPI, service: RuntimeService, *, read_capacity:
                         current = f"{execution_id}:{record['seq']}"
                         yield frame("progress", record, current)
                     current = next_page["nextCursor"]
+                    assert last_capture is not None
                     if not next_page["hasMore"] and (
                         last_capture["sealed"] or last_capture.get("observation_outcome") == "UNAVAILABLE"
                     ):
@@ -140,7 +142,7 @@ def add_progress_routes(app: FastAPI, service: RuntimeService, *, read_capacity:
                     if response.status_code != 200:
                         yield frame("error", {"code": "PROGRESS_UNAVAILABLE", "nextCursor": current})
                         return
-                    next_page = json.loads(response.body)
+                    next_page = json.loads(bytes(response.body))
             except ActionRejected:
                 yield frame("error", {"code": "PROGRESS_UNAVAILABLE", "nextCursor": current})
 
