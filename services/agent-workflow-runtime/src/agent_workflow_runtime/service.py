@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
 
 from skillweave_contracts import TrustedContext
 from skillweave_contracts.models import parse_identifier
 from skillweave_contracts.validation import ContractValidationError
 
+from .actions import ActionService
+from .lifecycle import RunLifecycle, RunRecord
 from .models import ActionRejected, ActionRequest, json_copy
 from .native_control import ControlledRunRunner
-from .lifecycle import RunLifecycle, RunRecord
-from .actions import ActionService
 
 if TYPE_CHECKING:
     from .postgres_progress import PostgresProgress
@@ -45,7 +45,9 @@ class ProjectionPort(Protocol):
 
     def run(self, owner: TrustedContext, run_id: str) -> dict[str, Any]: ...
     def control(self, owner: TrustedContext, control_id: str) -> dict[str, Any]: ...
-    def restart_identity(self, owner: TrustedContext, run_id: str) -> dict[str, Any]: ...
+    def restart_identity(
+        self, owner: TrustedContext, run_id: str
+    ) -> dict[str, Any]: ...
 
 
 ActionServiceT = TypeVar("ActionServiceT", bound=ActionService, covariant=True)
@@ -65,11 +67,17 @@ class ExecutionSession(Generic[ActionServiceT]):
 
 class RuntimeService:
     def __init__(
-        self, lifecycle: RunLifecycle, projection: ProjectionPort,
-        execution_session: Callable[[TrustedContext], AbstractContextManager[ExecutionSession[ActionService]]],
+        self,
+        lifecycle: RunLifecycle,
+        projection: ProjectionPort,
+        execution_session: Callable[
+            [TrustedContext], AbstractContextManager[ExecutionSession[ActionService]]
+        ],
         resolve_entry: Callable[[TrustedContext, str], str],
-        *, progress: PostgresProgress | None = None,
-        validate_inputs: Callable[[TrustedContext, str, dict[str, Any]], None] | None = None,
+        *,
+        progress: PostgresProgress | None = None,
+        validate_inputs: Callable[[TrustedContext, str, dict[str, Any]], None]
+        | None = None,
     ) -> None:
         self.lifecycle = lifecycle
         self.projection = projection
@@ -80,7 +88,10 @@ class RuntimeService:
 
     def _runner(self, session: ExecutionSession[ActionService]) -> ControlledRunRunner:
         runner = session.runner
-        if not isinstance(runner, ControlledRunRunner) or runner.lifecycle is not self.lifecycle:
+        if (
+            not isinstance(runner, ControlledRunRunner)
+            or runner.lifecycle is not self.lifecycle
+        ):
             raise ActionRejected("CONTROLLED_SERVICE_BINDING_REQUIRED")
         return runner
 
@@ -89,9 +100,17 @@ class RuntimeService:
 
     def control(self, owner: TrustedContext, control_id: str) -> dict[str, Any]:
         # No execution session, definition resolver, graph, or control lock.
-        return self.projection.control(require_owner(owner), control_identifier(control_id))
+        return self.projection.control(
+            require_owner(owner), control_identifier(control_id)
+        )
 
-    def start(self, owner: TrustedContext, control_id: str, definition_key: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    def start(
+        self,
+        owner: TrustedContext,
+        control_id: str,
+        definition_key: str,
+        inputs: dict[str, Any],
+    ) -> dict[str, Any]:
         require_owner(owner)
         control_identifier(control_id)
         identifier(definition_key)
@@ -105,21 +124,36 @@ class RuntimeService:
         entry = identifier(self.resolve_entry(owner, definition_key))
         with self.execution_session(owner) as session:
             response = self._runner(session).start(
-                owner, control_id, definition_key, inputs, entry,
+                owner,
+                control_id,
+                definition_key,
+                inputs,
+                entry,
             )
         # Never serialize the runner's checkpoint/thread or business outcome.
         return self.inspect(owner, response["runId"])
 
-    def stop(self, owner: TrustedContext, run_id: str, control_id: str) -> dict[str, Any]:
+    def stop(
+        self, owner: TrustedContext, run_id: str, control_id: str
+    ) -> dict[str, Any]:
         require_owner(owner)
         identifier(run_id)
         control_identifier(control_id)
         response = self.lifecycle.stop(owner, run_id, control_id)
         # Stop does not depend on the potentially busy interaction projection.
-        return {"runId": response["runId"], "lifecycle": response["status"],
-                "delivery": "RETURNED"}
+        return {
+            "runId": response["runId"],
+            "lifecycle": response["status"],
+            "delivery": "RETURNED",
+        }
 
-    def restart(self, owner: TrustedContext, run_id: str, control_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    def restart(
+        self,
+        owner: TrustedContext,
+        run_id: str,
+        control_id: str,
+        inputs: dict[str, Any],
+    ) -> dict[str, Any]:
         require_owner(owner)
         identifier(run_id)
         control_identifier(control_id)
@@ -136,16 +170,26 @@ class RuntimeService:
         entry = identifier(self.resolve_entry(owner, definition))
         with self.execution_session(owner) as session:
             response = self._runner(session).start(
-                owner, control_id, definition, inputs, entry, stopped_run_id=run_id,
+                owner,
+                control_id,
+                definition,
+                inputs,
+                entry,
+                stopped_run_id=run_id,
             )
         return self.inspect(owner, response["runId"])
 
-    def action(self, owner: TrustedContext, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def action(
+        self, owner: TrustedContext, run_id: str, node_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         require_owner(owner)
         identifier(run_id)
         identifier(node_id)
         if type(payload) is not dict or set(payload) != {
-            "interactionId", "actionName", "controlRequestId", "inputs",
+            "interactionId",
+            "actionName",
+            "controlRequestId",
+            "inputs",
         }:
             raise ActionRejected("INVALID_SERVICE_INPUT")
         bound = {**payload, "runId": run_id, "nodeId": node_id}
@@ -153,21 +197,47 @@ class RuntimeService:
         ActionRequest.from_mapping(bound)
         run = self.lifecycle.read(owner, run_id)
         if run.status != "RUNNING":
-            raise ActionRejected("RUN_STOPPED" if run.status == "STOPPED" else "RUN_NOT_ACTIVE")
+            raise ActionRejected(
+                "RUN_STOPPED" if run.status == "STOPPED" else "RUN_NOT_ACTIVE"
+            )
         with self.execution_session(owner) as session:
             runner = self._runner(session)
             runner.action(run, session.action_service(run), bound)
         return self.inspect(owner, run_id)
 
-    def progress_catalog(self, owner: TrustedContext, run_id: str, *, after: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def progress_catalog(
+        self,
+        owner: TrustedContext,
+        run_id: str,
+        *,
+        after: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
         require_owner(owner)
         if self.progress is None:
             raise ActionRejected("PROGRESS_UNAVAILABLE")
-        return self.progress.catalog(owner, identifier(run_id), after=after, limit=limit)
+        return self.progress.catalog(
+            owner, identifier(run_id), after=after, limit=limit
+        )
 
-    def progress_history(self, owner: TrustedContext, run_id: str, node_id: str, execution_id: str, *, after: str | None = None, limit: int = 100) -> dict[str, Any]:
+    def progress_history(
+        self,
+        owner: TrustedContext,
+        run_id: str,
+        node_id: str,
+        execution_id: str,
+        *,
+        after: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
         require_owner(owner)
         if self.progress is None:
             raise ActionRejected("PROGRESS_UNAVAILABLE")
-        return self.progress.history(owner, identifier(run_id), identifier(node_id), execution_id,
-                                     after=after, limit=limit)
+        return self.progress.history(
+            owner,
+            identifier(run_id),
+            identifier(node_id),
+            execution_id,
+            after=after,
+            limit=limit,
+        )

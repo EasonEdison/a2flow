@@ -1,18 +1,18 @@
 """Runtime-local ASGI adapter. No listener, authentication scheme or job queue."""
 
+import math
+import threading
+from collections.abc import Callable
 from functools import partial
 from typing import Annotated
-from collections.abc import Callable
-from starlette.types import ASGIApp, Scope, Receive, Send, Message
-from skillweave_contracts import TrustedContext
-import threading
-import math
 
 import anyio
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, JsonValue
+from skillweave_contracts import TrustedContext
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .models import ActionRejected
 from .service import RuntimeService, control_identifier, require_owner
@@ -37,7 +37,10 @@ ERRORS = {
     "INVALID_JSON": (400, "INVALID_INPUT"),
     "INVALID_SERVICE_INPUT": (400, "INVALID_INPUT"),
     "INVALID_ACTION_INPUT": (400, "INVALID_INPUT"),
-    "TEMPORARY_INTERACTION_SUBMISSION_INVALID": (400, "TEMPORARY_INTERACTION_SUBMISSION_INVALID"),
+    "TEMPORARY_INTERACTION_SUBMISSION_INVALID": (
+        400,
+        "TEMPORARY_INTERACTION_SUBMISSION_INVALID",
+    ),
     "INVALID_ACTION_REQUEST": (400, "INVALID_INPUT"),
     "INVALID_VIEW_PAGE": (400, "INVALID_INPUT"),
     "INVALID_VIEW_CURSOR": (400, "INVALID_VIEW_CURSOR"),
@@ -47,7 +50,10 @@ ERRORS = {
     "RESTART_SOURCE_OUTSIDE_THIS_SLICE": (409, "RESTART_SOURCE_OUTSIDE_THIS_SLICE"),
     "CONTROL_REQUEST_CONFLICT": (409, "CONTROL_REQUEST_CONFLICT"),
     "INTERACTION_NOT_WAITING": (409, "INTERACTION_NOT_WAITING"),
-    "RUN_OPERATION_PENDING_OR_UNCONFIRMED": (409, "RUN_OPERATION_PENDING_OR_UNCONFIRMED"),
+    "RUN_OPERATION_PENDING_OR_UNCONFIRMED": (
+        409,
+        "RUN_OPERATION_PENDING_OR_UNCONFIRMED",
+    ),
     "ACTION_NOT_ALLOWED": (409, "ACTION_NOT_ALLOWED"),
     "RUN_DEFINITION_MISMATCH": (409, "RUN_DEFINITION_MISMATCH"),
     "PROJECTION_UNAVAILABLE": (503, "PROJECTION_UNAVAILABLE"),
@@ -112,7 +118,9 @@ class _Lane:
         self._slots = threading.BoundedSemaphore(capacity)
         self._limiter = anyio.CapacityLimiter(capacity)
 
-    async def call(self, function: Callable[[], object], *, timeout: float | None = None) -> JSONResponse:
+    async def call(
+        self, function: Callable[[], object], *, timeout: float | None = None
+    ) -> JSONResponse:
         if not self._slots.acquire(blocking=False):
             return error_response(503, "CAPACITY_EXHAUSTED")
         lock = threading.Lock()
@@ -133,7 +141,9 @@ class _Lane:
         try:
             with anyio.fail_after(timeout) as deadline:
                 value = await anyio.to_thread.run_sync(
-                    work, abandon_on_cancel=True, limiter=self._limiter,
+                    work,
+                    abandon_on_cancel=True,
+                    limiter=self._limiter,
                 )
             return bounded_response(value)
         except TimeoutError:
@@ -174,10 +184,15 @@ class Action(Restart):
 
 
 def create_app(
-    service: RuntimeService, *, execution_capacity: int = 2, read_capacity: int = 2,
-    stop_capacity: int = 1, read_timeout: float = 3,
+    service: RuntimeService,
+    *,
+    execution_capacity: int = 2,
+    read_capacity: int = 2,
+    stop_capacity: int = 1,
+    read_timeout: float = 3,
     unexpected_error_observer: Callable[[Exception], None] | None = None,
-    action_stream: bool = False, execution_lane: _Lane | None = None,
+    action_stream: bool = False,
+    execution_lane: _Lane | None = None,
 ) -> FastAPI:
     """Host middleware must set scope['a2flow.trusted_context'] to TrustedContext.
 
@@ -185,13 +200,21 @@ def create_app(
     identity authority and supplies all execution/configuration factories.
     Initialization is eager, not lifespan-dependent. Tests need no listener.
     """
-    if type(read_timeout) not in (int, float) or not math.isfinite(read_timeout) or not 0 < read_timeout <= 10:
+    if (
+        type(read_timeout) not in (int, float)
+        or not math.isfinite(read_timeout)
+        or not 0 < read_timeout <= 10
+    ):
         raise ValueError("read timeout must be finite and within (0, 10] seconds")
-    if unexpected_error_observer is not None and not callable(unexpected_error_observer):
+    if unexpected_error_observer is not None and not callable(
+        unexpected_error_observer
+    ):
         raise ValueError("unexpected error observer must be callable")
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.add_middleware(BodyLimit)
-    execution = execution_lane if execution_lane is not None else _Lane(execution_capacity)
+    execution = (
+        execution_lane if execution_lane is not None else _Lane(execution_capacity)
+    )
     reads, stops = _Lane(read_capacity), _Lane(stop_capacity)
 
     def owner(request: Request) -> TrustedContext:
@@ -220,27 +243,44 @@ def create_app(
     @app.post("/runtime/runs")
     async def start(request: Request, body: Start) -> JSONResponse:
         who = owner(request)
-        return await execution.call(partial(
-            service.start, who, body.controlRequestId, body.definitionKey, body.inputs,
-        ))
+        return await execution.call(
+            partial(
+                service.start,
+                who,
+                body.controlRequestId,
+                body.definitionKey,
+                body.inputs,
+            )
+        )
 
     @app.get("/runtime/controls/{control_id:path}")
     async def control(request: Request, control_id: str) -> JSONResponse:
         who = owner(request)
-        return await reads.call(partial(service.control, who, control_id), timeout=read_timeout)
+        return await reads.call(
+            partial(service.control, who, control_id), timeout=read_timeout
+        )
 
     @app.get("/runtime/runs/{run_id}")
     async def inspect(request: Request, run_id: str) -> JSONResponse:
         who = owner(request)
-        return await reads.call(partial(service.inspect, who, run_id), timeout=read_timeout)
+        return await reads.call(
+            partial(service.inspect, who, run_id), timeout=read_timeout
+        )
 
     @app.get("/runtime/runs/{run_id}/events")
     async def events(request: Request, run_id: str) -> JSONResponse:
         who = owner(request)
+
         def observe() -> dict[str, object]:
             value = service.inspect(who, run_id)
-            return {"type": "runtime.snapshot", "observedAt": value["observedAt"],
-                    "delivery": "snapshot", "replay": False, "snapshot": value}
+            return {
+                "type": "runtime.snapshot",
+                "observedAt": value["observedAt"],
+                "delivery": "snapshot",
+                "replay": False,
+                "snapshot": value,
+            }
+
         if request.headers.get("last-event-id") is not None:
             return error_response(400, "REPLAY_UNSUPPORTED")
         return await reads.call(observe, timeout=read_timeout)
@@ -248,19 +288,31 @@ def create_app(
     @app.post("/runtime/runs/{run_id}/stop")
     async def stop(request: Request, run_id: str, body: Control) -> JSONResponse:
         who = owner(request)
-        return await stops.call(partial(service.stop, who, run_id, body.controlRequestId))
+        return await stops.call(
+            partial(service.stop, who, run_id, body.controlRequestId)
+        )
 
     @app.post("/runtime/runs/{run_id}/restart")
     async def restart(request: Request, run_id: str, body: Restart) -> JSONResponse:
         who = owner(request)
-        return await execution.call(partial(service.restart, who, run_id, body.controlRequestId, body.inputs))
+        return await execution.call(
+            partial(service.restart, who, run_id, body.controlRequestId, body.inputs)
+        )
 
     if not action_stream:
+
         @app.post("/runtime/runs/{run_id}/nodes/{node_id}/actions")
-        async def action(request: Request, run_id: str, node_id: str, body: Action) -> JSONResponse:
+        async def action(
+            request: Request, run_id: str, node_id: str, body: Action
+        ) -> JSONResponse:
             who = owner(request)
-            return await execution.call(partial(service.action, who, run_id, node_id, body.model_dump()))
+            return await execution.call(
+                partial(service.action, who, run_id, node_id, body.model_dump())
+            )
 
     from .progress_http import add_progress_routes
-    add_progress_routes(app, service, read_capacity=read_capacity, read_timeout=read_timeout)
+
+    add_progress_routes(
+        app, service, read_capacity=read_capacity, read_timeout=read_timeout
+    )
     return app
