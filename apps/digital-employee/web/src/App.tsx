@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Icon } from './components/Icon';
 import { ActivityDialog, WorkActivitySidebar, useWorkActivities } from './components/WorkActivity';
+import { pendingChatSendKey, readPendingChatSend, persistPendingChatSend, acknowledgePendingChatSend, type PendingChatSend } from './pendingChatSend.mjs';
 import { chatDraftKey, readChatDraft, saveChatDraft } from './chatDraft';
 import { ProcessingChip, ProcessingTaskPanel } from './components/ProcessingTask';
 import type { ProcessingSelection, ProcessingTask, RunReference, WorkActivity } from './productApi';
@@ -196,6 +197,13 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows, incomingPr
   const [startingWorkflow, setStartingWorkflow] = useState(false);
   const [workflowStartUnconfirmed, setWorkflowStartUnconfirmed] = useState(false);
   const draftKey = chatDraftKey(ownerId, conversationId);
+  const pendingSendKey = pendingChatSendKey(ownerId, conversationId);
+  const [pendingSend, setPendingSend] = useState<PendingChatSend | null>(() => {
+    try { return readPendingChatSend(pendingSendKey); } catch { return null; }
+  });
+  const [pendingStorageBlocked, setPendingStorageBlocked] = useState(() => {
+    try { readPendingChatSend(pendingSendKey); return false; } catch { return true; }
+  });
   const initialDraft = useRef(readChatDraft(draftKey));
   const [processing, setProcessing] = useState<ProcessingSelection | undefined>(initialDraft.current.processing);
   const [selectedTaskId, setSelectedTaskId] = useState('');
@@ -245,16 +253,24 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows, incomingPr
       const result = await productApi.messages(conversationId);
       if (current === epoch.current && operation === operationGeneration.current
         && !activeCardActions.current.size) {
+        const unresolved = readPendingChatSend(pendingSendKey);
+        if (unresolved && result.items.some(item => item.clientRequestId === unresolved.clientRequestId)) {
+          acknowledgePendingChatSend(pendingSendKey, unresolved.clientRequestId);
+          setPendingSend(null);
+          setDraftText(current => current.trim() === unresolved.text ? '' : current);
+          setRunReferences(current => current.filter(reference => !unresolved.references.some(sent => sent.activityId === reference.activityId)));
+          setProcessing(current => current?.requestId === unresolved.processing?.requestId ? undefined : current);
+        }
         setMessages(result.items);
         setUnassignedCards(result.unassignedCards);
         setLoaded(true);
         setHistoryError('');
       }
     } catch { if (current === epoch.current) { setLoaded(false); setHistoryError('历史读取失败，请刷新页面查看已保存状态；不要重复发送原消息。'); } }
-  }, [conversationId]);
+  }, [conversationId, pendingSendKey]);
   useEffect(() => { void load(); }, [historyRefreshKey, load]);
   useEffect(() => () => { epoch.current++; controller.current?.abort(); }, []);
-  const pending = messages.some(message => message.delivery === 'running' || message.delivery === 'unconfirmed');
+  const pending = messages.some(message => ['queued', 'running', 'unconfirmed', 'requires_review'].includes(message.delivery ?? ''));
   const cardNeedsRefresh = messages.some(message => [
     ...(message.parts ?? []).flatMap(part => part.type === 'application' && part.card ? [part.card] : []),
     ...(message.legacyCards ?? []),
@@ -291,21 +307,24 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows, incomingPr
     setActiveCardActionCount(actions.size);
     if (!active) setHistoryRefreshKey(value => value + 1);
   }, []);
-  const send = useCallback(async (rawText: string) => {
-    const text = rawText.trim();
-    if (!text || sending.current || pending || !loaded || activeCardActions.current.size) return;
+  const send = useCallback(async (rawText: string, retry?: PendingChatSend) => {
+    const text = retry?.text ?? rawText.trim();
+    if (!text || sending.current || pending || !loaded || pendingStorageBlocked || activeCardActions.current.size || (pendingSend && !retry)) return;
+    const request = retry ?? { clientRequestId: createUuidV4(), text, references: runReferences, processing };
+    try { persistPendingChatSend(pendingSendKey, request); setPendingSend(request); }
+    catch { setPendingStorageBlocked(true); setError('无法保存发送标识，本次消息尚未发送。请保留内容并恢复浏览器存储后刷新。'); return; }
     sending.current = true;
     epoch.current++; // In-flight history reads cannot overwrite live deltas.
     const abort = new AbortController();
     controller.current = abort;
     setBusy(true); setError('');
-    const sentReferences = runReferences;
-    const sentProcessing = processing;
+    const sentReferences = request.references;
+    const sentProcessing = request.processing;
     let accepted = false;
     try {
       await productApi.sendMessage(conversationId, text, event => {
         if (abort.signal.aborted) return;
-        if (event.type === 'turn_started' && !accepted) { accepted = true; setProcessing(current => current?.requestId === sentProcessing?.requestId ? undefined : current); setDraftText(current => current.trim() === text ? '' : current); setRunReferences(current => current.filter(reference => !sentReferences.some(sent => sent.activityId === reference.activityId))); }
+        if (event.type === 'turn_started' && !accepted) { accepted = true; acknowledgePendingChatSend(pendingSendKey, request.clientRequestId); setPendingSend(null); setProcessing(current => current?.requestId === sentProcessing?.requestId ? undefined : current); setDraftText(current => current.trim() === text ? '' : current); setRunReferences(current => current.filter(reference => !sentReferences.some(sent => sent.activityId === reference.activityId))); }
         setMessages(items => {
           let next = items;
           if (event.type === 'turn_started') {
@@ -330,13 +349,13 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows, incomingPr
           });
         });
         if (event.type === 'error') setError('本轮未成功完成，请查看保存的状态；不会自动重试。');
-      }, abort.signal, sentReferences.map(({ activityId }) => ({ activityId })), sentProcessing);
+      }, abort.signal, sentReferences.map(({ activityId }) => ({ activityId })), sentProcessing, request.clientRequestId);
     } catch { if (!abort.signal.aborted) { setLoaded(false); setError('连接中断或发送状态未确认。请刷新页面查看已保存状态，不要重复发送原消息。'); } }
     finally {
       sending.current = false;
       if (!abort.signal.aborted) { await load(); setBusy(false); }
     }
-  }, [conversationId, load, loaded, pending, runReferences, processing]);
+  }, [conversationId, load, loaded, pending, runReferences, processing, pendingSend, pendingSendKey, pendingStorageBlocked]);
   const runPersonalWorkflow = async (workflow: PersonalWorkflow, requirement: string) => {
     if (workflowStartInFlight.current || workflowStartUnconfirmed || busy || pending || !loaded || activeCardActions.current.size) return;
     workflowStartInFlight.current = true;
@@ -380,9 +399,9 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows, incomingPr
       messages={messages}
       unassignedCards={unassignedCards}
       isRunning={busy || pending}
-      isSendDisabled={!loaded || pending || activeCardActionCount > 0 || startingWorkflow}
+      isSendDisabled={!loaded || pending || Boolean(pendingSend) || pendingStorageBlocked || activeCardActionCount > 0 || startingWorkflow}
       error={historyError || error || draftStorageError || activityReadError || (readingActivity ? '正在读取运行详情…' : '')}
-      onSend={send}
+      onSend={text => send(text)}
       onCardUpdate={updateCard}
       onCardActionStateChange={setCardActionState}
       onComposerError={setError}
@@ -390,7 +409,7 @@ function ChatConversation({ ownerId, conversationId, onOpenWorkflows, incomingPr
       renderPersonalWorkflow={workflow => <PersonalWorkflowCard workflow={workflow}
         disabled={!loaded || busy || pending || activeCardActionCount > 0 || startingWorkflow || workflowStartUnconfirmed}
         onRun={runPersonalWorkflow} onOpenWorkflows={() => onOpenWorkflows('personal')} />}
-      threadTail={<>{workflowStartUnconfirmed ? <button className="secondary" onClick={() => onOpenWorkflows('runs')}>查看运行历史</button> : null}{runId && !messages.some(message => message.event?.type === 'interaction_required' && message.event.runId === runId) ? <RunDetail runId={runId} /> : null}</>}
+      threadTail={<>{pendingStorageBlocked ? <p role="alert">无法读取待确认的发送记录，请保留当前内容并恢复浏览器存储后刷新；暂不发送新消息。</p> : pendingSend && !busy ? <section role="status"><p>上一条消息的接收状态待确认。可用同一发送标识重新核对，不会创建重复消息。</p><button className="secondary" disabled={!loaded || pending || activeCardActionCount > 0} onClick={() => void send(pendingSend.text, pendingSend)}>核对并继续上次发送</button></section> : null}{workflowStartUnconfirmed ? <button className="secondary" onClick={() => onOpenWorkflows('runs')}>查看运行历史</button> : null}{runId && !messages.some(message => message.event?.type === 'interaction_required' && message.event.runId === runId) ? <RunDetail runId={runId} /> : null}</>}
     />
   </section>
     {activityOpen && !compactActivity ? activitySidebar : null}
