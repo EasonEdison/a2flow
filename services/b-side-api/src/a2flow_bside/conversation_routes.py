@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
 from .chat_application import ChatApplicationService
 from .chat_history import has_card_references, hydrate_history
 from .durable_chat import DurableChat
 from .errors import BsideError
-from .identity import RequestIdentity
 from .processing_tasks import ProcessingTasksRepository
 from .repositories import (
     ConversationsRepository,
@@ -24,7 +24,7 @@ from .route_dependencies import (
     ChatCards,
     JsonObject,
 )
-from .route_identity import identity
+from .route_identity import CurrentIdentity
 from .route_models import (
     ChatCardAction,
     ConversationCreate,
@@ -59,9 +59,7 @@ def create_router(
     )
 
     @router.get("/api/conversations", response_model=None)
-    async def list_conversations(
-        identity: RequestIdentity = Depends(identity),
-    ) -> JsonObject:
+    async def list_conversations(*, identity: CurrentIdentity) -> JsonObject:
         return {
             "conversations": [
                 {
@@ -75,7 +73,7 @@ def create_router(
 
     @router.post("/api/conversations", response_model=None)
     async def create_conversation(
-        body: ConversationCreate, identity: RequestIdentity = Depends(identity)
+        *, body: ConversationCreate, identity: CurrentIdentity
     ) -> JsonObject:
         row = conversations.create(user_id=identity.userId, title=body.title)
         return {
@@ -86,8 +84,9 @@ def create_router(
 
     @router.get("/api/conversations/messages", response_model=None)
     async def conversation_messages(
-        conversation_id: int = Query(alias="conversationId", gt=0),
-        identity: RequestIdentity = Depends(identity),
+        *,
+        conversation_id: Annotated[int, Query(alias="conversationId", gt=0)],
+        identity: CurrentIdentity,
     ) -> JsonObject:
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
@@ -121,17 +120,13 @@ def create_router(
                 for row in hydrated
                 # A submission triggers the next model turn server-side. Its internal
                 # input record is not a message authored by the user.
-                if not (
-                    row["role"] == "user" and row["ref_kind"] == "temporary_interaction"
-                )
+                if not (row["role"] == "user" and row["ref_kind"] == "temporary_interaction")
             ],
             "unassignedCards": unassigned_cards,
         }
 
     @router.post("/api/conversations/messages", response_model=None)
-    async def send_message(
-        body: MessageSend, identity: RequestIdentity = Depends(identity)
-    ) -> StreamingResponse:
+    async def send_message(*, body: MessageSend, identity: CurrentIdentity) -> StreamingResponse:
         conversation_id = body.conversationId
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
@@ -146,46 +141,37 @@ def create_router(
         )
 
     @router.get("/api/conversations/{conversation_id}/cards", response_model=None)
-    async def conversation_cards(
-        conversation_id: int, identity: RequestIdentity = Depends(identity)
-    ) -> JsonObject:
+    async def conversation_cards(*, conversation_id: int, identity: CurrentIdentity) -> JsonObject:
         if conversations.owner(conversation_id) != identity.userId:
             raise BsideError("CONVERSATION_NOT_FOUND", 404)
         if chat_cards is None:
             raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
-        return {
-            "cards": await asyncio.to_thread(
-                chat_cards, identity.userId, str(conversation_id)
-            )
-        }
+        return {"cards": await asyncio.to_thread(chat_cards, identity.userId, str(conversation_id))}
 
     @router.post(
         "/api/conversations/{conversation_id}/cards/{card_id}/actions",
         response_model=None,
     )
     async def conversation_card_action(
+        *,
         conversation_id: int,
         card_id: str,
         body: ChatCardAction,
-        identity: RequestIdentity = Depends(identity),
+        identity: CurrentIdentity,
     ) -> JsonObject:
         if conversations.owner(conversation_id) != identity.userId:
             raise BsideError("CONVERSATION_NOT_FOUND", 404)
         if chat_action is None:
             raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
         task = asyncio.create_task(
-            chat.execute_chat_card_action(
-                identity.userId, conversation_id, card_id, body
-            )
+            chat.execute_chat_card_action(identity.userId, conversation_id, card_id, body)
         )
         retain_task(task)
         return await asyncio.shield(task)
 
     @router.post("/api/conversations/{conversation_id}/run-refs", response_model=None)
     async def attach_run(
-        conversation_id: int,
-        body: RunRefCreate,
-        identity: RequestIdentity = Depends(identity),
+        *, conversation_id: int, body: RunRefCreate, identity: CurrentIdentity
     ) -> JsonObject:
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
@@ -195,7 +181,7 @@ def create_router(
         row = messages.append(
             conversation_id=conversation_id,
             role="assistant",
-            content={"text": "工作流已启动，等待你的确认。"},
+            content={"text": "工作流已启动，等待你的确认。"},  # noqa: RUF001 - existing Chinese wire text
             ref_kind="run",
             ref_id=body.runId,
         )

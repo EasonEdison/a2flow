@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
 from skillweave_contracts.user_id import user_id_from_wire
 
 from .errors import BsideError, RemoteRuntimeError
-from .identity import RequestIdentity
 from .repositories import (
     RunOwnershipRepository,
 )
@@ -19,7 +19,7 @@ from .route_dependencies import (
     JsonObject,
     WorkflowCatalog,
 )
-from .route_identity import identity
+from .route_identity import CurrentIdentity
 from .route_models import (
     InternalResume,
     InternalRunStart,
@@ -49,19 +49,17 @@ def create_router(
     _LOGGER = logging.getLogger(__name__)
 
     @router.get("/api/workflows", response_model=None)
-    async def workflows(identity: RequestIdentity = Depends(identity)) -> JsonObject:
+    async def workflows(*, identity: CurrentIdentity) -> JsonObject:
         return {"workflows": list(workflow_catalog(identity.userId))}
 
     @router.post("/api/runs", response_model=None)
-    async def start_run(
-        body: RunStart, identity: RequestIdentity = Depends(identity)
-    ) -> JsonObject:
+    async def start_run(*, body: RunStart, identity: CurrentIdentity) -> JsonObject:
         return await workflow.start_for(
             identity.userId, body.workflowKey, body.input, body.sourceType
         )
 
     @router.post("/api/internal/runs", response_model=None)
-    async def internal_start(request: Request, body: InternalRunStart) -> JsonObject:
+    async def internal_start(*, request: Request, body: InternalRunStart) -> JsonObject:
         workflow.require_internal(request)
         if body.environment != environment:
             raise BsideError("ENVIRONMENT_MISMATCH", 400)
@@ -89,7 +87,7 @@ def create_router(
         return {"controlRequestId": body.requestId, "status": "SUBMITTED"}
 
     @router.get("/api/internal/runs/{request_id}", response_model=None)
-    async def internal_run_status(request: Request, request_id: str) -> JsonObject:
+    async def internal_run_status(*, request: Request, request_id: str) -> JsonObject:
         workflow.require_internal(request)
         owner = run_ownership.owner(request_id)
         if owner is None:
@@ -100,15 +98,10 @@ def create_router(
         return {"controlRequestId": request_id, "status": "SUBMITTED", "view": view}
 
     @router.get("/api/runs/{control_id}/cards", response_model=None)
-    async def workflow_cards(
-        control_id: str,
-        identity: RequestIdentity = Depends(identity),
-    ) -> JsonObject:
+    async def workflow_cards(*, control_id: str, identity: CurrentIdentity) -> JsonObject:
         workflow.require_run_owner(control_id, identity.userId)
         try:
-            run_id = await asyncio.to_thread(
-                workflow.resolve_run_id, control_id, identity.userId
-            )
+            run_id = await asyncio.to_thread(workflow.resolve_run_id, control_id, identity.userId)
         except BsideError as error:
             if error.code == "RUN_NOT_RESOLVED":
                 return {"cards": []}
@@ -119,14 +112,9 @@ def create_router(
             raise
         return await asyncio.to_thread(workflow.runtime(identity.userId).cards, run_id)
 
-    @router.post(
-        "/api/internal/runs/{run_id}/cards/{card_id}/resume", response_model=None
-    )
+    @router.post("/api/internal/runs/{run_id}/cards/{card_id}/resume", response_model=None)
     async def internal_resume(
-        request: Request,
-        run_id: str,
-        card_id: str,
-        body: InternalResume,
+        *, request: Request, run_id: str, card_id: str, body: InternalResume
     ) -> JsonObject:
         workflow.require_internal(request)
         if body.environment != environment:
@@ -141,10 +129,9 @@ def create_router(
         )
         return {"controlRequestId": body.requestId, "status": "SUBMITTED"}
 
-    @router.get(
-        "/api/internal/runs/{run_id}/cards/{card_id}/resume-status", response_model=None
-    )
+    @router.get("/api/internal/runs/{run_id}/cards/{card_id}/resume-status", response_model=None)
     async def internal_resume_status(
+        *,
         request: Request,
         run_id: str,
         card_id: str,
@@ -153,7 +140,7 @@ def create_router(
         interactionId: str,
         requestId: str,
         actionRequestId: str,
-        requested_environment: str = Query(alias="environment"),
+        requested_environment: Annotated[str, Query(alias="environment")],
     ) -> JsonObject:
         workflow.require_internal(request)
         owner = user_id_from_wire(userId)
@@ -175,15 +162,14 @@ def create_router(
 
     @router.post("/api/runs/{control_id}/cards/{card_id}/actions", response_model=None)
     async def workflow_card_action(
+        *,
         control_id: str,
         card_id: str,
         body: WorkflowCardAction,
-        identity: RequestIdentity = Depends(identity),
+        identity: CurrentIdentity,
     ) -> JsonObject:
         workflow.require_run_owner(control_id, identity.userId)
-        run_id = await asyncio.to_thread(
-            workflow.resolve_run_id, control_id, identity.userId
-        )
+        run_id = await asyncio.to_thread(workflow.resolve_run_id, control_id, identity.userId)
         return await asyncio.to_thread(
             workflow.runtime(identity.userId).card_action,
             run_id,
@@ -192,7 +178,7 @@ def create_router(
         )
 
     @router.get("/api/runs", response_model=None)
-    async def list_runs(identity: RequestIdentity = Depends(identity)) -> JsonObject:
+    async def list_runs(*, identity: CurrentIdentity) -> JsonObject:
         items = []
         for row in run_ownership.list_for(identity.userId):
             item = {
@@ -201,9 +187,7 @@ def create_router(
                 "createdAt": _iso(row["created_at"]),
             }
             try:
-                item["view"] = workflow.runtime(identity.userId).control(
-                    row["control_id"]
-                )
+                item["view"] = workflow.runtime(identity.userId).control(row["control_id"])
             except RemoteRuntimeError:
                 item["view"] = None
             if item["view"] and item["view"].get("runId"):
@@ -222,9 +206,7 @@ def create_router(
         return {"runs": items}
 
     @router.get("/api/runs/{run_id}", response_model=None)
-    async def run_detail(
-        run_id: str, identity: RequestIdentity = Depends(identity)
-    ) -> JsonObject:
+    async def run_detail(*, run_id: str, identity: CurrentIdentity) -> JsonObject:
         workflow.require_run_owner(run_id, identity.userId)
         receipt = workflow.runtime(identity.userId).control(run_id)
         runtime_run_id = receipt.get("runId") if isinstance(receipt, dict) else None
@@ -236,16 +218,14 @@ def create_router(
         return receipt
 
     @router.post("/api/runs/{run_id}/stop", response_model=None)
-    async def stop_run(
-        run_id: str, identity: RequestIdentity = Depends(identity)
-    ) -> JsonObject:
+    async def stop_run(*, run_id: str, identity: CurrentIdentity) -> JsonObject:
         workflow.require_run_owner(run_id, identity.userId)
         runtime_run_id = workflow.resolve_run_id(run_id, identity.userId)
         return workflow.runtime(identity.userId).stop(runtime_run_id, uuid.uuid4().hex)
 
     @router.post("/api/runs/{run_id}/actions", response_model=None)
     async def run_action(
-        run_id: str, body: RunAction, identity: RequestIdentity = Depends(identity)
+        *, run_id: str, body: RunAction, identity: CurrentIdentity
     ) -> StreamingResponse:
         workflow.require_run_owner(run_id, identity.userId)
         runtime_run_id = workflow.resolve_run_id(run_id, identity.userId)
@@ -267,50 +247,39 @@ def create_router(
         )
 
     @router.get("/api/runs/{run_id}/surface", response_model=None)
-    async def run_surface(
-        run_id: str, identity: RequestIdentity = Depends(identity)
-    ) -> StreamingResponse:
+    async def run_surface(*, run_id: str, identity: CurrentIdentity) -> StreamingResponse:
         workflow.require_run_owner(run_id, identity.userId)
         runtime_run_id = workflow.resolve_run_id(run_id, identity.userId)
         return StreamingResponse(
-            _iterate_thread(
-                workflow.runtime(identity.userId).surface_stream(runtime_run_id)
-            ),
+            _iterate_thread(workflow.runtime(identity.userId).surface_stream(runtime_run_id)),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache"},
         )
 
     @router.get("/api/runs/{control_id}/progress")
     async def run_progress_catalog(
-        request: Request,
-        control_id: str,
-        identity: RequestIdentity = Depends(identity),
+        *, request: Request, control_id: str, identity: CurrentIdentity
     ) -> dict[str, object]:
         workflow.require_run_owner(control_id, identity.userId)
         query = workflow.progress_query(request)
         # An unbound run returns the existing explicit RUN_NOT_RESOLVED error.
-        run_id = await asyncio.to_thread(
-            workflow.resolve_run_id, control_id, identity.userId
-        )
+        run_id = await asyncio.to_thread(workflow.resolve_run_id, control_id, identity.userId)
         return await asyncio.to_thread(
             workflow.runtime(identity.userId).progress_catalog, run_id, query
         )
 
-    @router.get(
-        "/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/history"
-    )
+    @router.get("/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/history")
     async def run_progress_history(
+        *,
         request: Request,
         control_id: str,
         node_id: str,
         execution_id: str,
-        identity: RequestIdentity = Depends(identity),
+        identity: CurrentIdentity,
     ) -> dict[str, object]:
         workflow.require_run_owner(control_id, identity.userId)
         query = workflow.progress_query(request)
-        run_id = await asyncio.to_thread(
-            workflow.resolve_run_id, control_id, identity.userId
-        )
+        run_id = await asyncio.to_thread(workflow.resolve_run_id, control_id, identity.userId)
         return await asyncio.to_thread(
             workflow.runtime(identity.userId).progress_history,
             run_id,
@@ -319,21 +288,18 @@ def create_router(
             query,
         )
 
-    @router.get(
-        "/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/stream"
-    )
+    @router.get("/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/stream")
     async def run_progress_stream(
+        *,
         request: Request,
         control_id: str,
         node_id: str,
         execution_id: str,
-        identity: RequestIdentity = Depends(identity),
+        identity: CurrentIdentity,
     ) -> StreamingResponse:
         workflow.require_run_owner(control_id, identity.userId)
         query = workflow.progress_query(request, streaming=True)
-        run_id = await asyncio.to_thread(
-            workflow.resolve_run_id, control_id, identity.userId
-        )
+        run_id = await asyncio.to_thread(workflow.resolve_run_id, control_id, identity.userId)
         stream = await asyncio.to_thread(
             workflow.runtime(identity.userId).progress_stream,
             run_id,

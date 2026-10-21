@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 
 from .errors import BsideError
-from .identity import RequestIdentity
 from .processing_tasks import ProcessingTasksRepository
 from .route_dependencies import (
     JsonObject,
 )
-from .route_identity import identity
+from .route_identity import CurrentIdentity
 from .route_models import (
     ProcessingResolution,
 )
@@ -29,9 +28,7 @@ def create_router(
     router = APIRouter()
 
     @router.get("/api/processing-tasks/{task_id}", response_model=None)
-    async def processing_task(
-        task_id: str, identity: RequestIdentity = Depends(identity)
-    ) -> JsonObject:
+    async def processing_task(*, task_id: str, identity: CurrentIdentity) -> JsonObject:
         if processing_tasks is None:
             raise BsideError("PROCESSING_UNAVAILABLE", 503)
         return await asyncio.to_thread(
@@ -43,9 +40,7 @@ def create_router(
 
     @router.post("/api/processing-tasks/{task_id}/resolve", response_model=None)
     async def resolve_processing_task(
-        task_id: str,
-        body: ProcessingResolution,
-        identity: RequestIdentity = Depends(identity),
+        *, task_id: str, body: ProcessingResolution, identity: CurrentIdentity
     ) -> JsonObject:
         if processing_tasks is None:
             raise BsideError("PROCESSING_UNAVAILABLE", 503)
@@ -64,10 +59,11 @@ def create_router(
 
     @router.get("/api/work-activities", response_model=None)
     async def list_work_activities(
+        *,
         group: Literal["attention", "running", "completed"] | None = None,
-        cursor: str | None = Query(default=None, max_length=1024),
-        limit: int = Query(default=5, ge=1, le=50),
-        identity: RequestIdentity = Depends(identity),
+        cursor: Annotated[str | None, Query(max_length=1024)] = None,
+        limit: Annotated[int, Query(ge=1, le=50)] = 5,
+        identity: CurrentIdentity,
     ) -> JsonObject:
         return await asyncio.to_thread(
             _activities().list_runs,
@@ -80,11 +76,12 @@ def create_router(
 
     @router.get("/api/work-activities/{activity_id}/result", response_model=None)
     async def work_activity_result(
+        *,
         activity_id: str,
         nodeId: str | None = None,
-        offset: int = Query(default=0, ge=0),
-        limit: int = Query(default=12000, ge=1, le=12000),
-        identity: RequestIdentity = Depends(identity),
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=12000)] = 12000,
+        identity: CurrentIdentity,
     ) -> JsonObject:
         return await asyncio.to_thread(
             _activities().get_result,
@@ -97,9 +94,7 @@ def create_router(
         )
 
     @router.get("/api/work-activities/{activity_id}", response_model=None)
-    async def work_activity_detail(
-        activity_id: str, identity: RequestIdentity = Depends(identity)
-    ) -> JsonObject:
+    async def work_activity_detail(*, activity_id: str, identity: CurrentIdentity) -> JsonObject:
         return await asyncio.to_thread(
             _activities().get,
             user_id=identity.userId,
@@ -112,9 +107,7 @@ def create_router(
         response_model=None,
     )
     async def work_activity_ack(
-        activity_id: str,
-        attention_id: str,
-        identity: RequestIdentity = Depends(identity),
+        *, activity_id: str, attention_id: str, identity: CurrentIdentity
     ) -> JsonObject:
         return await asyncio.to_thread(
             _activities().acknowledge,

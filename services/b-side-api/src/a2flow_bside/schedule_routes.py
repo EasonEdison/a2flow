@@ -7,17 +7,16 @@ import datetime as dt
 from collections.abc import Callable
 
 from croniter import CroniterBadDateError
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from .errors import BsideError, RemoteRuntimeError
-from .identity import RequestIdentity
 from .repositories import (
     SchedulesRepository,
 )
 from .route_dependencies import (
     JsonObject,
 )
-from .route_identity import identity
+from .route_identity import CurrentIdentity
 from .route_models import (
     ScheduleCreate,
     ScheduleUpdate,
@@ -53,9 +52,7 @@ def create_router(
                 # Runtime admits bounded reads; list/history share one lane so
                 # opening a schedule page does not consume its whole capacity.
                 async with schedule_status_gate:
-                    actual = await asyncio.to_thread(
-                        _runtime(user_id).view, trigger.run_id
-                    )
+                    actual = await asyncio.to_thread(_runtime(user_id).view, trigger.run_id)
                 lifecycle = actual.get("lifecycle") or "UNKNOWN"
             except RemoteRuntimeError:
                 lifecycle = "UNKNOWN"
@@ -69,9 +66,7 @@ def create_router(
             inputText=trigger.input_text,
         )
 
-    def _computed_next(
-        rule_type: str, rule_json: JsonObject, timezone: str
-    ) -> dt.datetime:
+    def _computed_next(rule_type: str, rule_json: JsonObject, timezone: str) -> dt.datetime:
         try:
             rule = parse_rule(rule_type, rule_json, timezone, clock())
             next_at = next_run_after(rule, clock())
@@ -82,9 +77,7 @@ def create_router(
         return next_at
 
     @router.post("/api/schedules", response_model=None)
-    async def create_schedule(
-        body: ScheduleCreate, identity: RequestIdentity = Depends(identity)
-    ) -> JsonObject:
+    async def create_schedule(*, body: ScheduleCreate, identity: CurrentIdentity) -> JsonObject:
         if body.workflowKey.startswith("personal-wf-"):
             raise BsideError("PERSONAL_WORKFLOW_SCHEDULING_UNSUPPORTED", 400)
         timezone = body.timezone or "Asia/Shanghai"
@@ -102,14 +95,10 @@ def create_router(
         return _schedule_json(row)
 
     @router.get("/api/schedules", response_model=None)
-    async def list_schedules(
-        identity: RequestIdentity = Depends(identity),
-    ) -> JsonObject:
+    async def list_schedules(*, identity: CurrentIdentity) -> JsonObject:
         rows = [_schedule_json(row) for row in schedules.list_for(identity.userId)]
         if schedule_history is not None:
-            triggers = await asyncio.to_thread(
-                schedule_history.read, identity.userId, environment
-            )
+            triggers = await asyncio.to_thread(schedule_history.read, identity.userId, environment)
             visible = {str(row["id"]) for row in rows}
             latest_runs = await asyncio.gather(
                 *(
@@ -125,16 +114,13 @@ def create_router(
 
     @router.get("/api/schedules/{schedule_id}/runs", response_model=None)
     async def schedule_runs(
+        *,
         schedule_id: int,
         before: dt.datetime | None = None,
-        identity: RequestIdentity = Depends(identity),
+        identity: CurrentIdentity,
     ) -> JsonObject:
         row = schedules.get(schedule_id)
-        if (
-            row is None
-            or row["user_id"] != identity.userId
-            or row["environment"] != environment
-        ):
+        if row is None or row["user_id"] != identity.userId or row["environment"] != environment:
             raise BsideError("NOT_FOUND", 404)
         if schedule_history is None:
             raise BsideError("SCHEDULE_HISTORY_UNAVAILABLE", 503)
@@ -157,9 +143,7 @@ def create_router(
 
     @router.patch("/api/schedules/{schedule_id}", response_model=None)
     async def update_schedule(
-        schedule_id: int,
-        body: ScheduleUpdate,
-        identity: RequestIdentity = Depends(identity),
+        *, schedule_id: int, body: ScheduleUpdate, identity: CurrentIdentity
     ) -> JsonObject:
         row = schedules.get(schedule_id)
         if row is None or row["user_id"] != identity.userId:
@@ -172,17 +156,13 @@ def create_router(
         if body.inputText is not None:
             fields["input_text"] = body.inputText
         rule_changed = (
-            body.ruleType is not None
-            or body.ruleJson is not None
-            or body.timezone is not None
+            body.ruleType is not None or body.ruleJson is not None or body.timezone is not None
         )
         reenabled = body.enabled is True and not row["enabled"]
         if rule_changed or reenabled:
             rule_type = body.ruleType or row["rule_type"]
             rule_json = (
-                body.ruleJson.model_dump()
-                if body.ruleJson is not None
-                else row["rule_json"]
+                body.ruleJson.model_dump() if body.ruleJson is not None else row["rule_json"]
             )
             timezone = body.timezone or row["timezone"]
             fields["rule_type"] = rule_type
@@ -195,9 +175,7 @@ def create_router(
         return _schedule_json(updated)
 
     @router.delete("/api/schedules/{schedule_id}", response_model=None)
-    async def delete_schedule(
-        schedule_id: int, identity: RequestIdentity = Depends(identity)
-    ) -> JsonObject:
+    async def delete_schedule(*, schedule_id: int, identity: CurrentIdentity) -> JsonObject:
         if not schedules.delete(schedule_id, identity.userId):
             raise BsideError("NOT_FOUND", 404)
         return {"ok": True}

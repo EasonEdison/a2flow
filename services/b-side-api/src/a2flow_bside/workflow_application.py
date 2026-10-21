@@ -76,10 +76,7 @@ class WorkflowApplicationService:
         schema = entry.get("inputSchema") or {}
         required = schema.get("required") or []
         properties = schema.get("properties") or {}
-        if (
-            len(required) == 1
-            and properties.get(required[0], {}).get("type") == "string"
-        ):
+        if len(required) == 1 and properties.get(required[0], {}).get("type") == "string":
             return {required[0]: raw_input}
         raise BsideError("INVALID_INPUT", 400)
 
@@ -107,9 +104,7 @@ class WorkflowApplicationService:
         )
         runtime = self.runtime(user_id)
         try:
-            view = await asyncio.to_thread(
-                runtime.start, control_id, workflow_key, inputs
-            )
+            view = await asyncio.to_thread(runtime.start, control_id, workflow_key, inputs)
         except Exception as start_error:
             _LOGGER.warning(
                 "Runtime start failed category=%s control_id=%s",
@@ -152,9 +147,7 @@ class WorkflowApplicationService:
         if not hmac.compare_digest(provided, token):
             raise BsideError("INTERNAL_TOKEN_REQUIRED", 401)
 
-    def progress_query(
-        self, request: Request, *, streaming: bool = False
-    ) -> list[tuple[str, str]]:
+    def progress_query(self, request: Request, *, streaming: bool = False) -> list[tuple[str, str]]:
         query = request.query_params.multi_items()
         if request.headers.get("last-event-id") is not None and (
             not streaming or "after" in request.query_params
