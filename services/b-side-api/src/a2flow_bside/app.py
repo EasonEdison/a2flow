@@ -411,7 +411,7 @@ def create_app(
             write_completed=write_completed)
         state = assistant_message["content"].get("delivery")
         status = {"queued": "RUNNING", "running": "RUNNING", "completed": "COMPLETED",
-                  "waiting_action": "COMPLETED", "failed": "FAILED"}.get(state, "UNKNOWN")
+                  "waiting_action": "COMPLETED", "unconfirmed": "NEEDS_REVIEW", "failed": "FAILED"}.get(state, "UNKNOWN")
         return {**response, "continuation": {
             "cardId": card_id, "requestId": marker["requestId"], "status": status,
             "inputMessageId": str(input_message["id"]),
