@@ -9,15 +9,21 @@ from pydantic import SecretStr
 from skillweave_contracts import TrustedContext
 
 if TYPE_CHECKING:
-    from httpx import AsyncClient, Client
+    from httpx2 import AsyncClient, Client
+
     from .deepseek_model import DeepSeekChat
-    from .model_config import DeepSeekConfiguration
 
-ModelConfigurationResolver = Callable[[str, TrustedContext], Mapping[str, object] | DeepSeekConfiguration]
-ModelSecretResolver = Callable[[str, TrustedContext], SecretStr]
-
-from .model_config import ModelConfigurationError, parse_deepseek_configuration
+from .model_config import (
+    DeepSeekConfiguration,
+    ModelConfigurationError,
+    parse_deepseek_configuration,
+)
 from .service import require_owner
+
+ModelConfigurationResolver = Callable[
+    [str, TrustedContext], Mapping[str, object] | DeepSeekConfiguration
+]
+ModelSecretResolver = Callable[[str, TrustedContext], SecretStr]
 
 
 class DeepSeekModelFactory:
@@ -47,7 +53,8 @@ class DeepSeekModelFactory:
                 self._resolve_configuration(logical_reference, owner),
             )
             try:
-                from openai import OpenAI, AsyncOpenAI
+                from openai import AsyncOpenAI, OpenAI
+
                 from .deepseek_model import DeepSeekChat
             except ImportError:
                 raise ModelConfigurationError("DEEPSEEK_ADAPTER_UNAVAILABLE") from None

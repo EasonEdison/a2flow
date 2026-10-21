@@ -8,22 +8,22 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from a2flow_asset_store import BundleValidator
     from a2flow_asset_store.personal_workflows import PersonalWorkflowRepository
-    from skillweave_contracts import TrustedContext
     from pydantic import SecretStr
+    from skillweave_contracts import TrustedContext
 import sys
 
 from psycopg.conninfo import make_conninfo
 
 
 def configure() -> str:
-    from deploy.common.config import _secret, _required
+    from deploy.common.config import _required, _secret
     dsn = make_conninfo(
         host="/run/postgresql", dbname=_required("A2FLOW_DATABASE_NAME"),
         user=_required("A2FLOW_DATABASE_USER"),
@@ -41,10 +41,11 @@ def configure() -> str:
 
 
 def initialize(dsn: str) -> None:
-    from deploy.attended.seed import main as schemas
-    from deploy.assets import bundle_validator
-    from activity_planning_demo.package_bundle import make_package_bundle
     from a2flow_asset_store import PostgresAssetRepository
+    from activity_planning_demo.package_bundle import make_package_bundle
+
+    from deploy.assets import bundle_validator
+    from deploy.attended.seed import main as schemas
     schemas()
     database = os.environ["A2FLOW_DATABASE_NAME"]
     namespace = os.environ["A2FLOW_ASSET_NAMESPACE"]
@@ -58,8 +59,8 @@ def initialize(dsn: str) -> None:
 
 def personal_workflow_repository(dsn: str, validator: BundleValidator) -> PersonalWorkflowRepository:
     import psycopg
-    from psycopg.rows import dict_row
     from a2flow_asset_store.personal_workflows import PersonalWorkflowRepository
+    from psycopg.rows import dict_row
     return PersonalWorkflowRepository(
         lambda: psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5,
                                options="-c statement_timeout=10000 -c lock_timeout=5000"),
@@ -75,8 +76,9 @@ def initialize_personal_workflows(dsn: str) -> None:
 
 
 def bside() -> FastAPI:
-    from deploy.attended.bside_app import create_app_from_environment
     from fastapi.staticfiles import StaticFiles
+
+    from deploy.attended.bside_app import create_app_from_environment
     app = create_app_from_environment()
     app.mount("/employee", StaticFiles(
         directory=os.environ["A2FLOW_EMPLOYEE_STATIC_DIRECTORY"], html=True),
@@ -85,17 +87,20 @@ def bside() -> FastAPI:
 
 
 def runtime() -> FastAPI:
-    from deploy.assets import (
-        bundle_validator, application_validator, application_data_validator,
-    )
-    from deploy.mvp.operations import operations
-    from agent_workflow_runtime.workflow_rpc_host import RpcWorkflowHost
-    from agent_workflow_runtime.rpc_client import RpcClient
-    from deploy.attended.runtime_app import completed_card, SchedulerEventSink
     from agent_workflow_runtime.internal_identity import private_identity
     from agent_workflow_runtime.model_factory import DeepSeekModelFactory
     from agent_workflow_runtime.personal_memory import PersonalMemory
+    from agent_workflow_runtime.rpc_client import RpcClient
+    from agent_workflow_runtime.workflow_rpc_host import RpcWorkflowHost
     from pydantic import SecretStr
+
+    from deploy.assets import (
+        application_data_validator,
+        application_validator,
+        bundle_validator,
+    )
+    from deploy.attended.runtime_app import SchedulerEventSink, completed_card
+    from deploy.mvp.operations import operations
 
     def configuration(reference: str, owner: TrustedContext) -> Mapping[str, object]:
         if reference != "deepseek-v4-flash" or owner.environment != "PRT":

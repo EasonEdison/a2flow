@@ -12,33 +12,34 @@ import asyncio
 import json
 import queue
 import threading
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
-from langchain_core.messages import BaseMessage
-from skillweave_contracts import TrustedContext
-
-from a2flow_bside.chat_runner import RuntimeTurnInspection
 from a2flow_asset_store import AssetReader
 from a2flow_asset_store.personal_workflows import PersonalWorkflowReader
-from agent_workflow_runtime.model_factory import DeepSeekModelFactory
-from agent_workflow_runtime.personal_memory import PersonalMemory
+from a2flow_bside.chat_runner import RuntimeTurnInspection
 from agent_workflow_runtime.chat.cards import ChatObservation
 from agent_workflow_runtime.chat.persistence import ConversationStore
 from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
-from collections.abc import Callable
+from agent_workflow_runtime.model_factory import DeepSeekModelFactory
+from agent_workflow_runtime.personal_memory import PersonalMemory
+from langchain_core.messages import BaseMessage
+from skillweave_contracts import TrustedContext
 
 if TYPE_CHECKING:
-    from agent_workflow_runtime.chat.workflow_results import WorkflowRunProvider
     from agent_workflow_runtime.chat.processing import ProcessingProvider
+    from agent_workflow_runtime.chat.workflow_results import WorkflowRunProvider
 
 
 class ChatAssetsFactory(Protocol):
     """The two supported calls are ordinary admission and task-bound admission."""
 
     def __call__(
-        self, owner: TrustedContext, conversation_id: str,
-        control_request_id: str = "chat-action", *,
+        self,
+        owner: TrustedContext,
+        conversation_id: str,
+        control_request_id: str = "chat-action",
+        *,
         processing_context: Mapping[str, Any] | None = None,
         processing_turn_id: str | None = None,
     ) -> RpcChatAssets: ...
@@ -46,8 +47,12 @@ class ChatAssetsFactory(Protocol):
 
 class ChatObservationLoader(Protocol):
     def __call__(
-        self, owner: TrustedContext, conversation_id: str, *,
-        after_sequence: int, limit: int = 100,
+        self,
+        owner: TrustedContext,
+        conversation_id: str,
+        *,
+        after_sequence: int,
+        limit: int = 100,
     ) -> Sequence[ChatObservation]: ...
 
 
@@ -90,19 +95,33 @@ class ChatLoopRunner:
         self._system_prompt = system_prompt
 
     async def inspect_turn(
-        self, *, user_id: int, conversation_id: int, turn_id: str,
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+        turn_id: str,
     ) -> RuntimeTurnInspection:
         from skillweave_contracts import TrustedContext
 
-        owner = TrustedContext.from_mapping({
-            "userId": user_id, "environment": self._environment,
-        })
+        owner = TrustedContext.from_mapping(
+            {
+                "userId": user_id,
+                "environment": self._environment,
+            }
+        )
         return await asyncio.to_thread(
-            self._conversation_store.inspect_turn, owner, str(conversation_id), turn_id,
+            self._conversation_store.inspect_turn,
+            owner,
+            str(conversation_id),
+            turn_id,
         )
 
     async def iterate(
-        self, *, user_id: int, conversation_id: int, text: str,
+        self,
+        *,
+        user_id: int,
+        conversation_id: int,
+        text: str,
         turn_id: str,
         run_references: Sequence[Mapping[str, Any]] = (),
         processing_context: Mapping[str, Any] | None = None,
@@ -120,9 +139,12 @@ class ChatLoopRunner:
         ):
             yield {"type": "error", "code": "PROCESSING_ADAPTER_REQUIRED"}
             return
-        owner = TrustedContext.from_mapping({
-            "userId": user_id, "environment": self._environment,
-        })
+        owner = TrustedContext.from_mapping(
+            {
+                "userId": user_id,
+                "environment": self._environment,
+            }
+        )
         pending: queue.Queue[tuple[str, Mapping[str, Any]]] = queue.Queue(maxsize=64)
         closed = threading.Event()
         replay_events: list[dict[str, Any]] = []
@@ -147,19 +169,31 @@ class ChatLoopRunner:
                         pass
 
         emitter = Emitter()
+
         def run() -> None:
             with self._conversation_store.session(
-                owner, str(conversation_id), turn_id, completion_events=replay_events,
+                owner,
+                str(conversation_id),
+                turn_id,
+                completion_events=replay_events,
             ) as (saver, thread_id):
-                prompt = (self._system_prompt(owner)
-                          if callable(self._system_prompt) else self._system_prompt)
+                prompt = (
+                    self._system_prompt(owner)
+                    if callable(self._system_prompt)
+                    else self._system_prompt
+                )
+                observation_loader = self._observation_loader
                 loop = ChatLoop(
                     model_factory=self._model_factory,
-                    model_reference=self._model_reference, owner=owner,
-                    conversation_id=str(conversation_id), reader=self._reader,
+                    model_reference=self._model_reference,
+                    owner=owner,
+                    conversation_id=str(conversation_id),
+                    reader=self._reader,
                     control_request_id=f"chat-{turn_id}",
-                    emitter=emitter, system_prompt=prompt,
-                    checkpointer=saver, thread_id=thread_id,
+                    emitter=emitter,
+                    system_prompt=prompt,
+                    checkpointer=saver,
+                    thread_id=thread_id,
                     personal_memory=self._personal_memory,
                     personal_workflows=self._personal_workflows,
                     workflow_run_provider=self._workflow_run_provider,
@@ -167,21 +201,32 @@ class ChatLoopRunner:
                     processing_context_value=processing_context,
                     chat_assets=(
                         self._assets_factory(
-                            owner, str(conversation_id), f"chat-{turn_id}",
-                            processing_context=processing_context, processing_turn_id=turn_id,
-                        ) if processing_context is not None and self._assets_factory is not None
+                            owner,
+                            str(conversation_id),
+                            f"chat-{turn_id}",
+                            processing_context=processing_context,
+                            processing_turn_id=turn_id,
+                        )
+                        if processing_context is not None and self._assets_factory is not None
                         else self._assets_factory(owner, str(conversation_id), f"chat-{turn_id}")
-                        if self._assets_factory is not None else None
+                        if self._assets_factory is not None
+                        else None
                     ),
                     observation_loader=(
-                        (lambda cursor: self._observation_loader(
-                            owner, str(conversation_id),
-                            after_sequence=cursor, limit=100,
-                        ))
-                        if self._observation_loader is not None else None
+                        (
+                            lambda cursor: observation_loader(
+                                owner,
+                                str(conversation_id),
+                                after_sequence=cursor,
+                                limit=100,
+                            )
+                        )
+                        if observation_loader is not None
+                        else None
                     ),
                     history_loader=lambda: self._history_loader(
-                        user_id, conversation_id, int(turn_id)),
+                        user_id, conversation_id, int(turn_id)
+                    ),
                 )
                 loop.turn(text)
                 if completion["payload"] is None and not any(
@@ -190,15 +235,30 @@ class ChatLoopRunner:
                     raise ConversationAdmissionError("TURN_COMPLETION_EVIDENCE_MISSING")
                 # waiting_action is a successful terminal Chat turn too. Its
                 # continuation is a later turn, not replay of this agent run.
-                replay_events.append({"type": "done", **(completion["payload"] or {
-                    "content": "", "finalModelMessageId": None,
-                })})
+                replay_events.append(
+                    {
+                        "type": "done",
+                        **(
+                            completion["payload"]
+                            or {
+                                "content": "",
+                                "finalModelMessageId": None,
+                            }
+                        ),
+                    }
+                )
+
         def worker() -> None:
             try:
                 run()
-                emitter.emit("native_completed", completion["payload"] or {
-                    "content": "", "finalModelMessageId": None,
-                })
+                emitter.emit(
+                    "native_completed",
+                    completion["payload"]
+                    or {
+                        "content": "",
+                        "finalModelMessageId": None,
+                    },
+                )
             except ConversationAdmissionError as exc:
                 emitter.emit(ERROR, {"code": str(exc)})
             except Exception:
@@ -210,11 +270,13 @@ class ChatLoopRunner:
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
         failed = False
+
         def receive() -> tuple[str, Mapping[str, Any]] | None:
             try:
                 return pending.get(timeout=0.1)
             except queue.Empty:
                 return None
+
         try:
             while True:
                 queued_event = await asyncio.to_thread(receive)
@@ -241,16 +303,28 @@ class ChatLoopRunner:
 def _application_event(kind: str, payload: Mapping[str, Any]) -> dict[str, Any] | None:
     """One conversion for live delivery and durable projection repair."""
     if kind in ("text_delta", "reasoning_delta"):
-        return {"type": kind, "text": payload.get("text", ""),
-                "modelMessageId": payload.get("modelMessageId")}
+        return {
+            "type": kind,
+            "text": payload.get("text", ""),
+            "modelMessageId": payload.get("modelMessageId"),
+        }
     if kind == "tool_call":
         return {"type": kind, "tool": payload.get("tool", "")}
-    if kind in ("tool_call_started", "tool_call_finished", "a2ui_generation_progress",
-                "application_rendered", "waiting_action", "personal_workflow_created"):
+    if kind in (
+        "tool_call_started",
+        "tool_call_finished",
+        "a2ui_generation_progress",
+        "application_rendered",
+        "waiting_action",
+        "personal_workflow_created",
+    ):
         return {"type": kind, **payload}
     if kind == "workflow_confirm":
-        return {"type": kind, "workflowKey": payload.get("workflowKey"),
-                "title": payload.get("title")}
+        return {
+            "type": kind,
+            "workflowKey": payload.get("workflowKey"),
+            "title": payload.get("title"),
+        }
     if kind == "error":
         return {"type": kind, "code": payload.get("code", "CHAT_ERROR")}
     return None

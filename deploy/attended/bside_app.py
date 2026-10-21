@@ -12,21 +12,13 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from fastapi import FastAPI
-from langchain_core.messages import BaseMessage
-
 import psycopg
-from psycopg.rows import dict_row
-
-from skillweave_contracts import TrustedContext
-
 from a2flow_asset_store import BundleValidator, PostgresAssetRepository
-from a2flow_bside.persistence_types import DatabaseConnection
-from a2flow_bside.route_dependencies import MemoryState, CardActionPayload
-from agent_workflow_runtime.application_runtime import PreparedApplication
-from a2flow_bside.app import create_app
 from a2flow_bside.account_guard import AccountGuardConfig, PostgresAccountGuard
+from a2flow_bside.app import create_app
 from a2flow_bside.config import BsideConfig
+from a2flow_bside.notification_repository import NotificationsRepository, notification_engine
+from a2flow_bside.persistence_types import DatabaseConnection
 from a2flow_bside.repositories import (
     ConversationsRepository,
     MessagesRepository,
@@ -35,14 +27,17 @@ from a2flow_bside.repositories import (
     SessionsRepository,
     UsersRepository,
 )
+from a2flow_bside.route_dependencies import CardActionPayload, MemoryState
 from a2flow_bside.runtime_client import HttpRuntimeClient
-from a2flow_bside.notification_repository import NotificationsRepository, notification_engine
 from a2flow_bside.schedule_history import ScheduleHistoryRepository
 from a2flow_bside.work_activities import WorkActivitiesRepository
-
-from pydantic import SecretStr
-
+from agent_workflow_runtime.application_runtime import PreparedApplication
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
+from fastapi import FastAPI
+from langchain_core.messages import BaseMessage
+from psycopg.rows import dict_row
+from pydantic import SecretStr
+from skillweave_contracts import TrustedContext
 
 from .chat_runner import ChatLoopRunner
 
@@ -82,8 +77,8 @@ def create_app_from_environment() -> FastAPI:
         database=_required("A2FLOW_BSIDE_DATABASE_NAME"),
         validator=validator,
     )
-    from agent_workflow_runtime.rpc_client import RpcClient
     from agent_workflow_runtime.rpc_assets import RpcAssetReader
+    from agent_workflow_runtime.rpc_client import RpcClient
     rpc = RpcClient.from_environment(os.environ)
     base_reader = RpcAssetReader(repository, config.namespace, rpc)
 
@@ -148,24 +143,28 @@ def create_app_from_environment() -> FastAPI:
             options="-c statement_timeout=10000 -c lock_timeout=5000",
             application_name="a2flow-b-side-api",
         )
-    from a2flow_asset_store.personal_workflows import PersonalWorkflowReader, PersonalWorkflowRepository
+    from a2flow_asset_store.personal_workflows import (
+        PersonalWorkflowReader,
+        PersonalWorkflowRepository,
+    )
     personal_workflows = PersonalWorkflowRepository(
         connection_factory, namespace=config.namespace, environment=config.environment, validator=validator,
     )
     reader = PersonalWorkflowReader(base_reader, personal_workflows)
-    from agent_workflow_runtime.chat.persistence import ConversationStore
-    from langchain_core.messages import AIMessage, HumanMessage
     import json
 
+    from agent_workflow_runtime.chat.persistence import ConversationStore
+    from langchain_core.messages import AIMessage, HumanMessage
+
     message_repository = MessagesRepository(connection_factory)
-    from agent_workflow_runtime.personal_memory import PersonalMemory, MemoryConflict
     from a2flow_bside.errors import BsideError
+    from agent_workflow_runtime.personal_memory import MemoryConflict, PersonalMemory
     personal_memory = PersonalMemory(conninfo)
-    from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
+    from a2flow_bside.durable_chat import DurableChat
     from agent_workflow_runtime.chat.cards import ChatCardStore
     from agent_workflow_runtime.chat.rpc_actions import RpcChatActionService
+    from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
     from agent_workflow_runtime.models import ActionRejected
-    from a2flow_bside.durable_chat import DurableChat
     durable_chat = DurableChat(connection_factory, environment=config.environment)
     card_store = ChatCardStore(conninfo, environment=config.environment,
                                completion_observer=durable_chat.observe_completion)

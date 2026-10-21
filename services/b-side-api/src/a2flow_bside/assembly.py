@@ -9,24 +9,22 @@ WORKFLOW assets through the reviewed AssetReader.
 from __future__ import annotations
 
 import importlib
+import os
 import re
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import FastAPI
-
 import psycopg
+from a2flow_asset_store import AssetReader, BundleValidator, PostgresAssetRepository
+from fastapi import FastAPI
 from psycopg.rows import dict_row
-
 from skillweave_contracts import TrustedContext
 
-from a2flow_asset_store import AssetReader, BundleValidator, PostgresAssetRepository
-
-from .app import create_app
 from .account_guard import AccountGuardConfig, PostgresAccountGuard
-import os
-from .config import BsideConfig
+from .app import create_app
 from .chat_runner import ChatRunner, RuntimeTurnInspection
+from .config import BsideConfig
+from .notification_repository import NotificationsRepository, notification_engine
 from .persistence_types import DatabaseConnection
 from .repositories import (
     ConversationsRepository,
@@ -37,7 +35,6 @@ from .repositories import (
     UsersRepository,
 )
 from .runtime_client import HttpRuntimeClient
-from .notification_repository import NotificationsRepository, notification_engine
 from .schedule_history import ScheduleHistoryRepository
 
 _FACTORY = re.compile(
@@ -102,7 +99,10 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
             options="-c statement_timeout=10000 -c lock_timeout=5000",
             application_name="a2flow-b-side-api")
 
-    from a2flow_asset_store.personal_workflows import PersonalWorkflowReader, PersonalWorkflowRepository
+    from a2flow_asset_store.personal_workflows import (
+        PersonalWorkflowReader,
+        PersonalWorkflowRepository,
+    )
     reader = PersonalWorkflowReader(base_reader, PersonalWorkflowRepository(
         connection_factory, namespace=config.namespace, environment=config.environment, validator=validator,
     ))
