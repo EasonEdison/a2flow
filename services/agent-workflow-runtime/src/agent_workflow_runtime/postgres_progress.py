@@ -3,6 +3,8 @@
 from contextlib import contextmanager
 from hashlib import sha256
 import re
+from typing import Any
+from skillweave_contracts import TrustedContext
 
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -177,7 +179,7 @@ class PostgresProgress(PostgresProjection):
         ).fetchone() is None:
             raise ActionRejected("RUN_NOT_FOUND")
 
-    def catalog(self, owner, run_id, *, after=None, limit=100):
+    def catalog(self, owner: TrustedContext, run_id: str, *, after: str | None = None, limit: int = 100) -> dict[str, Any]:
         require_owner(owner)
         key, limit = self._key(owner, run_id), page_limit(limit)
         position = cursor(after, run_id)
@@ -200,7 +202,7 @@ class PostgresProgress(PostgresProjection):
         return {"runId": run_id, "segments": rows, "nextCursor": f"{run_id}:{last}",
                 "hasMore": last < maximum, "capture": "UNCONFIRMED" if not rows else "RECORDED"}
 
-    def history(self, owner, run_id, node_id, segment_id, *, after=None, limit=100):
+    def history(self, owner: TrustedContext, run_id: str, node_id: str, segment_id: str, *, after: str | None = None, limit: int = 100) -> dict[str, Any]:
         require_owner(owner)
         key = (*self._key(owner, run_id), identifier(node_id), execution_id(segment_id))
         position, limit = cursor(after, segment_id), page_limit(limit)

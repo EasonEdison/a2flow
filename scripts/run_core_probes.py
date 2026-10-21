@@ -141,6 +141,7 @@ def postgres_probes(args, report: dict) -> None:
             ("chat-turn-recovery", "a2flow_chat_turn_probe_ci", ["scripts/verify_chat_turn_recovery.py"]),
             ("chat-reliability", "a2flow_chat_reliability_probe_ci",
              ["services/b-side-api/tests/probe_chat_reliability.py"]),
+            ("python-route-composition", None, ["scripts/verify_python_route_composition.py"]),
             ("chat-write-approval", None, ["scripts/verify_chat_write_approval.py"]),
             ("workflow-write-approval", None, ["scripts/verify_workflow_write_approval.py"]),
             ("a2ui-write-preflight", None, ["scripts/verify_a2ui_write_preflight.py"]),
@@ -272,7 +273,7 @@ def main() -> int:
     parser.add_argument("--suite", choices=("postgres", "java"), default="postgres")
     parser.add_argument("--python-probe", choices=("all", "account-guard", "runtime-outbox",
                         "capability-approval", "chat-write-approval", "workflow-write-approval",
-                        "a2ui-write-preflight", "chat-turn-recovery", "chat-reliability"),
+                        "a2ui-write-preflight", "chat-turn-recovery", "chat-reliability", "python-route-composition"),
                         default="all", help="Local focused reproduction; CI always selects all")
     parser.add_argument("--java-probe", choices=("all", "management-context", "capability-approval", "package-restore"),
                         default="all", help="Local focused reproduction; CI always selects all")

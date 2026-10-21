@@ -58,9 +58,9 @@ class RuntimeClient(Protocol):
     ) -> dict[str, object]: ...
 
     def action_stream(self, run_id: str, node_id: str,
-                      payload: dict) -> "object": ...
+                      payload: dict) -> Iterator[str]: ...
 
-    def surface_stream(self, run_id: str) -> "object": ...
+    def surface_stream(self, run_id: str) -> Iterator[str]: ...
 
     def progress_catalog(self, run_id: str, query: list[tuple[str, str]]) -> dict[str, object]: ...
 
@@ -168,7 +168,7 @@ class HttpRuntimeClient:
             + urllib.parse.urlencode(query),
         )
 
-    def action_stream(self, run_id: str, node_id: str, payload: dict):
+    def action_stream(self, run_id: str, node_id: str, payload: dict) -> Iterator[str]:
         """POST the action and yield the runtime SSE chunks verbatim."""
         data = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
@@ -179,7 +179,7 @@ class HttpRuntimeClient:
         request.add_header("Content-Type", "application/json")
         return self._stream(request)
 
-    def surface_stream(self, run_id: str):
+    def surface_stream(self, run_id: str) -> Iterator[str]:
         """Subscribe to snapshot + surface updates for one run."""
         request = urllib.request.Request(
             self._base + "/runtime/runs/" + urllib.parse.quote(run_id, safe="")

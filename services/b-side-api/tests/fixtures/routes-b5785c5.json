@@ -1,0 +1,401 @@
+{
+  "routes": [
+    {
+      "path": "/api/memory",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/memory",
+      "methods": [
+        "PUT"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/auth/register",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/auth/login",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/auth/logout",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/auth/session",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/conversations",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/conversations",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/conversations/messages",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/conversations/messages",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/conversations/{conversation_id}/cards",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/conversations/{conversation_id}/cards/{card_id}/actions",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/conversations/{conversation_id}/run-refs",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/processing-tasks/{task_id}",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/processing-tasks/{task_id}/resolve",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/work-activities",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/work-activities/{activity_id}/result",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/work-activities/{activity_id}",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/work-activities/{activity_id}/attention/{attention_id}/ack",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/workflows",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/internal/runs",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/internal/runs/{request_id}",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{control_id}/cards",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/internal/runs/{run_id}/cards/{card_id}/resume",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/internal/runs/{run_id}/cards/{card_id}/resume-status",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{control_id}/cards/{card_id}/actions",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{run_id}",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{run_id}/stop",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{run_id}/actions",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{run_id}/surface",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{control_id}/progress",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/history",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/stream",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/schedules",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/schedules",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/schedules/{schedule_id}/runs",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/schedules/{schedule_id}",
+      "methods": [
+        "PATCH"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/schedules/{schedule_id}",
+      "methods": [
+        "DELETE"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/notifications",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/api/notifications/{notification_id}/read",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    }
+  ],
+  "paths": {
+    "/api/memory": "226b9a5ef15e756fbb11ff51801e30429051f2427649f4c6d306201c406359a8",
+    "/api/auth/register": "901bc3bf5d693866a89c1e82c7404b09c047d4c225d86c389aae4601a387a52d",
+    "/api/auth/login": "215fe1b669ba9d54fda38624db99e6f2efdd2a627a6a535c4f86df667e21b2ee",
+    "/api/auth/logout": "eb72242475156d22a89ad1f5760bd53426aa1081692c5c270af4c37612574202",
+    "/api/auth/session": "ec54991678f9048952e59cc79cb59d2673f8c4a8833bbae70e95265d5813f2bd",
+    "/api/conversations": "2e0ca49cdede8a171c0d550a3d81af9b5a6d2634f3c25c8017049e4a536c0f30",
+    "/api/conversations/messages": "205a680a3053a6d2e5981da867453f74c0b8b5a3144b91ac27dc540568a20e39",
+    "/api/conversations/{conversation_id}/cards": "285072757ae0c07d0fdb454fce87d9dafb1a20ae686df872b4e7feec52d519f5",
+    "/api/conversations/{conversation_id}/cards/{card_id}/actions": "cfc03f9ab9d7aae9b1bdcd829b420040f5bb3488172055e0856507abf512ce2b",
+    "/api/conversations/{conversation_id}/run-refs": "75e4aebdf57dbd87866589353239a6851c44881072986039486f628bdd1a8802",
+    "/api/processing-tasks/{task_id}": "d82195de2ddc8ffa108ecfc6505003aec40a6075dfab29153118b697dda77b8f",
+    "/api/processing-tasks/{task_id}/resolve": "784e4148b809d4230dd31e87514f7666cd675eba6e567037e6f09f3b346edd07",
+    "/api/work-activities": "c6c6b89ea3c9535c91d7e86ee0313554773ebc8f54056bae47390f526ee77fca",
+    "/api/work-activities/{activity_id}/result": "16a5cc5431c2ddb85a3e8f2277b86b6c095998ed5d2282710b57d28a32158645",
+    "/api/work-activities/{activity_id}": "9661d27513f1551f354c19811e371559b5e0734c82fc2a9e8fc4bec78c15ed02",
+    "/api/work-activities/{activity_id}/attention/{attention_id}/ack": "23d87c5bc1174bad6790d946d289cf90e2755ef76700d6dcb308c876086d71a6",
+    "/api/workflows": "ab2dae2c82e3564e1a7f486e2b046079250cbd2452e93a64011287dd2922f0fe",
+    "/api/runs": "d3a7bf8b6b938843f4b294f055e5c84f7b4cfd51c0b3d3007a6995ad3479d9c3",
+    "/api/internal/runs": "a49325d5774f7384f546301ca49718bf882e39897dcfce646416aec3f2d8e375",
+    "/api/internal/runs/{request_id}": "2f18d7360059b7672031f10753e4fc40066c2568044e9fe2e0c405009749aa1e",
+    "/api/runs/{control_id}/cards": "b4f56ca7a880009e563a4ad434fa12785a5e9d7aab7785af94cd3614811d6216",
+    "/api/internal/runs/{run_id}/cards/{card_id}/resume": "1f4ccc04667d567cf9bc4fe941805b475b735e481b839c313d313f7a8cabdd26",
+    "/api/internal/runs/{run_id}/cards/{card_id}/resume-status": "34066a6c2df070060869efc22bef52ff793994cb6218a0eec12f6df73ab43c27",
+    "/api/runs/{control_id}/cards/{card_id}/actions": "6fb207bffba669ab29f3f1f693d7bad80f7c49ea303ace744f2200b1a5ae7a60",
+    "/api/runs/{run_id}": "6c39aab23494d25279a20ce2e597fb43bbe9b5c8b306e7294af2e001a62fa3dc",
+    "/api/runs/{run_id}/stop": "bb30ec547453036ef0764d11f192ea81efab5d1aca9af3f0b78160d874720c59",
+    "/api/runs/{run_id}/actions": "5ac3e26628eed2038e4369325fab81ef1289aa6c56de0bcd57ba4967ac3b2f3b",
+    "/api/runs/{run_id}/surface": "dd12b7ba70adab517770fe95aa3a9e7148e8f058591d439b6af728e812d2f73f",
+    "/api/runs/{control_id}/progress": "cd734c08a9348dc9d1124214737494a39dd7695a5ef937cacbb85855c5bac84e",
+    "/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/history": "2a78e852cf4ede72983404cbc4f92724231f7f1d47a145bfce63ae595f9a2ed6",
+    "/api/runs/{control_id}/nodes/{node_id}/executions/{execution_id}/stream": "146604148fe028661e0ff3491ec8f9b0a06bca1037d0267dd7273e6174519edd",
+    "/api/schedules": "b74eddc82115c9716a22bc55382cfe109aeda33de919aa4f19690a0cf6b2169f",
+    "/api/schedules/{schedule_id}/runs": "dc5adaf4bcad5c40bf3ceff1d857ba7c231ad28cd06899ca34ec0009825313fb",
+    "/api/schedules/{schedule_id}": "044471f31afcd5cf1ae2d0491094faa8b7b6576c2572058839f76592029c7da7",
+    "/api/notifications": "5da631edfd808b3481ec488e1aa49e17578d4aa2ae9f18b6d62ed8f7f92ed58a",
+    "/api/notifications/{notification_id}/read": "ce9746bfff19f14aeb366f846b8104e19956b2ef5a56b9467c0882e805ad8dce"
+  },
+  "schemas": {
+    "ChatCardAction": "566766968905b73de9cb99876704b093375d8980f7c91cadd6ed60f4dddde88c",
+    "ConversationCreate": "9df7f767674d26dc448786c94f6f6ccf7b9b2e4c6ec72e2f74c5651b258feaa5",
+    "CronRuleInput": "dc4e21ea81eeafb96b3adb7f98c2b874765231848f3ef4da0814fd0dd67b5bf3",
+    "HTTPValidationError": "7373c21f1389312367e27e440140ba11d587693c56d8aa27249b36d3f58c10c6",
+    "InternalResume": "b56da6bf9eaade0307cc99e628b2f43a2938cf23e300a75b86d316e130b3d300",
+    "InternalRunStart": "61e959abd1746af30bef07c1235fb4bf0d412eeb81155fd6183c94c188e324a0",
+    "LoginRequest": "25b5d6e308107ca1ecb26bb30f890a30912a1a3b33bc05644d3d94cb8371fff7",
+    "MemoryEntry": "08e14828dde3679b560a323c4fddfbe2638768a6620118d7861a8c8daaf21685",
+    "MemorySettings": "a7e7ce36900890160821d232bfe47fa19cda7b75a89cad492d71156dcd9dd43f",
+    "MessageSend": "60fd3d521770256bcbe971d3d46086bce34a3e2929f7eef8b6b058e5057e715b",
+    "ProcessingResolution": "ea2407c70ee8f88080ca1d7641071312ef53d47d2d659769d8139e564052717a",
+    "ProcessingTarget": "6df8ec1ed6af1d8cb5a8ef40865f9db6026222bb9f130e36fbacafd0e1d38bf5",
+    "RegisterRequest": "2997e5d10a2b8bab65fdfc79f5b45f416bd002bdcbce013f208aed392755808f",
+    "RunAction": "8cb79d1b17b7e2a435a4b7f640112361d2971625bcb635814178dde386c4a537",
+    "RunRefCreate": "8d039b3f9903b7dfd0c83424d602b2053c57dad12917c8f741e6a8fdcabe34df",
+    "RunReference": "81f47f7c57280c20c69ad68e66c56aa4591c741e9814ffe6ebc42d1f4e784e16",
+    "RunStart": "3d6fd466069abd6041cbda5ef049c5512ef060894ba641c3130018d243c929dd",
+    "ScheduleCreate": "2bb87b326b74754d9f601b01eea1b765223df99e5fb0d5233c4b5c5c10d131fb",
+    "ScheduleUpdate": "d7133b90041f843f155acb30efb70168f7ed0cea7768eb42bd105b32462c9e7e",
+    "ValidationError": "ca285d0c0e64c42844efd2e860edb239e77cc49d87f065c5ccb7d2f55331b862",
+    "WorkflowCardAction": "d1e174413cae7a2029a0ba830913572231fd833807be5e4c4ab84f949d52d71c"
+  }
+}

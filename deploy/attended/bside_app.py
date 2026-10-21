@@ -9,16 +9,19 @@ from __future__ import annotations
 import importlib
 import os
 import re
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import psycopg
-from psycopg.rows import dict_row
-
-from skillweave_contracts import TrustedContext
-
-from a2flow_asset_store import PostgresAssetRepository
-from a2flow_bside.app import create_app
+from a2flow_asset_store import BundleValidator, PostgresAssetRepository
 from a2flow_bside.account_guard import AccountGuardConfig, PostgresAccountGuard
+from a2flow_bside.app import create_app
 from a2flow_bside.config import BsideConfig
+from a2flow_bside.notification_repository import (
+    NotificationsRepository,
+    notification_engine,
+)
+from a2flow_bside.persistence_types import DatabaseConnection
 from a2flow_bside.repositories import (
     ConversationsRepository,
     MessagesRepository,
@@ -27,14 +30,17 @@ from a2flow_bside.repositories import (
     SessionsRepository,
     UsersRepository,
 )
+from a2flow_bside.route_dependencies import CardActionPayload, MemoryState
 from a2flow_bside.runtime_client import HttpRuntimeClient
-from a2flow_bside.notification_repository import NotificationsRepository, notification_engine
 from a2flow_bside.schedule_history import ScheduleHistoryRepository
 from a2flow_bside.work_activities import WorkActivitiesRepository
-
-from pydantic import SecretStr
-
+from agent_workflow_runtime.application_runtime import PreparedApplication
 from agent_workflow_runtime.model_factory import DeepSeekModelFactory
+from fastapi import FastAPI
+from langchain_core.messages import BaseMessage
+from psycopg.rows import dict_row
+from pydantic import SecretStr
+from skillweave_contracts import TrustedContext
 
 from .chat_runner import ChatLoopRunner
 
@@ -51,12 +57,15 @@ def _required(name: str) -> str:
     return value
 
 
-def _load_validator(reference: str):
+def _load_validator(reference: str) -> BundleValidator:
     if not isinstance(reference, str) or not _FACTORY.fullmatch(reference):
         raise RuntimeError("INVALID_BSIDE_VALIDATOR_FACTORY")
     module_name, attribute = reference.split(":", 1)
     try:
-        factory = getattr(importlib.import_module(module_name), attribute)
+        # Protected plugin factories must produce the concrete bundle validator.
+        factory: Callable[[], BundleValidator] = getattr(
+            importlib.import_module(module_name), attribute
+        )
         validator = factory()
     except Exception:
         raise RuntimeError("BSIDE_VALIDATOR_UNAVAILABLE") from None
@@ -65,7 +74,7 @@ def _load_validator(reference: str):
     return validator
 
 
-def create_app_from_environment():
+def create_app_from_environment() -> FastAPI:
     config = BsideConfig.from_environment()
     validator = _load_validator(_required("A2FLOW_BSIDE_VALIDATOR_FACTORY"))
     repository = PostgresAssetRepository(
@@ -74,17 +83,20 @@ def create_app_from_environment():
         database=_required("A2FLOW_BSIDE_DATABASE_NAME"),
         validator=validator,
     )
-    from agent_workflow_runtime.rpc_client import RpcClient
     from agent_workflow_runtime.rpc_assets import RpcAssetReader
-    rpc = RpcClient.from_environment(os.environ)
-    reader = RpcAssetReader(repository, config.namespace, rpc)
+    from agent_workflow_runtime.rpc_client import RpcClient
 
-    def workflow_catalog(user_id: int):
-        owner = TrustedContext.from_mapping({
-            "userId": user_id, "environment": config.environment})
+    rpc = RpcClient.from_environment(os.environ)
+    base_reader = RpcAssetReader(repository, config.namespace, rpc)
+
+    def workflow_catalog(user_id: int) -> list[dict[str, Any]]:
+        owner = TrustedContext.from_mapping({"userId": user_id, "environment": config.environment})
         return [dict(item) for item in reader.list_workflows(owner)]
 
-    def _chat_model_configuration(reference, current_owner):
+    def _chat_model_configuration(
+        reference: str,
+        current_owner: TrustedContext,
+    ) -> Mapping[str, object]:
         # The bside session layer already verified the owner; chat accepts any
         # trusted principal instead of the runtime host fixed identity.
         if reference != "deepseek-v4-flash":
@@ -96,26 +108,22 @@ def create_app_from_environment():
             "options": {"thinking": "disabled", "max_tokens": 4096},
         }
 
-    def _chat_model_secret(reference, current_owner):
+    def _chat_model_secret(reference: str, current_owner: TrustedContext) -> SecretStr:
         if reference != "env:DEEPSEEK_API_KEY":
             raise RuntimeError("MODEL_CREDENTIAL_UNAVAILABLE")
         return SecretStr(os.environ["DEEPSEEK_API_KEY"])
 
-    chat_model_factory = DeepSeekModelFactory(
-        _chat_model_configuration, _chat_model_secret)
+    chat_model_factory = DeepSeekModelFactory(_chat_model_configuration, _chat_model_secret)
 
-    def _chat_system_prompt(catalog_owner):
+    def _chat_system_prompt(catalog_owner: TrustedContext) -> str:
         catalog_lines = []
         for item in reader.list_workflows(catalog_owner):
-            catalog_lines.append(
-                "- 工作流 " + str(item.get("definitionKey")))
+            catalog_lines.append("- 工作流 " + str(item.get("definitionKey")))
         for item in reader.list_skills(catalog_owner):
-            catalog_lines.append(
-                "- 技能 " + str(item.get("skillKey")))
+            catalog_lines.append("- 技能 " + str(item.get("skillKey")))
         return (
             "你是 A2Flow 数字员工助手。\n"
-            "可用工作流与技能（调用时使用确切 key）：\n"
-            + "\n".join(catalog_lines) + "\n"
+            "可用工作流与技能（调用时使用确切 key）：\n" + "\n".join(catalog_lines) + "\n"
             "当用户想执行工作流（例如活动策划、活动套餐）时，必须直接调用 "
             "propose_workflow_run 工具发起确认提案，不要只用文字描述；"
             "用户确认前绝不启动运行。用户要求创建或保存工作流时，使用个人工作流工具，"
@@ -123,7 +131,7 @@ def create_app_from_environment():
             "其他任务可用 use_skill 调用技能。"
         )
 
-    def _password_dsn():
+    def _password_dsn() -> str:
         secret_path = os.environ.get("A2FLOW_BSIDE_POSTGRES_PASSWORD_FILE")
         if not secret_path:
             return config.conninfo
@@ -132,68 +140,114 @@ def create_app_from_environment():
         return psycopg.conninfo.make_conninfo(config.conninfo, password=password)
 
     conninfo = _password_dsn()
-    connection_factory = lambda: psycopg.connect(
-        conninfo, row_factory=dict_row, connect_timeout=5,
-        options="-c statement_timeout=10000 -c lock_timeout=5000",
-        application_name="a2flow-b-side-api",
+
+    def connection_factory() -> DatabaseConnection:
+        return psycopg.connect(
+            conninfo,
+            row_factory=dict_row,
+            connect_timeout=5,
+            options="-c statement_timeout=10000 -c lock_timeout=5000",
+            application_name="a2flow-b-side-api",
+        )
+
+    from a2flow_asset_store.personal_workflows import (
+        PersonalWorkflowReader,
+        PersonalWorkflowRepository,
     )
-    from a2flow_asset_store.personal_workflows import PersonalWorkflowReader, PersonalWorkflowRepository
+
     personal_workflows = PersonalWorkflowRepository(
-        connection_factory, namespace=config.namespace, environment=config.environment, validator=validator,
+        connection_factory,
+        namespace=config.namespace,
+        environment=config.environment,
+        validator=validator,
     )
-    reader = PersonalWorkflowReader(reader, personal_workflows)
-    from agent_workflow_runtime.chat.persistence import ConversationStore
-    from langchain_core.messages import AIMessage, HumanMessage
+    reader = PersonalWorkflowReader(base_reader, personal_workflows)
     import json
 
+    from agent_workflow_runtime.chat.persistence import ConversationStore
+    from langchain_core.messages import AIMessage, HumanMessage
+
     message_repository = MessagesRepository(connection_factory)
-    from agent_workflow_runtime.personal_memory import PersonalMemory, MemoryConflict
     from a2flow_bside.errors import BsideError
+    from agent_workflow_runtime.personal_memory import MemoryConflict, PersonalMemory
+
     personal_memory = PersonalMemory(conninfo)
-    from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
+    from a2flow_bside.durable_chat import DurableChat
     from agent_workflow_runtime.chat.cards import ChatCardStore
     from agent_workflow_runtime.chat.rpc_actions import RpcChatActionService
+    from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
     from agent_workflow_runtime.models import ActionRejected
-    from a2flow_bside.durable_chat import DurableChat
+
     durable_chat = DurableChat(connection_factory, environment=config.environment)
-    card_store = ChatCardStore(conninfo, environment=config.environment,
-                               completion_observer=durable_chat.observe_completion)
+    card_store = ChatCardStore(
+        conninfo,
+        environment=config.environment,
+        completion_observer=durable_chat.observe_completion,
+    )
 
     def assets_factory(
-        owner, conversation_id, control_request_id="chat-action", *,
-        processing_context=None, processing_turn_id=None,
-    ):
-        return RpcChatAssets(reader=reader, rpc=rpc,
+        owner: TrustedContext,
+        conversation_id: str,
+        control_request_id: str = "chat-action",
+        *,
+        processing_context: Mapping[str, Any] | None = None,
+        processing_turn_id: str | None = None,
+    ) -> RpcChatAssets:
+        def save_card(
+            prepared: PreparedApplication,
+            metadata: dict[str, Any],
+        ) -> dict[str, Any]:
+            return card_store.save(owner, conversation_id, prepared, metadata)
+
+        return RpcChatAssets(
+            reader=reader,
+            rpc=rpc,
             processing_provider=processing_tasks,
             processing_context_value=processing_context,
             processing_turn_id=processing_turn_id,
-            owner=owner, conversation_id=conversation_id,
+            owner=owner,
+            conversation_id=conversation_id,
             control_request_id=control_request_id,
-            card_sink=lambda prepared, metadata: card_store.save(
-                owner, conversation_id, prepared, metadata))
+            card_sink=save_card,
+        )
 
     card_actions = RpcChatActionService(card_store, assets_factory)
 
-    def chat_cards(user_id, conversation_id):
+    def chat_cards(user_id: int, conversation_id: str) -> list[dict[str, Any]]:
         return card_store.list(memory_owner(user_id), conversation_id)
 
-    def chat_action(user_id, conversation_id, card_id, payload):
+    def chat_action(
+        user_id: int,
+        conversation_id: str,
+        card_id: str,
+        payload: CardActionPayload,
+    ) -> dict[str, Any]:
         try:
-            return card_actions.execute(memory_owner(user_id), conversation_id, card_id,
-                request_id=payload["requestId"], action_name=payload["actionName"],
-                inputs=payload["inputs"])
+            return dict(
+                card_actions.execute(
+                    memory_owner(user_id),
+                    conversation_id,
+                    card_id,
+                    request_id=payload["requestId"],
+                    action_name=payload["actionName"],
+                    inputs=payload["inputs"],
+                )
+            )
         except ActionRejected as exc:
             raise BsideError(exc.code, 409) from exc
 
-    def memory_owner(user_id):
-        return TrustedContext.from_mapping({
-            "userId": user_id, "environment": config.environment,
-        })
+    def memory_owner(user_id: int) -> TrustedContext:
+        return TrustedContext.from_mapping(
+            {
+                "userId": user_id,
+                "environment": config.environment,
+            }
+        )
 
-    def memory_view(user_id):
+    def memory_view(user_id: int) -> MemoryState:
         return personal_memory.view(memory_owner(user_id))
 
-    def memory_replace(user_id, settings):
+    def memory_replace(user_id: int, settings: MemoryState) -> MemoryState:
         try:
             return personal_memory.replace(memory_owner(user_id), **settings)
         except MemoryConflict as exc:
@@ -201,27 +255,34 @@ def create_app_from_environment():
         except ValueError as exc:
             raise BsideError("INVALID_MEMORY_SETTINGS", 400) from exc
 
-    def legacy_history(user_id, conversation_id, before_id):
+    def legacy_history(
+        user_id: int,
+        conversation_id: int,
+        before_id: int,
+    ) -> list[BaseMessage]:
         rows = message_repository.legacy_history(user_id, conversation_id, before_id)
-        result = []
+        result: list[BaseMessage] = []
         for row in rows:
             content = row["content"]
             # Preserve legacy visible content, but never invent historical tool calls.
-            text = (content.get("text", "") if isinstance(content, dict)
-                    else str(content))
+            text = content.get("text", "") if isinstance(content, dict) else str(content)
             if isinstance(content, dict) and content.get("events"):
                 text += "\nLegacy display events: " + json.dumps(
-                    content["events"], ensure_ascii=False)
+                    content["events"], ensure_ascii=False
+                )
             cls = HumanMessage if row["role"] == "user" else AIMessage
             result.append(cls(content=text, id=f"legacy-{row['id']}"))
         return result
 
     work_activities = WorkActivitiesRepository(connection_factory)
     from a2flow_bside.processing_tasks import ProcessingTasksRepository
+
     processing_tasks = ProcessingTasksRepository(connection_factory, work_activities)
     chat_runner = ChatLoopRunner(
-        model_factory=chat_model_factory, model_reference="deepseek-v4-flash",
-        environment=config.environment, reader=reader,
+        model_factory=chat_model_factory,
+        model_reference="deepseek-v4-flash",
+        environment=config.environment,
+        reader=reader,
         system_prompt=_chat_system_prompt,
         conversation_store=ConversationStore(conninfo),
         history_loader=legacy_history,
@@ -233,8 +294,12 @@ def create_app_from_environment():
         processing_provider=processing_tasks,
     )
 
-    account_guard = PostgresAccountGuard(connection_factory, pepper=config.pepper,
-        environment=config.environment, config=AccountGuardConfig.from_environment(os.environ))
+    account_guard = PostgresAccountGuard(
+        connection_factory,
+        pepper=config.pepper,
+        environment=config.environment,
+        config=AccountGuardConfig.from_environment(os.environ),
+    )
     account_guard.check_ready()
 
     return create_app(

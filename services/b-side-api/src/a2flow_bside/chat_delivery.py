@@ -9,14 +9,26 @@ import asyncio
 import copy
 import json
 import time
-from collections.abc import AsyncIterator
-from typing import Any, Literal, TypeAlias, TypedDict, cast
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from typing import Any, Literal, NotRequired, Protocol, TypeAlias, TypedDict, cast
 
 from starlette.responses import StreamingResponse
+from starlette.types import Receive, Scope, Send
 
-JsonValue: TypeAlias = (
-    bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"] | None
-)
+from .chat_runner import ChatStream
+from .persistence_types import MessageRecord
+from .processing_tasks import ProcessingContext
+
+
+class MessageProjection(Protocol):
+    """Both direct messages and generation-fenced writes persist projections."""
+
+    def update_delivery(
+        self, *, conversation_id: int, message_id: int, content: dict[str, Any]
+    ) -> None: ...
+
+
+JsonValue: TypeAlias = bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"] | None
 JsonObject: TypeAlias = dict[str, JsonValue]
 
 
@@ -93,12 +105,32 @@ def _identifier(value: object, *, limit: int = 256) -> str | None:
     return value if isinstance(value, str) and 0 < len(value) <= limit else None
 
 
+class RunnerArguments(TypedDict):
+    user_id: int
+    conversation_id: int
+    text: str
+    turn_id: str
+    run_references: NotRequired[Sequence[Mapping[str, Any]]]
+    processing_context: NotRequired[ProcessingContext]
+
+
 class ChatDelivery:
-    def __init__(self, *, messages, runner, user_id, conversation_id, text,
-                 input_message, assistant_message, run_references=(), processing_context=None):
+    def __init__(
+        self,
+        *,
+        messages: MessageProjection,
+        runner: ChatStream,
+        user_id: int,
+        conversation_id: int,
+        text: str,
+        input_message: MessageRecord,
+        assistant_message: MessageRecord,
+        run_references: tuple[dict[str, Any], ...] = (),
+        processing_context: ProcessingContext | None = None,
+    ) -> None:
         self.messages, self.runner = messages, runner
         self.user_id, self.conversation_id, self.text = user_id, conversation_id, text
-        self.input_id, self.assistant_id = input_message['id'], assistant_message['id']
+        self.input_id, self.assistant_id = input_message["id"], assistant_message["id"]
         self.run_references = copy.deepcopy(list(run_references))
         self.processing_context = copy.deepcopy(processing_context)
         self.turn_id = str(self.input_id)
@@ -111,11 +143,18 @@ class ChatDelivery:
             "toolCalls": [],
         }
         self.content: dict[str, Any] = {
-            "text": "", "reasoning": "", "tools": [], "events": [],
-            "delivery": "running", "execution": self.execution, "parts": [],
+            "text": "",
+            "reasoning": "",
+            "tools": [],
+            "events": [],
+            "delivery": "running",
+            "execution": self.execution,
+            "parts": [],
         }
         if isinstance(assistant_message.get("content", {}).get("continuation"), dict):
-            self.content["continuation"] = copy.deepcopy(assistant_message["content"]["continuation"])
+            self.content["continuation"] = copy.deepcopy(
+                assistant_message["content"]["continuation"]
+            )
         if self.processing_context is not None:
             self.content["processingTaskId"] = self.processing_context["taskId"]
         self.parts: list[ContentPart] = self.content["parts"]
@@ -129,9 +168,13 @@ class ChatDelivery:
         )
         self.detached = False
         self.sequence = 0
+        # Native delivery and durable journaling supply the same explicit event sink.
+        self.emit: Callable[[dict[str, Any]], Awaitable[None]] = self._emit
 
     def _model_delta(
-        self, event: dict[str, Any], key: Literal["text", "reasoning"],
+        self,
+        event: dict[str, Any],
+        key: Literal["text", "reasoning"],
         sequence: int,
     ) -> str | None:
         message_id = _identifier(event.get("modelMessageId"))
@@ -141,8 +184,13 @@ class ChatDelivery:
         if message_id is not None:
             record = self._model_messages.get(message_id)
             if record is None:
-                record = {"messageId": message_id, "sequence": sequence,
-                          "text": "", "reasoning": "", "phase": "process"}
+                record = {
+                    "messageId": message_id,
+                    "sequence": sequence,
+                    "text": "",
+                    "reasoning": "",
+                    "phase": "process",
+                }
                 self._model_messages[message_id] = record
                 self.execution["modelMessages"].append(record)
             if key == "text":
@@ -190,9 +238,13 @@ class ChatDelivery:
         self._live_cards[card_id] = copied
         part_id = "application:" + card_id
         if not any(part.get("id") == part_id for part in self.parts):
-            self.parts.append({
-                "type": "application", "id": part_id, "cardId": card_id,
-            })
+            self.parts.append(
+                {
+                    "type": "application",
+                    "id": part_id,
+                    "cardId": card_id,
+                }
+            )
         return part_id, copied
 
     def _personal_workflow(self, event: dict[str, Any]) -> tuple[str, JsonObject]:
@@ -200,19 +252,29 @@ class ChatDelivery:
         if not isinstance(workflow, dict):
             raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
         key = _identifier(workflow.get("definitionKey"))
-        if key is None or not key.startswith("personal-wf-") or workflow.get("source") != "PERSONAL":
+        if (
+            key is None
+            or not key.startswith("personal-wf-")
+            or workflow.get("source") != "PERSONAL"
+        ):
             raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
-        if (not isinstance(workflow.get("name"), str) or not workflow["name"].strip()
-                or len(workflow["name"]) > 200
-                or not isinstance(workflow.get("defaultRequirement"), str)
-                or len(workflow["defaultRequirement"]) > 2000):
+        if (
+            not isinstance(workflow.get("name"), str)
+            or not workflow["name"].strip()
+            or len(workflow["name"]) > 200
+            or not isinstance(workflow.get("defaultRequirement"), str)
+            or len(workflow["defaultRequirement"]) > 2000
+        ):
             raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
         nodes = workflow.get("nodes")
         if not isinstance(nodes, list) or not 1 <= len(nodes) <= 8:
             raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
         public_nodes: list[JsonValue] = []
         for node in nodes:
-            if not isinstance(node, dict) or node.get("type") not in {"SKILL", "BUSINESS_CAPABILITY"}:
+            if not isinstance(node, dict) or node.get("type") not in {
+                "SKILL",
+                "BUSINESS_CAPABILITY",
+            }:
                 raise ValueError("INVALID_PERSONAL_WORKFLOW_EVENT")
             reference = "skillKey" if node["type"] == "SKILL" else "abilityKey"
             if _identifier(node.get("nodeId")) is None or _identifier(node.get(reference)) is None:
@@ -221,9 +283,13 @@ class ChatDelivery:
             if isinstance(node.get("displayName"), str):
                 public_node["displayName"] = node["displayName"]
             public_nodes.append(public_node)
-        copied: JsonObject = {"definitionKey": key, "source": "PERSONAL",
-                              "name": workflow["name"], "defaultRequirement": workflow["defaultRequirement"],
-                              "nodes": public_nodes}
+        copied: JsonObject = {
+            "definitionKey": key,
+            "source": "PERSONAL",
+            "name": workflow["name"],
+            "defaultRequirement": workflow["defaultRequirement"],
+            "nodes": public_nodes,
+        }
         if isinstance(workflow.get("inputSchema"), dict):
             copied["inputSchema"] = copy.deepcopy(workflow["inputSchema"])
         part_id = "personal-workflow:" + key
@@ -239,9 +305,7 @@ class ChatDelivery:
         content = copy.deepcopy(self.content)
         for part in content["parts"]:
             if part.get("type") == "application":
-                part["card"] = copy.deepcopy(
-                    self._live_cards.get(part["cardId"])
-                )
+                part["card"] = copy.deepcopy(self._live_cards.get(part["cardId"]))
         return content
 
     def _tool_started(self, event: dict[str, Any], sequence: int) -> None:
@@ -249,8 +313,12 @@ class ChatDelivery:
         name = _identifier(event.get("name"), limit=128)
         started_at = _identifier(event.get("startedAt"), limit=64)
         arguments = event.get("arguments")
-        if (tool_call_id is None or name is None or started_at is None
-                or not isinstance(arguments, dict)):
+        if (
+            tool_call_id is None
+            or name is None
+            or started_at is None
+            or not isinstance(arguments, dict)
+        ):
             return
         record: ToolCallRecord = {
             "toolCallId": tool_call_id,
@@ -273,9 +341,13 @@ class ChatDelivery:
         lifecycle = event.get("lifecycleStatus")
         tool_status = event.get("toolMessageStatus")
         if (
-            tool_call_id is None or name is None or started_at is None
-            or finished_at is None or type(duration_ms) is not int
-            or duration_ms < 0 or lifecycle not in {"returned", "raised"}
+            tool_call_id is None
+            or name is None
+            or started_at is None
+            or finished_at is None
+            or type(duration_ms) is not int
+            or duration_ms < 0
+            or lifecycle not in {"returned", "raised"}
             or tool_status not in {None, "success", "error"}
         ):
             return
@@ -292,12 +364,14 @@ class ChatDelivery:
             }
             self._tool_calls[tool_call_id] = record
             self.execution["toolCalls"].append(record)
-        record.update({
-            "lifecycleStatus": lifecycle,
-            "toolMessageStatus": tool_status,
-            "finishedAt": finished_at,
-            "durationMs": duration_ms,
-        })
+        record.update(
+            {
+                "lifecycleStatus": lifecycle,
+                "toolMessageStatus": tool_status,
+                "finishedAt": finished_at,
+                "durationMs": duration_ms,
+            }
+        )
         if "result" in event:
             record["result"] = cast(JsonValue, copy.deepcopy(event["result"]))
         business_success = event.get("businessSuccess")
@@ -315,28 +389,48 @@ class ChatDelivery:
         elapsed = event.get("elapsedMs")
         code = event.get("errorCode", "")
         if (
-            record is None or record["name"] not in {"generate_a2ui", "generate_interaction"}
+            record is None
+            or record["name"] not in {"generate_a2ui", "generate_interaction"}
             or event.get("name") != record["name"]
             or not isinstance(stage, str)
-            or stage not in {"preparing", "generating", "validating_loading",
-                             "saving", "completed", "failed"}
-            or type(elapsed) is not int or elapsed < 0
-            or not isinstance(code, str) or len(code) > 128
+            or stage
+            not in {
+                "preparing",
+                "generating",
+                "validating_loading",
+                "saving",
+                "completed",
+                "failed",
+            }
+            or type(elapsed) is not int
+            or elapsed < 0
+            or not isinstance(code, str)
+            or len(code) > 128
             or (code and not all(char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for char in code))
         ):
             return None
         progress = record.setdefault("generationProgress", [])
-        order = {"preparing": 0, "generating": 1, "validating_loading": 2,
-                 "saving": 3, "completed": 4, "failed": 4}
-        if len(progress) >= 5 or (progress and (
-            order[stage] <= order[progress[-1]["stage"]]
-            or elapsed < progress[-1]["elapsedMs"]
-        )):
+        order = {
+            "preparing": 0,
+            "generating": 1,
+            "validating_loading": 2,
+            "saving": 3,
+            "completed": 4,
+            "failed": 4,
+        }
+        if len(progress) >= 5 or (
+            progress
+            and (
+                order[stage] <= order[progress[-1]["stage"]] or elapsed < progress[-1]["elapsedMs"]
+            )
+        ):
             return None
         value: GenerationProgressRecord = {
             "toolCallId": record["toolCallId"],
             "name": cast(Literal["generate_a2ui", "generate_interaction"], record["name"]),
-            "stage": cast(GenerationStage, stage), "elapsedMs": elapsed, "errorCode": code,
+            "stage": cast(GenerationStage, stage),
+            "elapsedMs": elapsed,
+            "errorCode": code,
         }
         if not progress or progress[-1] != value:
             progress.append(value)
@@ -349,8 +443,13 @@ class ChatDelivery:
         if final_id is not None:
             record = self._model_messages.get(final_id)
             if record is None:
-                record = {"messageId": final_id, "sequence": self.sequence + 1,
-                          "text": "", "reasoning": "", "phase": "final"}
+                record = {
+                    "messageId": final_id,
+                    "sequence": self.sequence + 1,
+                    "text": "",
+                    "reasoning": "",
+                    "phase": "final",
+                }
                 self._model_messages[final_id] = record
                 self.execution["modelMessages"].append(record)
             record["phase"] = "final"
@@ -373,41 +472,58 @@ class ChatDelivery:
             )
         )
         has_streamed_final = (
-            bool(matching_text) if final_id is not None
+            bool(matching_text)
+            if final_id is not None
             else isinstance(final_content, str) and matching_text == final_content
         )
-        if (
-            isinstance(final_content, str)
-            and final_content
-            and not has_streamed_final
-        ):
+        if isinstance(final_content, str) and final_content and not has_streamed_final:
             # Some providers only expose the final text on their terminal
             # message. Add that real text once; streamed text remains
             # authoritative whenever a matching part already exists.
             self._append_text_part(final_content, final_id)
 
-    async def emit(self, event: dict[str, Any]) -> None:
+    async def _emit(self, event: dict[str, Any]) -> None:
         self.sequence += 1
         if not self.detached:
-            await self.pending.put({**event, "sequence": self.sequence,
-                                    "messageId": str(self.assistant_id),
-                                    "inputMessageId": str(self.input_id)})
+            await self.pending.put(
+                {
+                    **event,
+                    "sequence": self.sequence,
+                    "messageId": str(self.assistant_id),
+                    "inputMessageId": str(self.input_id),
+                }
+            )
 
     async def save(self) -> None:
         await asyncio.to_thread(
-            self.messages.update_delivery, conversation_id=self.conversation_id,
-            message_id=self.assistant_id, content=copy.deepcopy(self.content))
+            self.messages.update_delivery,
+            conversation_id=self.conversation_id,
+            message_id=self.assistant_id,
+            content=copy.deepcopy(self.content),
+        )
 
     async def produce(self) -> None:
         completed, failed, waiting = False, False, False
         last_save = time.monotonic()
         iterator = None
         try:
-            await self.emit({"type": "turn_started", "turnId": self.turn_id,
-                             **({"processingTaskId": self.processing_context["taskId"]}
-                                if self.processing_context is not None else {})})
-            arguments = dict(user_id=self.user_id, conversation_id=self.conversation_id,
-                             text=self.text, turn_id=str(self.input_id))
+            await self.emit(
+                {
+                    "type": "turn_started",
+                    "turnId": self.turn_id,
+                    **(
+                        {"processingTaskId": self.processing_context["taskId"]}
+                        if self.processing_context is not None
+                        else {}
+                    ),
+                }
+            )
+            arguments: RunnerArguments = dict(
+                user_id=self.user_id,
+                conversation_id=self.conversation_id,
+                text=self.text,
+                turn_id=str(self.input_id),
+            )
             if self.run_references:
                 arguments["run_references"] = self.run_references
             if self.processing_context is not None:
@@ -425,9 +541,12 @@ class ChatDelivery:
                     continue
                 if kind == "waiting_action":
                     waiting = True
-                    event = {**event, "turnId": self.turn_id,
-                             "inputMessageId": str(self.input_id),
-                             "assistantMessageId": str(self.assistant_id)}
+                    event = {
+                        **event,
+                        "turnId": self.turn_id,
+                        "inputMessageId": str(self.input_id),
+                        "assistantMessageId": str(self.assistant_id),
+                    }
                     card_id = _identifier(event.get("cardId"), limit=128)
                     if card_id is not None:
                         event["partId"] = "application:" + card_id
@@ -451,40 +570,55 @@ class ChatDelivery:
                         continue
                     event = {"type": kind, **progress}
                 elif kind == "application_rendered":
-                    event = {**event, "turnId": self.turn_id,
-                             "inputMessageId": str(self.input_id),
-                             "assistantMessageId": str(self.assistant_id)}
+                    event = {
+                        **event,
+                        "turnId": self.turn_id,
+                        "inputMessageId": str(self.input_id),
+                        "assistantMessageId": str(self.assistant_id),
+                    }
                     application = self._application(event)
                     if application is None:
                         continue
                     part_id, card = application
                     event = {**event, "partId": part_id, "card": card}
-                    self.content["events"].append({
-                        "type": "application_rendered",
-                        "turnId": self.turn_id,
-                        "inputMessageId": str(self.input_id),
-                        "assistantMessageId": str(self.assistant_id),
-                        "partId": part_id,
-                        "cardId": card["cardId"],
-                    })
+                    self.content["events"].append(
+                        {
+                            "type": "application_rendered",
+                            "turnId": self.turn_id,
+                            "inputMessageId": str(self.input_id),
+                            "assistantMessageId": str(self.assistant_id),
+                            "partId": part_id,
+                            "cardId": card["cardId"],
+                        }
+                    )
                 elif kind == "personal_workflow_created":
                     part_id, workflow = self._personal_workflow(event)
-                    event = {"type": kind, "workflow": workflow, "partId": part_id,
-                             "turnId": self.turn_id, "sequence": self.sequence + 1,
-                             "messageId": str(self.assistant_id),
-                             "inputMessageId": str(self.input_id),
-                             "assistantMessageId": str(self.assistant_id)}
-                    if not any(item.get("type") == kind and item.get("partId") == part_id
-                               for item in self.content["events"]):
+                    event = {
+                        "type": kind,
+                        "workflow": workflow,
+                        "partId": part_id,
+                        "turnId": self.turn_id,
+                        "sequence": self.sequence + 1,
+                        "messageId": str(self.assistant_id),
+                        "inputMessageId": str(self.input_id),
+                        "assistantMessageId": str(self.assistant_id),
+                    }
+                    if not any(
+                        item.get("type") == kind and item.get("partId") == part_id
+                        for item in self.content["events"]
+                    ):
                         self.content["events"].append(copy.deepcopy(event))
                     # A displayed registration result must survive a refresh even
                     # if the model's later turn fails or the subscriber disconnects.
                     await self.save()
                     last_save = time.monotonic()
                 elif kind in ("workflow_confirm", "interaction_required"):
-                    event = {**event, "turnId": self.turn_id,
-                             "inputMessageId": str(self.input_id),
-                             "assistantMessageId": str(self.assistant_id)}
+                    event = {
+                        **event,
+                        "turnId": self.turn_id,
+                        "inputMessageId": str(self.input_id),
+                        "assistantMessageId": str(self.assistant_id),
+                    }
                     self.content["events"].append(event)
                 else:
                     continue
@@ -498,10 +632,16 @@ class ChatDelivery:
             else:
                 self.content["delivery"] = "waiting_action" if waiting else "completed"
             await self.save()
-            await self.emit({"type": "done" if self.content["delivery"] in {"completed", "waiting_action"} else "error",
-                             "code": self.content.get("errorCode"),
-                             "finalModelMessageId": self.final_model_message_id,
-                             "content": self._public_content()})
+            await self.emit(
+                {
+                    "type": "done"
+                    if self.content["delivery"] in {"completed", "waiting_action"}
+                    else "error",
+                    "code": self.content.get("errorCode"),
+                    "finalModelMessageId": self.final_model_message_id,
+                    "content": self._public_content(),
+                }
+            )
         except (Exception, asyncio.CancelledError):
             self.content["delivery"] = "unconfirmed"
             self.content["errorCode"] = "CHAT_UNCONFIRMED"
@@ -537,12 +677,15 @@ class ChatDelivery:
 
 
 class ChatStreamingResponse(StreamingResponse):
-    def __init__(self, delivery):
+    def __init__(self, delivery: ChatDelivery) -> None:
         self.delivery = delivery
-        super().__init__(delivery.stream(), media_type="text/event-stream",
-                         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+        super().__init__(
+            delivery.stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         try:
             await super().__call__(scope, receive, send)
         finally:

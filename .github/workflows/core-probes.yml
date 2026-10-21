@@ -9,6 +9,7 @@ on:
       - "contracts/**"
       - "experiments/runtime-phase1/requirements.lock"
       - "openspec/changes/portfolio-runtime-outbox/**"
+      - "requirements-quality.lock"
       - "scripts/**"
       - ".dockerignore"
       - ".github/workflows/core-probes.yml"
@@ -21,6 +22,7 @@ on:
       - "contracts/**"
       - "experiments/runtime-phase1/requirements.lock"
       - "openspec/changes/portfolio-runtime-outbox/**"
+      - "requirements-quality.lock"
       - "scripts/**"
       - ".dockerignore"
       - ".github/workflows/core-probes.yml"
@@ -51,6 +53,10 @@ jobs:
         run: |
           docker build -f openspec/changes/portfolio-runtime-outbox/Dockerfile.probe -t a2flow-core-probes:local .
           docker pull postgres:16.6-bookworm
+      - name: Check typed Python HTTP and production composition boundaries
+        timeout-minutes: 5
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=256m --mount type=bind,src="$PWD",dst=/workspace,readonly --workdir /workspace a2flow-core-probes:local python scripts/check_python_dependency_types.py
       - name: Exercise account, outbox, executor and Chat/Workflow/A2UI approval invariants
         timeout-minutes: 21
         run: python scripts/run_core_probes.py --run-id "$PROBE_RUN_ID" --probe-timeout 180
