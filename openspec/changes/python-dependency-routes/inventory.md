@@ -75,3 +75,19 @@ failures/errors (old schedule/run/notification fakes and incomplete
 InternalRunStart fixture). Runtime `test_http` ran 12 tests: ten passed; existing
 timeout-state and stale-reset assertions failed unchanged. These are recorded
 comparison boundaries, not successful whole-suite results.
+
+## Integrated candidate verification
+
+The complete `python-di-candidate` export (API `465668a`, assembly `fd40dd4`,
+verification `62a137f`, and root's adjacent service/Runtime boundary changes)
+passed all five composition/contract checks. The immutable 42 B and 19 Runtime
+route/OpenAPI snapshots were unchanged. Runtime progress HTTP passed all seven
+checks, including finite slow-send timeout, lease release and observer-only
+cancellation on disconnect.
+
+Broader B discovery ran 73 tests: 65 passed, two PostgreSQL-only tests skipped,
+and the same four failures/two errors reproduced at baseline. No new failure was
+introduced. The additional fifth composition test explains the increase from
+72 baseline tests. All checks ran against a read-only source export in the
+pinned local probe image with `--network none`. No production credentials,
+database, model call, business execution or deployment was used.
