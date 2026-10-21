@@ -25,3 +25,12 @@ class ChatRunner(Protocol):
                       run_references: tuple[dict[str, Any], ...] = (),
                       processing_context: dict[str, Any] | None = None,
                       ) -> AsyncIterator[dict[str, Any]]: ...
+
+    async def inspect_turn(self, *, user_id: int, conversation_id: int,
+                           turn_id: str) -> dict[str, Any]:
+        """Return NOT_STARTED, BUSY, COMPLETED (with events), or NEEDS_REVIEW.
+
+        Inspection shares native execution admission. An expired product lease
+        alone is never evidence that a model or business operation may replay.
+        """
+        ...
