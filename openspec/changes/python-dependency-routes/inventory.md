@@ -58,7 +58,20 @@ module locations, so a router move is allowed while an API contract drift fails.
 The request-level test separately pins authentication, missing Origin, rejected
 undeclared queries and non-owned conversation behavior using offline ASGI.
 
-Baseline execution: all four tests pass in `a2flow-core-probes:local`, with
+The additional Runtime composition check constructs the actual `RpcWorkflowHost`
+through `deploy.realchat.launcher.runtime()` without opening a connection. Its
+separate immutable fixture pins all 19 Runtime routes and OpenAPI schemas,
+including action, card, resume and progress endpoints. The example activity
+package is needed on the test PYTHONPATH, matching the real host imports.
+
+Baseline execution: all five tests pass in `a2flow-core-probes:local`, with
 `--network none`, no model key, no database and no production requests. The same
 test file must be rerun after integrating the router/composition changes; this
 baseline result alone does not establish post-refactor equivalence.
+
+Baseline broader checks (same image/source): B discovery before the fifth new
+test ran 72 tests: 64 passed, two PostgreSQL tests skipped and six existing
+failures/errors (old schedule/run/notification fakes and incomplete
+InternalRunStart fixture). Runtime `test_http` ran 12 tests: ten passed; existing
+timeout-state and stale-reset assertions failed unchanged. These are recorded
+comparison boundaries, not successful whole-suite results.

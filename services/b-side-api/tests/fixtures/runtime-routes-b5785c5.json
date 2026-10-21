@@ -1,0 +1,187 @@
+{
+  "routes": [
+    {
+      "path": "/runtime/runs",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/controls/{control_id:path}",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/events",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/stop",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/restart",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/progress",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/nodes/{node_id}/executions/{execution_id}/history",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/nodes/{node_id}/executions/{execution_id}/stream",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/session",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/view",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/workflows",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/nodes/{node_id}/actions",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/surface",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/cards",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/cards/{card_id}/actions",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/cards/{card_id}/resume",
+      "methods": [
+        "POST"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    },
+    {
+      "path": "/runtime/runs/{run_id}/cards/{card_id}/resume-status",
+      "methods": [
+        "GET"
+      ],
+      "status": null,
+      "responseClass": "DefaultPlaceholder"
+    }
+  ],
+  "paths": {
+    "/runtime/runs": "c9395281666616a5954bb3e54b11fb833c89d8e0bb3123f109ea5d1175ffdf0e",
+    "/runtime/controls/{control_id}": "2145b8f435610a52507c913547387e68c117bed8fe59eb0754b27054370a3440",
+    "/runtime/runs/{run_id}": "1582f92a28b8f1939d8664e5b18d7988a942ef228512d691e7950d06bd00108b",
+    "/runtime/runs/{run_id}/events": "cae8eca6ff6651bcc5149efef922af18017c11d314f08204ec86192ce23d7a48",
+    "/runtime/runs/{run_id}/stop": "8bcf043aa362533dd980b1c1f5c5166001e54cd525b3127491e27ff167c50253",
+    "/runtime/runs/{run_id}/restart": "a42f207ee216e28416ac1caa15f19fc94b6f1660947f6e6afa3d43f2d4cbd715",
+    "/runtime/runs/{run_id}/progress": "29b999ec320a7fa7b1ddaa2c8964c5e5afb023c48e337e3349a84d43999613de",
+    "/runtime/runs/{run_id}/nodes/{node_id}/executions/{execution_id}/history": "34f14cf080211a123164b37df4727949b417fbee53571e23fb367ecbbad0f5c1",
+    "/runtime/runs/{run_id}/nodes/{node_id}/executions/{execution_id}/stream": "642d9109853ce5b7835321ffd47b1cf6e3ca1674876f7a7c33fb8b36d0970b9e",
+    "/runtime/session": "23a37aa622d92e9da5b2fc4474701e5b810448d2a18304c18ad4b5d5fcdc6b28",
+    "/runtime/runs/{run_id}/view": "c71d435fd17d61dfc57f06622400620e3ca8cabb1f1cf51fc0f6f9c87baed4a5",
+    "/runtime/workflows": "b527ac76ad0fa50dd2de215a9ead0e01ec6e297dd59265dc88eaa9e4b18d8226",
+    "/runtime/runs/{run_id}/nodes/{node_id}/actions": "fb002492b8e22f715400ada4534bd0f54eee854a010b706b2aeeb600b112d0a9",
+    "/runtime/runs/{run_id}/surface": "8b31d448ec8ff131e4f082933ec9ace667490c8a7c7f658fffda66a219545f90",
+    "/runtime/runs/{run_id}/cards": "a418aa5fbf33022b21f822d577f93adb8eb54e1bf869fa7d22392965ae7eb26b",
+    "/runtime/runs/{run_id}/cards/{card_id}/actions": "8adc2483504fb049dc343f4f0afd5ec5fc297285f955ba82130086eeee986b82",
+    "/runtime/runs/{run_id}/cards/{card_id}/resume": "54d616550f0f59cf289a22c151ff25f5d444975f0a6a7d09d36a4cfc5bd46ea3",
+    "/runtime/runs/{run_id}/cards/{card_id}/resume-status": "ba95fcc108053cd4ecee93d499fab97ff72b7e93197958551694c34286c1b95c"
+  },
+  "schemas": {
+    "Action": "522c4ca8244759fb8f954d82dfd496678dd0e6a32db730ab8dd4b621a093c65d",
+    "CardActionBody": "7841bf959e92b1f3ec5a3d38c253bfe684a1791508f2334fc139337a73a310d2",
+    "CardResumeBody": "2c2a30d08762330652b38d891aa2e8952dee1dcda3442e94be3ea0e486a998f5",
+    "Control": "4eb2e914758482748a86ae12acf94bd67c565d40c79df6355fca295dbf0f6ad1",
+    "HTTPValidationError": "7373c21f1389312367e27e440140ba11d587693c56d8aa27249b36d3f58c10c6",
+    "JsonValue": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "Restart": "86b9eebf0de28de294a5272a4fd4b6d9e92e5e249b81bd6e8dd497835460981b",
+    "Start": "fd529fc8e86cca8afc0b06642db61bf0259e7214c04f30ae6e86c636261da4c4",
+    "ValidationError": "ca285d0c0e64c42844efd2e860edb239e77cc49d87f065c5ccb7d2f55331b862"
+  }
+}
