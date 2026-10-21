@@ -15,6 +15,7 @@ from psycopg.errors import UniqueViolation
 from skillweave_contracts.user_id import require_user_id
 
 from .errors import BsideError
+from .persistence_types import ConnectionFactory, MessageRecord
 from .interaction_continuation import continuation_reference
 
 
@@ -23,7 +24,7 @@ def _iso(value):
 
 
 class UsersRepository:
-    def __init__(self, connection_factory: Callable):
+    def __init__(self, connection_factory: ConnectionFactory):
         self._factory = connection_factory
 
     def create(self, *, username: str, password_hash: str,
@@ -53,7 +54,7 @@ class UsersRepository:
 
 
 class SessionsRepository:
-    def __init__(self, connection_factory: Callable):
+    def __init__(self, connection_factory: ConnectionFactory):
         self._factory = connection_factory
 
     def create(self, *, token_sha256: str, user_id: int,
@@ -86,7 +87,7 @@ class SessionsRepository:
 
 
 class ConversationsRepository:
-    def __init__(self, connection_factory: Callable):
+    def __init__(self, connection_factory: ConnectionFactory):
         self._factory = connection_factory
 
     def create(self, *, user_id: int, title: str | None) -> dict:
@@ -116,12 +117,12 @@ class ConversationsRepository:
 
 
 class MessagesRepository:
-    def __init__(self, connection_factory: Callable):
+    def __init__(self, connection_factory: ConnectionFactory):
         self._factory = connection_factory
 
     def append(self, *, conversation_id: int, role: str, content: dict,
                ref_kind: str | None = None,
-               ref_id: str | None = None) -> dict:
+               ref_id: str | None = None) -> MessageRecord:
         with self._factory() as connection:
             row = connection.execute(
                 "INSERT INTO messages (conversation_id, role, content, "
@@ -129,12 +130,12 @@ class MessagesRepository:
                 "RETURNING id, role, content, ref_kind, ref_id, created_at",
                 (conversation_id, role, json.dumps(content), ref_kind,
                  ref_id)).fetchone()
-        return dict(row)
+        return MessageRecord(**row)
 
     def claim_interaction_continuation(
         self, *, user_id: int, conversation_id: int, card_id: str, request_id: str,
         write_completed: bool = False,
-    ) -> tuple[bool, dict[str, Any], dict[str, Any]]:
+    ) -> tuple[bool, MessageRecord, MessageRecord]:
         """Create one follow-up pair per submitted card under the conversation lock.
 
         Only the transaction that inserts may dispatch. Reading an existing pair
@@ -158,7 +159,7 @@ class MessagesRepository:
                 (conversation_id, reference),
             ).fetchall()
             if rows:
-                by_role = {row["role"]: dict(row) for row in rows}
+                by_role = {row["role"]: MessageRecord(**row) for row in rows}
                 if len(rows) != 2 or set(by_role) != {"user", "assistant"}:
                     raise BsideError("CHAT_CONTINUATION_UNCONFIRMED", 409)
                 return False, by_role["user"], by_role["assistant"]
@@ -170,7 +171,7 @@ class MessagesRepository:
                 ("assistant", {"text": "", "delivery": "running", "parts": [],
                                "continuation": marker}),
             )
-            created = []
+            created: list[MessageRecord] = []
             for role, content in contents:
                 row = connection.execute(
                     "INSERT INTO messages (conversation_id,role,content,ref_kind,ref_id) "
@@ -178,17 +179,17 @@ class MessagesRepository:
                     "RETURNING id,role,content,ref_kind,ref_id,created_at",
                     (conversation_id, role, json.dumps(content), reference),
                 ).fetchone()
-                created.append(dict(row))
+                created.append(MessageRecord(**row))
             return True, created[0], created[1]
 
-    def list_for(self, conversation_id: int, limit: int = 200) -> list[dict]:
+    def list_for(self, conversation_id: int, limit: int = 200) -> list[MessageRecord]:
         with self._factory() as connection:
             rows = connection.execute(
                 "SELECT * FROM (SELECT id, role, content, ref_kind, ref_id, created_at "
                 "FROM messages WHERE conversation_id = %s "
                 "ORDER BY id DESC LIMIT %s) recent ORDER BY id ASC",
                 (conversation_id, limit)).fetchall()
-        return [dict(row) for row in rows]
+        return [MessageRecord(**row) for row in rows]
 
     def update_delivery(self, *, conversation_id: int, message_id: int,
                         content: dict) -> None:
@@ -202,7 +203,7 @@ class MessagesRepository:
                 raise ValueError("CHAT_MESSAGE_MISSING")
 
     def legacy_history(self, user_id: int, conversation_id: int,
-                       before_id: int) -> list[dict]:
+                       before_id: int) -> list[MessageRecord]:
         """One-time migration input, not a second live model history source."""
         require_user_id(user_id)
         with self._factory() as connection:
@@ -214,7 +215,7 @@ class MessagesRepository:
                 "AND NOT (m.content ? 'delivery') ORDER BY m.id",
                 (user_id, conversation_id, before_id),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [MessageRecord(**row) for row in rows]
 
 
 class SchedulesRepository:
@@ -223,7 +224,7 @@ class SchedulesRepository:
         "next_run_at", "last_run_at",
     })
 
-    def __init__(self, connection_factory: Callable):
+    def __init__(self, connection_factory: ConnectionFactory):
         self._factory = connection_factory
 
     def create(self, *, user_id: int, workflow_key: str, environment: str,
@@ -301,7 +302,7 @@ class SchedulesRepository:
 class RunOwnershipRepository:
     """B-side ownership of Runtime control requests (v1 run identity)."""
 
-    def __init__(self, connection_factory: Callable):
+    def __init__(self, connection_factory: ConnectionFactory):
         self._factory = connection_factory
 
     def create(self, *, control_id: str, user_id: int,
