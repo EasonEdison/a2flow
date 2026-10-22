@@ -27,8 +27,10 @@ from . import (
     schedule_routes,
 )
 from .account_guard import AccountGuardError, PostgresAccountGuard
-from .chat_runner import ChatRunner
-from .durable_chat import DurableChat, DurableDispatcher
+from .chat_application import ChatApplicationService
+from .chat_runtime import ChatRuntimeFactory
+from .chat_wake import ChatWake
+from .durable_chat import DurableDispatcher
 from .errors import BsideError, RemoteRuntimeError
 from .identity import (
     SESSION_COOKIE,
@@ -46,8 +48,6 @@ from .repositories import (
     UsersRepository,
 )
 from .route_dependencies import (
-    ChatAction,
-    ChatCards,
     JsonObject,
     MemoryReplace,
     MemoryView,
@@ -158,7 +158,6 @@ def create_app(
     notifications: NotificationsRepository,
     run_ownership: RunOwnershipRepository,
     runtime_client: RuntimeClient,
-    chat_runner: ChatRunner,
     workflow_catalog: WorkflowCatalog,
     pepper: str,
     browser_origin: str,
@@ -170,11 +169,9 @@ def create_app(
     memory_replace: MemoryReplace | None = None,
     work_activities: WorkActivitiesRepository | None = None,
     processing_tasks: ProcessingTasksRepository | None = None,
-    chat_cards: ChatCards | None = None,
-    chat_action: ChatAction | None = None,
     browser_origins: tuple[str, ...] = (),
     account_guard: PostgresAccountGuard | None = None,
-    durable_chat: DurableChat | None = None,
+    chat_runtime_factory: ChatRuntimeFactory | None = None,
 ) -> FastAPI:
     from .config import browser_origin as validate_origin
 
@@ -190,27 +187,58 @@ def create_app(
     # 生产使用 UTC 时钟, 测试可显式注入, 不在业务方法里读取隐式全局时间。
     clock = now or (lambda: dt.datetime.now(dt.UTC))
 
-    # 应用生命周期拥有后台调度器; HTTP 订阅者并不拥有执行任务。
+    # 只有启动成功后的具体服务才可用于请求；此引用只表达 HTTP 就绪状态。
+    chat: ChatApplicationService | None = None
+
+    def current_chat() -> ChatApplicationService:
+        if chat is None:
+            raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
+        return chat
+
+    # running loop 内完成构造；同一 wake 注入接收、卡片完成和分发依赖。
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        nonlocal chat
+        wake = ChatWake()
         stop = asyncio.Event()
-        worker = None
-        # 持久化续聊先通过就绪检查, 再启动扫描与分发。
-        if durable_chat is not None:
-            await asyncio.to_thread(durable_chat.check_ready)
-            worker = asyncio.create_task(
-                DurableDispatcher(durable_chat, messages, chat_runner, processing_tasks).run(stop)
-            )
+        worker: asyncio.Task[None] | None = None
         try:
+            runtime = chat_runtime_factory(wake) if chat_runtime_factory is not None else None
+            if runtime is not None:
+                await asyncio.to_thread(runtime.durable_chat.check_ready)
+                worker = asyncio.create_task(
+                    DurableDispatcher(
+                        runtime.durable_chat, messages, runtime.runner, processing_tasks
+                    ).run(stop)
+                )
+                # 启动任务先取得一次执行机会；立即失败不能被公布为已就绪。
+                await asyncio.sleep(0)
+                if worker.done():
+                    worker.result()
+                    raise RuntimeError("CHAT_DISPATCH_STARTUP_FAILED")
+            chat = ChatApplicationService(
+                messages=messages,
+                environment=environment,
+                work_activities=work_activities,
+                processing_tasks=processing_tasks,
+                durable_chat=runtime.durable_chat if runtime is not None else None,
+                chat_cards=runtime.cards if runtime is not None else None,
+                chat_action=runtime.action if runtime is not None else None,
+            )
             yield
-        # 停止准入并等待分发器退出, 然后等待尚未完成的卡片动作。
         finally:
+            # 先撤销新请求准入，再等待已归属的执行和卡片动作，最终关闭提示。
+            chat = None
             stop.set()
-            if worker is not None:
-                await worker
-            # Card actions stay owned after the HTTP subscriber disconnects.
-            while chat_tasks:
-                await asyncio.gather(*tuple(chat_tasks), return_exceptions=True)
+            try:
+                if worker is not None:
+                    await worker
+            finally:
+                try:
+                    while chat_tasks:
+                        await asyncio.gather(*tuple(chat_tasks), return_exceptions=True)
+                finally:
+                    wake.close()
 
     # 关闭自动文档入口, 后台动作集合由当前应用实例持有。
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, lifespan=lifespan)
@@ -325,12 +353,7 @@ def create_app(
             conversations=conversations,
             messages=messages,
             run_ownership=run_ownership,
-            environment=environment,
-            work_activities=work_activities,
-            processing_tasks=processing_tasks,
-            chat_cards=chat_cards,
-            chat_action=chat_action,
-            durable_chat=durable_chat,
+            chat_service=current_chat,
             retain_task=retain_task,
         )
     )
