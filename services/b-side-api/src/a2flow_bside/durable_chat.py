@@ -734,6 +734,7 @@ class DurableDispatcher:
         self.active: set[int] = set()
 
     async def dispatch(self, turn: dict[str, Any]) -> bool:
+        # False 仅要求争锁者本地退避；True 不代表业务成功或允许重放。
         # Dedicated session lock survives transaction commits; Runtime independently
         # arbitrates actual execution. Lock loss never authorizes business replay.
         # 先取得会话锁再重新读取当前轮次, 候选扫描结果不直接授权执行。
