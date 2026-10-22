@@ -97,6 +97,13 @@ def _identifier(value: object, *, limit: int = 256) -> str | None:
     return value if isinstance(value, str) and 0 < len(value) <= limit else None
 
 
+class WaitingActionEvent(TypedDict):
+    type: Literal["waiting_action"]
+    cardId: str
+    partId: str
+    cardScope: Literal["CURRENT_TURN", "EXISTING"]
+
+
 class ChatTurnResult(TypedDict):
     schemaVersion: Literal["v1"]
     turnId: str
@@ -544,8 +551,17 @@ class ChatResultAccumulator:
         if kind == "waiting_action":
             self.waiting = True
             card_id = _identifier(item.get("cardId"), limit=128)
-            if card_id is not None:
-                item["partId"] = "application:" + card_id
+            if card_id is None:
+                raise ValueError("CHAT_RESULT_WAITING_CARD_INVALID")
+            # 原生执行可因已有待提交卡片直接结束, 该引用不属于本轮渲染产物。
+            # 范围只从真实事件归并事实生成, 不接受传入方自行声明卡片所属轮次。
+            reference: WaitingActionEvent = {
+                "type": "waiting_action",
+                "cardId": card_id,
+                "partId": "application:" + card_id,
+                "cardScope": "CURRENT_TURN" if card_id in self._live_cards else "EXISTING",
+            }
+            item.update(reference)
             self.content["events"].append(item)
         elif kind in ("text_delta", "reasoning_delta"):
             key: Literal["text", "reasoning"] = "text" if kind == "text_delta" else "reasoning"
@@ -832,6 +848,7 @@ def validate_result(value: object) -> ChatTurnResult:
             raise ValueError("CHAT_RESULT_FINAL_PART_MISSING")
     waiting = False
     rendered_cards: set[str] = set()
+    existing_cards: set[str] = set()
     workflow_parts = {
         part["id"]: part["workflow"] for part in parts if part.get("type") == "personal_workflow"
     }
@@ -842,10 +859,19 @@ def validate_result(value: object) -> ChatTurnResult:
         kind = event.get("type")
         if kind == "waiting_action":
             waiting = True
-            if event.get("cardId") not in card_ids or event.get("partId") != "application:" + str(
-                event.get("cardId")
-            ):
+            card_id = _identifier(event.get("cardId"), limit=128)
+            if card_id is None or event.get("partId") != "application:" + card_id:
                 raise ValueError("CHAT_RESULT_WAITING_CARD_MISSING")
+            scope = event.get("cardScope")
+            if scope == "CURRENT_TURN":
+                if card_id not in card_ids:
+                    raise ValueError("CHAT_RESULT_WAITING_CARD_MISSING")
+            elif scope == "EXISTING":
+                if card_id in card_ids:
+                    raise ValueError("CHAT_RESULT_WAITING_CARD_SCOPE_CONFLICT")
+                existing_cards.add(card_id)
+            else:
+                raise ValueError("CHAT_RESULT_WAITING_CARD_SCOPE_INVALID")
         elif kind == "application_rendered":
             if event.get("cardId") not in card_ids or event.get("partId") != "application:" + str(
                 event.get("cardId")
@@ -861,6 +887,8 @@ def validate_result(value: object) -> ChatTurnResult:
             workflow_events.add(event["partId"])
         elif kind not in {"workflow_confirm", "interaction_required"}:
             raise ValueError("CHAT_RESULT_EVENT_INVALID")
+    if existing_cards & rendered_cards:
+        raise ValueError("CHAT_RESULT_WAITING_CARD_SCOPE_CONFLICT")
     if rendered_cards != card_ids or workflow_events != set(workflow_parts):
         raise ValueError("CHAT_RESULT_PART_EVENT_MISSING")
     if waiting != (content["delivery"] == "waiting_action"):
