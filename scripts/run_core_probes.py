@@ -139,6 +139,7 @@ def postgres_probes(args, report: dict) -> None:
              ["scripts/verify_capability_approval.py", "--dsn-file", "/private/probe.dsn",
               "--allow-disposable-database"]),
             ("chat-turn-recovery", "a2flow_chat_turn_probe_ci", ["scripts/verify_chat_turn_recovery.py"]),
+            ("chat-state-convergence", "a2flow_chat_state_probe_ci", ["scripts/verify_chat_state_convergence.py"]),
             ("chat-reliability", "a2flow_chat_reliability_probe_ci",
              ["services/b-side-api/tests/probe_chat_reliability.py"]),
             ("python-route-composition", None, ["scripts/verify_python_route_composition.py"]),
@@ -191,7 +192,7 @@ def postgres_probes(args, report: dict) -> None:
             if database is None and (result.get("result") != "PASS" or result.get("probe") != name
                                      or not isinstance(result.get("checks"), int) or result["checks"] < 1):
                 raise ProbeFailure(f"{name}: missing PASS result")
-            if name in {"capability-approval", "chat-turn-recovery", "chat-reliability"} and (result.get("result") != "PASS"
+            if name in {"capability-approval", "chat-turn-recovery", "chat-reliability", "chat-state-convergence"} and (result.get("result") != "PASS"
                                                 or result.get("postgres") is not True
                                                 or result.get("probeResourcesRemoved") is not True):
                 raise ProbeFailure(f"{name}: database-backed probe did not pass with cleanup")
@@ -273,7 +274,7 @@ def main() -> int:
     parser.add_argument("--suite", choices=("postgres", "java"), default="postgres")
     parser.add_argument("--python-probe", choices=("all", "account-guard", "runtime-outbox",
                         "capability-approval", "chat-write-approval", "workflow-write-approval",
-                        "a2ui-write-preflight", "chat-turn-recovery", "chat-reliability", "python-route-composition"),
+                        "a2ui-write-preflight", "chat-turn-recovery", "chat-reliability", "chat-state-convergence", "python-route-composition"),
                         default="all", help="Local focused reproduction; CI always selects all")
     parser.add_argument("--java-probe", choices=("all", "management-context", "capability-approval", "package-restore"),
                         default="all", help="Local focused reproduction; CI always selects all")

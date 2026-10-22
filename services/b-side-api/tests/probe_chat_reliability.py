@@ -13,6 +13,7 @@ from psycopg.rows import dict_row
 from a2flow_bside.durable_chat import DurableChat, DurableDispatcher
 from a2flow_bside.repositories import MessagesRepository
 from a2flow_bside.errors import BsideError
+from skillweave_contracts.chat_result import result_from_events
 
 
 async def exercise(factory):
@@ -51,7 +52,7 @@ async def exercise(factory):
                 {"type": "text_delta", "text": "saved", "modelMessageId": "m"},
                 {"type": "done", "content": "saved", "finalModelMessageId": "m"},
             ]
-            self.facts[kw["turn_id"]] = {"status": "COMPLETED", "events": events}
+            self.facts[kw["turn_id"]] = {"status": "COMPLETED", "result": result_from_events(events, turn_id=kw["turn_id"])}
             for event in events:
                 yield event
 
@@ -132,7 +133,7 @@ async def exercise(factory):
             == 2
         )
     checks += 3
-    # Runtime finished, projection commit fails: rebuild from immutable terminal events.
+    # Runtime finished, projection commit fails: rebuild from complete terminal result snapshot.
     cid = conversation()
     turn = receive(cid)
 
@@ -210,28 +211,6 @@ async def exercise(factory):
     processing = ProcessingTasksRepository(factory, Activities())
     cid = conversation()
 
-    def observer(c, context, user, assistant, *, new):
-        if new:
-            store.insert_turn(
-                c,
-                user_id=1,
-                conversation_id=cid,
-                request_id="processing:probe",
-                digest="probe",
-                input_message=user,
-                assistant_message=assistant,
-                processing_context=context,
-            )
-        store.record_request(
-            c,
-            user_id=1,
-            conversation_id=cid,
-            request_id="client-processing",
-            payload={"text": "handle"},
-            input_message=user,
-            assistant_message=assistant,
-        )
-
     kwargs = dict(
         user_id=1,
         environment="PRT",
@@ -240,7 +219,8 @@ async def exercise(factory):
         text="handle",
         references=[],
         target={"activityId": "activity-probe", "attentionId": "attention-probe"},
-        turn_observer=observer,
+        client_request_id="client-processing",
+        client_payload={"text": "handle"},
     )
     first = processing.begin_turn(**kwargs)
     second = processing.begin_turn(**kwargs)
@@ -300,10 +280,10 @@ async def exercise(factory):
     store.materialize(messages, BrokenBinding())
     with factory() as c:
         poison = c.execute(
-            "SELECT recovery_status,materialized FROM chat_continuations WHERE conversation_id=%s",
+            "SELECT state FROM chat_continuations WHERE conversation_id=%s",
             (poison_cid,),
         ).fetchone()
-    assert poison["recovery_status"] == "NEEDS_REVIEW" and not poison["materialized"]
+    assert poison["state"] == "NEEDS_REVIEW"
     valid = next(t for t in store.candidates() if t["conversation_id"] == valid_cid)
     await dispatch.dispatch(valid)
     await dispatch.dispatch(ordinary)
@@ -325,7 +305,6 @@ async def exercise(factory):
         **kwargs,
         content={"text": "repaired", "delivery": "completed"},
     )
-    store.set_status(fenced["input_message_id"], "COMPLETED", generation2)
     for action in [
         lambda: store.save_projection(
             fenced["input_message_id"],

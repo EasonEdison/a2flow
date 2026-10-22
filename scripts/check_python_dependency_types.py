@@ -45,9 +45,12 @@ PERSISTENCE = [
         "processing_tasks",
         "repositories",
         "durable_chat",
+        "turn_registry",
         "assembly",
     )
 ]
+CONTRACTS = ["packages/contracts/src/skillweave_contracts/" + name + ".py"
+             for name in ("chat_state", "chat_result")]
 TRANSPORT = [RUNTIME + name + ".py" for name in ("http", "progress_http", "service")]
 COMPOSITION = [
     "deploy/attended/bside_app.py",
@@ -68,6 +71,7 @@ def main() -> int:
     env["MYPYPATH"] = os.pathsep.join(map(str, paths))
     with tempfile.TemporaryDirectory(prefix="a2flow-dependency-types-") as cache:
         for name, files, legacy_calls in (
+            ("shared Chat contracts", CONTRACTS, False),
             ("HTTP routes", HTTP, False),
             ("persistence boundaries", PERSISTENCE, True),
             ("Runtime transport", TRANSPORT, False),
@@ -85,7 +89,7 @@ def main() -> int:
             ]
             print("Checking " + name, flush=True)
             subprocess.run(command, cwd=ROOT, env=env, check=True)
-    files = HTTP + PERSISTENCE + TRANSPORT + COMPOSITION
+    files = HTTP + PERSISTENCE + TRANSPORT + COMPOSITION + CONTRACTS
     subprocess.run(
         [sys.executable, "-m", "ruff", "check", "--no-cache", *HTTP],
         cwd=ROOT,
@@ -100,6 +104,7 @@ def main() -> int:
             "--no-cache",
             "--select",
             "ANN,F,I",
+            *CONTRACTS,
             *PERSISTENCE,
             *TRANSPORT,
             *COMPOSITION,
