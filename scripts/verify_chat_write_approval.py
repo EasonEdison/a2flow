@@ -272,9 +272,6 @@ def continuation_binding_probe():
                 if actual == {"conversation": conversation, "role": role, "reference": reference}:
                     row = {"id": message_id}
                     self.updates.append((message_id, conversation, role, reference))
-            elif sql.startswith("INSERT INTO processing_turns"):
-                check("ON CONFLICT DO NOTHING" in sql)
-                self.turns.append(parameters)
             else:
                 raise AssertionError("unexpected continuation SQL")
             return SimpleNamespace(fetchone=lambda: row)
@@ -293,20 +290,20 @@ def continuation_binding_probe():
     check(old_reference == "card")
     check(invoke()["taskId"] == "task" and ordinary.committed)
     check(ordinary.updates == [(81, 731, "user", "card"), (82, 731, "assistant", "card")])
-    check(ordinary.turns == [(OWNER.user_id, "PRT", 731, "card:card", "card", "task", 81, 82)])
+    check(ordinary.turns == [])  # The durable materializer owns the single turn registry.
 
     reference, first, invoke = bind("confirm-1")
     check(reference.startswith("write:") and reference != "card")
     check(invoke()["taskId"] == "task" and first.committed)
     check(first.updates == [(81, 731, "user", reference), (82, 731, "assistant", reference)])
-    check(first.turns == [(OWNER.user_id, "PRT", 731, "card:" + reference, reference, "task", 81, 82)])
+    check(first.turns == [])
     same_reference, repeated, invoke = bind("confirm-1")
     invoke()
     check(same_reference == reference and repeated.turns == first.turns)
     next_reference, second, invoke = bind("confirm-2")
     invoke()
-    check(next_reference != reference and second.turns[0][3] != first.turns[0][3])
-    check(second.turns[0][4] == next_reference and second.turns[0][-2:] == (81, 82))
+    check(next_reference != reference and second.updates[0][3] != first.updates[0][3])
+    check(second.updates == [(81, 731, "user", next_reference), (82, 731, "assistant", next_reference)])
 
     for invalid in ("conversation", "role", "reference"):
         _, connection, invoke = bind("confirm-1", wrong_scope=invalid)

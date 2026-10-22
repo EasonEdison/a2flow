@@ -945,9 +945,10 @@ class ChatObservationTests(unittest.TestCase):
 
         class ConversationStore:
             @contextmanager
-            def session(self, owner, conversation_id, turn_id, *, completion_events=None):
-                del owner, conversation_id, turn_id
+            def session(self, owner, conversation_id, turn_id, *, completion_result):
+                del owner, conversation_id
                 yield saver, "runner-observation-thread"
+                assert completion_result()["turnId"] == turn_id
 
         first_model = FakeModel([AIMessageChunk(content="first")])
         second_model = FakeModel([AIMessageChunk(content="second")])

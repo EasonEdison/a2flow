@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run real PostgreSQL Chat migration/transaction probes in a disposable DB."""
+"""Run real PostgreSQL Chat state/transaction probes in a disposable DB."""
 
 from __future__ import annotations
 
@@ -19,19 +19,25 @@ def main():
     if conninfo_to_dict(dsn).get("dbname") != "a2flow_chat_state_probe_ci":
         raise ValueError("DISPOSABLE_CHAT_STATE_DATABASE_REQUIRED")
     os.environ["A2FLOW_CONVERGENCE_DSN"] = dsn
+    os.environ["A2FLOW_TEST_CHAT_DSN"] = dsn
+    os.environ["A2FLOW_TEST_CHAT_CARDS_DSN"] = dsn
+    sys.path.insert(0, str(ROOT / "examples/activity-planning"))
     sys.path.insert(0, str(ROOT / "services/b-side-api/tests"))
     sys.path.insert(0, str(ROOT / "services/agent-workflow-runtime/tests"))
     suite = unittest.defaultTestLoader.loadTestsFromNames([
         "test_chat_state_convergence_postgres.ChatStateConvergenceTests",
         "test_chat_result_postgres.ChatResultPersistenceTests",
+        "test_chat_postgres.PostgresConversationTests",
+        "test_chat_vertical.ChatVerticalTest",
+        "test_chat_delivery_postgres.DeliveryPostgresTests",
     ])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     passed = result.wasSuccessful() and result.testsRun >= 15 and not result.skipped
     print(json.dumps({
         "probe": "chat-state-convergence", "result": "PASS" if passed else "FAIL",
         "checks": result.testsRun, "postgres": True, "probeResourcesRemoved": True,
-        "modelCalls": 0, "businessCalls": 0,
-        "scope": "isolated PostgreSQL transactions, fixed legacy fixtures, result recovery",
+        "externalModelCalls": 0, "externalBusinessCalls": 0, "scriptedModels": True,
+        "scope": "isolated PostgreSQL transactions, current schema, result recovery",
     }, sort_keys=True))
     return 0 if passed else 1
 
