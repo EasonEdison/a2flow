@@ -37,6 +37,7 @@ class CountingStore(DurableChat):
         self.scans = 0
         self.materializations = 0
         self.finished_materializations = 0
+        self.materialization_times = []
         self.scan_times = []
         self.fail_scan_once = False
         self.mutex = threading.Lock()
@@ -53,6 +54,7 @@ class CountingStore(DurableChat):
     def materialize(self, *args, **kwargs):
         with self.mutex:
             self.materializations += 1
+            self.materialization_times.append(time.perf_counter())
         try:
             return super().materialize(*args, **kwargs)
         finally:
@@ -246,7 +248,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.005)
 
     async def start_worker(
-        self, *, runner=None, reconcile_seconds=30.0, max_concurrency=8, retry_seconds=0.08
+        self, *, runner=None, reconcile_seconds=30.0, max_concurrency=8, retry_seconds=2.0
     ):
         chosen = runner or self.runner
         stop = asyncio.Event()
@@ -718,14 +720,14 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], rotated)
 
     async def test_materialization_and_failure_record_errors_finish_batch_then_back_off(self):
-        cid = self.conversation()
+        poison_cid, healthy_cid = self.conversation(), self.conversation()
         with self.factory() as c:
-            for card in ["poison-card", "healthy-card"]:
+            for card, cid in [("poison-card", poison_cid), ("healthy-card", healthy_cid)]:
                 self.store.observe_completion(
                     c,
                     SimpleNamespace(
                         owner=SimpleNamespace(user_id=1),
-                        conversation_id=str(cid if card == "poison-card" else self.conversation()),
+                        conversation_id=str(cid),
                         card_id=card,
                         request_id="submit",
                         metadata={"definitionSource": "TEMPORARY"},
@@ -743,12 +745,20 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         dispatcher = DurableDispatcher(
             self.store, self.messages, self.runner, reconcile_seconds=30.0, retry_seconds=0.12
         )
+
+        def healthy():
+            with self.factory() as c:
+                return c.execute(
+                    "SELECT * FROM chat_turns WHERE conversation_id=%s", (healthy_cid,)
+                ).fetchone()
+
         with self.assertLogs("a2flow_bside.durable_chat", level="ERROR"):
             task = asyncio.create_task(dispatcher.run(stop))
             self.workers.append((stop, task, self.runner))
-            await self.until(lambda: self.store.finished_materializations >= 1)
-            await asyncio.sleep(0.04)
-            self.assertEqual(1, self.store.materializations)
+            await self.until(lambda: healthy() is not None)
+            # Faults are still installed: a poison intent must not starve ready work.
+            await self.completed(healthy(), timeout=1.5)
+            self.assertEqual(1, self.call_count())
             with self.factory() as c:
                 rows = c.execute(
                     "SELECT card_id,state FROM chat_continuations ORDER BY card_id"
@@ -757,14 +767,23 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
                     [("healthy-card", "MATERIALIZED"), ("poison-card", "PENDING")],
                     [(r["card_id"], r["state"]) for r in rows],
                 )
-                self.assertEqual(
-                    1, c.execute("SELECT count(*) AS n FROM chat_turns").fetchone()["n"]
-                )
+            await self.until(lambda: self.store.finished_materializations >= 2)
+            gap = self.store.materialization_times[1] - self.store.materialization_times[0]
+            self.assertGreaterEqual(gap, 0.10)
+            METRICS["preparationFailureBackoff"] = {
+                "configuredRetrySeconds": 0.12,
+                "observedPassGapSeconds": round(gap, 3),
+                "healthyCompletedWhileFaultRemained": True,
+            }
+            with self.factory() as c:
                 c.execute(
                     "DROP TRIGGER reject_poison_turn ON chat_turns; DROP TRIGGER reject_poison_failure_record ON chat_continuations;"
                 )
             await self.until(lambda: self.call_count() == 2)
-        self.assertLessEqual(self.store.materializations, 5)
+            with self.factory() as c:
+                turns = c.execute("SELECT * FROM chat_turns").fetchall()
+            for turn in turns:
+                await self.completed(turn)
         with self.factory() as c:
             self.assertEqual(
                 2,
