@@ -16,7 +16,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.routing import APIRoute
-from test_app import Harness, ORIGIN_HEADERS
+from test_app import ORIGIN_HEADERS
+from test_chat_lifespan import CurrentHarness as Harness
 
 FIXTURE = Path(__file__).with_name("fixtures") / "routes-b5785c5.json"
 
@@ -66,41 +67,43 @@ class RouteContractTests(unittest.TestCase):
     def test_auth_origin_query_and_ownership_rejections(self):
         async def check():
             harness = Harness()
-            async with await harness.client() as client:
-                cases = [
-                    (
-                        "GET",
-                        "/api/conversations/messages?conversationId=123",
-                        None,
-                        {},
-                        401,
-                        "AUTHENTICATION_REQUIRED",
-                    ),
-                    ("POST", "/api/conversations", {}, {}, 403, "ORIGIN_REQUIRED"),
-                    (
-                        "GET",
-                        "/api/conversations/messages?conversationId=123&extra=1",
-                        None,
-                        {},
-                        400,
-                        "QUERY_PARAMETERS_NOT_ALLOWED",
-                    ),
-                ]
-                for method, path, body, headers, status, code in cases:
-                    response = await client.request(method, path, json=body, headers=headers)
-                    self.assertEqual(
-                        (status, code), (response.status_code, response.json()["error"]["code"])
+            async with harness.app.router.lifespan_context(harness.app):
+                async with await harness.client() as client:
+                    client.cookies.clear()
+                    cases = [
+                        (
+                            "GET",
+                            "/api/conversations/messages?conversationId=123",
+                            None,
+                            {},
+                            401,
+                            "AUTHENTICATION_REQUIRED",
+                        ),
+                        ("POST", "/api/conversations", {}, {}, 403, "ORIGIN_REQUIRED"),
+                        (
+                            "GET",
+                            "/api/conversations/messages?conversationId=123&extra=1",
+                            None,
+                            {},
+                            400,
+                            "QUERY_PARAMETERS_NOT_ALLOWED",
+                        ),
+                    ]
+                    for method, path, body, headers, status, code in cases:
+                        response = await client.request(method, path, json=body, headers=headers)
+                        self.assertEqual(
+                            (status, code), (response.status_code, response.json()["error"]["code"])
+                        )
+                    await client.post(
+                        "/api/auth/register",
+                        json={"username": "route-owner", "password": "route-password-1"},
+                        headers=ORIGIN_HEADERS,
                     )
-                await client.post(
-                    "/api/auth/register",
-                    json={"username": "route-owner", "password": "route-password-1"},
-                    headers=ORIGIN_HEADERS,
-                )
-                harness.components["conversations"].rows[123] = {"user_id": 999}
-                response = await client.get("/api/conversations/messages?conversationId=123")
-                self.assertEqual(
-                    (404, "NOT_FOUND"), (response.status_code, response.json()["error"]["code"])
-                )
+                    harness.components["conversations"].rows[123] = {"user_id": 999}
+                    response = await client.get("/api/conversations/messages?conversationId=123")
+                    self.assertEqual(
+                        (404, "NOT_FOUND"), (response.status_code, response.json()["error"]["code"])
+                    )
 
         asyncio.run(check())
 
@@ -121,16 +124,32 @@ class ProductionCompositionTests(unittest.TestCase):
     }
 
     def assemble(self, module):
-        from a2flow_bside.app import create_app
-        from a2flow_bside.account_guard import PostgresAccountGuard
         from a2flow_asset_store.personal_workflows import PersonalWorkflowReader
+        from a2flow_bside.account_guard import PostgresAccountGuard
+        from a2flow_bside.app import create_app
+        from a2flow_bside.durable_chat import DurableChat, DurableDispatcher
+        from agent_workflow_runtime.chat.cards import ChatCardStore
         from agent_workflow_runtime.rpc_client import RpcClient
 
         captured = {}
 
         def capture(**kwargs):
             captured.update(kwargs)
+            factory = kwargs.get("chat_runtime_factory")
+            if factory is not None:
+
+                def runtime_factory(wake):
+                    runtime = factory(wake)
+                    captured["runtime"] = runtime
+                    captured["wake"] = wake
+                    return runtime
+
+                kwargs["chat_runtime_factory"] = runtime_factory
             return create_app(**kwargs)
+
+        async def hold_worker(worker, stop):
+            captured["dispatcher"] = worker
+            await stop.wait()
 
         with (
             patch.dict(os.environ, self.ENV, clear=True),
@@ -139,12 +158,37 @@ class ProductionCompositionTests(unittest.TestCase):
             patch.object(PostgresAccountGuard, "check_ready") as ready,
             patch.object(RpcClient, "from_environment", return_value=object()),
             patch.object(PersonalWorkflowReader, "list_workflows", return_value=()),
+            patch.object(DurableChat, "check_ready") as chat_ready,
+            patch.object(DurableDispatcher, "run", hold_worker),
+            patch.object(ChatCardStore, "list", autospec=True, return_value=[]) as cards,
             patch("psycopg.connect", side_effect=AssertionError("unexpected database access")),
             patch("socket.socket.connect", side_effect=AssertionError("unexpected network access")),
         ):
             app = module.create_app_from_environment()
             self.assertEqual([], captured["workflow_catalog"](7))
             ready.assert_called_once_with()
+            self.assertNotIn("runtime", captured, "Chat must not be constructed before startup")
+
+            async def check_startup():
+                async with app.router.lifespan_context(app):
+                    if captured.get("chat_runtime_factory") is not None:
+                        runtime = captured["runtime"]
+                        self.assertIs(runtime.durable_chat.wake, captured["wake"])
+                        self.assertIs(captured["wake"], captured["dispatcher"].store.wake)
+                        self.assertEqual([], runtime.cards(7, "synthetic-conversation"))
+                        cards.assert_called_once()
+                        card_store = (
+                            cards.call_args.args[0] if len(cards.call_args.args) == 3 else None
+                        )
+                        if card_store is not None:
+                            self.assertIs(
+                                runtime.durable_chat, card_store._completion_observer.__self__
+                            )
+                        chat_ready.assert_called_once_with()
+                    else:
+                        chat_ready.assert_not_called()
+
+            asyncio.run(check_startup())
         return app, captured
 
     def test_generic_environment_factory_constructs_real_dependencies(self):
@@ -158,15 +202,15 @@ class ProductionCompositionTests(unittest.TestCase):
         self.assertEqual(contract(Harness().app), contract(app))
 
     def test_attended_and_realchat_use_durable_runner_and_same_public_routes(self):
+        from a2flow_bside.durable_chat import DurableChat
+        from a2flow_bside.processing_tasks import ProcessingTasksRepository
         from deploy.attended import bside_app
         from deploy.attended.chat_runner import ChatLoopRunner
         from deploy.realchat import launcher
-        from a2flow_bside.durable_chat import DurableChat
-        from a2flow_bside.processing_tasks import ProcessingTasksRepository
 
         app, dependencies = self.assemble(bside_app)
-        self.assertIsInstance(dependencies["chat_runner"], ChatLoopRunner)
-        self.assertIsInstance(dependencies["durable_chat"], DurableChat)
+        self.assertIsInstance(dependencies["runtime"].runner, ChatLoopRunner)
+        self.assertIsInstance(dependencies["runtime"].durable_chat, DurableChat)
         self.assertIsInstance(dependencies["processing_tasks"], ProcessingTasksRepository)
         self.assertEqual(contract(Harness().app), contract(app))
         with (
