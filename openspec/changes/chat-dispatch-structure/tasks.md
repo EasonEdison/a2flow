@@ -8,6 +8,6 @@
 - [x] Bound retry-persistence faults and close the signal even if shutdown settlement fails.
 - [x] Adapt all existing PostgreSQL cases and add task exit, waiter cleanup and double-fault probes.
 - [x] Complete scoped probes, strict quality and independent source review.
-- [ ] Integrate, push and verify equal origin/main and github/main refs.
+- [x] Integrate, push and verify equal origin/main and github/main refs.
 
 Deployment and public data changes are outside this source-only task.

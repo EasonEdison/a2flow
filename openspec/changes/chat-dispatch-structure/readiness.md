@@ -6,4 +6,4 @@ The current coordination API is `bind/notify/clear/wait/close`. There are no ver
 
 Eight scoped probe groups (423 checks), 32-file strict types/lint/format, source AST invariants, independent review, repository validation and diff checks passed. See [verification](regression.md), [plan](proposal.md) and [tasks](tasks.md).
 
-Source integration and remote ref verification are recorded after push. No public deployment, database migration/reset, external provider/model or business operation is included. Local probe success is not remote CI or public acceptance.
+Source integration `633aec06f8b91386aca7282cf200bf7fbaa88acf` was pushed to server origin/main and GitHub main; independent remote queries verified both refs equal. This receipt is a documentation-only follow-up to that tested integration. No public deployment, database migration/reset, external provider/model or business operation is included. Local probe success is not remote CI or public acceptance.
