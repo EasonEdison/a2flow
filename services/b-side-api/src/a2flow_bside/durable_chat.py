@@ -730,8 +730,10 @@ class DurableDispatcher:
             runner,
             processing_tasks,
         )
-        # 内存集合只减少本进程重复调度, 跨进程安全仍由数据库锁和代际保证。
-        self.active: set[int] = set()
+        # 一份归属表同时表达槽位和会话占用，跨进程安全仍由数据库事实保证。
+        self._tasks: dict[asyncio.Task[None], dict[str, Any]] = {}
+        self._cursor = 0
+        self._reconcile_at = 0.0
 
     async def dispatch(self, turn: dict[str, Any]) -> bool:
         # False 仅要求争锁者本地退避；True 不代表业务成功或允许重放。
@@ -859,28 +861,88 @@ class DurableDispatcher:
             # completed projection repair versus NEEDS_REVIEW; never blind retry.
             return True
 
-    # 后台拥有执行生命周期；唤醒只是提示重读数据库事实，不能直接派发。
+    # notify 来自事务提交；循环只负责排空、统一收尾和等待下一次机会。
     async def run(self, stop: asyncio.Event) -> None:
-        wake = self.store.wake
-        wake.bind()
-        loop = asyncio.get_running_loop()
-        reconcile_at = loop.time()
-        tasks: set[asyncio.Task[None]] = set()
-        active_conversations: set[int] = set()
-        cursor = 0
-
-        async def guarded(turn: dict[str, Any]) -> None:
-            try:
-                if await self.dispatch(turn) is False:
-                    # 退出未持锁的连接后本地退避；该槽有界占用，不篡改其他进程期限。
-                    try:
-                        await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
-                    except asyncio.TimeoutError:
-                        pass
-            except Exception:
-                _LOG.exception("Chat durable dispatch inspection failed")
+        self.store.wake.bind()
+        self._reconcile_at = asyncio.get_running_loop().time()
+        try:
+            while not stop.is_set():
+                # 清除发生在查事实之前，查询期间的通知由 Event 保留到 wait。
+                self.store.wake.clear()
+                backoff = await self._drain(stop)
                 try:
-                    # 异常只安排后续事实检查；终态不可回退，未知写结果不重跑。
+                    if await self._settle() and not backoff:
+                        continue  # 槽位已释放，直接检查后轮，无需自发通知回调。
+                except Exception:
+                    # 失败期限也无法保存时，不能因 past-due 行立即重复扫描。
+                    backoff = True
+                    _LOG.exception("Chat dispatch settlement persistence failed")
+                await self._wait(stop, backoff=backoff)
+        finally:
+            # 停止只停止新派发；同一 settle 路径观察并释放所有已开始任务。
+            try:
+                await asyncio.gather(*self._tasks, return_exceptions=True)
+                await self._settle()
+            finally:
+                self.store.wake.close()
+
+    async def _drain(self, stop: asyncio.Event) -> bool:
+        """Prepare and admit one bounded batch; return whether storage needs backoff."""
+        if len(self._tasks) >= self.max_concurrency:
+            return False
+        failed = False
+        try:
+            try:
+                await asyncio.to_thread(
+                    self.store.materialize, self.messages, self.processing_tasks
+                )
+            except Exception:
+                failed = True
+                _LOG.exception("Chat continuation inbox scan failed")
+            # 一个坏续聊不阻塞健康候选；会话占用直接从归属表派生。
+            conversations = {turn["conversation_id"] for turn in self._tasks.values()}
+            candidates = await asyncio.to_thread(
+                self.store.candidates,
+                exclude_conversations=tuple(conversations),
+                limit=self.max_concurrency - len(self._tasks),
+                after_input_id=self._cursor,
+            )
+            for turn in candidates:
+                if stop.is_set():
+                    break
+                if turn["conversation_id"] in conversations:
+                    continue
+                self._cursor = turn["input_message_id"]
+                conversations.add(turn["conversation_id"])
+                self._tasks[asyncio.create_task(self._execute(turn, stop))] = turn
+            now = asyncio.get_running_loop().time()
+            if now >= self._reconcile_at:
+                self._reconcile_at = now + self.reconcile_seconds
+        except Exception:
+            failed = True
+            _LOG.exception("Chat durable inbox reconciliation failed")
+        return failed
+
+    async def _execute(self, turn: dict[str, Any], stop: asyncio.Event) -> None:
+        if await self.dispatch(turn) is False:
+            # 争锁者退出连接后在自己的槽位内退避，不修改持锁者的共享期限。
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
+            except asyncio.TimeoutError:
+                pass
+
+    async def _settle(self) -> bool:
+        """Observe every exit and release ownership in exactly one place."""
+        finished = [task for task in self._tasks if task.done()]
+        failure_state_unavailable = False
+        for task in finished:
+            turn = self._tasks[task]
+            try:
+                task.result()
+            except (Exception, asyncio.CancelledError):
+                _LOG.exception("Chat durable dispatch inspection failed or cancelled")
+                try:
+                    # 失败/取消只安排事实重查；未知业务结果仍不能自动重放。
                     current = await asyncio.to_thread(self.store.get, turn["input_message_id"])
                     if current is not None:
                         await asyncio.to_thread(
@@ -890,89 +952,52 @@ class DurableDispatcher:
                             self.retry_seconds,
                         )
                 except Exception:
+                    failure_state_unavailable = True
                     _LOG.exception("Chat dispatch retry scheduling failed")
             finally:
-                self.active.discard(turn["input_message_id"])
-                active_conversations.discard(turn["conversation_id"])
-                # 释放槽后立即重查同会话后轮；BUSY/异常仍受数据库重查时间限制。
-                wake.notify()
+                del self._tasks[task]
+        # 整批已结束任务先释放；持久化故障统一交给现有等待路径退避。
+        if failure_state_unavailable:
+            raise RuntimeError("CHAT_DISPATCH_FAILURE_STATE_UNAVAILABLE")
+        return bool(finished)
 
+    async def _wait(self, stop: asyncio.Event, *, backoff: bool) -> None:
+        """Wait in one place for stop, capacity, hint or the next eligible deadline."""
+        if stop.is_set():
+            return
+        helpers: list[asyncio.Task[object]] = []
+        owned: set[asyncio.Task[object]] = set(self._tasks)
+        timeout = None
         try:
-            while not stop.is_set():
-                tasks.difference_update(task for task in tuple(tasks) if task.done())
-                if len(tasks) >= self.max_concurrency:
-                    # 满槽时外部重复唤醒留在合并信号中，不扫描、不空转。
-                    stopping = asyncio.create_task(stop.wait())
+            if len(owned) < self.max_concurrency:
+                if not backoff:
                     try:
-                        await asyncio.wait(tasks | {stopping}, return_when=asyncio.FIRST_COMPLETED)
-                    finally:
-                        stopping.cancel()
-                        await asyncio.gather(stopping, return_exceptions=True)
-                    continue
-
-                # 查询前取版本：查询期间和等待切换窗口中的新通知都不会丢失。
-                version = wake.snapshot()
-                try:
-                    preparation_failed = False
-                    try:
-                        await asyncio.to_thread(
-                            self.store.materialize, self.messages, self.processing_tasks
+                        delay = await asyncio.to_thread(
+                            self.store.next_delay,
+                            exclude_conversations=tuple(
+                                turn["conversation_id"] for turn in self._tasks.values()
+                            ),
+                        )
+                        timeout = max(0.0, self._reconcile_at - asyncio.get_running_loop().time())
+                        if delay is not None:
+                            timeout = min(timeout, delay)
+                        helpers.append(
+                            asyncio.create_task(self.store.wake.wait(), name="chat-dispatch-notify")
                         )
                     except Exception:
-                        preparation_failed = True
-                        _LOG.exception("Chat continuation inbox scan failed")
-                    # 物化失败也继续派发已就绪轮次，单个坏意图不能阻塞其他会话。
-                    candidates = await asyncio.to_thread(
-                        self.store.candidates,
-                        exclude_conversations=tuple(active_conversations),
-                        limit=self.max_concurrency - len(tasks),
-                        after_input_id=cursor,
-                    )
-                    for turn in candidates:
-                        if stop.is_set():
-                            break
-                        if (
-                            turn["input_message_id"] in self.active
-                            or turn["conversation_id"] in active_conversations
-                        ):
-                            continue
-                        cursor = turn["input_message_id"]
-                        self.active.add(turn["input_message_id"])
-                        active_conversations.add(turn["conversation_id"])
-                        task = asyncio.create_task(guarded(turn))
-                        tasks.add(task)
-                        task.add_done_callback(tasks.discard)
-                    # 扫描周期不因新通知顺延；到期补漏与持久化重查时间取较早者。
-                    now = loop.time()
-                    if now >= reconcile_at:
-                        reconcile_at = now + self.reconcile_seconds
-                    if len(tasks) >= self.max_concurrency:
-                        continue
-                    if preparation_failed:
-                        # 失败记录自身无法保存时不能采信其 past-due 零延迟；
-                        # 已就绪任务照常执行，下一次物化检查有界退避且保留新通知。
-                        try:
-                            await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
-                        except asyncio.TimeoutError:
-                            pass
-                        continue
-                    delay = await asyncio.to_thread(
-                        self.store.next_delay,
-                        exclude_conversations=tuple(active_conversations),
-                    )
-                    timeout = max(0.0, reconcile_at - loop.time())
-                    if delay is not None:
-                        timeout = min(timeout, delay)
-                    await wake.wait_after(version, timeout, stop)
-                except Exception:
-                    _LOG.exception("Chat durable inbox reconciliation failed")
-                    # 存储故障期间保留合并通知，按有界间隔重查，不因通知风暴忙等。
-                    try:
-                        await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
-                    except asyncio.TimeoutError:
-                        pass
+                        backoff = True
+                        _LOG.exception("Chat durable inbox deadline read failed")
+                if backoff:
+                    # 忽略故障期间的通知风暴/past-due 意图，已就绪执行仍自行推进。
+                    timeout = self.retry_seconds
+                    owned.clear()
+            helpers.append(asyncio.create_task(stop.wait(), name="chat-dispatch-stop"))
+            await asyncio.wait(
+                owned | set(helpers), timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+            )
         finally:
-            # 停止不取消已派发的业务，收尾期间的新意图保留给下次启动补扫。
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
-            wake.close()
+            # 只取消本次临时 waiter，不取消归属表中的真实执行。
+            for task in helpers:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*helpers, return_exceptions=True)
