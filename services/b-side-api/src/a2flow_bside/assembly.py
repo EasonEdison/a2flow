@@ -76,7 +76,7 @@ class _UnavailableChatRunner:
         turn_id: str,
     ) -> RuntimeTurnInspection:
         # An unwired engine cannot establish native admission or completed facts.
-        return {"status": "NEEDS_REVIEW", "events": []}
+        return {"status": "NEEDS_REVIEW"}
 
     async def iterate(
         self,
