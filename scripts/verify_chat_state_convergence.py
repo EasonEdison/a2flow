@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run real PostgreSQL Chat migration/transaction probes in a disposable DB."""
+"""Run real PostgreSQL Chat state/transaction probes in a disposable DB."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def main():
         "probe": "chat-state-convergence", "result": "PASS" if passed else "FAIL",
         "checks": result.testsRun, "postgres": True, "probeResourcesRemoved": True,
         "modelCalls": 0, "businessCalls": 0,
-        "scope": "isolated PostgreSQL transactions, fixed legacy fixtures, result recovery",
+        "scope": "isolated PostgreSQL transactions, current schema, result recovery",
     }, sort_keys=True))
     return 0 if passed else 1
 
