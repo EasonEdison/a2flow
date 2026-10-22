@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import psycopg
 from a2flow_bside.chat_application import ChatApplicationService
+from a2flow_bside.chat_wake import ChatWake
 from a2flow_bside.durable_chat import DurableChat, DurableDispatcher
 from a2flow_bside.repositories import MessagesRepository
 from a2flow_bside.route_models import ChatCardAction, MessageSend
@@ -29,6 +30,20 @@ METRICS: dict[str, object] = {}
 
 def connection(dsn, schema):
     return psycopg.connect(dsn, row_factory=dict_row, options="-c search_path=" + schema)
+
+
+class CountingWake(ChatWake):
+    """Observe producer calls without retaining a production notification version."""
+
+    def __init__(self):
+        super().__init__()
+        self.notifications = 0
+        self.count_lock = threading.Lock()
+
+    def notify(self):
+        with self.count_lock:
+            self.notifications += 1
+        super().notify()
 
 
 class CountingStore(DurableChat):
@@ -194,10 +209,12 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
                 "CREATE TABLE wake_native_calls(id bigserial PRIMARY KEY,turn_id text NOT NULL,process_id integer NOT NULL); "
                 "CREATE TABLE wake_native_facts(turn_id text PRIMARY KEY,state text NOT NULL,result jsonb);"
             )
-        self.store = CountingStore(self.factory, environment="PRT")
+        self.wake = CountingWake()
+        self.store = CountingStore(self.factory, environment="PRT", wake=self.wake)
         self.messages = MessagesRepository(self.factory)
         self.runner = DatabaseRunner(self.factory)
         self.workers = []
+        self.dispatchers = []
         self.addAsyncCleanup(self.stop_workers)
 
     def factory(self):
@@ -260,6 +277,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             max_concurrency=max_concurrency,
             retry_seconds=retry_seconds,
         )
+        self.dispatchers.append(dispatcher)
         task = asyncio.create_task(dispatcher.run(stop))
         self.workers.append((stop, task, chosen))
         await self.until(lambda: self.store.scans >= 1)
@@ -286,12 +304,12 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             c.execute("""CREATE FUNCTION reject_message() RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN RAISE EXCEPTION 'synthetic admission rollback'; END $$;
                 CREATE TRIGGER reject_message BEFORE INSERT ON messages FOR EACH ROW EXECUTE FUNCTION reject_message();""")
-        version = self.store.wake.snapshot()
+        version = self.wake.notifications
         with self.assertRaises(psycopg.Error):
             await self.app().admit_message(
                 MessageSend(conversationId=cid, clientRequestId="rollback", text="rollback"), 1
             )
-        self.assertEqual(version, self.store.wake.snapshot())
+        self.assertEqual(version, self.wake.notifications)
         completion = SimpleNamespace(
             owner=SimpleNamespace(user_id=1),
             conversation_id=str(cid),
@@ -302,7 +320,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(RuntimeError, "card rollback"):
             with self.factory() as c:
                 self.store.observe_completion(c, completion)
-                self.assertEqual(version, self.store.wake.snapshot())
+                self.assertEqual(version, self.wake.notifications)
                 raise RuntimeError("card rollback")
         await asyncio.sleep(0.15)
         self.assertEqual(0, self.call_count())
@@ -348,15 +366,19 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             clientRequestId="application",
             text="actual app admission",
         )
-        version = self.store.wake.snapshot()
+        version = self.wake.notifications
         accepted = await self.app().admit_message(body, 1)
-        self.assertGreater(self.store.wake.snapshot(), version)
+        self.assertEqual(
+            accepted["input_message_id"],
+            self.store.get(accepted["input_message_id"])["input_message_id"],
+        )
+        self.assertGreater(self.wake.notifications, version)
         await self.completed(accepted)
         calls = self.call_count()
-        replay_version = self.store.wake.snapshot()
+        replay_version = self.wake.notifications
         repeat = await self.app().admit_message(body, 1)
         self.assertEqual(accepted["input_message_id"], repeat["input_message_id"])
-        self.assertGreater(self.store.wake.snapshot(), replay_version)
+        self.assertGreater(self.wake.notifications, replay_version)
         await asyncio.sleep(0.03)
         self.assertEqual(calls, self.call_count())
 
@@ -495,6 +517,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.12)
         self.assertEqual(scans, self.store.scans)
         self.assertEqual(1, self.call_count())
+        notifications = self.wake.notifications
         release = time.perf_counter()
         gate.set()
         await self.completed(second)
@@ -505,6 +528,12 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.completed(first)
         self.assertEqual(2, self.call_count())
+        await self.until(lambda: not self.dispatchers[-1]._tasks)
+        self.assertEqual(
+            notifications,
+            self.wake.notifications,
+            "slot release must drain without self-notification",
+        )
 
     async def test_next_turn_of_same_conversation_runs_immediately_after_predecessor(self):
         first = self.receive()
@@ -610,6 +639,105 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("QUEUED", self.store.get(second["input_message_id"])["status"])
         self.assertEqual(1, self.call_count())
 
+    async def test_failed_owned_task_is_observed_deferred_and_releases_healthy_slot(self):
+        class FailOnceRunner(DatabaseRunner):
+            async def inspect_turn(inner, **kwargs):
+                if kwargs["turn_id"] == str(first["input_message_id"]) and not inner.inspections:
+                    inner.inspections.append((kwargs["turn_id"], time.perf_counter()))
+                    raise psycopg.OperationalError("synthetic native inspection failure")
+                return await super().inspect_turn(**kwargs)
+
+        first = self.receive()
+        healthy = self.receive()
+        runner = FailOnceRunner(self.factory)
+        with self.assertLogs("a2flow_bside.durable_chat", level="ERROR"):
+            await self.start_worker(runner=runner, max_concurrency=1, retry_seconds=0.3)
+            await self.completed(healthy)
+            failed = self.store.get(first["input_message_id"])
+            self.assertEqual(1, failed["dispatch_generation"])
+            with self.factory() as c:
+                self.assertTrue(
+                    c.execute(
+                        "SELECT %s > now() AS future", (failed["next_attempt_at"],)
+                    ).fetchone()["future"]
+                )
+            self.assertEqual(0, self.call_count(first["input_message_id"]))
+        await self.completed(first)
+        await self.until(lambda: not self.dispatchers[-1]._tasks)
+        self.assertEqual(2, self.call_count())
+        self.assertEqual(0, self.wake.notifications, "settlement must not notify itself")
+
+    async def test_cancelled_owned_task_releases_slot_without_replaying_busy_native_work(self):
+        gate = asyncio.Event()
+        runner = DatabaseRunner(self.factory, gate=gate)
+        first = self.receive(text="hold cancelled execution")
+        healthy = self.receive()
+        stop, worker = await self.start_worker(runner=runner, max_concurrency=1, retry_seconds=0.3)
+        await self.until(lambda: self.call_count(first["input_message_id"]) == 1)
+        dispatcher = self.dispatchers[-1]
+        owned = next(
+            task
+            for task, turn in dispatcher._tasks.items()
+            if turn["input_message_id"] == first["input_message_id"]
+        )
+        with self.assertLogs("a2flow_bside.durable_chat", level="ERROR"):
+            owned.cancel()
+            await self.completed(healthy)
+        self.assertTrue(owned.cancelled())
+        self.assertNotIn(owned, dispatcher._tasks)
+        self.assertEqual(1, self.call_count(first["input_message_id"]))
+        self.assertEqual(1, self.call_count(healthy["input_message_id"]))
+        self.assertNotEqual("COMPLETED", self.store.get(first["input_message_id"])["status"])
+        stop.set()
+        await asyncio.wait_for(worker, 2)
+        self.assertFalse(dispatcher._tasks)
+        self.assertEqual(0, self.wake.notifications)
+
+    async def test_wait_cleans_temporary_helpers_on_hint_deadline_stop_and_cancellation(self):
+        dispatcher = DurableDispatcher(self.store, self.messages, self.runner, retry_seconds=0.06)
+        self.wake.bind()
+        self.addCleanup(self.wake.close)
+        stop = asyncio.Event()
+
+        def pending_helpers():
+            return [
+                task
+                for task in asyncio.all_tasks()
+                if task.get_name().startswith("chat-dispatch-") and not task.done()
+            ]
+
+        for reason in ("hint", "deadline", "stop", "cancel"):
+            stop.clear()
+            self.wake.clear()
+            dispatcher._reconcile_at = asyncio.get_running_loop().time() + (
+                0.03 if reason == "deadline" else 2
+            )
+            waiting = asyncio.create_task(dispatcher._wait(stop, backoff=False))
+            await self.until(lambda: bool(pending_helpers()))
+            if reason == "hint":
+                self.wake.notify()
+            elif reason == "stop":
+                stop.set()
+            elif reason == "cancel":
+                waiting.cancel()
+            if reason == "cancel":
+                with self.assertRaises(asyncio.CancelledError):
+                    await waiting
+            else:
+                await asyncio.wait_for(waiting, 0.5)
+            self.assertFalse(pending_helpers(), reason)
+        # Storage backoff must not spin on hints or retain temporary waiters.
+        stop.clear()
+        started = time.perf_counter()
+        waiting = asyncio.create_task(dispatcher._wait(stop, backoff=True))
+        await self.until(lambda: bool(pending_helpers()))
+        self.wake.notify()
+        await asyncio.sleep(0.015)
+        self.assertFalse(waiting.done())
+        await asyncio.wait_for(waiting, 0.5)
+        self.assertGreaterEqual(time.perf_counter() - started, 0.05)
+        self.assertFalse(pending_helpers())
+
     async def test_defer_preserves_later_deadline_and_due_claim_recheck(self):
         turn = self.receive()
         input_id = turn["input_message_id"]
@@ -661,13 +789,13 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             processingRequestId="processing-source",
             processingTarget={"activityId": "activity", "attentionId": "attention"},
         )
-        version = self.store.wake.snapshot()
+        version = self.wake.notifications
         first = await app.admit_message(body, 1)
-        self.assertEqual(version + 1, self.store.wake.snapshot())
+        self.assertEqual(version + 1, self.wake.notifications)
         alias = body.model_copy(update={"clientRequestId": "processing-alias"})
-        version = self.store.wake.snapshot()
+        version = self.wake.notifications
         repeated = await app.admit_message(alias, 1)
-        self.assertEqual(version + 1, self.store.wake.snapshot())
+        self.assertEqual(version + 1, self.wake.notifications)
         self.assertEqual(first["input_message_id"], repeated["input_message_id"])
         with self.factory() as c:
             self.assertEqual(
@@ -753,6 +881,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
                 ).fetchone()
 
         with self.assertLogs("a2flow_bside.durable_chat", level="ERROR"):
+            self.dispatchers.append(dispatcher)
             task = asyncio.create_task(dispatcher.run(stop))
             self.workers.append((stop, task, self.runner))
             await self.until(lambda: healthy() is not None)
