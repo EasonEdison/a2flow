@@ -17,6 +17,6 @@
 - [x] Actual production composition and unchanged Workflow approval/continuation/notification/reference probes.
 - [x] Related strict types, lint/format, repository boundaries and diff checks.
 - [x] Independent integration review and exact outgoing-file/sensitive-data scan.
-- [ ] Integrate task branch and verify server origin/GitHub target refs.
+- [x] Integrate task branch and verify server origin/GitHub target refs (source integration `aebbf71`).
 
 Deployment and public operation are separate evidence gates, not implied by these checkboxes.
