@@ -222,9 +222,7 @@ class ChatDelivery(ChatResultAccumulator):
             await self.save()
             await self.emit(
                 {
-                    "type": "done"
-                    if self.content["delivery"] in FINAL_DELIVERIES
-                    else "error",
+                    "type": "done" if self.content["delivery"] in FINAL_DELIVERIES else "error",
                     "code": self.content.get("errorCode"),
                     "finalModelMessageId": self.final_model_message_id,
                     "content": _bind_content(
