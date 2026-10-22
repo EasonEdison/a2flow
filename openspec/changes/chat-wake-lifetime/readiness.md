@@ -6,4 +6,4 @@ ChatWake now binds once and closes permanently. Duplicate bind is an ownership e
 
 All eight scoped regression groups and 32-file quality gates passed; see [verification](regression.md), [proposal and OpenCode references](proposal.md) and [tasks](tasks.md). The published OpenCode source and fixed reference are documented separately; no external execution framework or code was imported.
 
-Source target integration/ref equality is the remaining delivery step. No public deployment, database migration/reset, model/provider or business operation was performed. Local gates do not establish remote CI or public runtime acceptance.
+Source integration `ab8c0ca` was pushed to server origin and GitHub main; both target refs were independently verified equal. No public deployment, database migration/reset, model/provider or business operation was performed. Local gates do not establish remote CI or public runtime acceptance.

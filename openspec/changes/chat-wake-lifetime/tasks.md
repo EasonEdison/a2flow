@@ -7,6 +7,6 @@
 - [x] Keep thread/loop ownership, bounded callback coalescing and drain/wait protection.
 - [x] Adapt real lifecycle/race tests; run strict types/lint/format.
 - [x] Complete scoped PostgreSQL, approval and actual composition gates.
-- [ ] Review outgoing scope, integrate and verify both remote main refs.
+- [x] Review outgoing scope, integrate and verify both remote main refs (`ab8c0ca`).
 
 Source delivery does not imply deployment or external model/business acceptance.
