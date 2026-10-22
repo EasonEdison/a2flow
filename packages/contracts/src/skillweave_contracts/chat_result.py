@@ -667,8 +667,13 @@ def validate_result(value: object) -> ChatTurnResult:
         "waiting_action",
     }:
         raise ValueError("CHAT_RESULT_TERMINAL_INVALID")
-    if "errorCode" in content or not all(
-        isinstance(content.get(key), str) for key in ("text", "reasoning")
+    if (
+        "errorCode" in content
+        or not all(isinstance(content.get(key), str) for key in ("text", "reasoning"))
+        or (
+            "unattributedReasoning" in content
+            and not isinstance(content["unattributedReasoning"], str)
+        )
     ):
         raise ValueError("CHAT_RESULT_CONTENT_INVALID")
     if not isinstance(content.get("tools"), list) or not all(
@@ -682,18 +687,20 @@ def validate_result(value: object) -> ChatTurnResult:
     if not isinstance(models, list) or not isinstance(calls, list):
         raise ValueError("CHAT_RESULT_EXECUTION_INVALID")
     model_ids: set[str] = set()
+    previous_sequence = 0
     for model in models:
         if (
             not isinstance(model, dict)
             or _identifier(model.get("messageId")) is None
             or model["messageId"] in model_ids
             or type(model.get("sequence")) is not int
-            or not 1 <= model["sequence"] <= value["eventCount"]
+            or not previous_sequence < model["sequence"] <= value["eventCount"]
             or model.get("phase") not in {"process", "final"}
             or not all(isinstance(model.get(key), str) for key in ("text", "reasoning"))
         ):
             raise ValueError("CHAT_RESULT_MODEL_INVALID")
         model_ids.add(model["messageId"])
+        previous_sequence = model["sequence"]
     final_id = value.get("finalModelMessageId")
     if final_id is not None and (_identifier(final_id) is None or final_id not in model_ids):
         raise ValueError("CHAT_RESULT_FINAL_MODEL_MISSING")
@@ -710,6 +717,7 @@ def validate_result(value: object) -> ChatTurnResult:
     if final_id is None and finals:
         raise ValueError("CHAT_RESULT_FINAL_MODEL_CONFLICT")
     call_ids: set[str] = set()
+    previous_sequence = 0
     for call in calls:
         if (
             not isinstance(call, dict)
@@ -720,7 +728,7 @@ def validate_result(value: object) -> ChatTurnResult:
             or call.get("lifecycleStatus") not in {"returned", "raised"}
             or call.get("toolMessageStatus") not in {None, "success", "error"}
             or type(call.get("sequence")) is not int
-            or not 1 <= call["sequence"] <= value["eventCount"]
+            or not previous_sequence < call["sequence"] <= value["eventCount"]
             or type(call.get("durationMs")) is not int
             or call["durationMs"] < 0
             or _identifier(call.get("startedAt"), limit=64) is None
@@ -767,6 +775,7 @@ def validate_result(value: object) -> ChatTurnResult:
                 raise ValueError("CHAT_RESULT_PROGRESS_INVALID")
             previous_stage, previous_elapsed = stages[item["stage"]], item["elapsedMs"]
         call_ids.add(call["toolCallId"])
+        previous_sequence = call["sequence"]
     parts, events = content.get("parts"), content.get("events")
     if not isinstance(parts, list) or not isinstance(events, list):
         raise ValueError("CHAT_RESULT_PARTS_INVALID")
@@ -811,6 +820,16 @@ def validate_result(value: object) -> ChatTurnResult:
         )
         if text != model["text"]:
             raise ValueError("CHAT_RESULT_MODEL_PARTS_CONFLICT")
+    if final_id is None and content["text"]:
+        anonymous_parts = [
+            part["text"]
+            for part in parts
+            if part.get("type") == "text" and "modelMessageId" not in part
+        ]
+        if not anonymous_parts or (
+            "".join(anonymous_parts) != content["text"] and anonymous_parts[-1] != content["text"]
+        ):
+            raise ValueError("CHAT_RESULT_FINAL_PART_MISSING")
     waiting = False
     rendered_cards: set[str] = set()
     workflow_parts = {
