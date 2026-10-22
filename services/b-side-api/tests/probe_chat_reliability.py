@@ -36,6 +36,13 @@ async def exercise(factory):
             references=[],
         )
 
+    def inspection_due(turn):
+        # This direct-dispatch fault probe controls eligibility explicitly.
+        # The wake probe independently verifies the real two-second retry deadline.
+        with factory() as c:
+            c.execute("UPDATE chat_turns SET next_attempt_at=now() WHERE input_message_id=%s "
+                      "AND status IN ('QUEUED','RUNNING')", (turn["input_message_id"],))
+
     class Runner:
         def __init__(self):
             self.facts = {}
@@ -151,6 +158,8 @@ async def exercise(factory):
         FailProjection(factory, environment="PRT"), messages, runner
     ).dispatch(turn)
     assert store.get(turn["input_message_id"])["status"] == "RUNNING"
+    assert runner.facts[str(turn["input_message_id"])]["status"] == "COMPLETED"
+    inspection_due(turn)
     await DurableDispatcher(store, messages, runner).dispatch(turn)
     assert (
         runner.calls == before + 1
@@ -179,6 +188,7 @@ async def exercise(factory):
         and store.get(turn["input_message_id"])["status"] == "QUEUED"
     )
     runner.facts[str(turn["input_message_id"])] = {"status": "NEEDS_REVIEW"}
+    inspection_due(turn)
     await dispatch.dispatch(turn)
     assert (
         runner.calls == before
