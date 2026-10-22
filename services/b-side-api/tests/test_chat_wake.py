@@ -71,33 +71,15 @@ class ChatWakeTests(unittest.TestCase):
         await asyncio.sleep(0)
         self.assertFalse(task.done())
 
-    def test_new_notifications_are_noop_and_startup_reads_committed_facts(self) -> None:
-        wake = ChatWake()
-        committed = ["accepted-before-startup"]
-        notify_burst(wake, 100)
-
-        async def case() -> None:
-            loop = asyncio.get_running_loop()
-            assert isinstance(loop, RecordingLoop)
-            wake.bind()
-            wake.clear()
-            self.assertEqual(["accepted-before-startup"], list(committed))
-            self.assertEqual(0, loop.wake_posts)
-            waiter = asyncio.create_task(wake.wait())
-            await self.assert_waiting(waiter)
-            waiter.cancel()
-            with self.assertRaises(asyncio.CancelledError):
-                await waiter
-            wake.close()
-
-        self.run_async(case)
+    def test_constructor_requires_running_loop(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "no running event loop"):
+            ChatWake()
 
     def test_thread_burst_posts_only_one_unexecuted_callback(self) -> None:
         async def case() -> None:
             loop = asyncio.get_running_loop()
             assert isinstance(loop, RecordingLoop)
             wake = ChatWake()
-            wake.bind()
             wake.clear()
             failures: list[BaseException] = []
             threads = [
@@ -132,7 +114,6 @@ class ChatWakeTests(unittest.TestCase):
     def test_delivered_hint_before_clear_is_covered_by_following_drain(self) -> None:
         async def case() -> None:
             wake = ChatWake()
-            wake.bind()
             facts: list[str] = []
 
             def commit() -> None:
@@ -158,7 +139,6 @@ class ChatWakeTests(unittest.TestCase):
     def test_hint_during_fact_query_survives_until_wait(self) -> None:
         async def case() -> None:
             wake = ChatWake()
-            wake.bind()
             facts: list[str] = []
             query_started, query_release = threading.Event(), threading.Event()
 
@@ -195,7 +175,6 @@ class ChatWakeTests(unittest.TestCase):
     def test_notify_after_clear_before_wait_interleaving(self) -> None:
         async def case() -> None:
             wake = ChatWake()
-            wake.bind()
             failures: list[BaseException] = []
             for _ in range(100):
                 wake.clear()
@@ -222,7 +201,6 @@ class ChatWakeTests(unittest.TestCase):
             loop = asyncio.get_running_loop()
             assert isinstance(loop, RecordingLoop)
             wake = ChatWake()
-            wake.bind()
             entered, release = threading.Event(), threading.Event()
             failures: list[BaseException] = []
             loop.pause_next_post = (entered, release)
@@ -252,7 +230,6 @@ class ChatWakeTests(unittest.TestCase):
     def test_timeout_and_cancel_use_event_waiter_cleanup(self) -> None:
         async def case() -> None:
             wake = ChatWake()
-            wake.bind()
             wake.clear()
             before = asyncio.all_tasks()
             with self.assertRaises(asyncio.TimeoutError):
@@ -274,32 +251,25 @@ class ChatWakeTests(unittest.TestCase):
 
         self.run_async(case)
 
-    def test_duplicate_bind_and_new_close_are_terminal(self) -> None:
-        wake = ChatWake()
-        wake.close()
-        wake.close()
-        wake.notify()
-
+    def test_close_is_terminal_and_idempotent(self) -> None:
         async def case() -> None:
+            wake = ChatWake()
+            wake.close()
+            wake.close()
+            wake.notify()
             with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_CLOSED"):
-                wake.bind()
-            current = ChatWake()
-            current.bind()
-            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_ALREADY_BOUND"):
-                current.bind()
-            current.close()
-            current.close()
-            current.notify()
+                wake.clear()
             with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_CLOSED"):
-                current.bind()
+                await wake.wait()
 
         self.run_async(case)
 
     def test_close_releases_waiter_and_closed_loop_notify_is_safe(self) -> None:
-        wake = ChatWake()
+        created: list[ChatWake] = []
 
         async def first() -> None:
-            wake.bind()
+            wake = ChatWake()
+            created.append(wake)
             waiter = asyncio.create_task(wake.wait())
             await self.assert_waiting(waiter)
             closer = threading.Thread(target=wake.close)
@@ -310,22 +280,20 @@ class ChatWakeTests(unittest.TestCase):
             wake.close()
 
         self.run_async(first)
-        notify_burst(wake, 100)
-        abandoned = ChatWake()
+        notify_burst(created[0], 100)
 
         async def leave_loop_closed() -> None:
-            abandoned.bind()
+            created.append(ChatWake())
 
         self.run_async(leave_loop_closed)
-        abandoned.notify()  # RuntimeError from closed-loop posting is isolated.
-        abandoned.close()
+        created[1].notify()  # RuntimeError from closed-loop posting is isolated.
+        created[1].close()
 
     def test_close_with_paused_poster_never_signals_a_fresh_object(self) -> None:
         async def case() -> None:
             loop = asyncio.get_running_loop()
             assert isinstance(loop, RecordingLoop)
             old = ChatWake()
-            old.bind()
             entered, release = threading.Event(), threading.Event()
             failures: list[BaseException] = []
             loop.pause_next_post = (entered, release)
@@ -339,7 +307,6 @@ class ChatWakeTests(unittest.TestCase):
             notify_burst(old, 100)
             self.assertEqual(1, loop.wake_posts)
             fresh = ChatWake()
-            fresh.bind()
             fresh.clear()
             waiter = asyncio.create_task(fresh.wait())
             await self.assert_waiting(waiter)
@@ -359,20 +326,14 @@ class ChatWakeTests(unittest.TestCase):
         self.run_async(case)
 
     def test_clear_and_wait_require_owner_loop(self) -> None:
-        wake = ChatWake()
-
         async def case() -> None:
-            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_NOT_BOUND"):
-                wake.clear()
-            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_NOT_BOUND"):
-                await wake.wait()
-            wake.bind()
+            wake = ChatWake()
 
             def foreign_loop() -> None:
                 async def wrong_owner() -> None:
-                    with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_NOT_BOUND"):
+                    with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_WRONG_LOOP"):
                         wake.clear()
-                    with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_NOT_BOUND"):
+                    with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_WRONG_LOOP"):
                         await wake.wait()
 
                 asyncio.run(wrong_owner())
@@ -384,9 +345,43 @@ class ChatWakeTests(unittest.TestCase):
             self.assertFalse(thread.is_alive())
             self.assertEqual([], failures)
             wake.close()
-            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_NOT_BOUND"):
-                wake.clear()
-            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_NOT_BOUND"):
-                await wake.wait()
+
+        self.run_async(case)
+
+    def test_independent_event_loops_own_independent_signals(self) -> None:
+        ready, observed = threading.Event(), threading.Event()
+        created: list[ChatWake] = []
+        failures: list[BaseException] = []
+
+        def other_loop() -> None:
+            async def own_signal() -> None:
+                wake = ChatWake()
+                created.append(wake)
+                ready.set()
+                try:
+                    await asyncio.wait_for(wake.wait(), 2)
+                    observed.set()
+                finally:
+                    wake.close()
+
+            asyncio.run(own_signal())
+
+        async def case() -> None:
+            owner = threading.Thread(target=capture_thread_failure, args=(failures, other_loop))
+            owner.start()
+            self.assertTrue(await asyncio.to_thread(ready.wait, 1))
+            current = ChatWake()
+            waiter = asyncio.create_task(current.wait())
+            try:
+                created[0].notify()
+                self.assertTrue(await asyncio.to_thread(observed.wait, 1))
+                await self.assert_waiting(waiter)
+                current.notify()
+                await asyncio.wait_for(waiter, 1)
+            finally:
+                current.close()
+                owner.join(2)
+            self.assertFalse(owner.is_alive())
+            self.assertEqual([], failures)
 
         self.run_async(case)
