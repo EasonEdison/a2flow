@@ -8,6 +8,6 @@
 - [x] Exercise real FastAPI startup, failed startup, shutdown waiting and multiple lifetimes.
 - [x] Adapt PostgreSQL owners/spawn boundaries to explicit async wake construction.
 - [x] Complete the final nine scoped groups, 33-file quality and independent review evidence.
-- [ ] Integrate and push; verify origin/main and github/main equal and worktrees clean.
+- [x] Integrate and push; verify origin/main and github/main equal and worktrees clean.
 
 Source only; public deployment and production data changes are not included.
