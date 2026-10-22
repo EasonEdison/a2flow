@@ -222,6 +222,7 @@ def create_app_from_environment() -> FastAPI:
     from a2flow_bside.processing_tasks import ProcessingTasksRepository
 
     processing_tasks = ProcessingTasksRepository(connection_factory, work_activities)
+
     # lifespan 提供已初始化的 wake；完成回调、请求服务和分发器共用同一仓库。
     def chat_runtime_factory(wake: ChatWake) -> ChatRuntime:
         durable_chat = DurableChat(connection_factory, environment=config.environment, wake=wake)

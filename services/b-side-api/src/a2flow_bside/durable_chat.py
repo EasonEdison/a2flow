@@ -41,9 +41,7 @@ def encoded(value: object) -> str:
 
 # 产品层保存接收事实、恢复意图和展示事件, 不维护另一套 Agent 执行图。
 class DurableChat:
-    def __init__(
-        self, factory: ConnectionFactory, *, environment: str, wake: ChatWake
-    ) -> None:
+    def __init__(self, factory: ConnectionFactory, *, environment: str, wake: ChatWake) -> None:
         self.factory, self.environment = factory, environment
         self.wake = wake
 
