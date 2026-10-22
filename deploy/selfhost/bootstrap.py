@@ -75,6 +75,11 @@ def apply_file(conninfo: str, relative: str) -> None:
         row = connection.execute("SELECT digest FROM selfhost_schema_history WHERE path=%s", (relative,)).fetchone()
         if row:
             if row[0] != digest:
+                if (relative == "services/b-side-api/src/a2flow_bside/schema.sql"
+                        and row[0] == "2fce29dc6b07b3f591bc90592b3374ddd85aedffc4b39fb4da2dc2db68d8c6aa"):
+                    # Reviewed v1 -> v2 delta is applied by migrate_chat_state below,
+                    # never by rerunning an edited initialization script.
+                    return
                 raise ValueError("Changed initialization SQL requires a reviewed migration")
             return
         connection.execute(body)
@@ -109,6 +114,8 @@ def schemas(dsn: Any, names: dict[str, str], config: dict[str, Any]) -> None:
         apply_file(dsn(kind), "services/management-java/backend/storage/db/runtime-publication/V001__publication_receipts.sql")
     for path in ("services/b-side-api/src/a2flow_bside/schema.sql", "services/b-side-api/src/a2flow_bside/account_guard.sql", "services/scheduler-mq/src/a2flow_scheduler/schema.sql"):
         apply_file(dsn("prt"), path)
+    from a2flow_bside.chat_migration import migrate_chat_state
+    migrate_chat_state(lambda: psycopg.connect(dsn("prt"), row_factory=dict_row))
     prt = dsn("prt")
     ConversationStore(prt).setup()
     ChatCardStore(prt, environment="PRT").setup()
