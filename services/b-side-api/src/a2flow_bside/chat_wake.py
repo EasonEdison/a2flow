@@ -1,38 +1,29 @@
-"""A process-local, coalescing hint for the durable Chat dispatcher.
+"""A coalesced process-local hint; durable database facts authorize dispatch.
 
-Only the database authorizes execution. A missed hint, including one before
-bind(), is covered by startup and periodic reconciliation. This port owns no
-background task, database connection, per-request queue or execution state.
+The owner must clear BEFORE querying durable work, never between its query and
+wait. Pre-clear hints are covered by that query; post-clear hints remain set.
+This single-lifetime port owns no task, deadline, retry or execution state.
 """
 
 from __future__ import annotations
 
 import asyncio
-import math
 import threading
 from contextlib import suppress
 
 
 class ChatWake:
-    """Thread-safe monotonic hints with at most one queued notification callback.
-
-    The counter closes drain/clear/wait races. Dirty and callback-pending are
-    separate: clearing an event cannot enqueue another callback while an older
-    callback is still waiting to run. Each object binds once and closes
-    permanently; a new dispatcher lifetime needs a new object.
-    """
+    """One level-triggered Event and at most one queued notification callback."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._version = 0
         self._loop: asyncio.AbstractEventLoop | None = None
         self._event: asyncio.Event | None = None
         self._closed = False
-        self._dirty = False
         self._callback_pending = False
 
     def bind(self) -> None:
-        """Bind during dispatcher startup, followed by an unconditional scan."""
+        """Bind once on the dispatcher loop, before its unconditional first drain."""
         loop = asyncio.get_running_loop()
         with self._lock:
             if self._closed:
@@ -42,85 +33,61 @@ class ChatWake:
             self._loop = loop
             self._event = asyncio.Event()
 
-    def snapshot(self) -> int:
-        """Take a counter before draining durable facts, not after the drain."""
-        with self._lock:
-            return self._version
-
     def notify(self) -> None:
-        """Hint after commit; safe before binding and a no-op after close."""
+        """Hint after commit from any thread; NEW/CLOSED objects safely ignore it."""
         with self._lock:
-            if self._closed:
+            loop, event = self._loop, self._event
+            if self._closed or loop is None or event is None:
                 return
-            self._version += 1
-            loop = self._loop
-            if loop is None or self._dirty:
-                return
-            self._dirty = True
-            if self._callback_pending:
+            if self._callback_pending or event.is_set():
                 return
             self._callback_pending = True
         try:
             loop.call_soon_threadsafe(self._deliver)
         except RuntimeError:
-            # Loop shutdown can race scheduling; persisted work survives the hint.
+            # Shutdown may close the loop before posting; persisted facts survive.
             with self._lock:
-                self._dirty = False
                 self._callback_pending = False
 
     def _deliver(self) -> None:
         with self._lock:
             if self._closed:
                 return
-            self._callback_pending = False
-            if self._dirty and self._event is not None:
+            if self._event is not None:
                 self._event.set()
+            self._callback_pending = False
 
-    async def wait_after(self, version: int, timeout: float, stop: asyncio.Event) -> None:
-        """Wait for a newer hint, a deadline or stop, then clean up child waiters.
+    def clear(self) -> None:
+        """Owner loop only: clear BEFORE database drain, never after querying.
 
-        Check the counter and clear the level-triggered signal under the same
-        lock used by notify(). A notify after this check either wakes the event
-        or is already covered by an outstanding coalesced callback.
+        Do not release the callback gate: a notifying thread may have reserved
+        its callback but not yet posted it. That pending callback still delivers
+        a signal after this clear, without queueing additional callbacks.
         """
-        if not math.isfinite(timeout) or timeout < 0:
-            raise ValueError("CHAT_WAKE_TIMEOUT_INVALID")
         loop = asyncio.get_running_loop()
         with self._lock:
             if self._loop is not loop or self._event is None:
                 raise RuntimeError("CHAT_WAKE_NOT_BOUND")
-            if self._version != version or stop.is_set() or timeout == 0:
-                return
+            self._event.clear()
+
+    async def wait(self) -> None:
+        """Await the signal without clearing; the dispatcher owns timeout/stop."""
+        loop = asyncio.get_running_loop()
+        with self._lock:
+            if self._loop is not loop or self._event is None:
+                raise RuntimeError("CHAT_WAKE_NOT_BOUND")
             event = self._event
-            event.clear()
-            self._dirty = False
-        signal_wait = asyncio.create_task(event.wait(), name="chat-wake-signal")
-        stop_wait = asyncio.create_task(stop.wait(), name="chat-wake-stop")
-        tasks = (signal_wait, stop_wait)
-        try:
-            done, _ = await asyncio.wait(
-                tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
-            )
-            for task in done:
-                task.result()
-        finally:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+        await event.wait()
 
     def close(self) -> None:
-        """Close once and wake existing waiters; this object cannot bind again."""
+        """Close permanently and release existing waiters; repeated close is a no-op."""
         with self._lock:
             if self._closed:
                 return
             self._closed = True
             loop, event = self._loop, self._event
             self._loop, self._event = None, None
-            self._dirty = False
             self._callback_pending = False
         if loop is not None and event is not None:
-            # Wake only this lifetime's waiters on their loop; a closed loop
-            # has no live waiters. Repeated close never queues another callback.
             with suppress(RuntimeError):
                 loop.call_soon_threadsafe(event.set)
