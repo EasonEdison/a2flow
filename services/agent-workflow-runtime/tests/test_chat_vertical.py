@@ -3,6 +3,7 @@
 import os
 import unittest
 from uuid import uuid4
+from skillweave_contracts.chat_result import result_from_events
 
 from a2flow_asset_store import AssetReader
 from activity_planning_demo import APPLICATION_KEY, BUDGET_KEY, application_validator, application_data_validator, bundle_validator
@@ -16,6 +17,13 @@ from agent_workflow_runtime.chat.events import ListEmitter
 from agent_workflow_runtime.models import ActionRejected
 from deploy.mvp.operations import operations
 from test_chat_skill_execution import OWNER, Factory, ScriptedModel, _call
+
+
+def final_result(emitter, turn_id):
+    public = [{"type": kind, **payload} for kind, payload in emitter.events]
+    if public and public[-1]["type"] == "waiting_action":
+        public.append({"type": "done", "content": "", "finalModelMessageId": None})
+    return result_from_events(public, turn_id=turn_id)
 
 
 class BundleRepository:
@@ -64,7 +72,7 @@ class ChatVerticalTest(unittest.TestCase):
         self.assertEqual("done", kinds[-1])
         recovered = asyncio.run(runner.inspect_turn(
             user_id=OWNER.user_id, conversation_id=conversation, turn_id="1"))
-        self.assertEqual({"status": "COMPLETED", "events": events}, recovered)
+        self.assertEqual({"status": "COMPLETED", "result": result_from_events(events, turn_id="1")}, recovered)
         card = next(event["card"] for event in events if event["type"] == "application_rendered")
         self.assertEqual(card, store.read(OWNER, conversation, card["cardId"]))
         self.assertNotIn("Recent saved Application states", str(model.observed[0]))
@@ -90,7 +98,7 @@ class ChatVerticalTest(unittest.TestCase):
                 "params": {"prompt": "Choose a plan", "options": [{"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
         ])
         emitter = ListEmitter()
-        with conversations.session(OWNER, conversation, "1") as (saver, thread_id):
+        with conversations.session(OWNER, conversation, "1", completion_result=lambda: final_result(emitter, "1")) as (saver, thread_id):
             loop = ChatLoop(model_factory=Factory(model), model_reference="deepseek-v4-flash",
                 owner=OWNER, conversation_id=conversation, reader=reader,
                 control_request_id="chat-1", emitter=emitter, checkpointer=saver, thread_id=thread_id,
@@ -116,9 +124,10 @@ class ChatVerticalTest(unittest.TestCase):
         # a new user message is not a fabricated Workflow resume.
         from langchain_core.messages import AIMessageChunk
         next_model = ScriptedModel(rounds=[[AIMessageChunk(content="Saved card received")]])
-        with conversations.session(OWNER, conversation, "2") as (saver, thread_id):
+        next_emitter = ListEmitter()
+        with conversations.session(OWNER, conversation, "2", completion_result=lambda: final_result(next_emitter, "2")) as (saver, thread_id):
             next_loop = ChatLoop(model_factory=Factory(next_model), model_reference="deepseek-v4-flash",
                 owner=OWNER, conversation_id=conversation, reader=reader,
-                control_request_id="chat-2", checkpointer=saver, thread_id=thread_id,
+                control_request_id="chat-2", checkpointer=saver, thread_id=thread_id, emitter=next_emitter,
                 chat_assets=assets_factory(OWNER, conversation, "chat-2"))
             self.assertEqual("Saved card received", next_loop.turn("What happened?"))
