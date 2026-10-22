@@ -114,8 +114,16 @@ class ChatWakeTests(unittest.TestCase):
             self.assertEqual([], failures)
             self.assertEqual(1, loop.wake_posts)
             await asyncio.wait_for(wake.wait(), 1)
-            notify_burst(wake, 100)
-            self.assertEqual(1, loop.wake_posts)  # Set Event itself coalesces later hints.
+            later = threading.Thread(
+                target=capture_thread_failure, args=(failures, lambda: notify_burst(wake, 100))
+            )
+            later.start()
+            later.join(2)
+            self.assertFalse(later.is_alive())
+            self.assertEqual([], failures)
+            # Already-set signals can post one more callback; no Event method
+            # is read from producer threads and concurrent posting stays bounded.
+            self.assertEqual(2, loop.wake_posts)
             await asyncio.wait_for(wake.wait(), 1)  # Waiting never consumes the level.
             wake.close()
 
