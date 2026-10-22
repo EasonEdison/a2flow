@@ -9,7 +9,6 @@ only module that connects the two services.
 from __future__ import annotations
 
 import asyncio
-import json
 import queue
 import threading
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
@@ -25,6 +24,7 @@ from agent_workflow_runtime.model_factory import DeepSeekModelFactory
 from agent_workflow_runtime.personal_memory import PersonalMemory
 from langchain_core.messages import BaseMessage
 from skillweave_contracts import TrustedContext
+from skillweave_contracts.chat_result import ChatResultAccumulator
 
 if TYPE_CHECKING:
     from agent_workflow_runtime.chat.processing import ProcessingProvider
@@ -147,7 +147,7 @@ class ChatLoopRunner:
         )
         pending: queue.Queue[tuple[str, Mapping[str, Any]]] = queue.Queue(maxsize=64)
         closed = threading.Event()
-        replay_events: list[dict[str, Any]] = []
+        accumulator = ChatResultAccumulator(turn_id=turn_id)
         completion: dict[str, dict[str, Any] | None] = {"payload": None}
 
         class Emitter:
@@ -155,11 +155,12 @@ class ChatLoopRunner:
                 # Capture only the same public application protocol sent to B,
                 # never graph state, runnable config or authentication context.
                 event = _application_event(kind, payload)
-                if event is not None and kind != DONE:
-                    replay_events.append(json.loads(json.dumps(event, allow_nan=False)))
+                if event is not None:
+                    accumulator.consume(event)
                 # A closed transport must not cancel/replay a model/tool turn.
                 if kind == DONE:
                     completion["payload"] = dict(payload)
+                    accumulator.consume({"type": "done", **payload})
                     return  # Completion is published after the saver session exits.
                 while not closed.is_set():
                     try:
@@ -175,7 +176,7 @@ class ChatLoopRunner:
                 owner,
                 str(conversation_id),
                 turn_id,
-                completion_events=replay_events,
+                completion_result=accumulator.finish,
             ) as (saver, thread_id):
                 prompt = (
                     self._system_prompt(owner)
@@ -229,24 +230,13 @@ class ChatLoopRunner:
                     ),
                 )
                 loop.turn(text)
-                if completion["payload"] is None and not any(
-                    event["type"] == "waiting_action" for event in replay_events
-                ):
-                    raise ConversationAdmissionError("TURN_COMPLETION_EVIDENCE_MISSING")
-                # waiting_action is a successful terminal Chat turn too. Its
-                # continuation is a later turn, not replay of this agent run.
-                replay_events.append(
-                    {
-                        "type": "done",
-                        **(
-                            completion["payload"]
-                            or {
-                                "content": "",
-                                "finalModelMessageId": None,
-                            }
-                        ),
-                    }
-                )
+                if completion["payload"] is None:
+                    if not accumulator.waiting:
+                        raise ConversationAdmissionError("TURN_COMPLETION_EVIDENCE_MISSING")
+                    # 等待交互结束当前 Agent 轮次,完成卡片后是新轮次,绝不重放。
+                    accumulator.consume(
+                        {"type": "done", "content": "", "finalModelMessageId": None}
+                    )
 
         def worker() -> None:
             try:

@@ -15,22 +15,20 @@ scripted fake. Events are plain JSON-safe dicts:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, AsyncIterator, Literal, Protocol, TypedDict
+from collections.abc import AsyncIterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from .processing_tasks import ProcessingContext
 
 
-# 执行层检查返回权威轮次状态; 已完成时同时提供可重建的公开事件。
-class RuntimeTurnInspection(TypedDict):
-    status: Literal["NOT_STARTED", "BUSY", "COMPLETED", "NEEDS_REVIEW"]
-    events: list[dict[str, Any]]
+# 原生检查结果由共享契约定义,不让 Runtime 反向依赖产品协议。
+from skillweave_contracts.chat_result import RuntimeTurnInspection as RuntimeTurnInspection
 
 
-# 真实执行与已完成事件回放共用迭代接口, 产品层无需识别底层图对象。
+# 真实执行通过迭代接口交付增量,已完成恢复直接读取最终结果, 产品层无需识别底层图对象。
 class ChatStream(Protocol):
-    """Live runner and completed-event replay both provide this stream."""
+    """Live native runner provides this stream; recovery consumes a final result."""
 
     # 普通方法返回异步迭代器; 这里声明输出契约, 不另建模型循环。
     def iterate(
@@ -53,7 +51,7 @@ class ChatRunner(ChatStream, Protocol):
     async def inspect_turn(
         self, *, user_id: int, conversation_id: int, turn_id: str
     ) -> RuntimeTurnInspection:
-        """Return NOT_STARTED, BUSY, COMPLETED (with events), or NEEDS_REVIEW.
+        """Return NOT_STARTED, BUSY, COMPLETED (with result), or NEEDS_REVIEW.
 
         Inspection shares native execution admission. An expired product lease
         alone is never evidence that a model or business operation may replay.
