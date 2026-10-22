@@ -54,6 +54,13 @@ def notify_after_release(release: threading.Event, wake: ChatWake) -> None:
     wake.notify()
 
 
+def capture_thread_failure(failures: list[BaseException], action: Callable[[], None]) -> None:
+    try:
+        action()
+    except BaseException as error:
+        failures.append(error)
+
+
 class ChatWakeTests(unittest.TestCase):
     def run_async(self, case: Callable[[], Coroutine[Any, Any, None]]) -> None:
         with asyncio.Runner(loop_factory=RecordingLoop) as runner:
@@ -76,7 +83,6 @@ class ChatWakeTests(unittest.TestCase):
 
         async def case() -> None:
             wake.bind()
-            wake.bind()  # Repeated startup on the same live loop is harmless.
             await asyncio.wait_for(wake.wait_after(initial, 10, asyncio.Event()), 0.1)
             self.assert_no_wait_tasks()
             wake.close()
@@ -207,37 +213,36 @@ class ChatWakeTests(unittest.TestCase):
 
         self.run_async(case)
 
-    def test_close_releases_waiter_and_notify_after_loop_closed_is_safe(self) -> None:
+    def test_close_releases_waiter_and_repeated_close_is_terminal(self) -> None:
         wake = ChatWake()
 
-        async def first() -> None:
+        async def case() -> None:
             wake.bind()
             waiter = asyncio.create_task(wake.wait_after(wake.snapshot(), 10, asyncio.Event()))
             await asyncio.sleep(0)
-            thread = threading.Thread(target=wake.close)
+            failures: list[BaseException] = []
+            thread = threading.Thread(target=capture_thread_failure, args=(failures, wake.close))
             thread.start()
             thread.join(2)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual([], failures)
             await asyncio.wait_for(waiter, 1)
             self.assert_no_wait_tasks()
-            wake.bind()  # Intentionally leave this binding attached to a closing loop.
-
-        self.run_async(first)
-        wake.notify()  # Closed loop scheduling is isolated, never raises to the caller.
-        wake.close()
-
-        async def second() -> None:
-            wake.bind()
-            before = wake.snapshot()
-            waiter = asyncio.create_task(wake.wait_after(before, 10, asyncio.Event()))
-            await asyncio.sleep(0)
-            wake.notify()
-            await asyncio.wait_for(waiter, 1)
-            self.assert_no_wait_tasks()
+            frozen = wake.snapshot()
             wake.close()
+            wake.close()
+            wake.notify()
+            self.assertEqual(frozen, wake.snapshot())
+            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_CLOSED"):
+                wake.bind()
 
-        self.run_async(second)
+        self.run_async(case)
+        frozen = wake.snapshot()
+        wake.notify()
+        wake.close()
+        self.assertEqual(frozen, wake.snapshot())
 
-    def test_old_binding_delayed_callback_cannot_wake_rebound_waiter(self) -> None:
+    def test_delayed_callback_after_close_cannot_signal_a_replacement_object(self) -> None:
         async def case() -> None:
             loop = asyncio.get_running_loop()
             assert isinstance(loop, RecordingLoop)
@@ -245,25 +250,40 @@ class ChatWakeTests(unittest.TestCase):
             wake.bind()
             entered, release = threading.Event(), threading.Event()
             loop.pause_next_post = (entered, release)
-            old_poster = threading.Thread(target=wake.notify)
+            failures: list[BaseException] = []
+            old_poster = threading.Thread(
+                target=capture_thread_failure, args=(failures, wake.notify)
+            )
             old_poster.start()
             self.assertTrue(entered.wait(1))
             wake.close()
-            wake.bind()
-            waiter = asyncio.create_task(wake.wait_after(wake.snapshot(), 10, asyncio.Event()))
+            frozen = wake.snapshot()
+            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_CLOSED"):
+                wake.bind()
+            replacement = ChatWake()
+            replacement.bind()
+            waiter = asyncio.create_task(
+                replacement.wait_after(replacement.snapshot(), 10, asyncio.Event())
+            )
             await asyncio.sleep(0)
             try:
                 release.set()
                 old_poster.join(2)
+                self.assertFalse(old_poster.is_alive())
+                self.assertEqual([], failures)
                 await asyncio.sleep(0)
                 await asyncio.sleep(0)
                 self.assertFalse(waiter.done())
-                wake.notify()
+                for _ in range(100):
+                    wake.notify()
+                self.assertEqual(frozen, wake.snapshot())
+                replacement.notify()
                 await asyncio.wait_for(waiter, 1)
             finally:
                 release.set()
                 old_poster.join(2)
                 wake.close()
+                replacement.close()
             self.assert_no_wait_tasks()
 
         self.run_async(case)
@@ -298,3 +318,115 @@ class ChatWakeTests(unittest.TestCase):
                 await wake.wait_after(0, 1, asyncio.Event())
 
         self.run_async(case)
+
+    def test_duplicate_bind_on_same_loop_preserves_existing_waiter(self) -> None:
+        async def case() -> None:
+            wake = ChatWake()
+            wake.bind()
+            waiter = asyncio.create_task(wake.wait_after(wake.snapshot(), 10, asyncio.Event()))
+            await asyncio.sleep(0)
+            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_ALREADY_BOUND"):
+                wake.bind()
+            wake.notify()
+            await asyncio.wait_for(waiter, 1)
+            self.assert_no_wait_tasks()
+            wake.close()
+
+        self.run_async(case)
+
+    def test_close_before_bind_is_terminal_and_freezes_prebind_hints(self) -> None:
+        wake = ChatWake()
+        wake.notify()
+        frozen = wake.snapshot()
+        wake.close()
+        wake.close()
+        failures: list[BaseException] = []
+        threads = [
+            threading.Thread(
+                target=capture_thread_failure, args=(failures, lambda: notify_burst(wake, 1000))
+            )
+            for _ in range(4)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(2)
+            self.assertFalse(thread.is_alive())
+        self.assertEqual([], failures)
+        self.assertEqual(frozen, wake.snapshot())
+
+        async def case() -> None:
+            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_CLOSED"):
+                wake.bind()
+            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_NOT_BOUND"):
+                await wake.wait_after(frozen, 1, asyncio.Event())
+            self.assert_no_wait_tasks()
+
+        self.run_async(case)
+
+    def test_closed_loop_cannot_be_rebound_but_a_fresh_object_can_bind(self) -> None:
+        wake = ChatWake()
+
+        async def first() -> None:
+            wake.bind()
+
+        self.run_async(first)
+        before = wake.snapshot()
+        # A loop may stop before its owner closes; the late hint must remain safe.
+        failures: list[BaseException] = []
+        thread = threading.Thread(target=capture_thread_failure, args=(failures, wake.notify))
+        thread.start()
+        thread.join(2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual([], failures)
+        self.assertEqual(before + 1, wake.snapshot())
+
+        async def second() -> None:
+            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_ALREADY_BOUND"):
+                wake.bind()
+            wake.close()
+            frozen = wake.snapshot()
+            wake.notify()
+            self.assertEqual(frozen, wake.snapshot())
+            with self.assertRaisesRegex(RuntimeError, "CHAT_WAKE_CLOSED"):
+                wake.bind()
+            replacement = ChatWake()
+            replacement.bind()
+            version = replacement.snapshot()
+            waiter = asyncio.create_task(replacement.wait_after(version, 10, asyncio.Event()))
+            await asyncio.sleep(0)
+            replacement.notify()
+            await asyncio.wait_for(waiter, 1)
+            self.assert_no_wait_tasks()
+            replacement.close()
+
+        self.run_async(second)
+
+    def test_notify_poster_racing_close_and_loop_shutdown_is_safe(self) -> None:
+        wake = ChatWake()
+        entered, release = threading.Event(), threading.Event()
+        failures: list[BaseException] = []
+        thread = threading.Thread(target=capture_thread_failure, args=(failures, wake.notify))
+
+        async def case() -> None:
+            loop = asyncio.get_running_loop()
+            assert isinstance(loop, RecordingLoop)
+            wake.bind()
+            loop.pause_next_post = (entered, release)
+            thread.start()
+            self.assertTrue(entered.wait(1))
+            wake.close()
+            self.assert_no_wait_tasks()
+
+        try:
+            self.run_async(case)
+            frozen = wake.snapshot()
+        finally:
+            # Release only after Runner has actually closed the target loop.
+            release.set()
+            thread.join(2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual([], failures)
+        wake.notify()
+        wake.close()
+        self.assertEqual(frozen, wake.snapshot())
