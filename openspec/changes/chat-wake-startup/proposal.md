@@ -14,7 +14,7 @@ On any startup failure, revoke request admission and close the created wake. On 
 
 ## Preserved semantics
 
-Do not alter dispatch admission, database transitions, reconciliation/deadlines, clear/drain/settle/wait, slot/conversation ownership, fencing, native execution facts, completed projection repair, unknown-result no-replay, control deduplication, card materialization or approval rules. The typed factory is composition only, not a new scheduler or DI framework. Follow the ownership/make principle of the official OpenCode coordinator without importing Effect or copying its loop.
+Do not alter dispatch admission, database transitions, reconciliation/deadlines, clear/drain/settle/wait, slot/conversation ownership, fencing, native execution facts, completed projection repair, unknown-result no-replay, control deduplication, card materialization or approval rules. The typed factory is composition only, not a new scheduler or DI framework. Follow the ownership/make principle of the [official OpenCode coordinator](https://github.com/anomalyco/opencode/blob/e3c4eb242585dcd77be1a867391b7c25fd47ce52/packages/core/src/session/run-coordinator.ts) without importing Effect or copying its loop.
 
 ## Verification and delivery
 
