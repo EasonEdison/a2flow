@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import asyncio
 
+from skillweave_contracts.chat_state import continuation_status_from_delivery
+
 from .durable_chat import DurableChat
 from .errors import BsideError
-from .persistence_types import DatabaseConnection, MessageRecord
-from .processing_tasks import ProcessingContext, ProcessingTasksRepository
+from .processing_tasks import ProcessingTasksRepository
 from .repositories import MessagesRepository
 from .route_dependencies import ChatAction, JsonObject
 from .route_models import ChatCardAction, MessageSend
@@ -118,15 +119,7 @@ class ChatApplicationService:
         )
         # 把产品消息投影状态映射给前端; 未知状态保持 UNKNOWN。
         state = assistant_message["content"].get("delivery")
-        statuses: dict[object, str] = {
-            "queued": "RUNNING",
-            "running": "RUNNING",
-            "completed": "COMPLETED",
-            "waiting_action": "COMPLETED",
-            "unconfirmed": "NEEDS_REVIEW",
-            "failed": "FAILED",
-        }
-        status = statuses.get(state, "UNKNOWN")
+        status = continuation_status_from_delivery(state)
         # 返回消息 ID 供页面定位同一次续聊, 提交响应不再另起模型请求。
         return {
             **response,
@@ -219,39 +212,6 @@ class ChatApplicationService:
             # validated request and concrete repository for the transaction callback.
             assert processing_tasks is not None and processing_request_id is not None
 
-            # 回调沿用任务仓库的事务连接, 同时建立轮次和客户端幂等映射。
-            def observe_turn(
-                connection: DatabaseConnection,
-                context: ProcessingContext,
-                input_message: MessageRecord,
-                assistant_message: MessageRecord,
-                *,
-                new: bool,
-            ) -> None:
-                # 只有新处理轮次才插入待执行记录, 重发只关联已有消息。
-                if new:
-                    durable_chat.insert_turn(
-                        connection,
-                        user_id=user_id,
-                        conversation_id=conversation_id,
-                        request_id="processing:" + processing_request_id,
-                        digest=processing_request_id,
-                        input_message=input_message,
-                        assistant_message=assistant_message,
-                        references=references,
-                        processing_context=context,
-                    )
-                # 每个客户端请求号映射到同一对输入和助手消息。
-                durable_chat.record_request(
-                    connection,
-                    user_id=user_id,
-                    conversation_id=conversation_id,
-                    request_id=body.clientRequestId,
-                    payload=body.model_dump(),
-                    input_message=input_message,
-                    assistant_message=assistant_message,
-                )
-
             # 任务、消息及持久化轮次一起提交, 失败时不留下半套处理关系。
             (
                 _created,
@@ -268,7 +228,8 @@ class ChatApplicationService:
                 references=references,
                 target=body.processingTarget.model_dump() if body.processingTarget else None,
                 task_id=body.processingTaskId,
-                turn_observer=observe_turn,
+                client_request_id=body.clientRequestId,
+                client_payload=body.model_dump(),
             )
             # 从已保存请求读取结果, 不凭回调局部变量推断准入成功。
             turn = await asyncio.to_thread(

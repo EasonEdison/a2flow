@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 # 入口必须接收认证层构造的 TrustedContext，普通字典不能冒充可信用户。
 
+
 def require_owner(owner: object) -> TrustedContext:
     if type(owner) is not TrustedContext:
         raise ActionRejected("TRUSTED_CONTEXT_REQUIRED")

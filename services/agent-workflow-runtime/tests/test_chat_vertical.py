@@ -3,6 +3,7 @@
 import os
 import unittest
 from uuid import uuid4
+from skillweave_contracts.chat_result import result_from_events
 
 from a2flow_asset_store import AssetReader
 from activity_planning_demo import APPLICATION_KEY, BUDGET_KEY, application_validator, application_data_validator, bundle_validator
@@ -16,6 +17,13 @@ from agent_workflow_runtime.chat.events import ListEmitter
 from agent_workflow_runtime.models import ActionRejected
 from deploy.mvp.operations import operations
 from test_chat_skill_execution import OWNER, Factory, ScriptedModel, _call
+
+
+def final_result(emitter, turn_id):
+    public = [{"type": kind, **payload} for kind, payload in emitter.events]
+    if public and public[-1]["type"] == "waiting_action":
+        public.append({"type": "done", "content": "", "finalModelMessageId": None})
+    return result_from_events(public, turn_id=turn_id)
 
 
 class BundleRepository:
@@ -64,7 +72,7 @@ class ChatVerticalTest(unittest.TestCase):
         self.assertEqual("done", kinds[-1])
         recovered = asyncio.run(runner.inspect_turn(
             user_id=OWNER.user_id, conversation_id=conversation, turn_id="1"))
-        self.assertEqual({"status": "COMPLETED", "events": events}, recovered)
+        self.assertEqual({"status": "COMPLETED", "result": result_from_events(events, turn_id="1")}, recovered)
         card = next(event["card"] for event in events if event["type"] == "application_rendered")
         self.assertEqual(card, store.read(OWNER, conversation, card["cardId"]))
         self.assertNotIn("Recent saved Application states", str(model.observed[0]))
@@ -90,7 +98,7 @@ class ChatVerticalTest(unittest.TestCase):
                 "params": {"prompt": "Choose a plan", "options": [{"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
         ])
         emitter = ListEmitter()
-        with conversations.session(OWNER, conversation, "1") as (saver, thread_id):
+        with conversations.session(OWNER, conversation, "1", completion_result=lambda: final_result(emitter, "1")) as (saver, thread_id):
             loop = ChatLoop(model_factory=Factory(model), model_reference="deepseek-v4-flash",
                 owner=OWNER, conversation_id=conversation, reader=reader,
                 control_request_id="chat-1", emitter=emitter, checkpointer=saver, thread_id=thread_id,
@@ -116,9 +124,73 @@ class ChatVerticalTest(unittest.TestCase):
         # a new user message is not a fabricated Workflow resume.
         from langchain_core.messages import AIMessageChunk
         next_model = ScriptedModel(rounds=[[AIMessageChunk(content="Saved card received")]])
-        with conversations.session(OWNER, conversation, "2") as (saver, thread_id):
+        next_emitter = ListEmitter()
+        with conversations.session(OWNER, conversation, "2", completion_result=lambda: final_result(next_emitter, "2")) as (saver, thread_id):
             next_loop = ChatLoop(model_factory=Factory(next_model), model_reference="deepseek-v4-flash",
                 owner=OWNER, conversation_id=conversation, reader=reader,
-                control_request_id="chat-2", checkpointer=saver, thread_id=thread_id,
+                control_request_id="chat-2", checkpointer=saver, thread_id=thread_id, emitter=next_emitter,
                 chat_assets=assets_factory(OWNER, conversation, "chat-2"))
             self.assertEqual("Saved card received", next_loop.turn("What happened?"))
+
+    def test_pending_card_stays_on_original_turn_while_ordinary_chat_replies(self):
+        import asyncio
+        from deploy.attended.chat_runner import ChatLoopRunner
+
+        dsn = os.environ["A2FLOW_TEST_CHAT_CARDS_DSN"]
+        cards = ChatCardStore(dsn, environment="PRT")
+        cards.setup()
+        conversations = ConversationStore(dsn)
+        conversations.setup()
+        reader = AssetReader(BundleRepository(), NAMESPACE)
+        registry = operations()
+        first_model = ScriptedModel(rounds=[
+            [_call(0, "pending-skill", "use_skill", {"skillKey": "activity-planning/plan"})],
+            [_call(0, "pending-card", "render_application", {"appCode": APPLICATION_KEY,
+                "params": {"prompt": "Choose", "options": [
+                    {"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
+        ])
+        from langchain_core.messages import AIMessageChunk
+        followup_model = ScriptedModel(rounds=[[AIMessageChunk(content="ordinary saved reply")]])
+
+        class Models:
+            def __init__(self):
+                self.models = [first_model, followup_model]
+            def create(self, reference, owner):
+                return self.models.pop(0)
+
+        def assets(owner, conversation, control):
+            return ChatAssets(reader, registry, owner, conversation, control,
+                lambda prepared, metadata: cards.save(owner, conversation, prepared, metadata),
+                application_validator, application_data_validator)
+
+        runner = ChatLoopRunner(model_factory=Models(), model_reference="deepseek-v4-flash",
+            environment="PRT", reader=reader, conversation_store=conversations,
+            history_loader=lambda *args: [], assets_factory=assets,
+            observation_loader=lambda *args, **kwargs: [])
+        conversation = str(uuid4())
+        async def run(text, turn_id):
+            return [event async for event in runner.iterate(user_id=OWNER.user_id,
+                conversation_id=conversation, text=text, turn_id=turn_id)]
+
+        first = asyncio.run(run("Prepare an interactive choice", "1"))
+        rendered = next(event["card"] for event in first if event["type"] == "application_rendered")
+        saved = cards.read(OWNER, conversation, rendered["cardId"])
+        self.assertEqual("1", saved["turnId"])
+        self.assertEqual("WAITING_ACTION", saved["status"])
+        second = asyncio.run(run("Another ordinary message while the card waits", "2"))
+        self.assertEqual(2, len(first_model.observed))
+        self.assertEqual(1, len(followup_model.observed))
+        self.assertEqual([], [event for event in second if event["type"] == "application_rendered"])
+        self.assertEqual([], [event for event in second if event["type"] == "waiting_action"])
+        self.assertEqual([], [event for event in second if event["type"] in {
+            "tool_call_started", "tool_call_finished"}])
+        self.assertEqual("done", second[-1]["type"])
+        inspected = asyncio.run(runner.inspect_turn(user_id=OWNER.user_id,
+            conversation_id=conversation, turn_id="2"))
+        self.assertEqual("COMPLETED", inspected["status"])
+        self.assertEqual("completed", inspected["result"]["content"]["delivery"])
+        self.assertEqual("ordinary saved reply", inspected["result"]["content"]["text"])
+        first_facts = asyncio.run(runner.inspect_turn(user_id=OWNER.user_id,
+            conversation_id=conversation, turn_id="1"))
+        self.assertEqual("waiting_action", first_facts["result"]["content"]["delivery"])
+        self.assertEqual(saved, cards.read(OWNER, conversation, saved["cardId"]))

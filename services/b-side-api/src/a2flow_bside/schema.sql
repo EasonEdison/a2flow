@@ -125,19 +125,6 @@ CREATE TABLE IF NOT EXISTS processing_tasks (
 );
 CREATE INDEX IF NOT EXISTS processing_tasks_attention
     ON processing_tasks(user_id,environment,activity_id,attention_id,created_at DESC);
-CREATE TABLE IF NOT EXISTS processing_turns (
-    user_id bigint NOT NULL,
-    environment text NOT NULL,
-    conversation_id bigint NOT NULL REFERENCES conversations(id),
-    request_id text NOT NULL,
-    request_digest text NOT NULL,
-    task_id text NOT NULL REFERENCES processing_tasks(task_id),
-    input_message_id bigint NOT NULL REFERENCES messages(id),
-    assistant_message_id bigint NOT NULL REFERENCES messages(id),
-    PRIMARY KEY(user_id,environment,conversation_id,request_id),
-    UNIQUE(input_message_id),
-    UNIQUE(assistant_message_id)
-);
 CREATE TABLE IF NOT EXISTS processing_cards (
     user_id bigint NOT NULL,
     environment text NOT NULL,
@@ -171,20 +158,24 @@ CREATE TABLE IF NOT EXISTS chat_turns (
  user_id bigint NOT NULL,
  environment text NOT NULL CHECK(environment IN ('PRT','ONLINE')),
  conversation_id bigint NOT NULL REFERENCES conversations(id),
- request_id text NOT NULL,
- request_digest text NOT NULL,
+ source_kind text NOT NULL CHECK(source_kind IN ('USER_MESSAGE','PROCESSING','CARD_CONTINUATION')),
+ source_key text NOT NULL,
+ source_digest text NOT NULL,
+ processing_task_id text REFERENCES processing_tasks(task_id),
  dispatch_generation bigint NOT NULL DEFAULT 0,
  status text NOT NULL DEFAULT 'QUEUED' CHECK(status IN ('QUEUED','RUNNING','COMPLETED','NEEDS_REVIEW')),
  run_references jsonb NOT NULL DEFAULT '[]',
  processing_context jsonb,
  next_attempt_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now(),
- UNIQUE(user_id,environment,conversation_id,request_id)
+ UNIQUE(user_id,environment,conversation_id,source_kind,source_key),
+ UNIQUE(input_message_id,user_id,environment,conversation_id)
 );
 CREATE INDEX IF NOT EXISTS chat_turns_dispatch ON chat_turns(environment,status,next_attempt_at,input_message_id);
 CREATE TABLE IF NOT EXISTS chat_turn_events (
  input_message_id bigint NOT NULL REFERENCES chat_turns(input_message_id),
  sequence integer NOT NULL,
+ dispatch_generation bigint NOT NULL DEFAULT 0,
  event jsonb NOT NULL,
  PRIMARY KEY(input_message_id,sequence)
 );
@@ -196,8 +187,7 @@ CREATE TABLE IF NOT EXISTS chat_continuations (
  card_id text NOT NULL,
  request_id text NOT NULL,
  write_completed boolean NOT NULL,
- materialized boolean NOT NULL DEFAULT false,
- recovery_status text NOT NULL DEFAULT 'PENDING' CHECK(recovery_status IN ('PENDING','NEEDS_REVIEW')),
+ state text NOT NULL DEFAULT 'PENDING' CHECK(state IN ('PENDING','MATERIALIZED','NEEDS_REVIEW')),
  error_code text,
  next_attempt_at timestamptz NOT NULL DEFAULT now(),
  created_at timestamptz NOT NULL DEFAULT now(),
@@ -210,6 +200,7 @@ CREATE TABLE IF NOT EXISTS chat_requests (
  client_request_id text NOT NULL,
  request_digest text NOT NULL,
  input_message_id bigint NOT NULL REFERENCES messages(id),
- assistant_message_id bigint NOT NULL REFERENCES messages(id),
- PRIMARY KEY(user_id,environment,conversation_id,client_request_id)
+ PRIMARY KEY(user_id,environment,conversation_id,client_request_id),
+ FOREIGN KEY(input_message_id,user_id,environment,conversation_id)
+   REFERENCES chat_turns(input_message_id,user_id,environment,conversation_id)
 );

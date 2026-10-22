@@ -63,15 +63,15 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             {'type': 'text', 'id': 'text:12:1', 'text': '文字A',
              'modelMessageId': 'model-one'},
             {'type': 'application', 'id': 'application:card-1',
-             'cardId': 'card-1'},
+             'cardId': 'card-1', 'card': {'cardId': 'card-1', 'status': 'WAITING_ACTION'}},
             {'type': 'text', 'id': 'text:12:2', 'text': '文字B',
              'modelMessageId': 'model-one'},
             {'type': 'application', 'id': 'application:card-2',
-             'cardId': 'card-2'},
+             'cardId': 'card-2', 'card': {'cardId': 'card-2', 'status': 'DISPLAY_ONLY'}},
             {'type': 'text', 'id': 'text:12:3', 'text': '文字C',
              'modelMessageId': 'model-one'},
         ], persisted['parts'])
-        self.assertNotIn('card', persisted['parts'][1])
+        self.assertEqual({'cardId': 'card-1', 'status': 'WAITING_ACTION'}, persisted['parts'][1]['card'])
         self.assertNotIn('card', persisted['events'][0])
 
         text_events = [event for event in events if event['type'] == 'text_delta']
@@ -276,12 +276,12 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('', saved['reasoning'])
         self.assertEqual('11', saved['execution']['turnId'])
         self.assertEqual(
-            [('model-process', 2, 'process'), ('model-final', 6, 'final')],
+            [('model-process', 1, 'process'), ('model-final', 5, 'final')],
             [(item['messageId'], item['sequence'], item['phase'])
              for item in saved['execution']['modelMessages']],
         )
         tool = saved['execution']['toolCalls'][0]
-        self.assertEqual(('call-1', 4, 'returned', False), (
+        self.assertEqual(('call-1', 3, 'returned', False), (
             tool['toolCallId'], tool['sequence'], tool['lifecycleStatus'],
             tool['businessSuccess'],
         ))
@@ -290,10 +290,8 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('12', saved['events'][0]['assistantMessageId'])
         self.assertEqual('11', events[0]['turnId'])
         self.assertEqual('model-final', events[-1]['finalModelMessageId'])
-        terminal = copy.deepcopy(events[-1]['content'])
-        for part in terminal['parts']:
-            part.pop('card', None)
-        self.assertEqual(saved, terminal)
+        # Final saved projection now retains the same authoritative card snapshot.
+        self.assertEqual(saved, events[-1]['content'])
 
     async def test_done_waits_for_native_iterator_exit_and_saved_projection(self):
         gate = asyncio.Event()

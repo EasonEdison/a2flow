@@ -6,6 +6,8 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessageChunk
 from skillweave_contracts.models import TrustedContext
+from skillweave_contracts.chat_result import result_from_events
+from agent_workflow_runtime.chat.events import ListEmitter
 from agent_workflow_runtime.chat.persistence import (
     ConversationStore, ConversationAdmissionError,
 )
@@ -24,13 +26,15 @@ class PostgresConversationTests(unittest.TestCase):
     def turn(self, owner, turn_id, text, loader=None):
         # New store and model instance simulate a different worker process.
         store = ConversationStore(os.environ["A2FLOW_TEST_CHAT_DSN"])
-        with store.session(owner, self.conversation, turn_id) as (saver, thread):
+        emitter = ListEmitter()
+        with store.session(owner, self.conversation, turn_id, completion_result=lambda: result_from_events(
+                [{"type": kind, **payload} for kind, payload in emitter.events], turn_id=turn_id)) as (saver, thread):
             loop = ChatLoop(
                 model_factory=FakeFactory([FakeModel([AIMessageChunk(content="reply")])]),
                 model_reference="deepseek-v4-flash", owner=owner,
                 conversation_id=self.conversation,
                 reader=FakeMaterialPort(skill_material()), control_request_id=turn_id,
-                checkpointer=saver, thread_id=thread, history_loader=loader,
+                checkpointer=saver, thread_id=thread, history_loader=loader, emitter=emitter,
             )
             loop.turn(text)
             return thread, loop.history
@@ -58,9 +62,9 @@ class PostgresConversationTests(unittest.TestCase):
 
     def test_busy_and_failed_turn_never_replays(self):
         with self.assertRaisesRegex(RuntimeError, "fixture failure"):
-            with self.store.session(self.owner, self.conversation, "1"):
+            with self.store.session(self.owner, self.conversation, "1", completion_result=lambda: result_from_events([], turn_id="1")):
                 with self.assertRaisesRegex(ConversationAdmissionError, "CONVERSATION_BUSY"):
-                    with self.store.session(self.owner, self.conversation, "2"):
+                    with self.store.session(self.owner, self.conversation, "2", completion_result=lambda: result_from_events([], turn_id="2")):
                         self.fail("must not admit competing worker")
                 raise RuntimeError("fixture failure")
         with self.assertRaisesRegex(ConversationAdmissionError, "CONVERSATION_REQUIRES_REVIEW"):
@@ -77,8 +81,8 @@ class PostgresConversationTests(unittest.TestCase):
                     connection.execute(statement)
             rows = connection.execute(
                 "SELECT table_name,column_name,data_type FROM information_schema.columns "
-                "WHERE table_schema=%s AND column_name IN (%s,%s)",
-                ("public", "user_id", "updated_by"),
+                "WHERE table_schema=current_schema() AND column_name IN (%s,%s)",
+                ("user_id", "updated_by"),
             ).fetchall()
         self.assertGreaterEqual(len(rows), 14)
         for table, column, kind in rows:
