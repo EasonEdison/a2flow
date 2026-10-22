@@ -41,8 +41,6 @@ class ChatWake:
                 raise RuntimeError("CHAT_WAKE_ALREADY_BOUND")
             self._loop = loop
             self._event = asyncio.Event()
-            self._dirty = False
-            self._callback_pending = False
 
     def snapshot(self) -> int:
         """Take a counter before draining durable facts, not after the drain."""
