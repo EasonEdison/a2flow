@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import psycopg
+from a2flow_bside.chat_runtime import ChatRuntime
 from a2flow_bside.chat_wake import ChatWake
 from a2flow_bside.durable_chat import DurableChat, DurableDispatcher
 from a2flow_bside.errors import BsideError
@@ -354,8 +355,9 @@ async def exercise_with_wake(factory, wake):
     harness = Harness(
         conversations=ConversationsRepository(factory),
         messages=messages,
-        durable_chat=store,
-        chat_runner=runner,
+        chat_runtime_factory=lambda application_wake: ChatRuntime(
+            DurableChat(factory, environment="PRT", wake=application_wake), runner
+        ),
     )
     async with harness.app.router.lifespan_context(harness.app):
         async with await harness.client() as client:
