@@ -837,7 +837,7 @@ class DurableDispatcher:
                 journal_sequence += 1
                 # Errors remain recoverable through inspect; no premature terminal event.
                 if event["type"] in {"error", "done", "turn_started"}:
-                    return True
+                    return
                 await asyncio.to_thread(
                     self.store.event,
                     user["id"],
@@ -856,7 +856,6 @@ class DurableDispatcher:
             # 最终投影保存已在同一事务完成调度终态，失败留待原生事实检查。
             # Failure deliberately remains RUNNING. The next inspection determines
             # completed projection repair versus NEEDS_REVIEW; never blind retry.
-
             return True
 
     # 后台拥有执行生命周期；唤醒只是提示重读数据库事实，不能直接派发。
