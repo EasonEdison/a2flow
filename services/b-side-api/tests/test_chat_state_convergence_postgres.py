@@ -1,6 +1,5 @@
 """Real PostgreSQL transaction and writer-boundary tests; no model/business IO."""
 
-import asyncio
 import json
 import os
 import unittest
@@ -9,6 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import psycopg
+from a2flow_bside.chat_wake import ChatWake
 from a2flow_bside.durable_chat import DurableChat, DurableDispatcher
 from a2flow_bside.errors import BsideError
 from a2flow_bside.processing_tasks import ProcessingTasksRepository
@@ -28,15 +28,17 @@ class Activities:
 
 
 @unittest.skipUnless(os.environ.get("A2FLOW_CONVERGENCE_DSN"), "disposable PG required")
-class ChatStateConvergenceTests(unittest.TestCase):
-    def setUp(self):
+class ChatStateConvergenceTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
         self.dsn = os.environ["A2FLOW_CONVERGENCE_DSN"]
         self.schema = "state_product_" + uuid4().hex
         with psycopg.connect(self.dsn, autocommit=True) as connection:
             connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(self.schema)))
         self.addCleanup(self.drop_schema)
         self.install((HERE.parent / "src/a2flow_bside/schema.sql").read_text())
-        self.store = DurableChat(self.factory, environment="PRT")
+        self.wake = ChatWake()
+        self.addCleanup(self.wake.close)
+        self.store = DurableChat(self.factory, environment="PRT", wake=self.wake)
         self.messages = MessagesRepository(self.factory)
         self.processing = ProcessingTasksRepository(self.factory, Activities())
 
@@ -66,7 +68,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
             user_id=1, conversation_id=cid, request_id=key, payload={"text": text}, references=[]
         )
 
-    def test_concurrent_duplicate_and_scope_source_identity(self):
+    async def test_concurrent_duplicate_and_scope_source_identity(self):
         cid = self.conversation()
         with ThreadPoolExecutor(max_workers=8) as pool:
             turns = list(pool.map(lambda _: self.receive(cid), range(16)))
@@ -91,7 +93,9 @@ class ChatStateConvergenceTests(unittest.TestCase):
                 payload={"text": "synthetic input"},
                 references=[],
             )
-        other = DurableChat(self.factory, environment="ONLINE")
+        other_wake = ChatWake()
+        self.addCleanup(other_wake.close)
+        other = DurableChat(self.factory, environment="ONLINE", wake=other_wake)
         self.assertIsNone(
             other.request(
                 user_id=1,
@@ -109,7 +113,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
             )
         )
 
-    def test_multiple_client_ids_share_processing_turn_and_conflict(self):
+    async def test_multiple_client_ids_share_processing_turn_and_conflict(self):
         cid = self.conversation()
         base = dict(
             user_id=1,
@@ -189,7 +193,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
                 ).fetchone()["n"],
             )
 
-    def test_final_projection_and_turn_complete_are_one_transaction(self):
+    async def test_final_projection_and_turn_complete_are_one_transaction(self):
         turn = self.receive(self.conversation())
         generation = self.store.claim_generation(turn["input_message_id"])
         self.store.set_status(turn["input_message_id"], "RUNNING", generation)
@@ -222,7 +226,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
         self.assertEqual("COMPLETED", self.store.get(turn["input_message_id"])["status"])
         self.assertEqual(final, self.store.pair(turn)[1]["content"])
 
-    def test_final_projection_checks_message_conversation_and_generation(self):
+    async def test_final_projection_checks_message_conversation_and_generation(self):
         turn = self.receive(self.conversation())
         foreign = self.receive(self.conversation())
         first = self.store.claim_generation(turn["input_message_id"])
@@ -254,7 +258,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
         self.store.set_status(turn["input_message_id"], "NEEDS_REVIEW", first)
         self.assertEqual("COMPLETED", self.store.get(turn["input_message_id"])["status"])
 
-    def test_completed_sse_resubscription_reads_saved_facts(self):
+    async def test_completed_sse_resubscription_reads_saved_facts(self):
         turn = self.receive(self.conversation())
         generation = self.store.claim_generation(turn["input_message_id"])
         self.store.set_status(turn["input_message_id"], "RUNNING", generation)
@@ -275,13 +279,13 @@ class ChatStateConvergenceTests(unittest.TestCase):
                 if line.startswith("data:")
             ]
 
-        first, second = asyncio.run(read()), asyncio.run(read())
+        first, second = await read(), await read()
         self.assertEqual(first, second)
         self.assertEqual("done", first[-1]["type"])
         self.assertEqual("waiting_action", first[-1]["content"]["delivery"])
         self.assertEqual(final, self.store.pair(turn)[1]["content"])
 
-    def test_continuation_crash_during_task_binding_recovers_once(self):
+    async def test_continuation_crash_during_task_binding_recovers_once(self):
         from types import SimpleNamespace
 
         from agent_workflow_runtime.chat.cards import DDL
@@ -343,7 +347,9 @@ class ChatStateConvergenceTests(unittest.TestCase):
             "UPDATE chat_continuations SET next_attempt_at=now();"
         )
         # A replacement worker reuses the persisted intent and any saved message pair.
-        replacement = DurableChat(self.factory, environment="PRT")
+        replacement_wake = ChatWake()
+        self.addCleanup(replacement_wake.close)
+        replacement = DurableChat(self.factory, environment="PRT", wake=replacement_wake)
         replacement.materialize(self.messages, self.processing)
         replacement.materialize(self.messages, self.processing)
         with self.factory() as connection:
@@ -369,7 +375,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
                 ).fetchone()["status"],
             )
 
-    def test_incompatible_schema_is_rejected_without_modifying_saved_rows(self):
+    async def test_incompatible_schema_is_rejected_without_modifying_saved_rows(self):
         # An obsolete shape is deliberately rejected, not upgraded at request time.
         self.install("DROP SCHEMA " + self.schema + " CASCADE; CREATE SCHEMA " + self.schema + ";")
         self.install(
@@ -395,7 +401,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
                 },
             )
 
-    def test_native_completed_repairs_only_snapshot_without_runner_reentry(self):
+    async def test_native_completed_repairs_only_snapshot_without_runner_reentry(self):
         from skillweave_contracts.chat_result import result_from_events
 
         turn = self.receive(self.conversation())
@@ -428,8 +434,8 @@ class ChatStateConvergenceTests(unittest.TestCase):
 
         runner = CompletedRunner()
         dispatcher = DurableDispatcher(self.store, self.messages, runner)
-        asyncio.run(dispatcher.dispatch(turn))
-        asyncio.run(dispatcher.dispatch(turn))
+        await dispatcher.dispatch(turn)
+        await dispatcher.dispatch(turn)
         self.assertEqual(0, runner.calls)
         self.assertEqual("COMPLETED", self.store.get(turn["input_message_id"])["status"])
         content = self.store.pair(turn)[1]["content"]
@@ -439,7 +445,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
         )
         self.assertEqual(str(turn["input_message_id"]), content["execution"]["turnId"])
 
-    def test_live_dispatch_and_snapshot_repair_have_identical_complete_projection(self):
+    async def test_live_dispatch_and_snapshot_repair_have_identical_complete_projection(self):
         from a2flow_bside.chat_delivery import restore_content
         from skillweave_contracts.chat_result import result_from_events
         from test_chat_result_postgres import events
@@ -460,7 +466,7 @@ class ChatStateConvergenceTests(unittest.TestCase):
                     yield event
 
         runner = NativeRunner()
-        asyncio.run(DurableDispatcher(self.store, self.messages, runner).dispatch(turn))
+        await DurableDispatcher(self.store, self.messages, runner).dispatch(turn)
         user, assistant = self.store.pair(turn)
         self.assertEqual("COMPLETED", self.store.get(turn["input_message_id"])["status"])
         self.assertEqual(1, runner.calls)

@@ -39,9 +39,9 @@ def main():
         )
     passed = (
         result.wasSuccessful()
-        and signal_checks >= 11
+        and signal_checks >= 12
         and postgres_checks >= 22
-        and result.testsRun >= 33
+        and result.testsRun >= 34
         and not result.skipped
         and cleaned
     )

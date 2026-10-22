@@ -1,24 +1,33 @@
 """Disposable PostgreSQL failure-boundary probe; no model or business calls."""
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import json
 import os
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
-import uuid
 
 import psycopg
-from psycopg.rows import dict_row
+from a2flow_bside.chat_wake import ChatWake
 from a2flow_bside.durable_chat import DurableChat, DurableDispatcher
-from a2flow_bside.repositories import MessagesRepository
 from a2flow_bside.errors import BsideError
+from a2flow_bside.repositories import MessagesRepository
+from psycopg.rows import dict_row
 from skillweave_contracts.chat_result import result_from_events
 
 
 async def exercise(factory):
+    wake = ChatWake()
+    try:
+        return await exercise_with_wake(factory, wake)
+    finally:
+        wake.close()
+
+
+async def exercise_with_wake(factory, wake):
     checks = 0
-    store = DurableChat(factory, environment="PRT")
+    store = DurableChat(factory, environment="PRT", wake=wake)
     messages = MessagesRepository(factory)
 
     def conversation():
@@ -155,7 +164,7 @@ async def exercise(factory):
 
     before = runner.calls
     await DurableDispatcher(
-        FailProjection(factory, environment="PRT"), messages, runner
+        FailProjection(factory, environment="PRT", wake=wake), messages, runner
     ).dispatch(turn)
     assert store.get(turn["input_message_id"])["status"] == "RUNNING"
     assert runner.facts[str(turn["input_message_id"])]["status"] == "COMPLETED"
@@ -339,8 +348,8 @@ async def exercise(factory):
     assert store.pair(fenced)[1]["content"]["text"] == "repaired"
     checks += 4
     # Real HTTP composition: request identity, new route, durable lifespan and replay.
-    from test_app import Harness, ORIGIN_HEADERS
     from a2flow_bside.repositories import ConversationsRepository
+    from test_app import ORIGIN_HEADERS, Harness
 
     harness = Harness(
         conversations=ConversationsRepository(factory),
