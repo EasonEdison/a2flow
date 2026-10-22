@@ -476,7 +476,10 @@ class DurableChat:
             except Exception as error:
                 # Only local, idempotent preparation is retried. No model or business
                 # dispatch happens here. A broken binding cannot starve other chats.
-                self._materialization_failed(intent, error)
+                try:
+                    self._materialization_failed(intent, error)
+                except Exception:
+                    _LOG.exception("Chat continuation failure-state persistence failed")
 
     # 可预期的非服务端错误转人工核对, 暂时故障保留待准备并延迟重试。
     def _materialization_failed(self, intent: dict[str, Any], error: Exception) -> None:
@@ -576,6 +579,19 @@ class DurableChat:
                 )
         # 待执行轮次与物化完成标记一起提交, 避免意图丢失或重复分发。
         with self.factory() as c:
+            # 与失败隔离路径统一先锁意图，再登记轮次，避免锁顺序反转和终态回退。
+            saved = c.execute(
+                "SELECT state FROM chat_continuations WHERE user_id=%s AND environment=%s "
+                "AND conversation_id=%s AND reference=%s FOR UPDATE",
+                (
+                    intent["user_id"],
+                    self.environment,
+                    intent["conversation_id"],
+                    intent["reference"],
+                ),
+            ).fetchone()
+            if saved is None or saved["state"] != "PENDING":
+                return
             self.insert_turn(
                 c,
                 user_id=intent["user_id"],
@@ -728,11 +744,13 @@ class DurableDispatcher:
             )
             # 持久化分发不依赖内存 HTTP 队列, 事件改写入数据库日志。
             delivery.detach()
-            delivery.sequence = await asyncio.to_thread(self.store.event_cursor, user["id"])
+            journal_sequence = await asyncio.to_thread(self.store.event_cursor, user["id"])
 
             # 先保存非终态公开事件; 最终状态等原生迭代器退出后再由事实确定。
             async def emit(event: dict[str, Any]) -> None:
-                delivery.sequence += 1
+                nonlocal journal_sequence
+                # 传输日志游标不修改共享结果归并器的原生事件序号。
+                journal_sequence += 1
                 # Errors remain recoverable through inspect; no premature terminal event.
                 if event["type"] in {"error", "done", "turn_started"}:
                     return
@@ -741,7 +759,7 @@ class DurableDispatcher:
                     user["id"],
                     {
                         **event,
-                        "sequence": delivery.sequence,
+                        "sequence": journal_sequence,
                         "messageId": str(assistant["id"]),
                         "inputMessageId": str(user["id"]),
                     },
