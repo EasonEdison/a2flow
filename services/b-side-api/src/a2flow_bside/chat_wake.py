@@ -39,7 +39,7 @@ class ChatWake:
             loop, event = self._loop, self._event
             if self._closed or loop is None or event is None:
                 return
-            if self._callback_pending or event.is_set():
+            if self._callback_pending:
                 return
             self._callback_pending = True
         try:
