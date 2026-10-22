@@ -11,8 +11,9 @@ import hashlib
 import json
 import re
 import uuid
-from typing import Any, Callable, Mapping, Protocol, TypedDict
+from typing import Any, Callable, Mapping, TypedDict
 
+from skillweave_contracts.chat_state import TurnSource
 from skillweave_contracts.user_id import require_user_id
 
 from .errors import BsideError
@@ -24,6 +25,7 @@ from .persistence_types import (
     MessageRecord,
     message_record,
 )
+from .turn_registry import TurnRegistry
 from .work_activities import WorkActivitiesRepository
 
 
@@ -72,21 +74,6 @@ def _context(row: Mapping[str, Any]) -> ProcessingContext:
         "objective": row["objective"],
         "status": row["status"],
     }
-
-
-# 观察者共享消息准入事务, 只登记关系, 不调用模型或业务服务。
-class ProcessingTurnObserver(Protocol):
-    """Shares the admission transaction; never dispatches model or business work."""
-
-    def __call__(
-        self,
-        connection: DatabaseConnection,
-        context: ProcessingContext,
-        input_message: MessageRecord,
-        assistant_message: MessageRecord,
-        *,
-        new: bool,
-    ) -> None: ...
 
 
 # 处理仓库保存显式任务和执行回执, 不能从模型总结自动判定业务已解决。
@@ -160,7 +147,8 @@ class ProcessingTasksRepository:
         references: list[dict[str, Any]],
         target: Mapping[str, str] | None = None,
         task_id: str | None = None,
-        turn_observer: ProcessingTurnObserver | None = None,
+        client_request_id: str | None = None,
+        client_payload: Mapping[str, Any] | None = None,
     ) -> tuple[bool, ProcessingContext, MessageRecord, MessageRecord]:
         """Atomically create the user/assistant pair and explicit task relation."""
         scope = self._scope(user_id, environment, conversation_id)
@@ -200,27 +188,29 @@ class ProcessingTasksRepository:
                 raise BsideError("CONVERSATION_NOT_FOUND", 404)
             # 处理请求重发先找既有轮次, 摘要不同直接报冲突。
             prior = connection.execute(
-                "SELECT * FROM processing_turns WHERE user_id=%s AND environment=%s "
-                "AND conversation_id=%s AND request_id=%s",
+                "SELECT * FROM chat_turns WHERE user_id=%s AND environment=%s "
+                "AND conversation_id=%s AND source_kind='PROCESSING' AND source_key=%s",
                 (*scope, request_id),
             ).fetchone()
             if prior:
-                if prior["request_digest"] != digest:
+                if prior["source_digest"] != digest:
                     raise BsideError("PROCESSING_REQUEST_CONFLICT", 409)
                 # 重发读取原消息对, 回调只登记客户端映射, 不再插入新待执行轮次。
                 prior_rows = connection.execute(
                     "SELECT * FROM messages WHERE id IN (%s,%s) ORDER BY id",
                     (prior["input_message_id"], prior["assistant_message_id"]),
                 ).fetchall()
-                context = _context(self._row(connection, scope, prior["task_id"]))
-                # 观察者拿到同一事务连接和 new=False, 准确区分重发与新准入。
-                if turn_observer is not None:
-                    turn_observer(
+                context = _context(self._row(connection, scope, prior["processing_task_id"]))
+                if client_request_id is not None and client_payload is not None:
+                    TurnRegistry.map_request(
                         connection,
-                        context,
-                        message_record(prior_rows[0]),
-                        message_record(prior_rows[1]),
-                        new=False,
+                        user_id=user_id,
+                        environment=environment,
+                        conversation_id=scope[2],
+                        request_id=client_request_id,
+                        payload=client_payload,
+                        input_message=message_record(prior_rows[0]),
+                        assistant_message=message_record(prior_rows[1]),
                     )
                 return False, context, message_record(prior_rows[0]), message_record(prior_rows[1])
             # 首次处理建立独立任务, 目标保留用户原文及来源异常身份。
@@ -275,21 +265,36 @@ class ProcessingTasksRepository:
                         ).fetchone()
                     )
                 )
-            connection.execute(
-                # 保存稳定处理请求号与消息对, 后续工具执行据此校验轮次归属。
-                "INSERT INTO processing_turns(user_id,environment,conversation_id,request_id,"
-                "request_digest,task_id,input_message_id,assistant_message_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (*scope, request_id, digest, task_id, rows[0]["id"], rows[1]["id"]),
+            TurnRegistry.insert(
+                connection,
+                user_id=user_id,
+                environment=environment,
+                conversation_id=scope[2],
+                source_kind=TurnSource.PROCESSING,
+                source_key=request_id,
+                source_digest=digest,
+                input_message=rows[0],
+                assistant_message=rows[1],
+                references=references,
+                processing_context=context,
             )
+            if client_request_id is not None and client_payload is not None:
+                TurnRegistry.map_request(
+                    connection,
+                    user_id=user_id,
+                    environment=environment,
+                    conversation_id=scope[2],
+                    request_id=client_request_id,
+                    payload=client_payload,
+                    input_message=rows[0],
+                    assistant_message=rows[1],
+                )
             # 仅首次消息作为任务来源消息, 继续处理不会覆盖原始入口。
             if target:
                 connection.execute(
                     "UPDATE processing_tasks SET origin_message_id=%s WHERE task_id=%s",
                     (rows[0]["id"], task_id),
                 )
-            # 新消息回调同事务登记持久化分发轮次, 提交前不启动模型。
-            if turn_observer is not None:
-                turn_observer(connection, context, rows[0], rows[1], new=True)
             return True, context, rows[0], rows[1]
 
     # 卡片必须绑定当前任务的权威元数据, 不能仅凭 ID 建立处理关系。
@@ -399,19 +404,7 @@ class ProcessingTasksRepository:
                 ).fetchone()
                 if row is None:
                     raise BsideError("PROCESSING_MESSAGE_NOT_FOUND", 404)
-            connection.execute(
-                "INSERT INTO processing_turns(user_id,environment,conversation_id,request_id,"
-                "request_digest,task_id,input_message_id,assistant_message_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
-                "ON CONFLICT DO NOTHING",
-                (
-                    *scope,
-                    "card:" + reference,
-                    reference,
-                    task_id,
-                    input_message_id,
-                    assistant_message_id,
-                ),
-            )
+            # 任务绑定在此保存；统一轮次由续聊物化事务登记，未登记前无法执行工具。
             # 所有待交互卡片关闭后才离开补参状态, 并根据已有真实回执恢复状态。
             if task["status"] == "WAITING_INPUT" and not self._waiting_card(
                 connection, scope, task_id
@@ -521,8 +514,8 @@ class ProcessingTasksRepository:
             task = self._row(connection, scope, task_id, lock=True)
             # 工具必须来自已登记的本任务轮次, 不接受任意模型提供的轮次号。
             turn = connection.execute(
-                "SELECT 1 FROM processing_turns WHERE user_id=%s AND environment=%s "
-                "AND conversation_id=%s AND task_id=%s AND input_message_id::text=%s",
+                "SELECT 1 FROM chat_turns WHERE user_id=%s AND environment=%s "
+                "AND conversation_id=%s AND processing_task_id=%s AND input_message_id::text=%s",
                 (*scope, task_id, turn_id),
             ).fetchone()
             # 没有轮次关系即拒绝; 已有相同操作仅返回保存的信封。
@@ -671,9 +664,9 @@ class ProcessingTasksRepository:
     @staticmethod
     def _delivery(connection: DatabaseConnection, task_id: str) -> str | None:
         row = connection.execute(
-            "SELECT m.content->>'delivery' delivery FROM processing_turns t "
+            "SELECT m.content->>'delivery' delivery FROM chat_turns t "
             "JOIN messages m ON m.id=t.assistant_message_id AND m.conversation_id=t.conversation_id "
-            "WHERE t.task_id=%s ORDER BY t.input_message_id DESC LIMIT 1",
+            "WHERE t.processing_task_id=%s ORDER BY t.input_message_id DESC LIMIT 1",
             (task_id,),
         ).fetchone()
         return row["delivery"] if row else None

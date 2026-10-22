@@ -3,22 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent_workflow_runtime.chat.cards import CardCompletion
-from .chat_delivery import ChatDelivery
+from skillweave_contracts.chat_state import FINAL_DELIVERIES, TurnSource
+
+from .chat_delivery import ChatDelivery, restore_content
 from .chat_runner import ChatRunner
 from .errors import BsideError
 from .interaction_continuation import continuation_reference
 from .persistence_types import ConnectionFactory, DatabaseConnection, MessageRecord, message_record
 from .processing_tasks import ProcessingContext, ProcessingTasksRepository
 from .repositories import MessagesRepository
+from .turn_registry import TurnRegistry
+from .turn_registry import digest as payload_digest
 
 _LOG = logging.getLogger(__name__)
 
@@ -49,10 +52,10 @@ class DurableChat:
     def request(
         self, *, user_id: int, conversation_id: int, request_id: str, payload: dict[str, Any]
     ) -> dict[str, Any] | None:
-        digest = hashlib.sha256(encoded(payload).encode()).hexdigest()
+        digest = payload_digest(payload)
         with self.factory() as c:
             row = c.execute(
-                "SELECT r.*,COALESCE(t.status,'LEGACY') AS status FROM chat_requests r "
+                "SELECT r.*,t.assistant_message_id,COALESCE(t.status,'LEGACY') AS status FROM chat_requests r "
                 "LEFT JOIN chat_turns t USING(input_message_id) WHERE r.user_id=%s AND r.environment=%s "
                 "AND r.conversation_id=%s AND r.client_request_id=%s",
                 (user_id, self.environment, conversation_id, request_id),
@@ -74,34 +77,15 @@ class DurableChat:
         input_message: MessageRecord,
         assistant_message: MessageRecord,
     ) -> None:
-        digest = hashlib.sha256(encoded(payload).encode()).hexdigest()
-        c.execute(
-            "INSERT INTO chat_requests(user_id,environment,conversation_id,client_request_id,"
-            "request_digest,input_message_id,assistant_message_id) VALUES(%s,%s,%s,%s,%s,%s,%s) "
-            "ON CONFLICT DO NOTHING",
-            (
-                user_id,
-                self.environment,
-                int(conversation_id),
-                request_id,
-                digest,
-                input_message["id"],
-                assistant_message["id"],
-            ),
-        )
-        # 插入后读回现有映射, 确认冲突记录确实对应同一负载和输入消息。
-        row = c.execute(
-            "SELECT request_digest,input_message_id FROM chat_requests WHERE user_id=%s AND environment=%s "
-            "AND conversation_id=%s AND client_request_id=%s",
-            (user_id, self.environment, int(conversation_id), request_id),
-        ).fetchone()
-        # 唯一记录必须存在; 摘要或消息不一致时整个事务失败。
-        assert row is not None
-        if row["request_digest"] != digest or row["input_message_id"] != input_message["id"]:
-            raise BsideError("CHAT_REQUEST_CONFLICT", 409)
-        c.execute(
-            "UPDATE messages SET content=content || %s::jsonb WHERE id=%s",
-            (encoded({"clientRequestId": request_id}), input_message["id"]),
+        TurnRegistry.map_request(
+            c,
+            user_id=user_id,
+            environment=self.environment,
+            conversation_id=conversation_id,
+            request_id=request_id,
+            payload=payload,
+            input_message=input_message,
+            assistant_message=assistant_message,
         )
 
     # 轮次与消息使用同一事务保存, 引用及处理上下文冻结为接收时的事实。
@@ -118,21 +102,24 @@ class DurableChat:
         references: Sequence[dict[str, Any]] = (),
         processing_context: ProcessingContext | None = None,
     ) -> None:
-        c.execute(
-            "INSERT INTO chat_turns(user_id,environment,conversation_id,request_id,request_digest,"
-            "input_message_id,assistant_message_id,run_references,processing_context) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb) ON CONFLICT DO NOTHING",
-            (
-                user_id,
-                self.environment,
-                int(conversation_id),
-                request_id,
-                digest,
-                input_message["id"],
-                assistant_message["id"],
-                encoded(list(references)),
-                encoded(processing_context),
-            ),
+        prefix, source_key = request_id.split(":", 1)
+        source_kind = {
+            "message": TurnSource.USER_MESSAGE,
+            "processing": TurnSource.PROCESSING,
+            "card": TurnSource.CARD_CONTINUATION,
+        }[prefix]
+        TurnRegistry.insert(
+            c,
+            user_id=user_id,
+            environment=self.environment,
+            conversation_id=conversation_id,
+            source_kind=source_kind,
+            source_key=source_key,
+            source_digest=digest,
+            input_message=input_message,
+            assistant_message=assistant_message,
+            references=references,
+            processing_context=processing_context,
         )
 
     # 普通消息以会话行锁串行准入, 原消息、助手占位和待分发轮次一起提交。
@@ -145,7 +132,7 @@ class DurableChat:
         payload: dict[str, Any],
         references: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        digest = hashlib.sha256(encoded(payload).encode()).hexdigest()
+        digest = payload_digest(payload)
         with self.factory() as c:
             # 事务内再次检查归属, 不能只依赖路由先前的读取。
             owner = c.execute(
@@ -157,11 +144,11 @@ class DurableChat:
             # 先找同请求轮次; 已存在时核对摘要并返回, 不插入第二对消息。
             prior = c.execute(
                 "SELECT * FROM chat_turns WHERE user_id=%s AND environment=%s "
-                "AND conversation_id=%s AND request_id=%s",
-                (user_id, self.environment, conversation_id, "message:" + request_id),
+                "AND conversation_id=%s AND source_kind='USER_MESSAGE' AND source_key=%s",
+                (user_id, self.environment, conversation_id, request_id),
             ).fetchone()
             if prior:
-                if prior["request_digest"] != digest:
+                if prior["source_digest"] != digest:
                     raise BsideError("CHAT_REQUEST_CONFLICT", 409)
                 return dict(prior)
             # 用户消息保存真实输入与引用, 助手消息以 queued 占位等待后台执行。
@@ -367,6 +354,13 @@ class DurableChat:
                 "UPDATE messages SET content=%s::jsonb WHERE id=%s",
                 (encoded(content), message_id),
             )
+            # 展示终态和产品调度完成共用本事务，崩溃不会留下已交付但仍可派发的轮次。
+            if content.get("delivery") in FINAL_DELIVERIES:
+                c.execute(
+                    "UPDATE chat_turns SET status='COMPLETED',updated_at=now() "
+                    "WHERE input_message_id=%s AND dispatch_generation=%s",
+                    (input_id, generation),
+                )
 
     # 事件日志写入与代际检查共用行锁, 防止丢锁的旧实例继续发布。
     def event(self, input_id: int, event: dict[str, Any], generation: int) -> None:
@@ -486,7 +480,7 @@ class DurableChat:
                 dict(r)
                 for r in c.execute(
                     "SELECT * FROM chat_continuations WHERE environment=%s "
-                    "AND materialized=false AND recovery_status='PENDING' AND next_attempt_at<=now() "
+                    "AND state='PENDING' AND next_attempt_at<=now() "
                     "ORDER BY created_at LIMIT 32",
                     (self.environment,),
                 ).fetchall()
@@ -512,9 +506,9 @@ class DurableChat:
         )
         with self.factory() as c:
             changed = c.execute(
-                "UPDATE chat_continuations SET recovery_status=%s,error_code=%s,"
+                "UPDATE chat_continuations SET state=%s,error_code=%s,"
                 "next_attempt_at=now()+interval '5 seconds' WHERE user_id=%s AND environment=%s "
-                "AND conversation_id=%s AND reference=%s AND materialized=false RETURNING reference",
+                "AND conversation_id=%s AND reference=%s AND state='PENDING' RETURNING reference",
                 (
                     "NEEDS_REVIEW" if review else "PENDING",
                     error.code
@@ -608,7 +602,7 @@ class DurableChat:
                 processing_context=context,
             )
             c.execute(
-                "UPDATE chat_continuations SET materialized=true WHERE user_id=%s AND environment=%s "
+                "UPDATE chat_continuations SET state='MATERIALIZED',error_code=NULL WHERE user_id=%s AND environment=%s "
                 "AND conversation_id=%s AND reference=%s",
                 (
                     intent["user_id"],
@@ -617,25 +611,6 @@ class DurableChat:
                     intent["reference"],
                 ),
             )
-
-
-# 回放器只消费原生层已完成事件, 修复展示时不再次调用模型或工具。
-class _Replay:
-    def __init__(self, events: list[dict[str, Any]]) -> None:
-        self.events = events
-
-    async def iterate(
-        self,
-        *,
-        user_id: int,
-        conversation_id: int,
-        text: str,
-        turn_id: str,
-        run_references: Sequence[Mapping[str, Any]] = (),
-        processing_context: ProcessingContext | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
-        for event in self.events:
-            yield event
 
 
 # 给消息投影附加输入身份及执行代际, 阻止过期任务写入。
@@ -736,10 +711,24 @@ class DurableDispatcher:
             await asyncio.to_thread(
                 self.store.set_status, turn["input_message_id"], "RUNNING", generation
             )
-            # 复用同一投影器处理新执行和完成回放, 保持展示协议一致。
+            if state == "COMPLETED":
+                # 完整原生快照只修复展示和调度终态，不重新归并 token 或调用模型工具。
+                content = restore_content(
+                    facts["result"],
+                    input_message=user,
+                    assistant_message=assistant,
+                )
+                await asyncio.to_thread(
+                    projection.update_delivery,
+                    conversation_id=turn["conversation_id"],
+                    message_id=assistant["id"],
+                    content=content,
+                )
+                return
+            # 只有原生 NOT_STARTED 才构建新执行的投影消费器。
             delivery = ChatDelivery(
                 messages=projection,
-                runner=_Replay(facts["events"]) if state == "COMPLETED" else self.runner,
+                runner=self.runner,
                 user_id=turn["user_id"],
                 conversation_id=turn["conversation_id"],
                 text=user["content"]["text"],
@@ -772,9 +761,7 @@ class DurableDispatcher:
             # 显式替换事件接收回调, 消费执行结果并保存展示。
             delivery.emit = emit
             await delivery.produce()
-            # 明确正常结束或等待用户才关闭轮次; 失败继续等待原生检查判定。
-            if delivery.content["delivery"] in {"completed", "waiting_action"}:
-                await asyncio.to_thread(self.store.set_status, user["id"], "COMPLETED", generation)
+            # 最终投影保存已在同一事务完成调度终态，失败留待原生事实检查。
             # Failure deliberately remains RUNNING. The next inspection determines
             # completed projection repair versus NEEDS_REVIEW; never blind retry.
 
