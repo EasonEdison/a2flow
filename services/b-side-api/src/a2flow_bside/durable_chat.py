@@ -16,6 +16,7 @@ from skillweave_contracts.chat_state import FINAL_DELIVERIES, ProductTurnStatus,
 
 from .chat_delivery import ChatDelivery, restore_content
 from .chat_runner import ChatRunner
+from .chat_wake import ChatWake
 from .errors import BsideError
 from .interaction_continuation import continuation_reference
 from .persistence_types import ConnectionFactory, DatabaseConnection, MessageRecord, message_record
@@ -40,8 +41,11 @@ def encoded(value: object) -> str:
 
 # 产品层保存接收事实、恢复意图和展示事件, 不维护另一套 Agent 执行图。
 class DurableChat:
-    def __init__(self, factory: ConnectionFactory, *, environment: str) -> None:
+    def __init__(
+        self, factory: ConnectionFactory, *, environment: str, wake: ChatWake | None = None
+    ) -> None:
         self.factory, self.environment = factory, environment
+        self.wake = wake if wake is not None else ChatWake()
 
     # 启动前检查持久化接收与续聊表可用, 避免接受无法恢复的请求。
     def check_ready(self) -> None:
@@ -254,7 +258,11 @@ class DurableChat:
             return message_record(rows[0]), message_record(rows[1])
 
     # 有待核对前序轮次时阻止后续消息执行, 避免在未知业务事实之上继续推理。
-    def candidates(self) -> list[dict[str, Any]]:
+    def candidates(
+        self, *, exclude_conversations: Sequence[int] = (), limit: int = 32
+    ) -> list[dict[str, Any]]:
+        if type(limit) is not int or limit < 1:
+            raise ValueError("CHAT_CANDIDATE_LIMIT_INVALID")
         with self.factory() as c:
             blocked = c.execute(
                 "UPDATE chat_turns t SET status='NEEDS_REVIEW',updated_at=now() "
@@ -284,12 +292,49 @@ class DurableChat:
                 for row in c.execute(
                     "SELECT t.* FROM chat_turns t WHERE t.environment=%s "
                     "AND t.status IN ('QUEUED','RUNNING') AND t.next_attempt_at<=now() "
+                    "AND NOT (t.conversation_id=ANY(%s::bigint[])) "
                     "AND NOT EXISTS(SELECT 1 FROM chat_turns p WHERE p.conversation_id=t.conversation_id "
                     "AND p.environment=t.environment AND p.input_message_id<t.input_message_id "
-                    "AND p.status IN ('QUEUED','RUNNING','NEEDS_REVIEW')) ORDER BY t.input_message_id LIMIT 32",
-                    (self.environment,),
+                    "AND p.status IN ('QUEUED','RUNNING','NEEDS_REVIEW')) "
+                    "ORDER BY t.input_message_id LIMIT %s",
+                    (self.environment, list(exclude_conversations), limit),
                 ).fetchall()
             ]
+
+    def next_delay(
+        self, *, exclude_conversations: Sequence[int] = (), include_turns: bool = True
+    ) -> float | None:
+        """Next eligible database deadline; a wake hint never changes retry permission."""
+        with self.factory() as c:
+            # 与候选使用同一前序阻断条件, 未来轮次不能越过未确认或运行中的前序。
+            row = c.execute(
+                "SELECT CASE WHEN min(next_attempt_at) IS NULL THEN NULL ELSE "
+                "GREATEST(0,EXTRACT(EPOCH FROM min(next_attempt_at)-now())) END AS seconds "
+                "FROM (SELECT t.next_attempt_at FROM chat_turns t WHERE t.environment=%s "
+                "AND %s AND t.status IN ('QUEUED','RUNNING') "
+                "AND NOT (t.conversation_id=ANY(%s::bigint[])) "
+                "AND NOT EXISTS(SELECT 1 FROM chat_turns p WHERE p.conversation_id=t.conversation_id "
+                "AND p.environment=t.environment AND p.input_message_id<t.input_message_id "
+                "AND p.status IN ('QUEUED','RUNNING','NEEDS_REVIEW')) "
+                "UNION ALL SELECT next_attempt_at FROM chat_continuations "
+                "WHERE environment=%s AND state='PENDING') deadlines",
+                (self.environment, include_turns, list(exclude_conversations), self.environment),
+            ).fetchone()
+            assert row is not None
+            return None if row["seconds"] is None else float(row["seconds"])
+
+    def defer(self, input_id: int, generation: int, seconds: float = 2.0) -> None:
+        """Bounded scheduling retry only; never alter execution or terminal facts."""
+        if seconds < 0 or not seconds < float("inf"):
+            raise ValueError("CHAT_RETRY_DELAY_INVALID")
+        with self.factory() as c:
+            c.execute(
+                "UPDATE chat_turns SET next_attempt_at=GREATEST(next_attempt_at,now()+%s*interval '1 second'),"
+                "updated_at=now() "
+                "WHERE input_message_id=%s AND dispatch_generation=%s "
+                "AND status IN ('QUEUED','RUNNING')",
+                (seconds, input_id, generation),
+            )
 
     # 会话级 PostgreSQL 锁跨事务持有, 只用于产品分发协调。
     @contextmanager
@@ -316,7 +361,8 @@ class DurableChat:
         with self.factory() as c:
             row = c.execute(
                 "UPDATE chat_turns SET dispatch_generation=dispatch_generation+1 "
-                "WHERE input_message_id=%s AND status IN ('QUEUED','RUNNING') RETURNING dispatch_generation",
+                "WHERE input_message_id=%s AND status IN ('QUEUED','RUNNING') "
+                "AND next_attempt_at<=now() RETURNING dispatch_generation",
                 (input_id,),
             ).fetchone()
             return row["dispatch_generation"] if row else None
@@ -621,6 +667,9 @@ class DurableChat:
                     intent["reference"],
                 ),
             )
+
+        # 只有轮次与物化状态的事务成功提交后才发进程内提示。
+        self.wake.notify()
 
 
 # 给消息投影附加输入身份及执行代际, 阻止过期任务写入。
