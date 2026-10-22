@@ -41,6 +41,7 @@ PERSISTENCE = [
     for name in (
         "persistence_types",
         "chat_runner",
+        "chat_wake",
         "chat_delivery",
         "processing_tasks",
         "repositories",
