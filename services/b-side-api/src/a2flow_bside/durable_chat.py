@@ -870,14 +870,21 @@ class DurableDispatcher:
                 # 清除发生在查事实之前，查询期间的通知由 Event 保留到 wait。
                 self.store.wake.clear()
                 backoff = await self._drain(stop)
-                if await self._settle() and not backoff:
-                    continue  # 槽位已释放，直接检查后轮，无需自发通知回调。
+                try:
+                    if await self._settle() and not backoff:
+                        continue  # 槽位已释放，直接检查后轮，无需自发通知回调。
+                except Exception:
+                    # 失败期限也无法保存时，不能因 past-due 行立即重复扫描。
+                    backoff = True
+                    _LOG.exception("Chat dispatch settlement persistence failed")
                 await self._wait(stop, backoff=backoff)
         finally:
             # 停止只停止新派发；同一 settle 路径观察并释放所有已开始任务。
-            await asyncio.gather(*self._tasks, return_exceptions=True)
-            await self._settle()
-            self.store.wake.close()
+            try:
+                await asyncio.gather(*self._tasks, return_exceptions=True)
+                await self._settle()
+            finally:
+                self.store.wake.close()
 
     async def _drain(self, stop: asyncio.Event) -> bool:
         """Prepare and admit one bounded batch; return whether storage needs backoff."""
@@ -925,6 +932,7 @@ class DurableDispatcher:
     async def _settle(self) -> bool:
         """Observe every exit and release ownership in exactly one place."""
         finished = [task for task in self._tasks if task.done()]
+        failure_state_unavailable = False
         for task in finished:
             turn = self._tasks[task]
             try:
@@ -942,9 +950,13 @@ class DurableDispatcher:
                             self.retry_seconds,
                         )
                 except Exception:
+                    failure_state_unavailable = True
                     _LOG.exception("Chat dispatch retry scheduling failed")
             finally:
                 del self._tasks[task]
+        # 整批已结束任务先释放；持久化故障统一交给现有等待路径退避。
+        if failure_state_unavailable:
+            raise RuntimeError("CHAT_DISPATCH_FAILURE_STATE_UNAVAILABLE")
         return bool(finished)
 
     async def _wait(self, stop: asyncio.Event, *, backoff: bool) -> None:
