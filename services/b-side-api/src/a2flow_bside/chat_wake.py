@@ -14,7 +14,7 @@ from contextlib import suppress
 
 
 class ChatWake:
-    """Thread-safe monotonic notifications with at most one queued callback.
+    """Thread-safe monotonic hints with at most one queued notification callback.
 
     The counter closes drain/clear/wait races. Dirty and callback-pending are
     separate: clearing an event cannot enqueue another callback while an older
@@ -77,7 +77,7 @@ class ChatWake:
                 self._event.set()
 
     async def wait_after(self, version: int, timeout: float, stop: asyncio.Event) -> None:
-        """Wait for a newer hint, a deadline or stop without owning child tasks.
+        """Wait for a newer hint, a deadline or stop, then clean up child waiters.
 
         Check the counter and clear the level-triggered signal under the same
         lock used by notify(). A notify after this check either wakes the event
