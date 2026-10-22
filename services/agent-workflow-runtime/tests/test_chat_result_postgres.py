@@ -210,7 +210,7 @@ class ChatResultPersistenceTests(unittest.TestCase):
             [],
             [{"type": "text_delta", "text": "partial"}],
             [{"type": "error", "code": "UNKNOWN"}, {"type": "done", "content": ""}],
-            [{"type": "waiting_action", "cardId": "missing"}, {"type": "done", "content": ""}],
+            [{"type": "waiting_action", "cardId": ""}, {"type": "done", "content": ""}],
             [
                 {
                     "type": "tool_call_started",

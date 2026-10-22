@@ -46,7 +46,7 @@ def main():
         )
     passed = (
         result.wasSuccessful()
-        and result.testsRun >= 25
+        and result.testsRun >= 26
         and not result.skipped
         and resources_removed
     )

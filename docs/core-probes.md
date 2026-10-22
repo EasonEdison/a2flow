@@ -132,4 +132,4 @@ legacy imported function calls are allowed in the explicitly listed migration
 boundaries; new HTTP and Runtime transport modules remain strict. Dynamic SQL
 values and extensible JSON payloads do not replace service dependency types.
 
-Use `--python-probe chat-state-convergence` for the 25 current-schema PostgreSQL fault-window and production projection tests. This is not a compatibility migration: obsolete schemas fail explicitly without being rewritten or cleared. Runtime completion recovery reads a verified final snapshot and never calls the live runner. The transport event journal remains mutable within its explicitly fenced generation; it is not an immutable event-sourcing log.
+Use `--python-probe chat-state-convergence` for the 26 current-schema PostgreSQL fault-window and production projection tests. This is not a compatibility migration: obsolete schemas fail explicitly without being rewritten or cleared. Runtime completion recovery reads a verified final snapshot and never calls the live runner. The transport event journal remains mutable within its explicitly fenced generation; it is not an immutable event-sourcing log.
