@@ -37,7 +37,7 @@ def main():
             ).fetchone()[0]
             == 0
         )
-    passed = result.wasSuccessful() and result.testsRun >= 28 and not result.skipped and cleaned
+    passed = result.wasSuccessful() and result.testsRun >= 32 and not result.skipped and cleaned
     print(
         json.dumps(
             {
