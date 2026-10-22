@@ -45,7 +45,8 @@ class TurnRegistry:
         c.execute(
             "INSERT INTO chat_turns(user_id,environment,conversation_id,"
             "source_kind,source_key,source_digest,processing_task_id,input_message_id,assistant_message_id,"
-            "run_references,processing_context) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb) "
+            "run_references,processing_context) VALUES "
+            "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb) "
             "ON CONFLICT DO NOTHING",
             (
                 user_id,
@@ -66,7 +67,7 @@ class TurnRegistry:
             "AND source_kind=%s AND source_key=%s",
             (user_id, environment, conversation_id, source_kind.value, source_key),
         ).fetchone()
-        # 冲突不覆盖输入、上下文或消息身份，整个准入事务回滚。
+        # 冲突不覆盖输入、上下文或消息身份, 整个准入事务回滚。
         if (
             row is None
             or row["source_digest"] != source_digest
@@ -87,7 +88,6 @@ class TurnRegistry:
         request_id: str,
         payload: Mapping[str, Any],
         input_message: MessageRecord,
-        assistant_message: MessageRecord,
     ) -> None:
         request_digest = digest(payload)
         c.execute(
@@ -103,7 +103,8 @@ class TurnRegistry:
             ),
         )
         row = c.execute(
-            "SELECT request_digest,input_message_id FROM chat_requests WHERE user_id=%s AND environment=%s "
+            "SELECT request_digest,input_message_id FROM chat_requests "
+            "WHERE user_id=%s AND environment=%s "
             "AND conversation_id=%s AND client_request_id=%s",
             (user_id, environment, conversation_id, request_id),
         ).fetchone()
@@ -113,8 +114,9 @@ class TurnRegistry:
             or row["input_message_id"] != input_message["id"]
         ):
             raise BsideError("CHAT_REQUEST_CONFLICT", 409)
-        # 一个处理来源可有多个客户端别名，首个输入消息的展示标记保持稳定。
+        # 一个处理来源可有多个客户端别名, 首个输入消息的展示标记保持稳定。
         c.execute(
-            "UPDATE messages SET content=content || %s::jsonb WHERE id=%s AND NOT content ? 'clientRequestId'",
+            "UPDATE messages SET content=content || %s::jsonb "
+            "WHERE id=%s AND NOT content ? 'clientRequestId'",
             (encoded({"clientRequestId": request_id}), input_message["id"]),
         )
