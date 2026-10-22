@@ -187,7 +187,7 @@ def create_app(
     # 生产使用 UTC 时钟, 测试可显式注入, 不在业务方法里读取隐式全局时间。
     clock = now or (lambda: dt.datetime.now(dt.UTC))
 
-    # 只有启动成功后的具体服务才可用于请求；此引用只表达 HTTP 就绪状态。
+    # 只有启动成功后的具体服务才可用于请求;此引用只表达 HTTP 就绪状态。
     chat: ChatApplicationService | None = None
 
     def current_chat() -> ChatApplicationService:
@@ -195,7 +195,7 @@ def create_app(
             raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
         return chat
 
-    # running loop 内完成构造；同一 wake 注入接收、卡片完成和分发依赖。
+    # running loop 内完成构造;同一 wake 注入接收、卡片完成和分发依赖。
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nonlocal chat
@@ -211,7 +211,7 @@ def create_app(
                         runtime.durable_chat, messages, runtime.runner, processing_tasks
                     ).run(stop)
                 )
-                # 启动任务先取得一次执行机会；立即失败不能被公布为已就绪。
+                # 启动任务先取得一次执行机会;立即失败不能被公布为已就绪。
                 await asyncio.sleep(0)
                 if worker.done():
                     worker.result()
@@ -227,7 +227,7 @@ def create_app(
             )
             yield
         finally:
-            # 先撤销新请求准入，再等待已归属的执行和卡片动作，最终关闭提示。
+            # 先撤销新请求准入,再等待已归属的执行和卡片动作,最终关闭提示。
             chat = None
             stop.set()
             try:

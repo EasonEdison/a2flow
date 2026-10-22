@@ -38,6 +38,8 @@ def create_router(
 ) -> APIRouter:
     # 会话路由注入应用服务, HTTP 层负责身份和响应, 执行准入由服务负责。
     router = APIRouter()
+    chat_dependency = Depends(chat_service)
+
     # 列表仅查询当前登录用户的会话, 时间统一转为线协议格式。
     @router.get("/api/conversations", response_model=None)
     async def list_conversations(*, identity: CurrentIdentity) -> JsonObject:
@@ -70,7 +72,7 @@ def create_router(
         *,
         conversation_id: Annotated[int, Query(alias="conversationId", gt=0)],
         identity: CurrentIdentity,
-        chat: ChatApplicationService = Depends(chat_service),
+        chat: ChatApplicationService = chat_dependency,
     ) -> JsonObject:
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
@@ -120,7 +122,7 @@ def create_router(
         *,
         body: MessageSend,
         identity: CurrentIdentity,
-        chat: ChatApplicationService = Depends(chat_service),
+        chat: ChatApplicationService = chat_dependency,
     ) -> StreamingResponse:
         conversation_id = body.conversationId
         owner = conversations.owner(conversation_id)
@@ -144,13 +146,14 @@ def create_router(
         *,
         conversation_id: int,
         identity: CurrentIdentity,
-        chat: ChatApplicationService = Depends(chat_service),
+        chat: ChatApplicationService = chat_dependency,
     ) -> JsonObject:
         if conversations.owner(conversation_id) != identity.userId:
             raise BsideError("CONVERSATION_NOT_FOUND", 404)
-        if chat.chat_cards is None:
+        chat_cards = chat.chat_cards
+        if chat_cards is None:
             raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
-        return {"cards": await asyncio.to_thread(chat.chat_cards, identity.userId, str(conversation_id))}
+        return {"cards": await asyncio.to_thread(chat_cards, identity.userId, str(conversation_id))}
 
     # 卡片动作只接受所属会话, 实际提交与自动续聊由应用服务衔接。
     @router.post(
@@ -163,7 +166,7 @@ def create_router(
         card_id: str,
         body: ChatCardAction,
         identity: CurrentIdentity,
-        chat: ChatApplicationService = Depends(chat_service),
+        chat: ChatApplicationService = chat_dependency,
     ) -> JsonObject:
         if conversations.owner(conversation_id) != identity.userId:
             raise BsideError("CONVERSATION_NOT_FOUND", 404)
