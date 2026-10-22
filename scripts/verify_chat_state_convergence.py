@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import sys
 import unittest
+from pathlib import Path
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
@@ -25,27 +25,47 @@ def main():
     sys.path.insert(0, str(ROOT / "examples/activity-planning"))
     sys.path.insert(0, str(ROOT / "services/b-side-api/tests"))
     sys.path.insert(0, str(ROOT / "services/agent-workflow-runtime/tests"))
-    suite = unittest.defaultTestLoader.loadTestsFromNames([
-        "test_chat_state_convergence_postgres.ChatStateConvergenceTests",
-        "test_chat_result_postgres.ChatResultPersistenceTests",
-        "test_chat_postgres.PostgresConversationTests",
-        "test_chat_vertical.ChatVerticalTest",
-        "test_chat_delivery_postgres.DeliveryPostgresTests",
-        "test_work_activities_chat_state_postgres.WorkActivitiesChatStateTests",
-    ])
+    suite = unittest.defaultTestLoader.loadTestsFromNames(
+        [
+            "test_chat_state_convergence_postgres.ChatStateConvergenceTests",
+            "test_chat_result_postgres.ChatResultPersistenceTests",
+            "test_chat_postgres.PostgresConversationTests",
+            "test_chat_vertical.ChatVerticalTest",
+            "test_chat_delivery_postgres.DeliveryPostgresTests",
+            "test_work_activities_chat_state_postgres.WorkActivitiesChatStateTests",
+        ]
+    )
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     with psycopg.connect(dsn) as connection:
-        resources_removed = connection.execute(
-            "SELECT count(*) FROM pg_namespace WHERE nspname NOT IN ('public','information_schema') "
-            "AND nspname NOT LIKE 'pg_%'"
-        ).fetchone()[0] == 0
-    passed = result.wasSuccessful() and result.testsRun >= 25 and not result.skipped and resources_removed
-    print(json.dumps({
-        "probe": "chat-state-convergence", "result": "PASS" if passed else "FAIL",
-        "checks": result.testsRun, "postgres": True, "probeResourcesRemoved": resources_removed,
-        "externalModelCalls": 0, "externalBusinessCalls": 0, "scriptedModels": True,
-        "scope": "isolated PostgreSQL transactions, current schema, result recovery",
-    }, sort_keys=True))
+        resources_removed = (
+            connection.execute(
+                "SELECT count(*) FROM pg_namespace WHERE nspname NOT IN ('public','information_schema') "
+                "AND nspname NOT LIKE 'pg_%'"
+            ).fetchone()[0]
+            == 0
+        )
+    passed = (
+        result.wasSuccessful()
+        and result.testsRun >= 25
+        and not result.skipped
+        and resources_removed
+    )
+    print(
+        json.dumps(
+            {
+                "probe": "chat-state-convergence",
+                "result": "PASS" if passed else "FAIL",
+                "checks": result.testsRun,
+                "postgres": True,
+                "probeResourcesRemoved": resources_removed,
+                "externalModelCalls": 0,
+                "externalBusinessCalls": 0,
+                "scriptedModels": True,
+                "scope": "isolated PostgreSQL transactions, current schema, result recovery",
+            },
+            sort_keys=True,
+        )
+    )
     return 0 if passed else 1
 
 
