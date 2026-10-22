@@ -147,8 +147,8 @@ class ProcessingTasksRepository:
         references: list[dict[str, Any]],
         target: Mapping[str, str] | None = None,
         task_id: str | None = None,
-        client_request_id: str | None = None,
-        client_payload: Mapping[str, Any] | None = None,
+        client_request_id: str,
+        client_payload: Mapping[str, Any],
     ) -> tuple[bool, ProcessingContext, MessageRecord, MessageRecord]:
         """Atomically create the user/assistant pair and explicit task relation."""
         scope = self._scope(user_id, environment, conversation_id)
@@ -201,17 +201,15 @@ class ProcessingTasksRepository:
                     (prior["input_message_id"], prior["assistant_message_id"]),
                 ).fetchall()
                 context = _context(self._row(connection, scope, prior["processing_task_id"]))
-                if client_request_id is not None and client_payload is not None:
-                    TurnRegistry.map_request(
-                        connection,
-                        user_id=user_id,
-                        environment=environment,
-                        conversation_id=scope[2],
-                        request_id=client_request_id,
-                        payload=client_payload,
-                        input_message=message_record(prior_rows[0]),
-                        assistant_message=message_record(prior_rows[1]),
-                    )
+                TurnRegistry.map_request(
+                    connection,
+                    user_id=user_id,
+                    environment=environment,
+                    conversation_id=scope[2],
+                    request_id=client_request_id,
+                    payload=client_payload,
+                    input_message=message_record(prior_rows[0]),
+                )
                 return False, context, message_record(prior_rows[0]), message_record(prior_rows[1])
             # 首次处理建立独立任务, 目标保留用户原文及来源异常身份。
             if target:
@@ -278,17 +276,15 @@ class ProcessingTasksRepository:
                 references=references,
                 processing_context=context,
             )
-            if client_request_id is not None and client_payload is not None:
-                TurnRegistry.map_request(
-                    connection,
-                    user_id=user_id,
-                    environment=environment,
-                    conversation_id=scope[2],
-                    request_id=client_request_id,
-                    payload=client_payload,
-                    input_message=rows[0],
-                    assistant_message=rows[1],
-                )
+            TurnRegistry.map_request(
+                connection,
+                user_id=user_id,
+                environment=environment,
+                conversation_id=scope[2],
+                request_id=client_request_id,
+                payload=client_payload,
+                input_message=rows[0],
+            )
             # 仅首次消息作为任务来源消息, 继续处理不会覆盖原始入口。
             if target:
                 connection.execute(

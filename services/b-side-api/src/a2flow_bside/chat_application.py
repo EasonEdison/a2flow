@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 
-from skillweave_contracts.chat_state import delivery_turn_status
+from skillweave_contracts.chat_state import continuation_status_from_delivery
 
 from .durable_chat import DurableChat
 from .errors import BsideError
@@ -119,7 +119,7 @@ class ChatApplicationService:
         )
         # 把产品消息投影状态映射给前端; 未知状态保持 UNKNOWN。
         state = assistant_message["content"].get("delivery")
-        status = delivery_turn_status(state)
+        status = continuation_status_from_delivery(state)
         # 返回消息 ID 供页面定位同一次续聊, 提交响应不再另起模型请求。
         return {
             **response,
