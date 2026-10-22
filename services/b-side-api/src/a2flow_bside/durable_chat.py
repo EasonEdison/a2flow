@@ -724,31 +724,25 @@ class DurableDispatcher:
         # 内存集合只减少本进程重复调度, 跨进程安全仍由数据库锁和代际保证。
         self.active: set[int] = set()
 
-    async def dispatch(self, turn: dict[str, Any]) -> None:
+    async def dispatch(self, turn: dict[str, Any]) -> bool:
         # Dedicated session lock survives transaction commits; Runtime independently
         # arbitrates actual execution. Lock loss never authorizes business replay.
         # 先取得会话锁再重新读取当前轮次, 候选扫描结果不直接授权执行。
         with self.store.lock(turn["conversation_id"]) as acquired:
             if not acquired:
-                # 锁争抢只延后同代候选的重查，不改变运行事实或授权重放。
-                await asyncio.to_thread(
-                    self.store.defer,
-                    turn["input_message_id"],
-                    turn["dispatch_generation"],
-                    self.retry_seconds,
-                )
-                return
+                # 争锁失败者不修改共享期限，避免在持锁者认领前将其反复延期。
+                return False
             # 拿锁后复核轮次仍可处理, 已结束状态不再分配执行代际。
             current = await asyncio.to_thread(self.store.get, turn["input_message_id"])
             assert current is not None
             if current["status"] not in {"QUEUED", "RUNNING"}:
-                return
+                return True
             # 领取新代际后构建受保护写入器, 旧代际不能覆盖本轮投影。
             generation = await asyncio.to_thread(
                 self.store.claim_generation, turn["input_message_id"]
             )
             if generation is None:
-                return
+                return True
             projection = _FencedProjection(self.store, turn["input_message_id"], generation)
             # 执行前必须问原生运行器：尚未开始、忙碌、已完成还是待核对。
             facts = await self.runner.inspect_turn(
@@ -765,7 +759,7 @@ class DurableDispatcher:
                     current["status"],
                     generation,
                 )
-                return
+                return True
             # 使用原来保存的消息对修复或执行, 不接受新文本替换原轮输入。
             user, assistant = await asyncio.to_thread(self.store.pair, turn)
             # 原生结果未知时保存未确认展示并阻止后续自动执行。
@@ -787,7 +781,7 @@ class DurableDispatcher:
                     ProductTurnStatus.NEEDS_REVIEW,
                     generation,
                 )
-                return
+                return True
             # 只有明确未开始才能真实执行, 已完成则只修复完整结果快照。
             if state not in {"NOT_STARTED", "COMPLETED"}:
                 raise ValueError("INVALID_RUNTIME_TURN_STATUS")
@@ -810,7 +804,7 @@ class DurableDispatcher:
                     message_id=assistant["id"],
                     content=content,
                 )
-                return
+                return True
             # 只有原生 NOT_STARTED 才构建新执行的投影消费器。
             delivery = ChatDelivery(
                 messages=projection,
@@ -834,7 +828,7 @@ class DurableDispatcher:
                 journal_sequence += 1
                 # Errors remain recoverable through inspect; no premature terminal event.
                 if event["type"] in {"error", "done", "turn_started"}:
-                    return
+                    return True
                 await asyncio.to_thread(
                     self.store.event,
                     user["id"],
@@ -854,6 +848,8 @@ class DurableDispatcher:
             # Failure deliberately remains RUNNING. The next inspection determines
             # completed projection repair versus NEEDS_REVIEW; never blind retry.
 
+            return True
+
     # 后台拥有执行生命周期；唤醒只是提示重读数据库事实，不能直接派发。
     async def run(self, stop: asyncio.Event) -> None:
         wake = self.store.wake
@@ -862,10 +858,16 @@ class DurableDispatcher:
         reconcile_at = loop.time()
         tasks: set[asyncio.Task[None]] = set()
         active_conversations: set[int] = set()
+        cursor = 0
 
         async def guarded(turn: dict[str, Any]) -> None:
             try:
-                await self.dispatch(turn)
+                if await self.dispatch(turn) is False:
+                    # 退出未持锁的连接后本地退避；该槽有界占用，不篡改其他进程期限。
+                    try:
+                        await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
+                    except asyncio.TimeoutError:
+                        pass
             except Exception:
                 _LOG.exception("Chat durable dispatch inspection failed")
                 try:
@@ -909,6 +911,7 @@ class DurableDispatcher:
                         self.store.candidates,
                         exclude_conversations=tuple(active_conversations),
                         limit=self.max_concurrency - len(tasks),
+                        after_input_id=cursor,
                     )
                     for turn in candidates:
                         if stop.is_set():
@@ -918,6 +921,7 @@ class DurableDispatcher:
                             or turn["conversation_id"] in active_conversations
                         ):
                             continue
+                        cursor = turn["input_message_id"]
                         self.active.add(turn["input_message_id"])
                         active_conversations.add(turn["conversation_id"])
                         task = asyncio.create_task(guarded(turn))
