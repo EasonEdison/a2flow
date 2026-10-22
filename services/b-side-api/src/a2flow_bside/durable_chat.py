@@ -259,7 +259,11 @@ class DurableChat:
 
     # 有待核对前序轮次时阻止后续消息执行, 避免在未知业务事实之上继续推理。
     def candidates(
-        self, *, exclude_conversations: Sequence[int] = (), limit: int = 32
+        self,
+        *,
+        exclude_conversations: Sequence[int] = (),
+        limit: int = 32,
+        after_input_id: int = 0,
     ) -> list[dict[str, Any]]:
         if type(limit) is not int or limit < 1:
             raise ValueError("CHAT_CANDIDATE_LIMIT_INVALID")
@@ -296,8 +300,8 @@ class DurableChat:
                     "AND NOT EXISTS(SELECT 1 FROM chat_turns p WHERE p.conversation_id=t.conversation_id "
                     "AND p.environment=t.environment AND p.input_message_id<t.input_message_id "
                     "AND p.status IN ('QUEUED','RUNNING','NEEDS_REVIEW')) "
-                    "ORDER BY t.input_message_id LIMIT %s",
-                    (self.environment, list(exclude_conversations), limit),
+                    "ORDER BY (t.input_message_id<=%s),t.input_message_id LIMIT %s",
+                    (self.environment, list(exclude_conversations), after_input_id, limit),
                 ).fetchall()
             ]
 
@@ -524,6 +528,7 @@ class DurableChat:
                 ).fetchall()
             ]
         # 仅重试本地幂等准备, 物化阶段本身不调用模型或业务工具。
+        failure_state_unavailable = False
         for intent in intents:
             try:
                 self._materialize_one(intent, messages, processing_tasks)
@@ -533,7 +538,11 @@ class DurableChat:
                 try:
                     self._materialization_failed(intent, error)
                 except Exception:
+                    failure_state_unavailable = True
                     _LOG.exception("Chat continuation failure-state persistence failed")
+        # 本批其他意图仍先处理; 无法保存失败或重查期限时交由调度层有界退避。
+        if failure_state_unavailable:
+            raise RuntimeError("CHAT_CONTINUATION_FAILURE_STATE_UNAVAILABLE")
 
     # 可预期的非服务端错误转人工核对, 暂时故障保留待准备并延迟重试。
     def _materialization_failed(self, intent: dict[str, Any], error: Exception) -> None:
