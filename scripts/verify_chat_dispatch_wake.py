@@ -23,12 +23,12 @@ def main():
     os.environ["A2FLOW_WAKE_PROBE_DSN"] = dsn
     sys.path.insert(0, str(ROOT / "services/b-side-api/tests"))
     module = importlib.import_module("test_chat_dispatch_wake_postgres")
-    suite = unittest.defaultTestLoader.loadTestsFromNames(
-        [
-            "test_chat_wake.ChatWakeTests",
-            "test_chat_dispatch_wake_postgres.ChatDispatchWakeTests",
-        ]
+    signal_suite = unittest.defaultTestLoader.loadTestsFromName("test_chat_wake.ChatWakeTests")
+    postgres_suite = unittest.defaultTestLoader.loadTestsFromName(
+        "test_chat_dispatch_wake_postgres.ChatDispatchWakeTests"
     )
+    signal_checks, postgres_checks = signal_suite.countTestCases(), postgres_suite.countTestCases()
+    suite = unittest.TestSuite([signal_suite, postgres_suite])
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     with psycopg.connect(dsn) as c:
         cleaned = (
@@ -37,13 +37,22 @@ def main():
             ).fetchone()[0]
             == 0
         )
-    passed = result.wasSuccessful() and result.testsRun >= 32 and not result.skipped and cleaned
+    passed = (
+        result.wasSuccessful()
+        and signal_checks >= 11
+        and postgres_checks >= 21
+        and result.testsRun >= 32
+        and not result.skipped
+        and cleaned
+    )
     print(
         json.dumps(
             {
                 "probe": "chat-dispatch-wake",
                 "result": "PASS" if passed else "FAIL",
                 "checks": result.testsRun,
+                "signalChecks": signal_checks,
+                "postgresChecks": postgres_checks,
                 "postgres": True,
                 "probeResourcesRemoved": cleaned,
                 "externalModelCalls": 0,
