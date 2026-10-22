@@ -195,7 +195,7 @@ class ProcessingTasksRepository:
             if prior:
                 if prior["source_digest"] != digest:
                     raise BsideError("PROCESSING_REQUEST_CONFLICT", 409)
-                # 重发读取原消息对, 回调只登记客户端映射, 不再插入新待执行轮次。
+                # 重发读取原消息对, 仅登记新的客户端别名, 不再插入待执行轮次。
                 prior_rows = connection.execute(
                     "SELECT * FROM messages WHERE id IN (%s,%s) ORDER BY id",
                     (prior["input_message_id"], prior["assistant_message_id"]),
