@@ -206,6 +206,19 @@ class ChatResultPersistenceTests(unittest.TestCase):
                     validate_result(rehash(candidate))
 
     def test_partial_or_failed_stream_cannot_become_terminal_snapshot(self):
+        # A trusted native waiting event may reference a card from an older turn.
+        # This is a pure protocol assertion, not a claim that ordinary Chat blocks.
+        existing = result_from_events(
+            [
+                {"type": "waiting_action", "cardId": "saved-older-card"},
+                {"type": "done", "content": "", "finalModelMessageId": None},
+            ],
+            turn_id="1",
+        )["content"]
+        self.assertEqual("waiting_action", existing["delivery"])
+        self.assertEqual([], existing["parts"])
+        self.assertEqual("EXISTING", existing["events"][0]["cardScope"])
+        self.assertEqual("application:saved-older-card", existing["events"][0]["partId"])
         invalid = [
             [],
             [{"type": "text_delta", "text": "partial"}],

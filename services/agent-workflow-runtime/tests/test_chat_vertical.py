@@ -132,7 +132,7 @@ class ChatVerticalTest(unittest.TestCase):
                 chat_assets=assets_factory(OWNER, conversation, "chat-2"))
             self.assertEqual("Saved card received", next_loop.turn("What happened?"))
 
-    def test_pending_card_short_circuits_next_turn_without_rebinding_or_model(self):
+    def test_pending_card_stays_on_original_turn_while_ordinary_chat_replies(self):
         import asyncio
         from deploy.attended.chat_runner import ChatLoopRunner
 
@@ -150,11 +150,11 @@ class ChatVerticalTest(unittest.TestCase):
                     {"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
         ])
         from langchain_core.messages import AIMessageChunk
-        unused_model = ScriptedModel(rounds=[[AIMessageChunk(content="must not run")]])
+        followup_model = ScriptedModel(rounds=[[AIMessageChunk(content="ordinary saved reply")]])
 
         class Models:
             def __init__(self):
-                self.models = [first_model, unused_model]
+                self.models = [first_model, followup_model]
             def create(self, reference, owner):
                 return self.models.pop(0)
 
@@ -178,13 +178,19 @@ class ChatVerticalTest(unittest.TestCase):
         self.assertEqual("1", saved["turnId"])
         self.assertEqual("WAITING_ACTION", saved["status"])
         second = asyncio.run(run("Another ordinary message while the card waits", "2"))
-        self.assertEqual([], unused_model.observed)
+        self.assertEqual(2, len(first_model.observed))
+        self.assertEqual(1, len(followup_model.observed))
         self.assertEqual([], [event for event in second if event["type"] == "application_rendered"])
-        self.assertEqual([saved["cardId"]], [event["cardId"] for event in second
-                                              if event["type"] == "waiting_action"])
+        self.assertEqual([], [event for event in second if event["type"] == "waiting_action"])
+        self.assertEqual([], [event for event in second if event["type"] in {
+            "tool_call_started", "tool_call_finished"}])
         self.assertEqual("done", second[-1]["type"])
         inspected = asyncio.run(runner.inspect_turn(user_id=OWNER.user_id,
             conversation_id=conversation, turn_id="2"))
         self.assertEqual("COMPLETED", inspected["status"])
-        self.assertEqual("waiting_action", inspected["result"]["content"]["delivery"])
+        self.assertEqual("completed", inspected["result"]["content"]["delivery"])
+        self.assertEqual("ordinary saved reply", inspected["result"]["content"]["text"])
+        first_facts = asyncio.run(runner.inspect_turn(user_id=OWNER.user_id,
+            conversation_id=conversation, turn_id="1"))
+        self.assertEqual("waiting_action", first_facts["result"]["content"]["delivery"])
         self.assertEqual(saved, cards.read(OWNER, conversation, saved["cardId"]))
