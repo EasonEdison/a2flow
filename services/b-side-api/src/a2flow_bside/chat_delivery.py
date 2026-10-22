@@ -19,6 +19,7 @@ from skillweave_contracts.chat_result import (
     ChatTurnResult,
     validate_result,
 )
+from skillweave_contracts.chat_state import FINAL_DELIVERIES
 from starlette.responses import StreamingResponse
 from starlette.types import Receive, Scope, Send
 
@@ -222,7 +223,7 @@ class ChatDelivery(ChatResultAccumulator):
             await self.emit(
                 {
                     "type": "done"
-                    if self.content["delivery"] in {"completed", "waiting_action"}
+                    if self.content["delivery"] in FINAL_DELIVERIES
                     else "error",
                     "code": self.content.get("errorCode"),
                     "finalModelMessageId": self.final_model_message_id,
