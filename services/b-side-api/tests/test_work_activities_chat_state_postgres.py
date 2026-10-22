@@ -14,6 +14,7 @@ from a2flow_bside.errors import BsideError
 from a2flow_bside.notification_repository import NotificationsRepository
 from a2flow_bside.processing_tasks import ProcessingTasksRepository
 from a2flow_bside.work_activities import WorkActivitiesRepository
+from agent_workflow_runtime.chat.cards import DDL as CHAT_CARD_DDL
 from agent_workflow_runtime.lifecycle import (
     OperationFact,
     RunControl,
@@ -51,7 +52,13 @@ class WorkActivitiesChatStateTests(unittest.TestCase):
             connection.execute(
                 (ROOT / "services/b-side-api/src/a2flow_bside/schema.sql").read_text()
             )
-            for statement in (*RUN_DDL, *INTERACTION_DDL, *VIEW_DDL, *ATTENTION_DDL):
+            for statement in (
+                *RUN_DDL,
+                *INTERACTION_DDL,
+                *VIEW_DDL,
+                *ATTENTION_DDL,
+                *CHAT_CARD_DDL,
+            ):
                 connection.execute(statement)
             connection.execute(
                 (ROOT / "services/scheduler-mq/src/a2flow_scheduler/schema.sql").read_text()
