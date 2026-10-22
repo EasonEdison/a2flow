@@ -667,13 +667,73 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(2, self.call_count())
         self.assertEqual(0, self.wake.notifications, "settlement must not notify itself")
 
-    async def test_cancelled_owned_task_releases_slot_without_replaying_busy_native_work(self):
-        gate = asyncio.Event()
-        runner = DatabaseRunner(self.factory, gate=gate)
-        first = self.receive(text="hold cancelled execution")
+    async def test_dispatch_and_defer_failures_back_off_without_starving_healthy_work(self):
+        poison = self.receive()
         healthy = self.receive()
+        failed_inspections = []
+
+        class FailingInspectionRunner(DatabaseRunner):
+            fail = True
+
+            async def inspect_turn(inner, **kwargs):
+                if kwargs["turn_id"] == str(poison["input_message_id"]) and inner.fail:
+                    failed_inspections.append(time.perf_counter())
+                    raise psycopg.OperationalError("synthetic persistent inspection failure")
+                return await super().inspect_turn(**kwargs)
+
+        with self.factory() as c:
+            c.execute(
+                sql.SQL("""CREATE FUNCTION reject_retry() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN IF NEW.input_message_id = {} AND NEW.dispatch_generation = OLD.dispatch_generation
+                    AND NEW.next_attempt_at > OLD.next_attempt_at THEN
+                    RAISE EXCEPTION 'synthetic defer storage failure'; END IF; RETURN NEW; END $$;
+                CREATE TRIGGER reject_retry BEFORE UPDATE ON chat_turns FOR EACH ROW EXECUTE FUNCTION reject_retry();""").format(
+                    sql.Literal(poison["input_message_id"])
+                )
+            )
+        runner = FailingInspectionRunner(self.factory)
+        with self.assertLogs("a2flow_bside.durable_chat", level="ERROR"):
+            await self.start_worker(runner=runner, max_concurrency=2, retry_seconds=0.12)
+            await self.completed(healthy)
+            await self.until(lambda: len(failed_inspections) >= 2)
+            gap = failed_inspections[1] - failed_inspections[0]
+            self.assertGreaterEqual(gap, 0.10)
+            self.assertEqual(0, self.call_count(poison["input_message_id"]))
+            self.assertEqual(1, self.call_count(healthy["input_message_id"]))
+            with self.factory() as c:
+                c.execute("DROP TRIGGER reject_retry ON chat_turns")
+            runner.fail = False
+            await self.completed(poison)
+        await self.until(lambda: not self.dispatchers[-1]._tasks)
+        self.assertEqual(2, self.call_count())
+        self.assertEqual(0, self.wake.notifications)
+        METRICS["settlementFailureBackoff"] = {
+            "retrySeconds": 0.12,
+            "observedInspectionGapSeconds": round(gap, 3),
+            "healthyCompletedWhileFaultRemained": True,
+        }
+
+    async def test_cancelled_owned_task_releases_slot_without_replaying_busy_native_work(self):
+        inspecting = asyncio.Event()
+        gate = asyncio.Event()
+        first = self.receive()
+        healthy = self.receive()
+        with self.factory() as c:
+            c.execute(
+                "INSERT INTO wake_native_facts(turn_id,state) VALUES(%s,'BUSY')",
+                (str(first["input_message_id"]),),
+            )
+
+        class PausedInspectionRunner(DatabaseRunner):
+            async def inspect_turn(inner, **kwargs):
+                if kwargs["turn_id"] == str(first["input_message_id"]):
+                    inspecting.set()
+                    await gate.wait()
+                return await super().inspect_turn(**kwargs)
+
+        runner = PausedInspectionRunner(self.factory)
         stop, worker = await self.start_worker(runner=runner, max_concurrency=1, retry_seconds=0.3)
-        await self.until(lambda: self.call_count(first["input_message_id"]) == 1)
+        await asyncio.wait_for(inspecting.wait(), 2)
         dispatcher = self.dispatchers[-1]
         owned = next(
             task
@@ -685,9 +745,10 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             await self.completed(healthy)
         self.assertTrue(owned.cancelled())
         self.assertNotIn(owned, dispatcher._tasks)
-        self.assertEqual(1, self.call_count(first["input_message_id"]))
+        self.assertEqual(0, self.call_count(first["input_message_id"]))
         self.assertEqual(1, self.call_count(healthy["input_message_id"]))
         self.assertNotEqual("COMPLETED", self.store.get(first["input_message_id"])["status"])
+        gate.set()
         stop.set()
         await asyncio.wait_for(worker, 2)
         self.assertFalse(dispatcher._tasks)
