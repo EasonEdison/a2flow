@@ -58,6 +58,13 @@ class DurableChat:
             if invalid:
                 raise RuntimeError("CHAT_STATE_SCHEMA_INCOMPATIBLE")
             c.execute("SELECT reference,state FROM chat_continuations LIMIT 0")
+            c.execute(
+                "SELECT user_id,environment,conversation_id,client_request_id,request_digest,"
+                "input_message_id FROM chat_requests LIMIT 0"
+            )
+            c.execute(
+                "SELECT input_message_id,sequence,dispatch_generation,event FROM chat_turn_events LIMIT 0"
+            )
             legacy = c.execute(
                 "SELECT to_regclass('processing_turns') IS NOT NULL OR EXISTS("
                 "SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() "
