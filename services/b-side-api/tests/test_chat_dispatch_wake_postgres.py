@@ -36,6 +36,7 @@ class CountingStore(DurableChat):
         super().__init__(*args, **kwargs)
         self.scans = 0
         self.materializations = 0
+        self.finished_materializations = 0
         self.scan_times = []
         self.fail_scan_once = False
         self.mutex = threading.Lock()
@@ -52,7 +53,11 @@ class CountingStore(DurableChat):
     def materialize(self, *args, **kwargs):
         with self.mutex:
             self.materializations += 1
-        return super().materialize(*args, **kwargs)
+        try:
+            return super().materialize(*args, **kwargs)
+        finally:
+            with self.mutex:
+                self.finished_materializations += 1
 
 
 class DatabaseRunner:
@@ -325,12 +330,14 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             )
             samples.append(round((dispatched - committed) * 1000, 3))
             await self.completed(turn)
-        METRICS["commitToDispatchMs"] = samples
+        METRICS["transactionReturnToScriptedRunnerStartMs"] = samples
         METRICS["latencyConfig"] = {
             "reconcileSeconds": 30.0,
             "maxConcurrency": 8,
             "samples": len(samples),
             "native": "scripted PostgreSQL recording port",
+            "retrySeconds": 2.0,
+            "boundary": "transaction return and notify to scripted native-port start record",
         }
         self.assertLess(max(samples), 450, "wake scheduling regressed to a 500ms polling cycle")
         # The actual application notification is checked independently from the measured hint.
@@ -359,7 +366,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         METRICS["idleObservation"] = {
             "configuredReconcileSeconds": 30.0,
             "observedSeconds": round(duration, 3),
-            "candidateScans": self.store.scans,
+            "candidateReconciliationPasses": self.store.scans,
             "executions": self.call_count(),
         }
         self.assertGreater(duration, 30)
@@ -519,6 +526,18 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             self.store.next_delay(exclude_conversations=[row["conversation_id"] for row in turns])
         )
         self.assertEqual(0.0, self.store.next_delay())
+        self.assertEqual(
+            turns[1]["input_message_id"],
+            self.store.candidates(after_input_id=turns[0]["input_message_id"], limit=1)[0][
+                "input_message_id"
+            ],
+        )
+        self.assertEqual(
+            turns[0]["input_message_id"],
+            self.store.candidates(after_input_id=turns[-1]["input_message_id"], limit=1)[0][
+                "input_message_id"
+            ],
+        )
 
     async def test_committed_card_action_materializes_and_continues_once(self):
         cid = self.conversation()
@@ -727,7 +746,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertLogs("a2flow_bside.durable_chat", level="ERROR"):
             task = asyncio.create_task(dispatcher.run(stop))
             self.workers.append((stop, task, self.runner))
-            await self.until(lambda: self.store.materializations >= 1)
+            await self.until(lambda: self.store.finished_materializations >= 1)
             await asyncio.sleep(0.04)
             self.assertEqual(1, self.store.materializations)
             with self.factory() as c:

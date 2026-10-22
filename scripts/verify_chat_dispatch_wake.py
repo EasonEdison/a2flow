@@ -37,7 +37,7 @@ def main():
             ).fetchone()[0]
             == 0
         )
-    passed = result.wasSuccessful() and result.testsRun >= 25 and not result.skipped and cleaned
+    passed = result.wasSuccessful() and result.testsRun >= 28 and not result.skipped and cleaned
     print(
         json.dumps(
             {
@@ -52,7 +52,7 @@ def main():
                 "measurements": module.METRICS,
                 "acceleratedScenarios": {
                     "reconcileSeconds": [0.08, 0.1, 0.12],
-                    "retrySeconds": [0.08, 0.12],
+                    "retrySeconds": [0.06, 0.12],
                     "busyRetrySeconds": 2.0,
                 },
             },
