@@ -893,7 +893,9 @@ class DurableDispatcher:
         failed = False
         try:
             try:
-                await asyncio.to_thread(self.store.materialize, self.messages, self.processing_tasks)
+                await asyncio.to_thread(
+                    self.store.materialize, self.messages, self.processing_tasks
+                )
             except Exception:
                 failed = True
                 _LOG.exception("Chat continuation inbox scan failed")
@@ -979,7 +981,9 @@ class DurableDispatcher:
                         timeout = max(0.0, self._reconcile_at - asyncio.get_running_loop().time())
                         if delay is not None:
                             timeout = min(timeout, delay)
-                        helpers.append(asyncio.create_task(self.store.wake.wait(), name="chat-dispatch-notify"))
+                        helpers.append(
+                            asyncio.create_task(self.store.wake.wait(), name="chat-dispatch-notify")
+                        )
                     except Exception:
                         backoff = True
                         _LOG.exception("Chat durable inbox deadline read failed")
@@ -988,7 +992,9 @@ class DurableDispatcher:
                     timeout = self.retry_seconds
                     owned.clear()
             helpers.append(asyncio.create_task(stop.wait(), name="chat-dispatch-stop"))
-            await asyncio.wait(owned | set(helpers), timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(
+                owned | set(helpers), timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+            )
         finally:
             # 只取消本次临时 waiter，不取消归属表中的真实执行。
             for task in helpers:
