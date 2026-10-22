@@ -16,34 +16,22 @@ class ChatWake:
     """One level-triggered Event and at most one queued notification callback."""
 
     def __init__(self) -> None:
+        self._loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+        self._event = asyncio.Event()
         self._lock = threading.Lock()
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._event: asyncio.Event | None = None
         self._closed = False
         self._callback_pending = False
 
-    def bind(self) -> None:
-        """Bind once on the dispatcher loop, before its unconditional first drain."""
-        loop = asyncio.get_running_loop()
+    def notify(self) -> None:
+        """Hint after commit from any thread; closed objects safely ignore it."""
         with self._lock:
             if self._closed:
-                raise RuntimeError("CHAT_WAKE_CLOSED")
-            if self._loop is not None:
-                raise RuntimeError("CHAT_WAKE_ALREADY_BOUND")
-            self._loop = loop
-            self._event = asyncio.Event()
-
-    def notify(self) -> None:
-        """Hint after commit from any thread; NEW/CLOSED objects safely ignore it."""
-        with self._lock:
-            loop, event = self._loop, self._event
-            if self._closed or loop is None or event is None:
                 return
             if self._callback_pending:
                 return
             self._callback_pending = True
         try:
-            loop.call_soon_threadsafe(self._deliver)
+            self._loop.call_soon_threadsafe(self._deliver)
         except RuntimeError:
             # Shutdown may close the loop before posting; persisted facts survive.
             with self._lock:
@@ -53,8 +41,7 @@ class ChatWake:
         with self._lock:
             if self._closed:
                 return
-            if self._event is not None:
-                self._event.set()
+            self._event.set()
             self._callback_pending = False
 
     def clear(self) -> None:
@@ -66,16 +53,20 @@ class ChatWake:
         """
         loop = asyncio.get_running_loop()
         with self._lock:
-            if self._loop is not loop or self._event is None:
-                raise RuntimeError("CHAT_WAKE_NOT_BOUND")
+            if self._closed:
+                raise RuntimeError("CHAT_WAKE_CLOSED")
+            if self._loop is not loop:
+                raise RuntimeError("CHAT_WAKE_WRONG_LOOP")
             self._event.clear()
 
     async def wait(self) -> None:
         """Await the signal without clearing; the dispatcher owns timeout/stop."""
         loop = asyncio.get_running_loop()
         with self._lock:
-            if self._loop is not loop or self._event is None:
-                raise RuntimeError("CHAT_WAKE_NOT_BOUND")
+            if self._closed:
+                raise RuntimeError("CHAT_WAKE_CLOSED")
+            if self._loop is not loop:
+                raise RuntimeError("CHAT_WAKE_WRONG_LOOP")
             event = self._event
         await event.wait()
 
@@ -85,9 +76,6 @@ class ChatWake:
             if self._closed:
                 return
             self._closed = True
-            loop, event = self._loop, self._event
-            self._loop, self._event = None, None
             self._callback_pending = False
-        if loop is not None and event is not None:
-            with suppress(RuntimeError):
-                loop.call_soon_threadsafe(event.set)
+        with suppress(RuntimeError):
+            self._loop.call_soon_threadsafe(self._event.set)
