@@ -152,26 +152,35 @@ class DatabaseRunner:
 
 
 def commit_then_crash(dsn, schema, cid):
-    store = DurableChat(lambda: connection(dsn, schema), environment="PRT")
-    store.receive(
-        user_id=1,
-        conversation_id=cid,
-        request_id="committed-before-crash",
-        payload={"text": "lost wake"},
-        references=[],
-    )
-    os._exit(17)  # Deliberately bypass every cleanup/notify after the committed inbox.
+    async def crash():
+        wake = ChatWake()
+        store = DurableChat(lambda: connection(dsn, schema), environment="PRT", wake=wake)
+        store.receive(
+            user_id=1,
+            conversation_id=cid,
+            request_id="committed-before-crash",
+            payload={"text": "lost wake"},
+            references=[],
+        )
+        os._exit(17)  # Deliberately bypass cleanup/notify after committed admission.
+
+    asyncio.run(crash())
 
 
 def competing_dispatch(dsn, schema, input_id, start):
-    factory = lambda: connection(dsn, schema)
-    store = DurableChat(factory, environment="PRT")
-    start.wait(8)
-    asyncio.run(
-        DurableDispatcher(store, MessagesRepository(factory), DatabaseRunner(factory)).dispatch(
-            store.get(input_id)
-        )
-    )
+    async def execute():
+        factory = lambda: connection(dsn, schema)
+        wake = ChatWake()
+        try:
+            store = DurableChat(factory, environment="PRT", wake=wake)
+            await asyncio.to_thread(start.wait, 8)
+            await DurableDispatcher(
+                store, MessagesRepository(factory), DatabaseRunner(factory)
+            ).dispatch(store.get(input_id))
+        finally:
+            wake.close()
+
+    asyncio.run(execute())
 
 
 def dispatch_with_paused_lock(dsn, schema, input_id, held, release):
@@ -187,12 +196,17 @@ def dispatch_with_paused_lock(dsn, schema, input_id, held, release):
                         raise RuntimeError("paused lock test release timeout")
                 yield acquired
 
-    store = PauseStore(factory, environment="PRT")
-    asyncio.run(
-        DurableDispatcher(store, MessagesRepository(factory), DatabaseRunner(factory)).dispatch(
-            store.get(input_id)
-        )
-    )
+    async def execute():
+        wake = ChatWake()
+        try:
+            store = PauseStore(factory, environment="PRT", wake=wake)
+            await DurableDispatcher(
+                store, MessagesRepository(factory), DatabaseRunner(factory)
+            ).dispatch(store.get(input_id))
+        finally:
+            wake.close()
+
+    asyncio.run(execute())
 
 
 @unittest.skipUnless(os.environ.get("A2FLOW_WAKE_PROBE_DSN"), "disposable PostgreSQL required")
@@ -210,6 +224,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
                 "CREATE TABLE wake_native_facts(turn_id text PRIMARY KEY,state text NOT NULL,result jsonb);"
             )
         self.wake = CountingWake()
+        self.addCleanup(self.wake.close)
         self.store = CountingStore(self.factory, environment="PRT", wake=self.wake)
         self.messages = MessagesRepository(self.factory)
         self.runner = DatabaseRunner(self.factory)
@@ -638,6 +653,10 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("COMPLETED", self.store.get(first["input_message_id"])["status"])
         self.assertEqual("QUEUED", self.store.get(second["input_message_id"])["status"])
         self.assertEqual(1, self.call_count())
+        # Dispatcher shutdown releases work, while this fixture still owns a usable wake.
+        self.wake.clear()
+        self.wake.notify()
+        await asyncio.wait_for(self.wake.wait(), 0.5)
 
     async def test_failed_owned_task_is_observed_deferred_and_releases_healthy_slot(self):
         class FailOnceRunner(DatabaseRunner):
@@ -756,8 +775,6 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_wait_cleans_temporary_helpers_on_hint_deadline_stop_and_cancellation(self):
         dispatcher = DurableDispatcher(self.store, self.messages, self.runner, retry_seconds=0.06)
-        self.wake.bind()
-        self.addCleanup(self.wake.close)
         stop = asyncio.Event()
 
         def pending_helpers():

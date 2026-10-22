@@ -13,7 +13,7 @@ from .durable_chat import DurableChat
 from .errors import BsideError
 from .processing_tasks import ProcessingTasksRepository
 from .repositories import MessagesRepository
-from .route_dependencies import ChatAction, JsonObject
+from .route_dependencies import ChatAction, ChatCards, JsonObject
 from .route_models import ChatCardAction, MessageSend
 from .route_support import _bounded_run_reference
 from .work_activities import WorkActivitiesRepository
@@ -30,6 +30,7 @@ class ChatApplicationService:
         processing_tasks: ProcessingTasksRepository | None,
         chat_action: ChatAction | None,
         durable_chat: DurableChat | None,
+        chat_cards: ChatCards | None = None,
     ) -> None:
         # 依赖在装配时固定传入, 避免请求处理时动态查询全局服务。
         self.messages = messages
@@ -38,6 +39,7 @@ class ChatApplicationService:
         self.processing_tasks = processing_tasks
         self.chat_action = chat_action
         self.durable_chat = durable_chat
+        self.chat_cards = chat_cards
 
     async def execute_chat_card_action(
         self, user_id: int, conversation_id: int, card_id: str, body: ChatCardAction

@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import psycopg
+from a2flow_bside.chat_wake import ChatWake
 from a2flow_bside.durable_chat import DurableChat
 from a2flow_bside.errors import BsideError
 from a2flow_bside.notification_repository import NotificationsRepository
@@ -40,8 +41,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 @unittest.skipUnless(os.environ.get("A2FLOW_CONVERGENCE_DSN"), "disposable PostgreSQL required")
-class WorkActivitiesChatStateTests(unittest.TestCase):
-    def setUp(self):
+class WorkActivitiesChatStateTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
         self.dsn = os.environ["A2FLOW_CONVERGENCE_DSN"]
         self.schema = "activity_chat_state_" + uuid4().hex
         with psycopg.connect(self.dsn, autocommit=True) as connection:
@@ -65,7 +66,9 @@ class WorkActivitiesChatStateTests(unittest.TestCase):
             )
         self.activities = WorkActivitiesRepository(self.factory)
         self.processing = ProcessingTasksRepository(self.factory, self.activities)
-        self.durable = DurableChat(self.factory, environment="PRT")
+        self.wake = ChatWake()
+        self.addCleanup(self.wake.close)
+        self.durable = DurableChat(self.factory, environment="PRT", wake=self.wake)
         self.seed_workflow()
 
     def factory(self):
@@ -210,7 +213,7 @@ class WorkActivitiesChatStateTests(unittest.TestCase):
     def attention(self, activity):
         return next(a for a in activity["attentionItems"] if a["attentionId"] == self.attention_id)
 
-    def test_activity_sql_links_latest_turn_receipt_and_explicit_resolution(self):
+    async def test_activity_sql_links_latest_turn_receipt_and_explicit_resolution(self):
         baseline = self.activities.get_result(
             user_id=1, environment="PRT", activity_id=self.control_id
         )
@@ -292,7 +295,7 @@ class WorkActivitiesChatStateTests(unittest.TestCase):
         self.assertEqual(envelope["result"], task["operations"][0]["result"])
         self.assertEqual(1, len(calls))
 
-    def test_notification_read_and_attention_ack_do_not_resolve_source_task(self):
+    async def test_notification_read_and_attention_ack_do_not_resolve_source_task(self):
         _, context, user, _ = self.begin_turn()
         engine = create_engine(
             "postgresql+psycopg://",

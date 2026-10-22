@@ -16,6 +16,8 @@ import psycopg
 from a2flow_asset_store import BundleValidator, PostgresAssetRepository
 from a2flow_bside.account_guard import AccountGuardConfig, PostgresAccountGuard
 from a2flow_bside.app import create_app
+from a2flow_bside.chat_runtime import ChatRuntime
+from a2flow_bside.chat_wake import ChatWake
 from a2flow_bside.config import BsideConfig
 from a2flow_bside.notification_repository import (
     NotificationsRepository,
@@ -178,64 +180,6 @@ def create_app_from_environment() -> FastAPI:
     from agent_workflow_runtime.chat.rpc_assets import RpcChatAssets
     from agent_workflow_runtime.models import ActionRejected
 
-    durable_chat = DurableChat(connection_factory, environment=config.environment)
-    card_store = ChatCardStore(
-        conninfo,
-        environment=config.environment,
-        completion_observer=durable_chat.observe_completion,
-    )
-
-    def assets_factory(
-        owner: TrustedContext,
-        conversation_id: str,
-        control_request_id: str = "chat-action",
-        *,
-        processing_context: Mapping[str, Any] | None = None,
-        processing_turn_id: str | None = None,
-    ) -> RpcChatAssets:
-        def save_card(
-            prepared: PreparedApplication,
-            metadata: dict[str, Any],
-        ) -> dict[str, Any]:
-            return card_store.save(owner, conversation_id, prepared, metadata)
-
-        return RpcChatAssets(
-            reader=reader,
-            rpc=rpc,
-            processing_provider=processing_tasks,
-            processing_context_value=processing_context,
-            processing_turn_id=processing_turn_id,
-            owner=owner,
-            conversation_id=conversation_id,
-            control_request_id=control_request_id,
-            card_sink=save_card,
-        )
-
-    card_actions = RpcChatActionService(card_store, assets_factory)
-
-    def chat_cards(user_id: int, conversation_id: str) -> list[dict[str, Any]]:
-        return card_store.list(memory_owner(user_id), conversation_id)
-
-    def chat_action(
-        user_id: int,
-        conversation_id: str,
-        card_id: str,
-        payload: CardActionPayload,
-    ) -> dict[str, Any]:
-        try:
-            return dict(
-                card_actions.execute(
-                    memory_owner(user_id),
-                    conversation_id,
-                    card_id,
-                    request_id=payload["requestId"],
-                    action_name=payload["actionName"],
-                    inputs=payload["inputs"],
-                )
-            )
-        except ActionRejected as exc:
-            raise BsideError(exc.code, 409) from exc
-
     def memory_owner(user_id: int) -> TrustedContext:
         return TrustedContext.from_mapping(
             {
@@ -278,21 +222,89 @@ def create_app_from_environment() -> FastAPI:
     from a2flow_bside.processing_tasks import ProcessingTasksRepository
 
     processing_tasks = ProcessingTasksRepository(connection_factory, work_activities)
-    chat_runner = ChatLoopRunner(
-        model_factory=chat_model_factory,
-        model_reference="deepseek-v4-flash",
-        environment=config.environment,
-        reader=reader,
-        system_prompt=_chat_system_prompt,
-        conversation_store=ConversationStore(conninfo),
-        history_loader=legacy_history,
-        personal_memory=personal_memory,
-        personal_workflows=reader,
-        assets_factory=assets_factory,
-        observation_loader=card_store.list_observations,
-        workflow_run_provider=work_activities,
-        processing_provider=processing_tasks,
-    )
+
+    # lifespan 提供已初始化的 wake；完成回调、请求服务和分发器共用同一仓库。
+    def chat_runtime_factory(wake: ChatWake) -> ChatRuntime:
+        durable_chat = DurableChat(connection_factory, environment=config.environment, wake=wake)
+        card_store = ChatCardStore(
+            conninfo,
+            environment=config.environment,
+            completion_observer=durable_chat.observe_completion,
+        )
+
+        def assets_factory(
+            owner: TrustedContext,
+            conversation_id: str,
+            control_request_id: str = "chat-action",
+            *,
+            processing_context: Mapping[str, Any] | None = None,
+            processing_turn_id: str | None = None,
+        ) -> RpcChatAssets:
+            def save_card(
+                prepared: PreparedApplication,
+                metadata: dict[str, Any],
+            ) -> dict[str, Any]:
+                return card_store.save(owner, conversation_id, prepared, metadata)
+
+            return RpcChatAssets(
+                reader=reader,
+                rpc=rpc,
+                processing_provider=processing_tasks,
+                processing_context_value=processing_context,
+                processing_turn_id=processing_turn_id,
+                owner=owner,
+                conversation_id=conversation_id,
+                control_request_id=control_request_id,
+                card_sink=save_card,
+            )
+
+        card_actions = RpcChatActionService(card_store, assets_factory)
+
+        def chat_cards(user_id: int, conversation_id: str) -> list[dict[str, Any]]:
+            return card_store.list(memory_owner(user_id), conversation_id)
+
+        def chat_action(
+            user_id: int,
+            conversation_id: str,
+            card_id: str,
+            payload: CardActionPayload,
+        ) -> dict[str, Any]:
+            try:
+                return dict(
+                    card_actions.execute(
+                        memory_owner(user_id),
+                        conversation_id,
+                        card_id,
+                        request_id=payload["requestId"],
+                        action_name=payload["actionName"],
+                        inputs=payload["inputs"],
+                    )
+                )
+            except ActionRejected as exc:
+                raise BsideError(exc.code, 409) from exc
+
+        chat_runner = ChatLoopRunner(
+            model_factory=chat_model_factory,
+            model_reference="deepseek-v4-flash",
+            environment=config.environment,
+            reader=reader,
+            system_prompt=_chat_system_prompt,
+            conversation_store=ConversationStore(conninfo),
+            history_loader=legacy_history,
+            personal_memory=personal_memory,
+            personal_workflows=reader,
+            assets_factory=assets_factory,
+            observation_loader=card_store.list_observations,
+            workflow_run_provider=work_activities,
+            processing_provider=processing_tasks,
+        )
+
+        return ChatRuntime(
+            durable_chat=durable_chat,
+            runner=chat_runner,
+            cards=chat_cards,
+            action=chat_action,
+        )
 
     account_guard = PostgresAccountGuard(
         connection_factory,
@@ -304,7 +316,7 @@ def create_app_from_environment() -> FastAPI:
 
     return create_app(
         account_guard=account_guard,
-        durable_chat=durable_chat,
+        chat_runtime_factory=chat_runtime_factory,
         users=UsersRepository(connection_factory),
         sessions=SessionsRepository(connection_factory),
         conversations=ConversationsRepository(connection_factory),
@@ -318,9 +330,6 @@ def create_app_from_environment() -> FastAPI:
         work_activities=work_activities,
         processing_tasks=processing_tasks,
         runtime_client=HttpRuntimeClient(config.runtime_url),
-        chat_runner=chat_runner,
-        chat_cards=chat_cards,
-        chat_action=chat_action,
         workflow_catalog=workflow_catalog,
         pepper=config.pepper,
         browser_origin=config.browser_origin,

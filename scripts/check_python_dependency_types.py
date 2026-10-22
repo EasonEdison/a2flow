@@ -28,6 +28,7 @@ HTTP = [
         "run_routes",
         "schedule_routes",
         "chat_application",
+        "chat_runtime",
         "workflow_application",
         "route_dependencies",
         "route_identity",

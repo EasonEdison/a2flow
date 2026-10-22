@@ -92,7 +92,7 @@ def bside_application(dsn: str, schema: str, admission: PostgresAccountGuard):
     # Only auth routes are called; unrelated product dependencies stay unconfigured.
     return create_app(users=UsersRepository(connection), sessions=SessionsRepository(connection),
         conversations=None, messages=None, schedules=None, notifications=None,
-        run_ownership=None, runtime_client=None, chat_runner=None, workflow_catalog=lambda _: [],
+        run_ownership=None, runtime_client=None, workflow_catalog=lambda _: [],
         pepper=PEPPER, browser_origin=ORIGIN, environment='PRT', session_seconds=7200,
         account_guard=admission)
 

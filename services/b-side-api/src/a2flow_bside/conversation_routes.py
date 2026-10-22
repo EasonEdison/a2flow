@@ -6,24 +6,18 @@ import asyncio
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from .chat_application import ChatApplicationService
 from .chat_history import has_card_references, hydrate_history
-from .durable_chat import DurableChat
 from .errors import BsideError
-from .processing_tasks import ProcessingTasksRepository
 from .repositories import (
     ConversationsRepository,
     MessagesRepository,
     RunOwnershipRepository,
 )
-from .route_dependencies import (
-    ChatAction,
-    ChatCards,
-    JsonObject,
-)
+from .route_dependencies import JsonObject
 from .route_identity import CurrentIdentity
 from .route_models import (
     ChatCardAction,
@@ -32,7 +26,6 @@ from .route_models import (
     RunRefCreate,
 )
 from .route_support import _iso
-from .work_activities import WorkActivitiesRepository
 
 
 def create_router(
@@ -40,24 +33,12 @@ def create_router(
     conversations: ConversationsRepository,
     messages: MessagesRepository,
     run_ownership: RunOwnershipRepository,
-    environment: str,
-    work_activities: WorkActivitiesRepository | None,
-    processing_tasks: ProcessingTasksRepository | None,
-    chat_cards: ChatCards | None,
-    chat_action: ChatAction | None,
-    durable_chat: DurableChat | None,
+    chat_service: Callable[[], ChatApplicationService],
     retain_task: Callable[[asyncio.Task[JsonObject]], None],
 ) -> APIRouter:
     # 会话路由注入应用服务, HTTP 层负责身份和响应, 执行准入由服务负责。
     router = APIRouter()
-    chat = ChatApplicationService(
-        messages=messages,
-        environment=environment,
-        work_activities=work_activities,
-        processing_tasks=processing_tasks,
-        chat_action=chat_action,
-        durable_chat=durable_chat,
-    )
+    chat_dependency = Depends(chat_service)
 
     # 列表仅查询当前登录用户的会话, 时间统一转为线协议格式。
     @router.get("/api/conversations", response_model=None)
@@ -91,6 +72,7 @@ def create_router(
         *,
         conversation_id: Annotated[int, Query(alias="conversationId", gt=0)],
         identity: CurrentIdentity,
+        chat: ChatApplicationService = chat_dependency,
     ) -> JsonObject:
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
@@ -98,6 +80,7 @@ def create_router(
         # 历史由保存的消息和最新权威卡片状态共同恢复。
         rows = messages.list_for(conversation_id)
         cards = []
+        chat_cards = chat.chat_cards
         if chat_cards is not None:
             try:
                 cards = await asyncio.to_thread(
@@ -135,13 +118,19 @@ def create_router(
 
     # 消息先完成持久化准入, 再订阅输出; 刷新重连不会重新启动模型。
     @router.post("/api/conversations/messages", response_model=None)
-    async def send_message(*, body: MessageSend, identity: CurrentIdentity) -> StreamingResponse:
+    async def send_message(
+        *,
+        body: MessageSend,
+        identity: CurrentIdentity,
+        chat: ChatApplicationService = chat_dependency,
+    ) -> StreamingResponse:
         conversation_id = body.conversationId
         owner = conversations.owner(conversation_id)
         if owner is None or owner != identity.userId:
             raise BsideError("NOT_FOUND", 404)
         # 应用服务校验幂等键、引用及处理任务, 并返回同一轮次事实。
         turn = await chat.admit_message(body, identity.userId)
+        durable_chat = chat.durable_chat
         if durable_chat is None:
             raise BsideError("CHAT_DURABLE_DISPATCH_UNAVAILABLE", 503)
         # SSE 只订阅保存的事件, 禁止缓存及代理缓冲。
@@ -153,9 +142,15 @@ def create_router(
 
     # 卡片列表沿用会话归属检查, 不因知道卡片 ID 就开放读取。
     @router.get("/api/conversations/{conversation_id}/cards", response_model=None)
-    async def conversation_cards(*, conversation_id: int, identity: CurrentIdentity) -> JsonObject:
+    async def conversation_cards(
+        *,
+        conversation_id: int,
+        identity: CurrentIdentity,
+        chat: ChatApplicationService = chat_dependency,
+    ) -> JsonObject:
         if conversations.owner(conversation_id) != identity.userId:
             raise BsideError("CONVERSATION_NOT_FOUND", 404)
+        chat_cards = chat.chat_cards
         if chat_cards is None:
             raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
         return {"cards": await asyncio.to_thread(chat_cards, identity.userId, str(conversation_id))}
@@ -171,10 +166,11 @@ def create_router(
         card_id: str,
         body: ChatCardAction,
         identity: CurrentIdentity,
+        chat: ChatApplicationService = chat_dependency,
     ) -> JsonObject:
         if conversations.owner(conversation_id) != identity.userId:
             raise BsideError("CONVERSATION_NOT_FOUND", 404)
-        if chat_action is None:
+        if chat.chat_action is None:
             raise BsideError("CHAT_APPLICATION_UNAVAILABLE", 503)
         # 动作任务归应用生命周期所有, shield 避免浏览器断连取消真实执行。
         task = asyncio.create_task(

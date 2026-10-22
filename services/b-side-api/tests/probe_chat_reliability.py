@@ -1,24 +1,34 @@
 """Disposable PostgreSQL failure-boundary probe; no model or business calls."""
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import json
 import os
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
-import uuid
 
 import psycopg
-from psycopg.rows import dict_row
+from a2flow_bside.chat_runtime import ChatRuntime
+from a2flow_bside.chat_wake import ChatWake
 from a2flow_bside.durable_chat import DurableChat, DurableDispatcher
-from a2flow_bside.repositories import MessagesRepository
 from a2flow_bside.errors import BsideError
+from a2flow_bside.repositories import MessagesRepository
+from psycopg.rows import dict_row
 from skillweave_contracts.chat_result import result_from_events
 
 
 async def exercise(factory):
+    wake = ChatWake()
+    try:
+        return await exercise_with_wake(factory, wake)
+    finally:
+        wake.close()
+
+
+async def exercise_with_wake(factory, wake):
     checks = 0
-    store = DurableChat(factory, environment="PRT")
+    store = DurableChat(factory, environment="PRT", wake=wake)
     messages = MessagesRepository(factory)
 
     def conversation():
@@ -155,7 +165,7 @@ async def exercise(factory):
 
     before = runner.calls
     await DurableDispatcher(
-        FailProjection(factory, environment="PRT"), messages, runner
+        FailProjection(factory, environment="PRT", wake=wake), messages, runner
     ).dispatch(turn)
     assert store.get(turn["input_message_id"])["status"] == "RUNNING"
     assert runner.facts[str(turn["input_message_id"])]["status"] == "COMPLETED"
@@ -339,17 +349,50 @@ async def exercise(factory):
     assert store.pair(fenced)[1]["content"]["text"] == "repaired"
     checks += 4
     # Real HTTP composition: request identity, new route, durable lifespan and replay.
-    from test_app import Harness, ORIGIN_HEADERS
+    import httpx
+    from a2flow_bside.app import create_app
     from a2flow_bside.repositories import ConversationsRepository
+    from test_app import (
+        ORIGIN,
+        ORIGIN_HEADERS,
+        PEPPER,
+        FakeAccountGuard,
+        FakeClock,
+        FakeNotifications,
+        FakeRunOwnership,
+        FakeRuntimeClient,
+        FakeSchedules,
+        FakeSessions,
+        FakeUsers,
+        catalog,
+    )
 
-    harness = Harness(
+    users = FakeUsers()
+    app = create_app(
+        users=users,
+        sessions=FakeSessions(users),
+        account_guard=FakeAccountGuard(),
+        schedules=FakeSchedules(),
+        notifications=FakeNotifications(),
+        run_ownership=FakeRunOwnership(),
+        runtime_client=FakeRuntimeClient(),
+        workflow_catalog=catalog,
+        pepper=PEPPER,
+        browser_origin=ORIGIN,
+        environment="PRT",
+        session_seconds=7200,
+        now=FakeClock(),
         conversations=ConversationsRepository(factory),
         messages=messages,
-        durable_chat=store,
-        chat_runner=runner,
+        chat_runtime_factory=lambda application_wake: ChatRuntime(
+            DurableChat(factory, environment="PRT", wake=application_wake), runner
+        ),
     )
-    async with harness.app.router.lifespan_context(harness.app):
-        async with await harness.client() as client:
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://127.0.0.1",
+        ) as client:
             registered = await client.post(
                 "/api/auth/register",
                 json={"username": "probe-user", "password": "probe-password"},

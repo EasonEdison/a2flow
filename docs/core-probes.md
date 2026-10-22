@@ -7,7 +7,7 @@ replace [full self-host acceptance](../openspec/changes/portfolio-selfhost/readi
 
 | Probe | Real boundary checked | Deliberately synthetic |
 | --- | --- | --- |
-| Python route composition | Actual generic/attended/realchat B and Runtime assembly, immutable route order and OpenAPI wire contracts | External database/network/model dependencies replaced; no listener |
+| Python route composition | Actual generic/attended/realchat B and Runtime assembly, async Chat lifespan/readiness/cleanup and shared injection, immutable route order and OpenAPI wire contracts | External database/network/model dependencies replaced; no listener |
 | Chat durable delivery | PostgreSQL transactional request/continuation inbox, concurrent dispatch, fresh worker recovery, completed projection repair and parameter-based HTTP endpoints | Scripted runner with explicit execution facts; no model keys or business effects |
 | Chat state convergence | PostgreSQL terminal-message/dispatch atomicity under trigger failures, source/client concurrency, durable card-task binding failure recovery, exact live-vs-snapshot projection equality, strict complete-result validation, and incompatible-schema rejection without mutation | Saved synthetic public events; no external model or business calls |
 | Chat dispatch wake | PostgreSQL commit/rollback admission, lost-hint process exit, cross-process locking, bounded wake/slot scheduling, centralized task settlement, retry-persistence fault backoff, waiter cleanup and default idle reconciliation measurement | Scripted native facts and card action, synthetic business receipts; no external model/business calls |

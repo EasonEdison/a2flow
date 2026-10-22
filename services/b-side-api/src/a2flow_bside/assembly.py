@@ -11,7 +11,7 @@ from __future__ import annotations
 import importlib
 import os
 import re
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import Callable
 from typing import Any
 
 import psycopg
@@ -22,7 +22,6 @@ from skillweave_contracts import TrustedContext
 
 from .account_guard import AccountGuardConfig, PostgresAccountGuard
 from .app import create_app
-from .chat_runner import ChatRunner, RuntimeTurnInspection
 from .config import BsideConfig
 from .notification_repository import NotificationsRepository, notification_engine
 from .persistence_types import DatabaseConnection
@@ -63,36 +62,7 @@ def _load_validator(reference: str) -> BundleValidator:
     return validator
 
 
-# 未接入真实 Chat 时明确报错, 不用演示回答伪装可运行。
-class _UnavailableChatRunner:
-    """Fail-closed placeholder: chat is unavailable until wired by the
-    deployment composition (deploy.attended.bside_app)."""
-
-    async def inspect_turn(
-        self,
-        *,
-        user_id: int,
-        conversation_id: int,
-        turn_id: str,
-    ) -> RuntimeTurnInspection:
-        # An unwired engine cannot establish native admission or completed facts.
-        return {"status": "NEEDS_REVIEW"}
-
-    async def iterate(
-        self,
-        *,
-        user_id: int,
-        conversation_id: int,
-        text: str,
-        turn_id: str,
-        run_references: Sequence[Mapping[str, Any]] = (),
-        processing_context: Mapping[str, Any] | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
-        # 流中返回明确不可用事件, 调用方不能把空输出当作执行成功。
-        yield {"type": "error", "code": "CHAT_RUNNER_NOT_WIRED"}
-
-
-def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> FastAPI:
+def create_app_from_environment() -> FastAPI:
     """Uvicorn factory; every value is explicit protected configuration."""
     # 启动阶段一次性构造配置和资产读取器, 导入模块本身不连接数据库。
     config = BsideConfig.from_environment()
@@ -164,7 +134,6 @@ def create_app_from_environment(*, chat_runner: ChatRunner | None = None) -> Fas
         browser_origin=config.browser_origin,
         browser_origins=config.browser_origins,
         environment=config.environment,
-        chat_runner=chat_runner if chat_runner is not None else _UnavailableChatRunner(),
         session_seconds=config.session_seconds,
     )
 

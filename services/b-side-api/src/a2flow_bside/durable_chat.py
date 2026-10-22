@@ -41,11 +41,9 @@ def encoded(value: object) -> str:
 
 # 产品层保存接收事实、恢复意图和展示事件, 不维护另一套 Agent 执行图。
 class DurableChat:
-    def __init__(
-        self, factory: ConnectionFactory, *, environment: str, wake: ChatWake | None = None
-    ) -> None:
+    def __init__(self, factory: ConnectionFactory, *, environment: str, wake: ChatWake) -> None:
         self.factory, self.environment = factory, environment
-        self.wake = wake if wake is not None else ChatWake()
+        self.wake = wake
 
     # 启动前检查持久化接收与续聊表可用, 避免接受无法恢复的请求。
     def check_ready(self) -> None:
@@ -863,7 +861,6 @@ class DurableDispatcher:
 
     # notify 来自事务提交；循环只负责排空、统一收尾和等待下一次机会。
     async def run(self, stop: asyncio.Event) -> None:
-        self.store.wake.bind()
         self._reconcile_at = asyncio.get_running_loop().time()
         try:
             while not stop.is_set():
@@ -880,11 +877,8 @@ class DurableDispatcher:
                 await self._wait(stop, backoff=backoff)
         finally:
             # 停止只停止新派发；同一 settle 路径观察并释放所有已开始任务。
-            try:
-                await asyncio.gather(*self._tasks, return_exceptions=True)
-                await self._settle()
-            finally:
-                self.store.wake.close()
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+            await self._settle()
 
     async def _drain(self, stop: asyncio.Event) -> bool:
         """Prepare and admit one bounded batch; return whether storage needs backoff."""
