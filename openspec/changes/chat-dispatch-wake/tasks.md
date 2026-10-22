@@ -9,6 +9,6 @@
 - [x] Verify real PostgreSQL crash, rollback, continuation and multi-process behavior.
 - [x] Measure local scripted dispatch latency and default idle reconciliation frequency.
 - [x] Run related core invariants, strict types, format and repository checks.
-- [ ] Review exact outgoing scope and integrate/push both target main refs.
+- [x] Review exact outgoing scope and integrate/push both target main refs (verified source integration `73a01b5`).
 
 Public deployment, schema migration/reset and provider/business acceptance are not performed by these source tasks.
