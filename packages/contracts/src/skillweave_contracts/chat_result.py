@@ -59,7 +59,7 @@ class ToolCallRecord(TypedDict, total=False):
     generationProgress: list[GenerationProgressRecord]
 
 
-# 投影绑定轮次及两条产品消息, 供刷新恢复和执行明细展示。
+# 执行明细保存模型消息和工具调用, 产品消息身份由展示层绑定。
 class ExecutionProjection(TypedDict):
     schemaVersion: Literal["v1"]
     modelMessages: list[ModelMessageRecord]
@@ -208,7 +208,7 @@ class ChatResultAccumulator:
         return self._append_text_part(value, message_id)
 
     def _append_text_part(self, value: str, message_id: str | None) -> str:
-        # 片段 ID 由助手消息和本地计数组成, 不冒充模型原始消息 ID。
+        # 片段 ID 由展示前缀和本地计数组成, 不冒充模型原始消息 ID。
         self._text_part_count += 1
         part: TextContentPart = {
             "type": "text",
