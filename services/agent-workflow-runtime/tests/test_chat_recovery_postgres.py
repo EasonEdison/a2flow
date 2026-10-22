@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessageChunk
 from skillweave_contracts import TrustedContext
+from skillweave_contracts.chat_result import result_from_events
 from agent_workflow_runtime.chat.persistence import ConversationStore, ConversationAdmissionError
 from deploy.attended.chat_runner import ChatLoopRunner
 from test_chat_loop import FakeFactory, FakeModel, FakeMaterialPort, skill_material
@@ -16,7 +17,7 @@ from test_chat_loop import FakeFactory, FakeModel, FakeMaterialPort, skill_mater
 def _crash_after_admission(dsn, conversation, admitted, release):
     store = ConversationStore(dsn)
     owner = TrustedContext(user_id=19001, environment="PRT")
-    with store.session(owner, conversation, "1"):
+    with store.session(owner, conversation, "1", completion_result=lambda: result_from_events([], turn_id="1")):
         admitted.set()
         release.wait(10)
         os._exit(7)  # No context cleanup: emulate lost worker, not caught error.
@@ -52,7 +53,7 @@ class DurableChatRecoveryTests(unittest.TestCase):
         # is gone; inspect does not instantiate or invoke a model.
         fresh = ConversationStore(self.dsn)
         recovered = fresh.inspect_turn(self.owner, self.conversation, "1")
-        self.assertEqual({"status": "COMPLETED", "events": original}, recovered)
+        self.assertEqual({"status": "COMPLETED", "result": result_from_events(original, turn_id="1")}, recovered)
         calls = len(model.observed)
         duplicate = asyncio.run(run("1"))
         self.assertEqual("TURN_ALREADY_COMPLETED", duplicate[-1]["code"])
@@ -78,7 +79,7 @@ class DurableChatRecoveryTests(unittest.TestCase):
             self.assertEqual("NEEDS_REVIEW", self.inspect()["status"])
             self.assertEqual("NEEDS_REVIEW", self.inspect("2")["status"])
             with self.assertRaisesRegex(ConversationAdmissionError, "REQUIRES_REVIEW"):
-                with self.store.session(self.owner, self.conversation, "1"):
+                with self.store.session(self.owner, self.conversation, "1", completion_result=lambda: result_from_events([], turn_id="1")):
                     self.fail("crashed execution must not be replayed")
         finally:
             if process.is_alive():
@@ -86,22 +87,23 @@ class DurableChatRecoveryTests(unittest.TestCase):
             process.join()
 
     def test_incomplete_terminal_evidence_never_releases_ready(self):
-        with self.assertRaisesRegex(ConversationAdmissionError, "EVIDENCE_MISSING"):
-            with self.store.session(self.owner, self.conversation, "1", completion_events=[]):
+        with self.assertRaisesRegex(ValueError, "EVIDENCE_MISSING"):
+            with self.store.session(self.owner, self.conversation, "1", completion_result=lambda: result_from_events([], turn_id="1")):
                 pass
         self.assertEqual("NEEDS_REVIEW", self.inspect()["status"])
 
     def test_failed_turn_does_not_erase_older_completed_projection(self):
-        events = [{"type": "waiting_action", "cardId": "synthetic-card"},
+        events = [{"type": "application_rendered", "card": {"cardId": "synthetic-card", "status": "WAITING_ACTION"}},
+                  {"type": "waiting_action", "cardId": "synthetic-card"},
                   {"type": "done", "content": "", "finalModelMessageId": None}]
-        with self.store.session(self.owner, self.conversation, "1", completion_events=events):
+        with self.store.session(self.owner, self.conversation, "1", completion_result=lambda: result_from_events(events, turn_id="1")):
             pass
         # Test admission stops at missing checkpoint instead of guessing a new
         # agent run is safe. The completed projection remains recoverable.
         with self.assertRaisesRegex(ConversationAdmissionError, "CHECKPOINT_MISSING"):
-            with self.store.session(self.owner, self.conversation, "2"):
+            with self.store.session(self.owner, self.conversation, "2", completion_result=lambda: result_from_events(events, turn_id="2")):
                 self.fail("must not recreate missing agent context")
-        self.assertEqual(events, self.inspect()["events"])
+        self.assertEqual(result_from_events(events, turn_id="1"), self.inspect()["result"])
         with self.assertRaisesRegex(ConversationAdmissionError, "TURN_ALREADY_COMPLETED"):
-            with self.store.session(self.owner, self.conversation, "1"):
+            with self.store.session(self.owner, self.conversation, "1", completion_result=lambda: result_from_events([], turn_id="1")):
                 self.fail("old turn cannot be admitted")

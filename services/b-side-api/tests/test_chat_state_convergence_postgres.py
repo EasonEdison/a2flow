@@ -279,3 +279,31 @@ class ChatStateConvergenceTests(unittest.TestCase):
         self.assertEqual("native saved result", content["text"])
         self.assertEqual("text:" + str(turn["assistant_message_id"]) + ":1", content["parts"][0]["id"])
         self.assertEqual(str(turn["input_message_id"]), content["execution"]["turnId"])
+
+    def test_live_dispatch_and_snapshot_repair_have_identical_complete_projection(self):
+        from test_chat_result_postgres import events
+        from skillweave_contracts.chat_result import result_from_events
+        from a2flow_bside.chat_delivery import restore_content
+        turn = self.receive(self.conversation())
+        stream = events()
+        result = result_from_events(stream, turn_id=str(turn["input_message_id"]))
+        class NativeRunner:
+            calls = 0
+            async def inspect_turn(self, **kwargs):
+                return {"status": "NOT_STARTED"}
+            async def iterate(self, **kwargs):
+                self.calls += 1
+                for event in stream:
+                    yield event
+        runner = NativeRunner()
+        asyncio.run(DurableDispatcher(self.store, self.messages, runner).dispatch(turn))
+        user, assistant = self.store.pair(turn)
+        self.assertEqual("COMPLETED", self.store.get(turn["input_message_id"])["status"])
+        self.assertEqual(1, runner.calls)
+        self.assertEqual(restore_content(result, input_message=user, assistant_message=assistant),
+                         assistant["content"])
+        with self.factory() as connection:
+            rows = connection.execute("SELECT sequence,dispatch_generation FROM chat_turn_events WHERE input_message_id=%s ORDER BY sequence",
+                                      (turn["input_message_id"],)).fetchall()
+            self.assertEqual(len(rows), len({r["sequence"] for r in rows}))
+            self.assertTrue(all(r["dispatch_generation"] == 1 for r in rows))

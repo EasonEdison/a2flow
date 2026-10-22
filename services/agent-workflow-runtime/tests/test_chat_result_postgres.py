@@ -131,6 +131,8 @@ class ChatResultPersistenceTests(unittest.TestCase):
             lambda r: r.update(finalModelMessageId="missing-model"),
             lambda r: r["content"].update(delivery="completed"),
             lambda r: r["content"].update(errorCode="UNKNOWN"),
+            lambda r: r["content"]["parts"][-1].update(text="inconsistent final part"),
+            lambda r: next(e for e in r["content"]["events"] if e["type"] == "waiting_action").update(partId=r["content"]["parts"][0]["id"]),
         ]
         for mutate in mutations:
             with self.subTest(mutate=mutate):
