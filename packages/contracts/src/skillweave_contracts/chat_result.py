@@ -174,6 +174,12 @@ class ChatResultAccumulator:
                 record["text"] += value
             else:
                 record["reasoning"] += value
+        if key == "reasoning" and message_id is None:
+            # 无供应商消息身份时保留原始可见推理, 不编造一个模型消息 ID。
+            self.content["unattributedReasoning"] = (
+                self.content.get("unattributedReasoning", "") + value
+            )
+            self.content["reasoning"] = self.content["unattributedReasoning"]
         if key != "text":
             return None
         # 仅相邻且属于同一模型消息的正文片段可合并。
@@ -458,7 +464,7 @@ class ChatResultAccumulator:
             if record is None:
                 record = {
                     "messageId": final_id,
-                    "sequence": self.sequence + 1,
+                    "sequence": self.sequence,
                     "text": "",
                     "reasoning": "",
                     "phase": "final",
@@ -551,6 +557,13 @@ class ChatResultAccumulator:
         elif kind == "tool_call_started":
             self._tool_started(item, self.sequence)
         elif kind == "tool_call_finished":
+            prior = self._tool_calls.get(str(item.get("toolCallId", "")))
+            if prior is not None and (
+                prior.get("name") != item.get("name")
+                or prior.get("startedAt") != item.get("startedAt")
+                or prior.get("lifecycleStatus") != "running"
+            ):
+                self.integrity_errors.append("TOOL_LIFECYCLE_CONFLICT")
             self._tool_finished(item, self.sequence)
         elif kind == "a2ui_generation_progress":
             progress = self._generation_progress(item)
@@ -675,7 +688,7 @@ def validate_result(value: object) -> ChatTurnResult:
             or _identifier(model.get("messageId")) is None
             or model["messageId"] in model_ids
             or type(model.get("sequence")) is not int
-            or model["sequence"] < 1
+            or not 1 <= model["sequence"] <= value["eventCount"]
             or model.get("phase") not in {"process", "final"}
             or not all(isinstance(model.get(key), str) for key in ("text", "reasoning"))
         ):
@@ -692,11 +705,7 @@ def validate_result(value: object) -> ChatTurnResult:
         or finals[0]["reasoning"] != content["reasoning"]
     ):
         raise ValueError("CHAT_RESULT_FINAL_MODEL_CONFLICT")
-    if (
-        final_id is not None
-        and isinstance(terminal.get("content"), str)
-        and terminal["content"] != content["text"]
-    ):
+    if isinstance(terminal.get("content"), str) and terminal["content"] != content["text"]:
         raise ValueError("CHAT_RESULT_FINAL_TEXT_CONFLICT")
     if final_id is None and finals:
         raise ValueError("CHAT_RESULT_FINAL_MODEL_CONFLICT")
@@ -711,7 +720,7 @@ def validate_result(value: object) -> ChatTurnResult:
             or call.get("lifecycleStatus") not in {"returned", "raised"}
             or call.get("toolMessageStatus") not in {None, "success", "error"}
             or type(call.get("sequence")) is not int
-            or call["sequence"] < 1
+            or not 1 <= call["sequence"] <= value["eventCount"]
             or type(call.get("durationMs")) is not int
             or call["durationMs"] < 0
             or _identifier(call.get("startedAt"), limit=64) is None
@@ -724,6 +733,39 @@ def validate_result(value: object) -> ChatTurnResult:
             and type(call["businessSuccess"]) is not bool
         ):
             raise ValueError("CHAT_RESULT_TOOL_INVALID")
+        progress = call.get("generationProgress", [])
+        if not isinstance(progress, list) or len(progress) > 5:
+            raise ValueError("CHAT_RESULT_PROGRESS_INVALID")
+        previous_stage, previous_elapsed = -1, -1
+        stages = {
+            "preparing": 0,
+            "generating": 1,
+            "validating_loading": 2,
+            "saving": 3,
+            "completed": 4,
+            "failed": 4,
+        }
+        for item in progress:
+            if (
+                not isinstance(item, dict)
+                or call["name"] not in {"generate_a2ui", "generate_interaction"}
+                or item.get("name") != call["name"]
+                or item.get("toolCallId") != call["toolCallId"]
+                or not isinstance(item.get("stage"), str)
+                or item["stage"] not in stages
+                or stages[item["stage"]] <= previous_stage
+                or type(item.get("elapsedMs")) is not int
+                or item["elapsedMs"] < previous_elapsed
+                or item["elapsedMs"] < 0
+                or not isinstance(item.get("errorCode"), str)
+                or len(item["errorCode"]) > 128
+                or any(
+                    char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+                    for char in item["errorCode"]
+                )
+            ):
+                raise ValueError("CHAT_RESULT_PROGRESS_INVALID")
+            previous_stage, previous_elapsed = stages[item["stage"]], item["elapsedMs"]
         call_ids.add(call["toolCallId"])
     parts, events = content.get("parts"), content.get("events")
     if not isinstance(parts, list) or not isinstance(events, list):
@@ -760,23 +802,48 @@ def validate_result(value: object) -> ChatTurnResult:
                 raise ValueError("CHAT_RESULT_WORKFLOW_INVALID")
         else:
             raise ValueError("CHAT_RESULT_PART_TYPE_INVALID")
+    # 模型正文与有序页面片段必须一致, 不能只校验 ID 存在。
+    for model in models:
+        text = "".join(
+            part["text"]
+            for part in parts
+            if part.get("type") == "text" and part.get("modelMessageId") == model["messageId"]
+        )
+        if text != model["text"]:
+            raise ValueError("CHAT_RESULT_MODEL_PARTS_CONFLICT")
     waiting = False
+    rendered_cards: set[str] = set()
+    workflow_parts = {
+        part["id"]: part["workflow"] for part in parts if part.get("type") == "personal_workflow"
+    }
+    workflow_events: set[str] = set()
     for event in events:
         if not isinstance(event, dict):
             raise ValueError("CHAT_RESULT_EVENT_INVALID")
         kind = event.get("type")
         if kind == "waiting_action":
             waiting = True
-            if event.get("cardId") not in card_ids or event.get("partId") not in part_ids:
+            if event.get("cardId") not in card_ids or event.get("partId") != "application:" + str(
+                event.get("cardId")
+            ):
                 raise ValueError("CHAT_RESULT_WAITING_CARD_MISSING")
         elif kind == "application_rendered":
-            if event.get("cardId") not in card_ids or event.get("partId") not in part_ids:
+            if event.get("cardId") not in card_ids or event.get("partId") != "application:" + str(
+                event.get("cardId")
+            ):
                 raise ValueError("CHAT_RESULT_CARD_EVENT_MISSING")
+            rendered_cards.add(event["cardId"])
         elif kind == "personal_workflow_created":
-            if event.get("partId") not in part_ids:
+            if (
+                event.get("partId") not in workflow_parts
+                or event.get("workflow") != workflow_parts[event["partId"]]
+            ):
                 raise ValueError("CHAT_RESULT_WORKFLOW_EVENT_MISSING")
+            workflow_events.add(event["partId"])
         elif kind not in {"workflow_confirm", "interaction_required"}:
             raise ValueError("CHAT_RESULT_EVENT_INVALID")
+    if rendered_cards != card_ids or workflow_events != set(workflow_parts):
+        raise ValueError("CHAT_RESULT_PART_EVENT_MISSING")
     if waiting != (content["delivery"] == "waiting_action"):
         raise ValueError("CHAT_RESULT_WAITING_CONFLICT")
     return cast(ChatTurnResult, copy.deepcopy(value))

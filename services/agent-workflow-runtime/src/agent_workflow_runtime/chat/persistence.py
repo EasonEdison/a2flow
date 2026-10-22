@@ -45,7 +45,11 @@ CREATE TABLE IF NOT EXISTS agent_chat_turns (
     started_at timestamptz NOT NULL DEFAULT now(),
     completed_at timestamptz,
     PRIMARY KEY (environment, user_id, conversation_id, turn_id)
-)
+);
+CREATE INDEX IF NOT EXISTS agent_chat_turns_latest_idx
+ON agent_chat_turns(environment,user_id,conversation_id,started_at DESC,turn_id DESC);
+CREATE INDEX IF NOT EXISTS agent_chat_turns_unfinished_idx
+ON agent_chat_turns(environment,user_id,conversation_id) WHERE state <> 'COMPLETED'
 """
 
 
@@ -111,16 +115,24 @@ class ConversationStore:
         connection: Connection, identity: Identity, conversation: Mapping[str, Any]
     ) -> str | None:
         # 即使检查目标轮次不存在,同一会话的未知执行也必须阻止新模型调用。
-        turns = connection.execute(
-            "SELECT state,result FROM agent_chat_turns WHERE environment=%s "
-            "AND user_id=%s AND conversation_id=%s",
+        unfinished = connection.execute(
+            "SELECT 1 FROM agent_chat_turns WHERE environment=%s AND user_id=%s "
+            "AND conversation_id=%s AND state <> 'COMPLETED' LIMIT 1",
             identity,
-        ).fetchall()
-        if any(turn["state"] != "COMPLETED" for turn in turns):
+        ).fetchone()
+        if unfinished:
             return "CONVERSATION_REQUIRES_REVIEW"
-        for turn in turns:
+        # 已提交快照在完成事务验证过, 准入只核对最近执行与 checkpoint, 不搬运全部历史。
+        latest = connection.execute(
+            "SELECT turn_id,result FROM agent_chat_turns WHERE environment=%s AND user_id=%s "
+            "AND conversation_id=%s ORDER BY started_at DESC,turn_id DESC LIMIT 1",
+            identity,
+        ).fetchone()
+        if latest:
             try:
-                validate_result(turn["result"])
+                result = validate_result(latest["result"])
+                if result["turnId"] != latest["turn_id"]:
+                    return "CONVERSATION_RESULT_INVALID"
             except (ValueError, TypeError):
                 return "CONVERSATION_RESULT_INVALID"
         checkpoint = PostgresSaver(connection).get_tuple(
@@ -128,9 +140,9 @@ class ConversationStore:
                 "configurable": {"thread_id": conversation["thread_id"]},
             }
         )
-        if turns and checkpoint is None:
+        if latest and checkpoint is None:
             return "CONVERSATION_CHECKPOINT_MISSING"
-        if not turns and checkpoint is not None:
+        if latest is None and checkpoint is not None:
             return "CONVERSATION_TURN_EVIDENCE_MISSING"
         return None
 
