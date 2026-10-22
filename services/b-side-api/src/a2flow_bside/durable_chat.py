@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -15,6 +16,7 @@ from skillweave_contracts.chat_state import FINAL_DELIVERIES, ProductTurnStatus,
 
 from .chat_delivery import ChatDelivery, restore_content
 from .chat_runner import ChatRunner
+from .chat_wake import ChatWake
 from .errors import BsideError
 from .interaction_continuation import continuation_reference
 from .persistence_types import ConnectionFactory, DatabaseConnection, MessageRecord, message_record
@@ -39,8 +41,11 @@ def encoded(value: object) -> str:
 
 # 产品层保存接收事实、恢复意图和展示事件, 不维护另一套 Agent 执行图。
 class DurableChat:
-    def __init__(self, factory: ConnectionFactory, *, environment: str) -> None:
+    def __init__(
+        self, factory: ConnectionFactory, *, environment: str, wake: ChatWake | None = None
+    ) -> None:
         self.factory, self.environment = factory, environment
+        self.wake = wake if wake is not None else ChatWake()
 
     # 启动前检查持久化接收与续聊表可用, 避免接受无法恢复的请求。
     def check_ready(self) -> None:
@@ -253,7 +258,15 @@ class DurableChat:
             return message_record(rows[0]), message_record(rows[1])
 
     # 有待核对前序轮次时阻止后续消息执行, 避免在未知业务事实之上继续推理。
-    def candidates(self) -> list[dict[str, Any]]:
+    def candidates(
+        self,
+        *,
+        exclude_conversations: Sequence[int] = (),
+        limit: int = 32,
+        after_input_id: int = 0,
+    ) -> list[dict[str, Any]]:
+        if type(limit) is not int or limit < 1:
+            raise ValueError("CHAT_CANDIDATE_LIMIT_INVALID")
         with self.factory() as c:
             blocked = c.execute(
                 "UPDATE chat_turns t SET status='NEEDS_REVIEW',updated_at=now() "
@@ -283,12 +296,49 @@ class DurableChat:
                 for row in c.execute(
                     "SELECT t.* FROM chat_turns t WHERE t.environment=%s "
                     "AND t.status IN ('QUEUED','RUNNING') AND t.next_attempt_at<=now() "
+                    "AND NOT (t.conversation_id=ANY(%s::bigint[])) "
                     "AND NOT EXISTS(SELECT 1 FROM chat_turns p WHERE p.conversation_id=t.conversation_id "
                     "AND p.environment=t.environment AND p.input_message_id<t.input_message_id "
-                    "AND p.status IN ('QUEUED','RUNNING','NEEDS_REVIEW')) ORDER BY t.input_message_id LIMIT 32",
-                    (self.environment,),
+                    "AND p.status IN ('QUEUED','RUNNING','NEEDS_REVIEW')) "
+                    "ORDER BY (t.input_message_id<=%s),t.input_message_id LIMIT %s",
+                    (self.environment, list(exclude_conversations), after_input_id, limit),
                 ).fetchall()
             ]
+
+    def next_delay(
+        self, *, exclude_conversations: Sequence[int] = (), include_turns: bool = True
+    ) -> float | None:
+        """Next eligible database deadline; a wake hint never changes retry permission."""
+        with self.factory() as c:
+            # 与候选使用同一前序阻断条件, 未来轮次不能越过未确认或运行中的前序。
+            row = c.execute(
+                "SELECT CASE WHEN min(next_attempt_at) IS NULL THEN NULL ELSE "
+                "GREATEST(0,EXTRACT(EPOCH FROM min(next_attempt_at)-now())) END AS seconds "
+                "FROM (SELECT t.next_attempt_at FROM chat_turns t WHERE t.environment=%s "
+                "AND %s AND t.status IN ('QUEUED','RUNNING') "
+                "AND NOT (t.conversation_id=ANY(%s::bigint[])) "
+                "AND NOT EXISTS(SELECT 1 FROM chat_turns p WHERE p.conversation_id=t.conversation_id "
+                "AND p.environment=t.environment AND p.input_message_id<t.input_message_id "
+                "AND p.status IN ('QUEUED','RUNNING','NEEDS_REVIEW')) "
+                "UNION ALL SELECT next_attempt_at FROM chat_continuations "
+                "WHERE environment=%s AND state='PENDING') deadlines",
+                (self.environment, include_turns, list(exclude_conversations), self.environment),
+            ).fetchone()
+            assert row is not None
+            return None if row["seconds"] is None else float(row["seconds"])
+
+    def defer(self, input_id: int, generation: int, seconds: float = 2.0) -> None:
+        """Bounded scheduling retry only; never alter execution or terminal facts."""
+        if seconds < 0 or not seconds < float("inf"):
+            raise ValueError("CHAT_RETRY_DELAY_INVALID")
+        with self.factory() as c:
+            c.execute(
+                "UPDATE chat_turns SET next_attempt_at=GREATEST(next_attempt_at,now()+%s*interval '1 second'),"
+                "updated_at=now() "
+                "WHERE input_message_id=%s AND dispatch_generation=%s "
+                "AND status IN ('QUEUED','RUNNING')",
+                (seconds, input_id, generation),
+            )
 
     # 会话级 PostgreSQL 锁跨事务持有, 只用于产品分发协调。
     @contextmanager
@@ -315,7 +365,8 @@ class DurableChat:
         with self.factory() as c:
             row = c.execute(
                 "UPDATE chat_turns SET dispatch_generation=dispatch_generation+1 "
-                "WHERE input_message_id=%s AND status IN ('QUEUED','RUNNING') RETURNING dispatch_generation",
+                "WHERE input_message_id=%s AND status IN ('QUEUED','RUNNING') "
+                "AND next_attempt_at<=now() RETURNING dispatch_generation",
                 (input_id,),
             ).fetchone()
             return row["dispatch_generation"] if row else None
@@ -477,6 +528,7 @@ class DurableChat:
                 ).fetchall()
             ]
         # 仅重试本地幂等准备, 物化阶段本身不调用模型或业务工具。
+        failure_state_unavailable = False
         for intent in intents:
             try:
                 self._materialize_one(intent, messages, processing_tasks)
@@ -486,7 +538,11 @@ class DurableChat:
                 try:
                     self._materialization_failed(intent, error)
                 except Exception:
+                    failure_state_unavailable = True
                     _LOG.exception("Chat continuation failure-state persistence failed")
+        # 本批其他意图仍先处理; 无法保存失败或重查期限时交由调度层有界退避。
+        if failure_state_unavailable:
+            raise RuntimeError("CHAT_CONTINUATION_FAILURE_STATE_UNAVAILABLE")
 
     # 可预期的非服务端错误转人工核对, 暂时故障保留待准备并延迟重试。
     def _materialization_failed(self, intent: dict[str, Any], error: Exception) -> None:
@@ -621,6 +677,9 @@ class DurableChat:
                 ),
             )
 
+        # 只有轮次与物化状态的事务成功提交后才发进程内提示。
+        self.wake.notify()
+
 
 # 给消息投影附加输入身份及执行代际, 阻止过期任务写入。
 class _FencedProjection:
@@ -647,7 +706,24 @@ class DurableDispatcher:
         messages: MessagesRepository,
         runner: ChatRunner,
         processing_tasks: ProcessingTasksRepository | None = None,
+        *,
+        reconcile_seconds: float = 30.0,
+        max_concurrency: int = 8,
+        retry_seconds: float = 2.0,
     ) -> None:
+        if (
+            not math.isfinite(reconcile_seconds)
+            or reconcile_seconds <= 0
+            or not math.isfinite(retry_seconds)
+            or retry_seconds <= 0
+            or isinstance(max_concurrency, bool)
+            or not isinstance(max_concurrency, int)
+            or max_concurrency < 1
+        ):
+            raise ValueError("INVALID_CHAT_DISPATCH_CONFIGURATION")
+        self.reconcile_seconds = reconcile_seconds
+        self.max_concurrency = max_concurrency
+        self.retry_seconds = retry_seconds
         self.store, self.messages, self.runner, self.processing_tasks = (
             store,
             messages,
@@ -657,24 +733,26 @@ class DurableDispatcher:
         # 内存集合只减少本进程重复调度, 跨进程安全仍由数据库锁和代际保证。
         self.active: set[int] = set()
 
-    async def dispatch(self, turn: dict[str, Any]) -> None:
+    async def dispatch(self, turn: dict[str, Any]) -> bool:
+        # False 仅要求争锁者本地退避；True 不代表业务成功或允许重放。
         # Dedicated session lock survives transaction commits; Runtime independently
         # arbitrates actual execution. Lock loss never authorizes business replay.
         # 先取得会话锁再重新读取当前轮次, 候选扫描结果不直接授权执行。
         with self.store.lock(turn["conversation_id"]) as acquired:
             if not acquired:
-                return
+                # 争锁失败者不修改共享期限，避免在持锁者认领前将其反复延期。
+                return False
             # 拿锁后复核轮次仍可处理, 已结束状态不再分配执行代际。
             current = await asyncio.to_thread(self.store.get, turn["input_message_id"])
             assert current is not None
             if current["status"] not in {"QUEUED", "RUNNING"}:
-                return
+                return True
             # 领取新代际后构建受保护写入器, 旧代际不能覆盖本轮投影。
             generation = await asyncio.to_thread(
                 self.store.claim_generation, turn["input_message_id"]
             )
             if generation is None:
-                return
+                return True
             projection = _FencedProjection(self.store, turn["input_message_id"], generation)
             # 执行前必须问原生运行器：尚未开始、忙碌、已完成还是待核对。
             facts = await self.runner.inspect_turn(
@@ -691,7 +769,7 @@ class DurableDispatcher:
                     current["status"],
                     generation,
                 )
-                return
+                return True
             # 使用原来保存的消息对修复或执行, 不接受新文本替换原轮输入。
             user, assistant = await asyncio.to_thread(self.store.pair, turn)
             # 原生结果未知时保存未确认展示并阻止后续自动执行。
@@ -713,7 +791,7 @@ class DurableDispatcher:
                     ProductTurnStatus.NEEDS_REVIEW,
                     generation,
                 )
-                return
+                return True
             # 只有明确未开始才能真实执行, 已完成则只修复完整结果快照。
             if state not in {"NOT_STARTED", "COMPLETED"}:
                 raise ValueError("INVALID_RUNTIME_TURN_STATUS")
@@ -736,7 +814,7 @@ class DurableDispatcher:
                     message_id=assistant["id"],
                     content=content,
                 )
-                return
+                return True
             # 只有原生 NOT_STARTED 才构建新执行的投影消费器。
             delivery = ChatDelivery(
                 messages=projection,
@@ -779,47 +857,122 @@ class DurableDispatcher:
             # 最终投影保存已在同一事务完成调度终态，失败留待原生事实检查。
             # Failure deliberately remains RUNNING. The next inspection determines
             # completed projection repair versus NEEDS_REVIEW; never blind retry.
+            return True
 
-    # 后台循环先物化续聊, 再领取待分发轮次, 停止时等待已开始任务收尾。
+    # 后台拥有执行生命周期；唤醒只是提示重读数据库事实，不能直接派发。
     async def run(self, stop: asyncio.Event) -> None:
-        # 异常记录后释放本进程活跃标记, 后续只会重新检查事实而非盲目重跑。
+        wake = self.store.wake
+        wake.bind()
+        loop = asyncio.get_running_loop()
+        reconcile_at = loop.time()
+        tasks: set[asyncio.Task[None]] = set()
+        active_conversations: set[int] = set()
+        cursor = 0
+
         async def guarded(turn: dict[str, Any]) -> None:
             try:
-                await self.dispatch(turn)
+                if await self.dispatch(turn) is False:
+                    # 退出未持锁的连接后本地退避；该槽有界占用，不篡改其他进程期限。
+                    try:
+                        await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
+                    except asyncio.TimeoutError:
+                        pass
             except Exception:
                 _LOG.exception("Chat durable dispatch inspection failed")
+                try:
+                    # 异常只安排后续事实检查；终态不可回退，未知写结果不重跑。
+                    current = await asyncio.to_thread(self.store.get, turn["input_message_id"])
+                    if current is not None:
+                        await asyncio.to_thread(
+                            self.store.defer,
+                            turn["input_message_id"],
+                            current["dispatch_generation"],
+                            self.retry_seconds,
+                        )
+                except Exception:
+                    _LOG.exception("Chat dispatch retry scheduling failed")
             finally:
                 self.active.discard(turn["input_message_id"])
+                active_conversations.discard(turn["conversation_id"])
+                # 释放槽后立即重查同会话后轮；BUSY/异常仍受数据库重查时间限制。
+                wake.notify()
 
-        # 最多并发八个会话任务, 避免单次扫描耗尽执行资源。
-        tasks: set[asyncio.Task[None]] = set()
         try:
             while not stop.is_set():
+                tasks.difference_update(task for task in tuple(tasks) if task.done())
+                if len(tasks) >= self.max_concurrency:
+                    # 满槽时外部重复唤醒留在合并信号中，不扫描、不空转。
+                    stopping = asyncio.create_task(stop.wait())
+                    try:
+                        await asyncio.wait(tasks | {stopping}, return_when=asyncio.FIRST_COMPLETED)
+                    finally:
+                        stopping.cancel()
+                        await asyncio.gather(stopping, return_exceptions=True)
+                    continue
+
+                # 查询前取版本：查询期间和等待切换窗口中的新通知都不会丢失。
+                version = wake.snapshot()
                 try:
-                    await asyncio.to_thread(
-                        self.store.materialize, self.messages, self.processing_tasks
+                    preparation_failed = False
+                    try:
+                        await asyncio.to_thread(
+                            self.store.materialize, self.messages, self.processing_tasks
+                        )
+                    except Exception:
+                        preparation_failed = True
+                        _LOG.exception("Chat continuation inbox scan failed")
+                    # 物化失败也继续派发已就绪轮次，单个坏意图不能阻塞其他会话。
+                    candidates = await asyncio.to_thread(
+                        self.store.candidates,
+                        exclude_conversations=tuple(active_conversations),
+                        limit=self.max_concurrency - len(tasks),
+                        after_input_id=cursor,
                     )
-                except Exception:
-                    _LOG.exception("Chat continuation inbox scan failed")
-                try:
-                    # 候选按保存顺序处理, 活跃轮次不会在同一进程重复创建任务。
-                    for turn in await asyncio.to_thread(self.store.candidates):
-                        if len(tasks) >= 8:
+                    for turn in candidates:
+                        if stop.is_set():
                             break
-                        if turn["input_message_id"] in self.active:
+                        if (
+                            turn["input_message_id"] in self.active
+                            or turn["conversation_id"] in active_conversations
+                        ):
                             continue
+                        cursor = turn["input_message_id"]
                         self.active.add(turn["input_message_id"])
+                        active_conversations.add(turn["conversation_id"])
                         task = asyncio.create_task(guarded(turn))
                         tasks.add(task)
                         task.add_done_callback(tasks.discard)
+                    # 扫描周期不因新通知顺延；到期补漏与持久化重查时间取较早者。
+                    now = loop.time()
+                    if now >= reconcile_at:
+                        reconcile_at = now + self.reconcile_seconds
+                    if len(tasks) >= self.max_concurrency:
+                        continue
+                    if preparation_failed:
+                        # 失败记录自身无法保存时不能采信其 past-due 零延迟；
+                        # 已就绪任务照常执行，下一次物化检查有界退避且保留新通知。
+                        try:
+                            await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
+                        except asyncio.TimeoutError:
+                            pass
+                        continue
+                    delay = await asyncio.to_thread(
+                        self.store.next_delay,
+                        exclude_conversations=tuple(active_conversations),
+                    )
+                    timeout = max(0.0, reconcile_at - loop.time())
+                    if delay is not None:
+                        timeout = min(timeout, delay)
+                    await wake.wait_after(version, timeout, stop)
                 except Exception:
-                    _LOG.exception("Chat durable inbox scan failed")
-                # 短间隔等待可被停止事件打断, 退出时不强制取消已派发任务。
-                try:
-                    await asyncio.wait_for(stop.wait(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    pass
-        # 优雅退出等待全部已开始任务, 保留真实晚到结果。
+                    _LOG.exception("Chat durable inbox reconciliation failed")
+                    # 存储故障期间保留合并通知，按有界间隔重查，不因通知风暴忙等。
+                    try:
+                        await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
+                    except asyncio.TimeoutError:
+                        pass
         finally:
+            # 停止不取消已派发的业务，收尾期间的新意图保留给下次启动补扫。
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+            wake.close()

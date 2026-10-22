@@ -10,6 +10,7 @@ replace [full self-host acceptance](../openspec/changes/portfolio-selfhost/readi
 | Python route composition | Actual generic/attended/realchat B and Runtime assembly, immutable route order and OpenAPI wire contracts | External database/network/model dependencies replaced; no listener |
 | Chat durable delivery | PostgreSQL transactional request/continuation inbox, concurrent dispatch, fresh worker recovery, completed projection repair and parameter-based HTTP endpoints | Scripted runner with explicit execution facts; no model keys or business effects |
 | Chat state convergence | PostgreSQL terminal-message/dispatch atomicity under trigger failures, source/client concurrency, durable card-task binding failure recovery, exact live-vs-snapshot projection equality, strict complete-result validation, and incompatible-schema rejection without mutation | Saved synthetic public events; no external model or business calls |
+| Chat dispatch wake | PostgreSQL commit/rollback admission, lost-hint process exit, cross-process locking, bounded wake/slot scheduling, retry deadlines and default idle reconciliation measurement | Scripted native facts and card action, synthetic business receipts; no external model/business calls |
 | Chat native recovery | Actual Deep Agents execution completion, validated final snapshot, advisory lock and abrupt worker exit | Scripted model, no external tools or live operations |
 | Account guard | PostgreSQL cross-process admission, shared M/B limits, trusted proxy parsing, password recovery and session revocation | Account and ASGI requests; no public HTTP server |
 | Runtime outbox | PostgreSQL transaction failure, duplicate/ack recovery, fresh-process delivery, native LangGraph waiting checkpoint recovery | Reference transport/failure injection; no Redis/external sender or business dispatch |
@@ -43,8 +44,8 @@ docker pull postgres:16.6-bookworm
 python3 scripts/run_core_probes.py --run-id local-core-check
 ```
 
-The runner creates its own PostgreSQL container with a random password, six empty
-databases and RAM-backed storage. No port is published. The six database probes
+The runner creates its own PostgreSQL container with a random password, seven empty
+databases and RAM-backed storage. No port is published. The seven database probes
 join only that container's network namespace; the Chat/Workflow/A2UI probes run in
 separate `network none` namespaces. Source is mounted read-only; private DSN files are
 owner-only, outside the checkout, and removed on exit. No installation DSN is
@@ -53,7 +54,7 @@ The Python executor probe creates and removes its dedicated synthetic role and
 table. The role retains `default_transaction_read_only=on`; only the consumption
 connection opts into writes, with `INSERT, SELECT` and no update/delete privilege.
 Use `--python-probe capability-approval` for that focused local reproduction.
-CI always selects all ten Python probes; the report identifies narrowed runs.
+CI always selects all eleven Python probes; the report identifies narrowed runs.
 
 For Colima or another explicitly selected local Docker context, build/pull with
 `docker --context CONTEXT ...`, then pass `--docker-context CONTEXT` to the runner.
@@ -133,3 +134,7 @@ boundaries; new HTTP and Runtime transport modules remain strict. Dynamic SQL
 values and extensible JSON payloads do not replace service dependency types.
 
 Use `--python-probe chat-state-convergence` for the 26 current-schema PostgreSQL fault-window and production projection tests. This is not a compatibility migration: obsolete schemas fail explicitly without being rewritten or cleared. Runtime completion recovery reads a verified final snapshot and never calls the live runner. The transport event journal remains mutable within its explicitly fenced generation; it is not an immutable event-sourcing log.
+
+## Chat scheduling measurement scope
+
+Select `--python-probe chat-dispatch-wake` for the new isolated group. Its JSON report includes the observed candidate-reconciliation count over more than 30 seconds with the default 30-second interval, and local transaction-return-to-scripted-runner-start samples. These are measurements of the disposable PostgreSQL fixture, not public provider latency or a production benchmark. The signal and process fixtures also test lost hints, coalescing, stop cleanup and contention fairness.

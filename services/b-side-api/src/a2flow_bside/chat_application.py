@@ -67,6 +67,9 @@ class ChatApplicationService:
                 "inputs": body.inputs,
             },
         )
+        # 动作事务已经返回; 即使后续响应校验或物化失败, 数据库续聊意图仍需及时检查。
+        if self.durable_chat is not None:
+            self.durable_chat.wake.notify()
         # 只有动作服务返回可信续聊标记才进入恢复, 普通展示动作直接返回。
         marker = response.get("continuation")
         if marker is None:
@@ -149,6 +152,7 @@ class ChatApplicationService:
 
         # 重发直接复用原轮次, 不重复读取引用、创建处理任务或启动模型。
         if prior is not None:
+            durable_chat.wake.notify()
             return prior
 
         processing_context = None
@@ -231,6 +235,8 @@ class ChatApplicationService:
                 client_request_id=body.clientRequestId,
                 client_payload=body.model_dump(),
             )
+            # begin_turn 的提交已成功, 后续读取响应失败也不遗漏本进程的唤醒机会。
+            durable_chat.wake.notify()
             # 从已保存请求读取结果, 不凭回调局部变量推断准入成功。
             turn = await asyncio.to_thread(
                 durable_chat.request,
@@ -249,6 +255,7 @@ class ChatApplicationService:
                 payload=body.model_dump(),
                 references=references,
             )
+            durable_chat.wake.notify()
 
         # 完成准入必须得到轮次记录, 返回后由后台分发器负责执行。
         assert turn is not None
