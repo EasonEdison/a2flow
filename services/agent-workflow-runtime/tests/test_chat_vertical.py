@@ -131,3 +131,60 @@ class ChatVerticalTest(unittest.TestCase):
                 control_request_id="chat-2", checkpointer=saver, thread_id=thread_id, emitter=next_emitter,
                 chat_assets=assets_factory(OWNER, conversation, "chat-2"))
             self.assertEqual("Saved card received", next_loop.turn("What happened?"))
+
+    def test_pending_card_short_circuits_next_turn_without_rebinding_or_model(self):
+        import asyncio
+        from deploy.attended.chat_runner import ChatLoopRunner
+
+        dsn = os.environ["A2FLOW_TEST_CHAT_CARDS_DSN"]
+        cards = ChatCardStore(dsn, environment="PRT")
+        cards.setup()
+        conversations = ConversationStore(dsn)
+        conversations.setup()
+        reader = AssetReader(BundleRepository(), NAMESPACE)
+        registry = operations()
+        first_model = ScriptedModel(rounds=[
+            [_call(0, "pending-skill", "use_skill", {"skillKey": "activity-planning/plan"})],
+            [_call(0, "pending-card", "render_application", {"appCode": APPLICATION_KEY,
+                "params": {"prompt": "Choose", "options": [
+                    {"label": "A", "value": "a"}, {"label": "B", "value": "b"}]}})],
+        ])
+        from langchain_core.messages import AIMessageChunk
+        unused_model = ScriptedModel(rounds=[[AIMessageChunk(content="must not run")]])
+
+        class Models:
+            def __init__(self):
+                self.models = [first_model, unused_model]
+            def create(self, reference, owner):
+                return self.models.pop(0)
+
+        def assets(owner, conversation, control):
+            return ChatAssets(reader, registry, owner, conversation, control,
+                lambda prepared, metadata: cards.save(owner, conversation, prepared, metadata),
+                application_validator, application_data_validator)
+
+        runner = ChatLoopRunner(model_factory=Models(), model_reference="deepseek-v4-flash",
+            environment="PRT", reader=reader, conversation_store=conversations,
+            history_loader=lambda *args: [], assets_factory=assets,
+            observation_loader=lambda *args, **kwargs: [])
+        conversation = str(uuid4())
+        async def run(text, turn_id):
+            return [event async for event in runner.iterate(user_id=OWNER.user_id,
+                conversation_id=conversation, text=text, turn_id=turn_id)]
+
+        first = asyncio.run(run("Prepare an interactive choice", "1"))
+        rendered = next(event["card"] for event in first if event["type"] == "application_rendered")
+        saved = cards.read(OWNER, conversation, rendered["cardId"])
+        self.assertEqual("1", saved["turnId"])
+        self.assertEqual("WAITING_ACTION", saved["status"])
+        second = asyncio.run(run("Another ordinary message while the card waits", "2"))
+        self.assertEqual([], unused_model.observed)
+        self.assertEqual([], [event for event in second if event["type"] == "application_rendered"])
+        self.assertEqual([saved["cardId"]], [event["cardId"] for event in second
+                                              if event["type"] == "waiting_action"])
+        self.assertEqual("done", second[-1]["type"])
+        inspected = asyncio.run(runner.inspect_turn(user_id=OWNER.user_id,
+            conversation_id=conversation, turn_id="2"))
+        self.assertEqual("COMPLETED", inspected["status"])
+        self.assertEqual("waiting_action", inspected["result"]["content"]["delivery"])
+        self.assertEqual(saved, cards.read(OWNER, conversation, saved["cardId"]))
