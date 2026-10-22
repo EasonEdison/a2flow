@@ -8,6 +8,7 @@ import os
 import threading
 import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -34,6 +35,7 @@ class CountingStore(DurableChat):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.scans = 0
+        self.materializations = 0
         self.scan_times = []
         self.fail_scan_once = False
         self.mutex = threading.Lock()
@@ -46,6 +48,11 @@ class CountingStore(DurableChat):
         if fail:
             raise psycopg.OperationalError("synthetic reconciliation read failure")
         return super().candidates(**kwargs)
+
+    def materialize(self, *args, **kwargs):
+        with self.mutex:
+            self.materializations += 1
+        return super().materialize(*args, **kwargs)
 
 
 class DatabaseRunner:
@@ -138,6 +145,27 @@ def competing_dispatch(dsn, schema, input_id, start):
     factory = lambda: connection(dsn, schema)
     store = DurableChat(factory, environment="PRT")
     start.wait(8)
+    asyncio.run(
+        DurableDispatcher(store, MessagesRepository(factory), DatabaseRunner(factory)).dispatch(
+            store.get(input_id)
+        )
+    )
+
+
+def dispatch_with_paused_lock(dsn, schema, input_id, held, release):
+    factory = lambda: connection(dsn, schema)
+
+    class PauseStore(DurableChat):
+        @contextmanager
+        def lock(self, conversation_id):
+            with super().lock(conversation_id) as acquired:
+                if acquired:
+                    held.set()
+                    if not release.wait(8):
+                        raise RuntimeError("paused lock test release timeout")
+                yield acquired
+
+    store = PauseStore(factory, environment="PRT")
     asyncio.run(
         DurableDispatcher(store, MessagesRepository(factory), DatabaseRunner(factory)).dispatch(
             store.get(input_id)
@@ -591,6 +619,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
                     "runId": "synthetic-run",
                     "status": "COMPLETED",
                     "result": {"synthetic": True},
+                    "resultPage": "synthetic saved result",
                 }
 
         activities = Activities()
@@ -627,3 +656,101 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         await self.start_worker()
         await self.completed(first)
         self.assertEqual(1, self.call_count())
+
+    async def test_losing_lock_cannot_defer_winner_paused_before_generation_claim(self):
+        turn = self.receive()
+        deadline = self.store.get(turn["input_message_id"])["next_attempt_at"]
+        context = multiprocessing.get_context("spawn")
+        held, release = context.Event(), context.Event()
+        winner = context.Process(
+            target=dispatch_with_paused_lock,
+            args=(self.dsn, self.schema, turn["input_message_id"], held, release),
+        )
+        winner.start()
+        try:
+            self.assertTrue(await asyncio.to_thread(held.wait, 8))
+            lost = await DurableDispatcher(self.store, self.messages, self.runner).dispatch(turn)
+            self.assertIs(False, lost)
+            self.assertEqual(deadline, self.store.get(turn["input_message_id"])["next_attempt_at"])
+            self.assertEqual(0, self.store.get(turn["input_message_id"])["dispatch_generation"])
+        finally:
+            release.set()
+            await asyncio.to_thread(winner.join, 10)
+            if winner.is_alive():
+                winner.kill()
+                winner.join()
+        self.assertEqual(0, winner.exitcode)
+        await self.completed(turn)
+        self.assertEqual(1, self.call_count())
+
+    async def test_locked_oldest_turn_does_not_starve_another_conversation(self):
+        first, second = self.receive(), self.receive()
+        with self.store.lock(first["conversation_id"]) as acquired:
+            self.assertTrue(acquired)
+            await self.start_worker(max_concurrency=1, retry_seconds=0.06)
+            await self.completed(second, timeout=1)
+            self.assertEqual(0, self.call_count(first["input_message_id"]))
+            self.assertEqual(1, self.call_count(second["input_message_id"]))
+            self.assertEqual("QUEUED", self.store.get(first["input_message_id"])["status"])
+        self.store.wake.notify()
+        await self.completed(first)
+        self.assertEqual(2, self.call_count())
+        rotated = self.store.candidates(after_input_id=first["input_message_id"], limit=1)
+        self.assertEqual([], rotated)
+
+    async def test_materialization_and_failure_record_errors_finish_batch_then_back_off(self):
+        cid = self.conversation()
+        with self.factory() as c:
+            for card in ["poison-card", "healthy-card"]:
+                self.store.observe_completion(
+                    c,
+                    SimpleNamespace(
+                        owner=SimpleNamespace(user_id=1),
+                        conversation_id=str(cid if card == "poison-card" else self.conversation()),
+                        card_id=card,
+                        request_id="submit",
+                        metadata={"definitionSource": "TEMPORARY"},
+                    ),
+                )
+            c.execute("""CREATE FUNCTION reject_poison_turn() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN IF NEW.source_key='poison-card' THEN RAISE EXCEPTION 'synthetic preparation failure'; END IF;
+                RETURN NEW; END $$;
+                CREATE TRIGGER reject_poison_turn BEFORE INSERT ON chat_turns FOR EACH ROW EXECUTE FUNCTION reject_poison_turn();
+                CREATE FUNCTION reject_poison_failure_record() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN IF NEW.card_id='poison-card' THEN RAISE EXCEPTION 'synthetic failure persistence error'; END IF;
+                RETURN NEW; END $$;
+                CREATE TRIGGER reject_poison_failure_record BEFORE UPDATE ON chat_continuations FOR EACH ROW EXECUTE FUNCTION reject_poison_failure_record();""")
+        stop = asyncio.Event()
+        dispatcher = DurableDispatcher(
+            self.store, self.messages, self.runner, reconcile_seconds=30.0, retry_seconds=0.12
+        )
+        with self.assertLogs("a2flow_bside.durable_chat", level="ERROR"):
+            task = asyncio.create_task(dispatcher.run(stop))
+            self.workers.append((stop, task, self.runner))
+            await self.until(lambda: self.store.materializations >= 1)
+            await asyncio.sleep(0.04)
+            self.assertEqual(1, self.store.materializations)
+            with self.factory() as c:
+                rows = c.execute(
+                    "SELECT card_id,state FROM chat_continuations ORDER BY card_id"
+                ).fetchall()
+                self.assertEqual(
+                    [("healthy-card", "MATERIALIZED"), ("poison-card", "PENDING")],
+                    [(r["card_id"], r["state"]) for r in rows],
+                )
+                self.assertEqual(
+                    1, c.execute("SELECT count(*) AS n FROM chat_turns").fetchone()["n"]
+                )
+                c.execute(
+                    "DROP TRIGGER reject_poison_turn ON chat_turns; DROP TRIGGER reject_poison_failure_record ON chat_continuations;"
+                )
+            await self.until(lambda: self.call_count() == 2)
+        self.assertLessEqual(self.store.materializations, 5)
+        with self.factory() as c:
+            self.assertEqual(
+                2,
+                c.execute(
+                    "SELECT count(*) AS n FROM chat_turns WHERE status='COMPLETED'"
+                ).fetchone()["n"],
+            )
+            self.assertEqual(4, c.execute("SELECT count(*) AS n FROM messages").fetchone()["n"])
