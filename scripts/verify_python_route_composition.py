@@ -17,9 +17,11 @@ def main() -> int:
     root = Path(__file__).resolve().parent.parent
     sys.path.insert(0, str(root / "services/b-side-api/tests"))
     sys.path.insert(0, str(root / "examples/activity-planning"))
-    suite = unittest.defaultTestLoader.loadTestsFromName("test_route_composition")
+    suite = unittest.defaultTestLoader.loadTestsFromNames(
+        ["test_route_composition", "test_chat_lifespan.ChatLifespanTests"]
+    )
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    passed = result.wasSuccessful() and result.testsRun >= 5 and not result.skipped
+    passed = result.wasSuccessful() and result.testsRun >= 9 and not result.skipped
     print(
         json.dumps(
             {
