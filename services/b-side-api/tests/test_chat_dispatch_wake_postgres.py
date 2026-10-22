@@ -653,6 +653,10 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("COMPLETED", self.store.get(first["input_message_id"])["status"])
         self.assertEqual("QUEUED", self.store.get(second["input_message_id"])["status"])
         self.assertEqual(1, self.call_count())
+        # Dispatcher shutdown releases work, while this fixture still owns a usable wake.
+        self.wake.clear()
+        self.wake.notify()
+        await asyncio.wait_for(self.wake.wait(), 0.5)
 
     async def test_failed_owned_task_is_observed_deferred_and_releases_healthy_slot(self):
         class FailOnceRunner(DatabaseRunner):
