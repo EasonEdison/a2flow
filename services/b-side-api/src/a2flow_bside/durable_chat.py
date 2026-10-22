@@ -912,9 +912,15 @@ class DurableDispatcher:
                 # 查询前取版本：查询期间和等待切换窗口中的新通知都不会丢失。
                 version = wake.snapshot()
                 try:
-                    await asyncio.to_thread(
-                        self.store.materialize, self.messages, self.processing_tasks
-                    )
+                    preparation_failed = False
+                    try:
+                        await asyncio.to_thread(
+                            self.store.materialize, self.messages, self.processing_tasks
+                        )
+                    except Exception:
+                        preparation_failed = True
+                        _LOG.exception("Chat continuation inbox scan failed")
+                    # 物化失败也继续派发已就绪轮次，单个坏意图不能阻塞其他会话。
                     candidates = await asyncio.to_thread(
                         self.store.candidates,
                         exclude_conversations=tuple(active_conversations),
@@ -940,6 +946,14 @@ class DurableDispatcher:
                     if now >= reconcile_at:
                         reconcile_at = now + self.reconcile_seconds
                     if len(tasks) >= self.max_concurrency:
+                        continue
+                    if preparation_failed:
+                        # 失败记录自身无法保存时不能采信其 past-due 零延迟；
+                        # 已就绪任务照常执行，下一次物化检查有界退避且保留新通知。
+                        try:
+                            await asyncio.wait_for(stop.wait(), timeout=self.retry_seconds)
+                        except asyncio.TimeoutError:
+                            pass
                         continue
                     delay = await asyncio.to_thread(
                         self.store.next_delay,
