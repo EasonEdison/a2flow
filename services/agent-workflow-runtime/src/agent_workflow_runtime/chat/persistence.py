@@ -23,6 +23,7 @@ from skillweave_contracts.chat_result import (
     RuntimeTurnInspection,
     validate_result,
 )
+from skillweave_contracts.chat_state import AgentTurnState, TurnInspectionStatus
 
 from ..service import require_owner
 
@@ -96,7 +97,7 @@ class ConversationStore:
             PostgresSaver(connection).setup()
 
     @staticmethod
-    def _identity(
+    def _execution_identity(
         owner: TrustedContext, conversation_id: str, turn_id: str
     ) -> tuple[Identity, int]:
         require_owner(owner)
@@ -105,10 +106,11 @@ class ConversationStore:
         if not isinstance(turn_id, str) or not turn_id:
             raise ValueError("TURN_ID_REQUIRED")
         identity = (owner.environment, owner.user_id, conversation_id)
-        lock_key = int.from_bytes(
+        execution_lock_key = int.from_bytes(
             sha256(json.dumps(identity).encode()).digest()[:8], "big", signed=True
         )
-        return identity, lock_key
+        # 同一环境/用户/会话共享原生执行锁, 锁键算法保持稳定, 不混入产品分发身份。
+        return identity, execution_lock_key
 
     @staticmethod
     def _blocked(
@@ -117,8 +119,8 @@ class ConversationStore:
         # 即使检查目标轮次不存在,同一会话的未知执行也必须阻止新模型调用。
         unfinished = connection.execute(
             "SELECT 1 FROM agent_chat_turns WHERE environment=%s AND user_id=%s "
-            "AND conversation_id=%s AND state <> 'COMPLETED' LIMIT 1",
-            identity,
+            "AND conversation_id=%s AND state <> %s LIMIT 1",
+            (*identity, AgentTurnState.COMPLETED.value),
         ).fetchone()
         if unfinished:
             return "CONVERSATION_REQUIRES_REVIEW"
@@ -149,15 +151,16 @@ class ConversationStore:
     def inspect_turn(
         self, owner: TrustedContext, conversation_id: str, turn_id: str
     ) -> RuntimeTurnInspection:
-        identity, lock_key = self._identity(owner, conversation_id, turn_id)
+        # inspect 短暂取得 session 的同一原生执行锁, 不是 B 端的产品 dispatch_lock。
+        identity, execution_lock_key = self._execution_identity(owner, conversation_id, turn_id)
         with psycopg.connect(
             self._conninfo, autocommit=True, row_factory=dict_row, connect_timeout=5
         ) as connection:
             acquired = connection.execute(
-                "SELECT pg_try_advisory_lock(%s) AS acquired", (lock_key,)
+                "SELECT pg_try_advisory_lock(%s) AS acquired", (execution_lock_key,)
             ).fetchone()
             if acquired is None or not acquired["acquired"]:
-                return {"status": "BUSY"}
+                return {"status": TurnInspectionStatus.BUSY.value}
             try:
                 turn = connection.execute(
                     "SELECT state,result FROM agent_chat_turns WHERE environment=%s "
@@ -165,22 +168,25 @@ class ConversationStore:
                     (*identity, turn_id),
                 ).fetchone()
                 if turn:
-                    if turn["state"] == "COMPLETED":
+                    if turn["state"] == AgentTurnState.COMPLETED.value:
                         try:
                             result = validate_result(turn["result"])
                             if result["turnId"] != turn_id:
                                 raise ValueError("CHAT_RESULT_TURN_ID_MISMATCH")
-                            return {"status": "COMPLETED", "result": result}
+                            return {
+                                "status": TurnInspectionStatus.COMPLETED.value,
+                                "result": result,
+                            }
                         except (ValueError, TypeError):
                             pass
-                    return {"status": "NEEDS_REVIEW"}
+                    return {"status": TurnInspectionStatus.NEEDS_REVIEW.value}
                 conversation = connection.execute(
                     "SELECT thread_id FROM agent_conversations WHERE "
                     "environment=%s AND user_id=%s AND conversation_id=%s",
                     identity,
                 ).fetchone()
                 if conversation and self._blocked(connection, identity, conversation):
-                    return {"status": "NEEDS_REVIEW"}
+                    return {"status": TurnInspectionStatus.NEEDS_REVIEW.value}
                 if (
                     conversation is None
                     and connection.execute(
@@ -189,10 +195,10 @@ class ConversationStore:
                         identity,
                     ).fetchone()
                 ):
-                    return {"status": "NEEDS_REVIEW"}
-                return {"status": "NOT_STARTED"}
+                    return {"status": TurnInspectionStatus.NEEDS_REVIEW.value}
+                return {"status": TurnInspectionStatus.NOT_STARTED.value}
             finally:
-                connection.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
+                connection.execute("SELECT pg_advisory_unlock(%s)", (execution_lock_key,))
 
     @contextmanager
     def session(
@@ -204,12 +210,13 @@ class ConversationStore:
         completion_result: Callable[[], ChatTurnResult],
     ) -> Iterator[tuple[PostgresSaver, str]]:
         """Hold admission through native IO and complete result commit."""
-        identity, lock_key = self._identity(owner, conversation_id, turn_id)
+        # 此锁跨越模型、工具、checkpoint 与最终结果提交, 不能由 HTTP 订阅或 B 端分发锁替代。
+        identity, execution_lock_key = self._execution_identity(owner, conversation_id, turn_id)
         with psycopg.connect(
             self._conninfo, autocommit=True, row_factory=dict_row, connect_timeout=5
         ) as connection:
             acquired = connection.execute(
-                "SELECT pg_try_advisory_lock(%s) AS acquired", (lock_key,)
+                "SELECT pg_try_advisory_lock(%s) AS acquired", (execution_lock_key,)
             ).fetchone()
             if acquired is None or not acquired["acquired"]:
                 raise ConversationAdmissionError("CONVERSATION_BUSY")
@@ -232,7 +239,7 @@ class ConversationStore:
                     "AND conversation_id=%s AND turn_id=%s",
                     (*identity, turn_id),
                 ).fetchone()
-                if prior and prior["state"] == "COMPLETED":
+                if prior and prior["state"] == AgentTurnState.COMPLETED.value:
                     raise ConversationAdmissionError("TURN_ALREADY_COMPLETED")
                 if prior:
                     raise ConversationAdmissionError("CONVERSATION_REQUIRES_REVIEW")
@@ -244,8 +251,8 @@ class ConversationStore:
                 connection.execute(
                     "INSERT INTO agent_chat_turns "
                     "(environment,user_id,conversation_id,turn_id,state) "
-                    "VALUES (%s,%s,%s,%s,'RUNNING')",
-                    (*identity, turn_id),
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (*identity, turn_id, AgentTurnState.RUNNING.value),
                 )
                 try:
                     yield saver, row["thread_id"]
@@ -254,17 +261,17 @@ class ConversationStore:
                         raise ValueError("CHAT_RESULT_TURN_ID_MISMATCH")
                     # 在释放会话锁之前提交完整快照;B 端失败只能修复展示,不重跑原生轮次。
                     connection.execute(
-                        "UPDATE agent_chat_turns SET state='COMPLETED',result=%s,"
+                        "UPDATE agent_chat_turns SET state=%s,result=%s,"
                         "completed_at=now() WHERE environment=%s AND user_id=%s "
                         "AND conversation_id=%s AND turn_id=%s",
-                        (Jsonb(result), *identity, turn_id),
+                        (AgentTurnState.COMPLETED.value, Jsonb(result), *identity, turn_id),
                     )
                 except BaseException:
                     connection.execute(
-                        "UPDATE agent_chat_turns SET state='NEEDS_REVIEW' WHERE environment=%s "
+                        "UPDATE agent_chat_turns SET state=%s WHERE environment=%s "
                         "AND user_id=%s AND conversation_id=%s AND turn_id=%s",
-                        (*identity, turn_id),
+                        (AgentTurnState.NEEDS_REVIEW.value, *identity, turn_id),
                     )
                     raise
             finally:
-                connection.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
+                connection.execute("SELECT pg_advisory_unlock(%s)", (execution_lock_key,))
