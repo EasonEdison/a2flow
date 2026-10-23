@@ -747,10 +747,8 @@ class DurableDispatcher:
 
     async def dispatch(self, turn: dict[str, Any]) -> bool:
         # False 仅要求争锁者本地退避；True 不代表业务成功或允许重放。
-        # Dedicated session lock survives transaction commits; Runtime independently
-        # arbitrates actual execution. Lock loss never authorizes business replay.
-        # 先取得会话锁再重新读取当前轮次, 候选扫描结果不直接授权执行。
-        # 此锁只协调 B 分发; 后续 inspect 还要检查独立的原生执行锁。
+        # 产品分发锁跨事务协调 B worker; 候选记录和此锁不直接授权 Agent 执行。
+        # 后续 inspect 仍要检查独立的原生执行锁及持久化事实。
         # 连接丢失后 generation 只约束平台迟到写入, 不保证外部业务 exactly-once。
         with self.store.dispatch_lock(turn["conversation_id"]) as acquired:
             if not acquired:
@@ -807,7 +805,10 @@ class DurableDispatcher:
                 )
                 return True
             # 只有明确未开始才能真实执行, 已完成则只修复完整结果快照。
-            if inspection_status not in {TurnInspectionStatus.NOT_STARTED, TurnInspectionStatus.COMPLETED}:
+            if inspection_status not in {
+                TurnInspectionStatus.NOT_STARTED,
+                TurnInspectionStatus.COMPLETED,
+            }:
                 raise ValueError("INVALID_RUNTIME_TURN_STATUS")
             await asyncio.to_thread(
                 self.store.set_status,
