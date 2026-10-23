@@ -507,7 +507,9 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.2)
         self.assertEqual(2, len(self.runner.inspections))
         self.assertEqual(0, self.call_count(), "BUSY never authorizes native execution")
-        self.assertLessEqual(self.store.scans, 4)
+        self.assertLessEqual(
+            self.store.scans, 6
+        )  # Two independent settlements may each drain once.
         with self.factory() as c:
             for state, turn in turns:
                 saved = c.execute(
@@ -603,6 +605,10 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
             if process.is_alive():
                 process.terminate()
                 await asyncio.to_thread(process.join, 3)
+        with self.factory() as c:
+            self.assertEqual(
+                "RUNNING", c.execute("SELECT state FROM agent_chat_turns").fetchone()["state"]
+            )
         self.assertEqual(
             "NEEDS_REVIEW",
             (await inspect())["status"],
