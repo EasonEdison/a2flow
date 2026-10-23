@@ -1,6 +1,6 @@
 # Separate Chat state vocabulary and lock responsibilities
 
-Baseline `b3a8e7c`. Human request: make the two lock boundaries and product/native/inspection states clear in source navigation. This is a bounded readability/type change, not a state-machine redesign. The other reading thread's four uncommitted files remain untouched and are not merged.
+Baseline `b3a8e7c`. Human request: make the two lock boundaries and product/native/inspection states clear in source navigation. This is a bounded readability/type change, not a state-machine redesign.
 
 - Explain each ProductTurnStatus value as product dispatch/delivery state, not business success. Add AgentTurnState for agent_chat_turns.state and TurnInspectionStatus for the computed inspect_turn result. Document every value and its source, especially RUNNING evidence versus BUSY lock contention.
 - Runtime uses native-state enum constants for its row comparisons and bound state values, and inspection enum constants for returned plain-string values. Keep SCHEMA/DDL and the existing RuntimeTurnInspection TypedDict literal-string wire contract unchanged; document that contract. B dispatch compares explicit enum constants with source-specific variable names. Unknown inspection values retain the existing INVALID_RUNTIME_TURN_STATUS rejection.

@@ -101,3 +101,5 @@ See [code navigation](../openspec/changes/python-dependency-routes/navigation.md
 [scope inventory](../openspec/changes/python-dependency-routes/inventory.md) and
 [verification limits](../openspec/changes/python-dependency-routes/regression.md).
 This is source organization and type coverage, not a new execution engine.
+
+For the distinct product/native/inspection enums, concrete implementation navigation and the two advisory-lock responsibilities, see [Chat state and locks](chat-state-and-locks.md).
