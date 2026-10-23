@@ -173,7 +173,10 @@ class ConversationStore:
                             result = validate_result(turn["result"])
                             if result["turnId"] != turn_id:
                                 raise ValueError("CHAT_RESULT_TURN_ID_MISMATCH")
-                            return {"status": TurnInspectionStatus.COMPLETED.value, "result": result}
+                            return {
+                                "status": TurnInspectionStatus.COMPLETED.value,
+                                "result": result,
+                            }
                         except (ValueError, TypeError):
                             pass
                     return {"status": TurnInspectionStatus.NEEDS_REVIEW.value}
@@ -207,7 +210,7 @@ class ConversationStore:
         completion_result: Callable[[], ChatTurnResult],
     ) -> Iterator[tuple[PostgresSaver, str]]:
         """Hold admission through native IO and complete result commit."""
-        # 此锁跨越模型、工具、checkpoint 与最终结果提交, 不由 HTTP 订阅或产品租约拥有。
+        # 此锁跨越模型、工具、checkpoint 与最终结果提交, 不能由 HTTP 订阅或 B 端分发锁替代。
         identity, execution_lock_key = self._execution_identity(owner, conversation_id, turn_id)
         with psycopg.connect(
             self._conninfo, autocommit=True, row_factory=dict_row, connect_timeout=5
