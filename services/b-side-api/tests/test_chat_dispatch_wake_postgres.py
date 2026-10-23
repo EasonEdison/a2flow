@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import multiprocessing
 import os
 import threading
@@ -19,10 +20,14 @@ from a2flow_bside.chat_wake import ChatWake
 from a2flow_bside.durable_chat import DurableChat, DurableDispatcher
 from a2flow_bside.repositories import MessagesRepository
 from a2flow_bside.route_models import ChatCardAction, MessageSend
+from agent_workflow_runtime.chat.persistence import ConversationStore
 from psycopg import sql
+from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from skillweave_contracts import TrustedContext
 from skillweave_contracts.chat_result import result_from_events
+from skillweave_contracts.chat_state import AgentTurnState, ProductTurnStatus, TurnInspectionStatus
 
 HERE = Path(__file__).resolve().parent
 METRICS: dict[str, object] = {}
@@ -188,8 +193,8 @@ def dispatch_with_paused_lock(dsn, schema, input_id, held, release):
 
     class PauseStore(DurableChat):
         @contextmanager
-        def lock(self, conversation_id):
-            with super().lock(conversation_id) as acquired:
+        def dispatch_lock(self, conversation_id):
+            with super().dispatch_lock(conversation_id) as acquired:
                 if acquired:
                     held.set()
                     if not release.wait(8):
@@ -207,6 +212,19 @@ def dispatch_with_paused_lock(dsn, schema, input_id, held, release):
             wake.close()
 
     asyncio.run(execute())
+
+
+def native_session_then_crash(dsn, schema, cid, turn_id, held, release):
+    native = ConversationStore(make_conninfo(dsn, options="-c search_path=" + schema))
+    with native.session(
+        TrustedContext(1, "PRT"), str(cid), str(turn_id), completion_result=lambda: {}
+    ):
+        held.set()
+        if not release.wait(8):
+            raise RuntimeError("native lock test release timeout")
+        os._exit(
+            17
+        )  # Keep actual RUNNING evidence while PostgreSQL releases the dead session lock.
 
 
 @unittest.skipUnless(os.environ.get("A2FLOW_WAKE_PROBE_DSN"), "disposable PostgreSQL required")
@@ -473,30 +491,146 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
         }
 
     async def test_busy_retry_uses_saved_deadline_without_hot_scans(self):
-        turn = self.receive()
+        turns = [(state, self.receive()) for state in ("QUEUED", "RUNNING")]
         with self.factory() as c:
-            c.execute(
-                "INSERT INTO wake_native_facts(turn_id,state) VALUES(%s,'BUSY')",
-                (str(turn["input_message_id"]),),
-            )
+            for state, turn in turns:
+                c.execute(
+                    "UPDATE chat_turns SET status=%s WHERE input_message_id=%s",
+                    (state, turn["input_message_id"]),
+                )
+                c.execute(
+                    "INSERT INTO wake_native_facts(turn_id,state) VALUES(%s,'BUSY')",
+                    (str(turn["input_message_id"]),),
+                )
         await self.start_worker()
-        await self.until(lambda: len(self.runner.inspections) == 1)
+        await self.until(lambda: len(self.runner.inspections) == 2)
         await asyncio.sleep(0.2)
-        self.assertEqual(1, len(self.runner.inspections))
-        self.assertLessEqual(self.store.scans, 4)
+        self.assertEqual(2, len(self.runner.inspections))
+        self.assertEqual(0, self.call_count(), "BUSY never authorizes native execution")
+        self.assertLessEqual(
+            self.store.scans, 6
+        )  # Two independent settlements may each drain once.
         with self.factory() as c:
-            c.execute(
-                "DELETE FROM wake_native_facts WHERE turn_id=%s", (str(turn["input_message_id"]),)
-            )
-        await self.completed(turn, timeout=3)
-        timestamps = [
-            stamp for key, stamp in self.runner.inspections if key == str(turn["input_message_id"])
-        ]
-        self.assertGreaterEqual(timestamps[1] - timestamps[0], 1.8)
-        self.assertEqual(1, self.call_count())
+            for state, turn in turns:
+                saved = c.execute(
+                    "SELECT status,extract(epoch FROM next_attempt_at-now()) AS remaining FROM chat_turns WHERE input_message_id=%s",
+                    (turn["input_message_id"],),
+                ).fetchone()
+                self.assertEqual(state, saved["status"])
+                self.assertGreater(float(saved["remaining"]), 1.5)
+                self.assertLessEqual(float(saved["remaining"]), 2.0)
+            c.execute("DELETE FROM wake_native_facts WHERE state='BUSY'")
+        gaps = {}
+        for state, turn in turns:
+            await self.completed(turn, timeout=3)
+            timestamps = [
+                stamp
+                for key, stamp in self.runner.inspections
+                if key == str(turn["input_message_id"])
+            ]
+            self.assertGreaterEqual(timestamps[1] - timestamps[0], 1.8)
+            self.assertEqual(1, self.call_count(turn["input_message_id"]))
+            gaps[state] = round(timestamps[1] - timestamps[0], 3)
         METRICS["busyRetry"] = {
-            "observedInspectionGapSeconds": round(timestamps[1] - timestamps[0], 3),
-            "executions": 1,
+            "inspectionGapSecondsByOriginalStatus": gaps,
+            "executionsWhileBusy": 0,
+            "executionsAfterNotStarted": 2,
+        }
+
+    async def test_product_and_native_execution_locks_have_independent_authority(self):
+        wire = json.loads(
+            json.dumps(
+                {
+                    "product": ProductTurnStatus.QUEUED,
+                    "native": AgentTurnState.RUNNING,
+                    "inspection": TurnInspectionStatus.BUSY,
+                }
+            )
+        )
+        self.assertEqual({"product": "QUEUED", "native": "RUNNING", "inspection": "BUSY"}, wire)
+        turn = self.receive()
+        native = ConversationStore(make_conninfo(self.dsn, options="-c search_path=" + self.schema))
+        await asyncio.to_thread(native.setup)
+        owner = TrustedContext(1, "PRT")
+
+        async def inspect():
+            result = await asyncio.to_thread(
+                native.inspect_turn,
+                owner,
+                str(turn["conversation_id"]),
+                str(turn["input_message_id"]),
+            )
+            self.assertIs(
+                type(result["status"]), str, "wire inspection remains a plain literal string"
+            )
+            return result
+
+        with self.store.dispatch_lock(turn["conversation_id"]) as acquired:
+            self.assertTrue(acquired)
+            self.assertEqual(
+                "NOT_STARTED",
+                (await inspect())["status"],
+                "product dispatch lock alone must not produce native BUSY",
+            )
+        context = multiprocessing.get_context("spawn")
+        held, release = context.Event(), context.Event()
+        process = context.Process(
+            target=native_session_then_crash,
+            args=(
+                self.dsn,
+                self.schema,
+                turn["conversation_id"],
+                turn["input_message_id"],
+                held,
+                release,
+            ),
+        )
+        process.start()
+        try:
+            self.assertTrue(await asyncio.to_thread(held.wait, 8))
+            self.assertEqual("BUSY", (await inspect())["status"])
+            with self.store.dispatch_lock(turn["conversation_id"]) as acquired:
+                self.assertTrue(
+                    acquired, "native execution lock must not own the product dispatch lock"
+                )
+            with self.factory() as c:
+                self.assertEqual(
+                    "RUNNING", c.execute("SELECT state FROM agent_chat_turns").fetchone()["state"]
+                )
+            release.set()
+            await asyncio.to_thread(process.join, 8)
+            self.assertEqual(17, process.exitcode)
+        finally:
+            release.set()
+            if process.is_alive():
+                process.terminate()
+                await asyncio.to_thread(process.join, 3)
+        with self.factory() as c:
+            self.assertEqual(
+                "RUNNING", c.execute("SELECT state FROM agent_chat_turns").fetchone()["state"]
+            )
+        self.assertEqual(
+            "NEEDS_REVIEW",
+            (await inspect())["status"],
+            "RUNNING row with released native lock is uncertain, not BUSY or replayable",
+        )
+
+        class ActualNativeInspection(DatabaseRunner):
+            async def inspect_turn(inner, **kwargs):
+                return await inspect()
+
+        await DurableDispatcher(
+            self.store, self.messages, ActualNativeInspection(self.factory)
+        ).dispatch(turn)
+        self.assertEqual("NEEDS_REVIEW", self.store.get(turn["input_message_id"])["status"])
+        self.assertEqual(0, self.call_count())
+        METRICS["actualNativeLock"] = {
+            "nativeHolderProcessExit": 17,
+            "persistedStateAfterCrash": "RUNNING",
+            "inspectionWhileHeld": "BUSY",
+            "inspectionAfterCrash": "NEEDS_REVIEW",
+            "productLockIndependent": True,
+            "executions": 0,
         }
 
     async def test_unknown_native_result_is_never_replayed_or_overtaken(self):
@@ -912,7 +1046,7 @@ class ChatDispatchWakeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_locked_oldest_turn_does_not_starve_another_conversation(self):
         first, second = self.receive(), self.receive()
-        with self.store.lock(first["conversation_id"]) as acquired:
+        with self.store.dispatch_lock(first["conversation_id"]) as acquired:
             self.assertTrue(acquired)
             await self.start_worker(max_concurrency=1, retry_seconds=0.06)
             await self.completed(second, timeout=1)

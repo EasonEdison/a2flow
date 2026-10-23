@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent_workflow_runtime.chat.cards import CardCompletion
-from skillweave_contracts.chat_state import FINAL_DELIVERIES, ProductTurnStatus, TurnSource
+from skillweave_contracts.chat_state import (
+    FINAL_DELIVERIES,
+    ProductTurnStatus,
+    TurnInspectionStatus,
+    TurnSource,
+)
 
 from .chat_delivery import ChatDelivery, restore_content
 from .chat_runner import ChatRunner
@@ -340,10 +345,12 @@ class DurableChat:
 
     # 会话级 PostgreSQL 锁跨事务持有, 只用于产品分发协调。
     @contextmanager
-    def lock(self, conversation_id: int) -> Iterator[bool]:
+    def dispatch_lock(self, conversation_id: int) -> Iterator[bool]:
+        """Own B dispatch/projection coordination, not native Agent execution."""
         with self.factory() as c:
             # 独立连接持有会话锁, 事务提交不会提前释放分发权。
             c.autocommit = True
+            # 产品键含环境和会话; Runtime 另用用户/环境/会话派生执行锁。
             key = "bside-chat:" + self.environment + ":" + str(conversation_id)
             acquired_row = c.execute(
                 "SELECT pg_try_advisory_lock(hashtextextended(%s,0)) AS acquired",
@@ -371,6 +378,11 @@ class DurableChat:
 
     # 状态更新受代际与当前状态双重约束, 过期写入者无权推进终态。
     def set_status(self, input_id: int, status: ProductTurnStatus, generation: int) -> None:
+        """Write product status and defer inspection by the existing two seconds.
+
+        Passing the current status preserves QUEUED/RUNNING; BUSY is not a
+        transition to RUNNING and is never persisted as a product status.
+        """
         with self.factory() as c:
             c.execute(
                 "UPDATE chat_turns SET status=%s,next_attempt_at=now()+interval '2 seconds',updated_at=now() "
@@ -735,17 +747,17 @@ class DurableDispatcher:
 
     async def dispatch(self, turn: dict[str, Any]) -> bool:
         # False 仅要求争锁者本地退避；True 不代表业务成功或允许重放。
-        # Dedicated session lock survives transaction commits; Runtime independently
-        # arbitrates actual execution. Lock loss never authorizes business replay.
-        # 先取得会话锁再重新读取当前轮次, 候选扫描结果不直接授权执行。
-        with self.store.lock(turn["conversation_id"]) as acquired:
+        # 产品分发锁跨事务协调 B worker; 候选记录和此锁不直接授权 Agent 执行。
+        # 后续 inspect 仍要检查独立的原生执行锁及持久化事实。
+        # 连接丢失后 generation 只约束平台迟到写入, 不保证外部业务 exactly-once。
+        with self.store.dispatch_lock(turn["conversation_id"]) as acquired:
             if not acquired:
                 # 争锁失败者不修改共享期限，避免在持锁者认领前将其反复延期。
                 return False
             # 拿锁后复核轮次仍可处理, 已结束状态不再分配执行代际。
             current = await asyncio.to_thread(self.store.get, turn["input_message_id"])
             assert current is not None
-            if current["status"] not in {"QUEUED", "RUNNING"}:
+            if current["status"] not in {ProductTurnStatus.QUEUED, ProductTurnStatus.RUNNING}:
                 return True
             # 领取新代际后构建受保护写入器, 旧代际不能覆盖本轮投影。
             generation = await asyncio.to_thread(
@@ -760,9 +772,9 @@ class DurableDispatcher:
                 conversation_id=turn["conversation_id"],
                 turn_id=str(turn["input_message_id"]),
             )
-            state = facts["status"]
-            # 原生层仍在执行时延后查询, 绝不因产品锁空闲就重复发起。
-            if state == "BUSY":
+            inspection_status = facts["status"]
+            # BUSY 只表示原生锁被占用, 保持产品 QUEUED/RUNNING 并按原节奏延后检查。
+            if inspection_status == TurnInspectionStatus.BUSY:
                 await asyncio.to_thread(
                     self.store.set_status,
                     turn["input_message_id"],
@@ -773,7 +785,7 @@ class DurableDispatcher:
             # 使用原来保存的消息对修复或执行, 不接受新文本替换原轮输入。
             user, assistant = await asyncio.to_thread(self.store.pair, turn)
             # 原生结果未知时保存未确认展示并阻止后续自动执行。
-            if state == "NEEDS_REVIEW":
+            if inspection_status == TurnInspectionStatus.NEEDS_REVIEW:
                 content = {
                     **assistant["content"],
                     "delivery": "unconfirmed",
@@ -793,7 +805,10 @@ class DurableDispatcher:
                 )
                 return True
             # 只有明确未开始才能真实执行, 已完成则只修复完整结果快照。
-            if state not in {"NOT_STARTED", "COMPLETED"}:
+            if inspection_status not in {
+                TurnInspectionStatus.NOT_STARTED,
+                TurnInspectionStatus.COMPLETED,
+            }:
                 raise ValueError("INVALID_RUNTIME_TURN_STATUS")
             await asyncio.to_thread(
                 self.store.set_status,
@@ -801,7 +816,7 @@ class DurableDispatcher:
                 ProductTurnStatus.RUNNING,
                 generation,
             )
-            if state == "COMPLETED":
+            if inspection_status == TurnInspectionStatus.COMPLETED:
                 # 完整原生快照只修复展示和调度终态，不重新归并 token 或调用模型工具。
                 content = restore_content(
                     facts["result"],

@@ -1,0 +1,11 @@
+# Separate Chat state vocabulary and lock responsibilities
+
+Baseline `b3a8e7c`. Human request: make the two lock boundaries and product/native/inspection states clear in source navigation. This is a bounded readability/type change, not a state-machine redesign.
+
+- Explain each ProductTurnStatus value as product dispatch/delivery state, not business success. Add AgentTurnState for agent_chat_turns.state and TurnInspectionStatus for the computed inspect_turn result. Document every value and its source, especially RUNNING evidence versus BUSY lock contention.
+- Runtime uses native-state enum constants for its row comparisons and bound state values, and inspection enum constants for returned plain-string values. Keep SCHEMA/DDL and the existing RuntimeTurnInspection TypedDict literal-string wire contract unchanged; document that contract. B dispatch compares explicit enum constants with source-specific variable names. Unknown inspection values retain the existing INVALID_RUNTIME_TURN_STATUS rejection.
+- Rename B's internal lock method to dispatch_lock and Runtime's private identity/key helper to _execution_identity; no compatibility aliases. Preserve both original key derivations and connection-scoped acquisition/unlock order. Keep Runtime session as the execution context manager; document that inspect_turn briefly tries the same native execution lock held across model/tool/checkpoint work.
+- Clarify at set_status and its BUSY call that the product status is preserved while next_attempt_at moves by the existing two seconds. Keep the SQL/update behavior, delay, generation fencing, actual execution admission, deduplication and approval/continuation semantics intact. Neither lock nor platform fencing promises external business exactly-once after connection loss.
+- Add a concise reading guide/table/call chain and include the actual changed Runtime persistence file in the typed quality scope. Validate unchanged string serialization and both lock boundaries with relevant isolated Chat state/reliability/native-recovery/wake probes, plus existing approval and composition checks where affected. No public DB/provider/business calls or deployment.
+
+Source, integration and runtime proof remain separate. Commit this plan before implementation, then integrate/push according to project rules after focused checks.

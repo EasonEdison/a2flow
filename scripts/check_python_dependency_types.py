@@ -50,7 +50,7 @@ PERSISTENCE = [
         "turn_registry",
         "assembly",
     )
-]
+] + [RUNTIME + "chat/persistence.py"]
 CONTRACTS = ["packages/contracts/src/skillweave_contracts/" + name + ".py"
              for name in ("chat_state", "chat_result")]
 TRANSPORT = [RUNTIME + name + ".py" for name in ("http", "progress_http", "service")]
