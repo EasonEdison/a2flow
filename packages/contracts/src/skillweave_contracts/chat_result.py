@@ -115,6 +115,12 @@ class ChatTurnResult(TypedDict):
 
 
 class RuntimeTurnInspection(TypedDict):
+    """TurnInspectionStatus wire contract; keep literal strings for callers and JSON.
+
+    This status is an inspection conclusion, not chat_turns.status or an
+    agent_chat_turns.state column. See skillweave_contracts.chat_state.
+    """
+
     status: Literal["NOT_STARTED", "BUSY", "COMPLETED", "NEEDS_REVIEW"]
     result: NotRequired[ChatTurnResult]
 
